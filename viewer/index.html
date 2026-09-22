@@ -1,0 +1,3985 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Knowledge Galaxy</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='6' fill='%237cc4ff'/%3E%3Ccircle cx='26' cy='7' r='2.5' fill='%23ffb347'/%3E%3Ccircle cx='6' cy='24' r='2' fill='%239d7cff'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --ink:#e8eefc;
+    --muted:#8fa0c0;
+    --line:rgba(140,170,220,.16);
+    --glass:rgba(10,16,30,.72);
+    --accent:#7cc4ff;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:#000;color:var(--ink);
+    font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    overflow:hidden;-webkit-font-smoothing:antialiased}
+
+  /* ---------- deep space ---------- */
+  #stars{position:fixed;inset:0;z-index:0;display:block}
+  #nebula{position:fixed;inset:0;z-index:1;pointer-events:none;
+    background:
+      radial-gradient(48% 42% at 22% 26%, rgba(60,90,190,.24), transparent 70%),
+      radial-gradient(42% 38% at 80% 70%, rgba(150,70,190,.20), transparent 70%),
+      radial-gradient(60% 50% at 55% 95%, rgba(20,120,140,.14), transparent 70%);
+    filter:blur(6px)}
+  #vignette{position:fixed;inset:0;z-index:5;pointer-events:none;
+    background:radial-gradient(120% 90% at 50% 50%, transparent 42%, rgba(0,0,0,.72) 100%)}
+  /* No CSS filter on the WebGL canvas: it forces a separate composite layer and
+     some drivers resample it, which shows up as soft, blurry nodes. */
+  #graph{position:fixed;inset:0;z-index:2}
+
+  /* ---------- chrome ---------- */
+  .hud{position:fixed;z-index:6}
+  #title{top:22px;left:26px;max-width:38ch}
+  #title h1{margin:0;font-size:15px;letter-spacing:.34em;text-transform:uppercase;
+    font-weight:600;color:#fff;text-shadow:0 0 18px rgba(124,196,255,.45)}
+  #title p{margin:7px 0 0;font-size:11.5px;color:var(--muted);letter-spacing:.06em}
+  #title .hint{margin-top:9px;font-size:11px;color:rgba(143,160,192,.62)}
+  #density{margin-top:7px;padding:0;background:none;border:0;cursor:pointer;
+    font:inherit;font-size:11px;color:var(--accent);opacity:.8;letter-spacing:.04em;
+    text-align:left;transition:.2s}
+  #density:hover{opacity:1;text-shadow:0 0 12px rgba(124,196,255,.5)}
+
+  /* Which brain is answering. Small, always there, and it changes the moment a
+     swap lands - a chip that lags is worse than no chip, because it is evidence
+     for the wrong thing. Amber while a runtime swap is in force, so "not what
+     config.json says" is visible without reading anything. */
+  #brainchip{position:fixed;z-index:7;left:26px;bottom:104px;display:flex;
+    align-items:center;gap:7px;padding:5px 11px;border-radius:999px;
+    border:1px solid var(--line);background:rgba(10,14,26,.72);
+    backdrop-filter:blur(7px);font-size:10.5px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--muted);cursor:pointer;
+    transition:color .25s,border-color .25s,background .25s}
+  #brainchip:hover{border-color:rgba(124,196,255,.5);color:#cfe4ff}
+  #brainchip:focus-visible{outline:1px solid rgba(124,196,255,.7);outline-offset:3px}
+  #brainchip i{width:6px;height:6px;border-radius:50%;background:currentColor;
+    box-shadow:0 0 9px currentColor;flex:0 0 auto}
+  #brainchip.swapped{color:#ffc65c;border-color:rgba(255,198,92,.55);
+    background:rgba(255,198,92,.08)}
+  #brainchip.nokey{color:#ff7d7d;border-color:rgba(255,125,125,.5)}
+  #brainchip b{font-weight:600;letter-spacing:.16em;color:#fff}
+  #brainchip.swapped b{color:#ffd88f}
+  #brainchip.nokey b{color:#ffb4b4}
+  @media (max-width:860px){#brainchip{display:none}}
+
+  /* THE BUTTON DOOR. The same list the voice can reach, because the menu is built
+     from what the SERVER says it has - a hard-coded menu is a menu that offers you a
+     model the allowlist will refuse. */
+  #brainmenu{position:fixed;z-index:8;left:26px;bottom:136px;display:none;
+    flex-direction:column;gap:1px;padding:6px;border-radius:12px;
+    border:1px solid var(--line);background:rgba(8,11,20,.94);
+    backdrop-filter:blur(9px);min-width:186px;
+    box-shadow:0 18px 40px rgba(0,0,0,.5)}
+  #brainmenu.open{display:flex}
+  #brainmenu button{appearance:none;border:0;background:transparent;color:#cfe4ff;
+    font:inherit;font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+    text-align:left;padding:7px 10px;border-radius:8px;cursor:pointer;
+    transition:background .15s,color .15s}
+  #brainmenu button:hover{background:rgba(124,196,255,.12);color:#fff}
+  #brainmenu button.on{color:#ffd88f}
+  #brainmenu button.on::after{content:' ·';opacity:.7}
+  #brainmenu .hr{height:1px;margin:5px 4px;background:var(--line)}
+  #brainmenu .home{color:var(--muted)}
+
+  #legend{top:22px;right:26px;text-align:right;max-width:30ch}
+  #legend .lg{display:flex;align-items:center;justify-content:flex-end;gap:8px;
+    font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+    padding:2.5px 0;cursor:pointer;user-select:none;transition:color .2s,opacity .2s}
+  #legend .lg:hover{color:#fff}
+  #legend .lg.off{opacity:.32}
+  #legend .lg i{width:8px;height:8px;border-radius:50%;display:inline-block;
+    box-shadow:0 0 9px currentColor;background:currentColor;flex:0 0 auto}
+  #legend .lg b{font-weight:500;font-variant-numeric:tabular-nums;
+    color:rgba(143,160,192,.5);min-width:2ch}
+
+  /* ---------- side panel ---------- */
+  #panel{position:fixed;z-index:7;top:0;right:0;height:100%;width:min(420px,88vw);
+    background:linear-gradient(200deg,rgba(12,18,34,.94),rgba(6,9,18,.96));
+    border-left:1px solid var(--line);backdrop-filter:blur(14px);
+    transform:translateX(102%);transition:transform .45s cubic-bezier(.22,.7,.25,1);
+    display:flex;flex-direction:column;padding:26px 26px 22px}
+  #panel.open{transform:none}
+  #panel .kicker{display:flex;align-items:center;gap:9px;font-size:10.5px;
+    letter-spacing:.24em;text-transform:uppercase;color:var(--muted)}
+  #panel .kicker i{width:8px;height:8px;border-radius:50%;background:currentColor;
+    box-shadow:0 0 10px currentColor}
+  #panel h2{margin:14px 0 4px;font-size:25px;line-height:1.2;font-weight:600;color:#fff}
+  #panel .meta{font-size:11px;color:rgba(143,160,192,.7);letter-spacing:.05em;
+    font-variant-numeric:tabular-nums}
+  #panel .body{margin-top:18px;overflow-y:auto;flex:1;font-size:13.5px;
+    color:rgba(232,238,252,.86)}
+  #panel .body p{margin:0 0 14px}
+  #panel h3{margin:22px 0 10px;font-size:10.5px;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--muted);font-weight:600}
+  #close{position:absolute;top:20px;right:22px;width:28px;height:28px;border-radius:50%;
+    border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;
+    font-size:15px;line-height:1;transition:.2s}
+  #close:hover{color:#fff;border-color:rgba(140,170,220,.5)}
+
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{border:1px solid var(--line);background:rgba(124,196,255,.06);color:var(--ink);
+    border-radius:999px;padding:5px 11px;font-size:11.5px;cursor:pointer;
+    transition:.18s;text-align:left}
+  .chip:hover{background:rgba(124,196,255,.18);border-color:rgba(124,196,255,.5);
+    transform:translateY(-1px)}
+  .chip i{width:6px;height:6px;border-radius:50%;background:currentColor;
+    display:inline-block;margin-right:7px;box-shadow:0 0 7px currentColor}
+
+  /* ---------- brain / ask bar ---------- */
+  #brain{position:fixed;z-index:8;left:50%;transform:translateX(-50%);bottom:26px;
+    width:min(760px,calc(100vw - 52px));display:flex;flex-direction:column;gap:10px}
+  #answer{display:none;background:var(--glass);border:1px solid var(--line);
+    border-radius:16px;padding:16px 18px;backdrop-filter:blur(16px);
+    box-shadow:0 20px 60px rgba(0,0,0,.55)}
+  #answer.show{display:block;animation:rise .35s cubic-bezier(.22,.7,.25,1)}
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  #answer .q{font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:9px}
+  #answer .a{font-size:14.5px;line-height:1.6;color:#f2f6ff;white-space:pre-wrap}
+  #answer.err .a{color:#ffc9a8}
+  #answer .src{margin-top:13px}
+  #answer .src .lbl{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:8px}
+  #bar{display:flex;align-items:center;gap:12px;background:var(--glass);
+    border:1px solid var(--line);border-radius:999px;padding:6px 6px 6px 20px;
+    backdrop-filter:blur(16px);box-shadow:0 18px 50px rgba(0,0,0,.6);transition:.25s}
+  #bar:focus-within{border-color:rgba(124,196,255,.45);
+    box-shadow:0 18px 50px rgba(0,0,0,.6),0 0 0 4px rgba(124,196,255,.08)}
+  #bar .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);
+    box-shadow:0 0 12px var(--accent);flex:0 0 auto}
+  #bar .dot.busy{animation:pulse 1.05s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.25)}}
+  #q{flex:1;background:transparent;border:0;outline:0;color:var(--ink);font-size:14.5px;
+    padding:10px 0;font-family:inherit}
+  #q::placeholder{color:rgba(143,160,192,.55)}
+  #send,#reset{border:0;border-radius:999px;cursor:pointer;font-family:inherit;
+    transition:.2s;flex:0 0 auto}
+  #send{background:rgba(124,196,255,.16);color:#dceaff;padding:10px 20px;font-size:13px;
+    border:1px solid rgba(124,196,255,.3)}
+  #send:hover:not(:disabled){background:rgba(124,196,255,.3)}
+  #send:disabled{opacity:.5;cursor:default}
+  #reset{background:transparent;color:var(--muted);padding:10px 12px;font-size:13px}
+  #reset:hover{color:#fff}
+
+  /* ---------- voice ---------- */
+  #mic{flex:0 0 auto;width:38px;height:38px;padding:0;border-radius:50%;
+    border:1px solid var(--line);background:transparent;color:var(--muted);
+    cursor:pointer;display:grid;place-items:center;transition:.2s}
+  #mic:hover:not(:disabled){color:#fff;border-color:rgba(140,170,220,.5)}
+  #mic:disabled{opacity:.3;cursor:not-allowed}
+  #mic svg{width:15px;height:15px;display:block}
+  #mic.on{color:#ff6b7f;border-color:rgba(255,107,127,.6);
+    background:rgba(255,107,127,.14);animation:miclive 1.5s ease-in-out infinite}
+  @keyframes miclive{0%,100%{box-shadow:0 0 0 0 rgba(255,107,127,.4)}
+    50%{box-shadow:0 0 0 8px rgba(255,107,127,0)}}
+  #status{display:flex;align-items:center;gap:9px;padding:0 20px;min-height:16px;
+    font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+    transition:color .3s}
+  #status i{width:6px;height:6px;border-radius:50%;background:currentColor;
+    box-shadow:0 0 9px currentColor;flex:0 0 auto;transition:.3s}
+  #status.listening{color:#ff8b9a}
+  #status.thinking{color:#ffb347}
+  #status.speaking{color:#4be0b8}
+  #status.looking{color:#9d7cff}
+  #status.listening i,#status.thinking i,#status.looking i{
+    animation:pulse 1.1s ease-in-out infinite}
+
+  /* ---------- screen share ----------
+     Deliberately loud. A tool that can see your screen and says so quietly is a
+     tool you will one day forget is watching, so this is a red frame round the
+     whole window plus a chip that cannot be mistaken for decoration. */
+  #screen{flex:0 0 auto;width:38px;height:38px;padding:0;border-radius:50%;
+    border:1px solid var(--line);background:transparent;color:var(--muted);
+    cursor:pointer;display:grid;place-items:center;transition:.2s}
+  #screen:hover:not(:disabled){color:#fff;border-color:rgba(140,170,220,.5)}
+  #screen:disabled{opacity:.3;cursor:not-allowed}
+  #screen svg{width:16px;height:16px;display:block}
+  #screen.on{color:#ff4d5e;border-color:rgba(255,77,94,.75);
+    background:rgba(255,77,94,.18)}
+  /* The same share, doing a second job: red for "this screen is being captured",
+     amber ring for "and it is being diffed every five seconds". */
+  #screen.watching{box-shadow:0 0 0 2px rgba(255,183,77,.55)}
+  #sharewash{position:fixed;inset:0;z-index:9;pointer-events:none;display:none;
+    box-shadow:inset 0 0 0 2px rgba(255,77,94,.85),inset 0 0 70px rgba(255,77,94,.16);
+    animation:washlive 2.4s ease-in-out infinite}
+  #sharewash.live{display:block}
+  @keyframes washlive{0%,100%{opacity:.55}50%{opacity:1}}
+  #sharing{position:fixed;z-index:12;top:16px;left:50%;transform:translateX(-50%);
+    display:none;align-items:center;gap:10px;padding:8px 10px 8px 14px;
+    border-radius:999px;background:rgba(38,6,10,.86);border:1px solid rgba(255,77,94,.7);
+    backdrop-filter:blur(12px);box-shadow:0 10px 34px rgba(255,0,30,.28);
+    font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#ffd7dc}
+  #sharing.live{display:flex}
+  #sharing .rec{width:9px;height:9px;border-radius:50%;background:#ff4d5e;
+    box-shadow:0 0 12px #ff4d5e;animation:pulse 1.15s ease-in-out infinite;
+    flex:0 0 auto}
+  #sharing .dim{letter-spacing:.02em;text-transform:none;color:rgba(255,215,220,.62)}
+  #sharing button{border:0;border-radius:999px;cursor:pointer;font-family:inherit;
+    font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;padding:5px 11px;
+    background:rgba(255,77,94,.22);color:#ffe6ea;border:1px solid rgba(255,77,94,.45)}
+  #sharing button:hover{background:rgba(255,77,94,.4)}
+
+  /* ---------- the eyes ----------
+     Quieter than the screen share, and on purpose. Nothing here is uploaded - three
+     booleans leave this page and the pixels never do - so a red frame round the whole
+     window would be crying wolf, and a tool that cries wolf about the harmless claim
+     has nothing left to say about the serious one. Violet, one chip, and a lid that
+     shuts on a single tap. The chip goes amber when the posture itself is the news. */
+  #eye{flex:0 0 auto;width:38px;height:38px;padding:0;border-radius:50%;
+    border:1px solid var(--line);background:transparent;color:var(--muted);
+    cursor:pointer;display:grid;place-items:center;transition:.2s}
+  #eye:hover:not(:disabled){color:#fff;border-color:rgba(157,124,255,.55)}
+  #eye:disabled{opacity:.3;cursor:not-allowed}
+  #eye svg{width:17px;height:17px;display:block}
+  #eye.on{color:#c3a6ff;border-color:rgba(157,124,255,.75);
+    background:rgba(157,124,255,.18)}
+  #eye.on.bent{color:#ffd08a;border-color:rgba(255,179,71,.8);
+    background:rgba(255,179,71,.16)}
+  #eyeing{position:fixed;z-index:12;top:16px;left:50%;transform:translateX(-50%);
+    display:none;align-items:center;gap:10px;padding:8px 10px 8px 14px;
+    border-radius:999px;background:rgba(20,12,38,.88);
+    border:1px solid rgba(157,124,255,.6);backdrop-filter:blur(12px);
+    box-shadow:0 10px 34px rgba(110,70,255,.24);font-size:11px;letter-spacing:.2em;
+    text-transform:uppercase;color:#e4dbff}
+  #eyeing.live{display:flex}
+  /* Both chips can be live at once, and the share is the louder claim, so it keeps
+     the top slot and this one steps down a row rather than hiding behind it. */
+  #sharing.live ~ #eyeing{top:62px}
+  #eyeing .lid{width:9px;height:9px;border-radius:50%;background:#9d7cff;
+    box-shadow:0 0 12px #9d7cff;animation:pulse 1.6s ease-in-out infinite;
+    flex:0 0 auto}
+  #eyeing .dim{letter-spacing:.02em;text-transform:none;
+    color:rgba(228,219,255,.62)}
+  #eyeing button{border:0;border-radius:999px;cursor:pointer;font-family:inherit;
+    font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;padding:5px 11px;
+    background:rgba(157,124,255,.22);color:#efe9ff;
+    border:1px solid rgba(157,124,255,.45)}
+  #eyeing button:hover{background:rgba(157,124,255,.4)}
+
+  /* ---------- the watch ----------
+     Amber, because this one is neither the red of an upload nor the violet of a
+     camera that uploads nothing: it is a share that sits there costing nothing and
+     occasionally decides to spend a thought. The chip counts the stillness out loud
+     in numbers, which is the only honest way to show a clock you cannot hear. */
+  #watching{position:fixed;z-index:12;top:16px;left:50%;transform:translateX(-50%);
+    display:none;align-items:center;gap:10px;padding:8px 10px 8px 14px;
+    border-radius:999px;background:rgba(36,24,6,.88);
+    border:1px solid rgba(255,183,77,.62);backdrop-filter:blur(12px);
+    box-shadow:0 10px 34px rgba(255,150,0,.22);font-size:11px;letter-spacing:.2em;
+    text-transform:uppercase;color:#ffe7c2}
+  #watching.live{display:flex}
+  /* Three chips can be live at once. The share is the loudest claim so it keeps the
+     top slot; the watch IS a share, so it sits under it, and the eyes step down
+     again. Each rule names the chips above it, so no chip can hide behind another. */
+  #sharing.live ~ #watching{top:62px}
+  #sharing.live ~ #eyeing{top:62px}
+  #sharing.live ~ #watching.live ~ #eyeing{top:108px}
+  #watching .eye{width:9px;height:9px;border-radius:50%;background:#ffb74d;
+    box-shadow:0 0 12px #ffb74d;animation:pulse 2.6s ease-in-out infinite;
+    flex:0 0 auto}
+  #watching .dim{letter-spacing:.02em;text-transform:none;
+    color:rgba(255,231,194,.66);font-variant-numeric:tabular-nums}
+  #watching button{border:0;border-radius:999px;cursor:pointer;font-family:inherit;
+    font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;padding:5px 11px;
+    background:rgba(255,183,77,.2);color:#fff1dc;
+    border:1px solid rgba(255,183,77,.45)}
+  #watching button:hover{background:rgba(255,183,77,.38)}
+
+  /* THE FACE, in-page fallback. The real article is a Document Picture-in-Picture
+     window that sits above every other application; this is what you get in a
+     browser that has none, and it says so rather than pretending to be pinned. */
+  #facecard{position:fixed;z-index:14;top:16px;right:16px;display:none;
+    width:196px;padding:12px 13px;border-radius:16px;
+    background:rgba(14,10,4,.92);border:1px solid rgba(255,183,77,.5);
+    backdrop-filter:blur(14px);box-shadow:0 18px 50px rgba(0,0,0,.6);
+    color:#ffe7c2;font-size:11px;letter-spacing:.06em}
+  #facecard.show{display:block}
+  #facecard .row{display:flex;align-items:center;gap:10px}
+  #facecard .mark{width:38px;height:38px;flex:0 0 auto}
+  #facecard .t{text-transform:uppercase;letter-spacing:.2em;font-size:10px}
+  #facecard .s{color:rgba(255,231,194,.66);font-variant-numeric:tabular-nums;
+    margin-top:2px;letter-spacing:.02em;text-transform:none}
+  #facecard .pin{margin-top:9px;width:100%;border:1px solid rgba(255,183,77,.4);
+    border-radius:999px;background:rgba(255,183,77,.16);color:#fff1dc;
+    font-family:inherit;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    padding:6px 8px;cursor:pointer}
+  #facecard .pin:hover{background:rgba(255,183,77,.34)}
+
+  /* the exact frame that was sent, shown beside the answer it produced */
+  #answer .saw{display:none;margin-top:13px;gap:11px;align-items:flex-start}
+  #answer .saw.show{display:flex}
+  #answer .saw img{width:132px;border-radius:8px;border:1px solid rgba(255,77,94,.4);
+    display:block;background:#000}
+  #answer .saw .fm{font-size:10.5px;line-height:1.7;color:var(--muted);
+    letter-spacing:.02em}
+  #answer .saw .fm b{display:block;font-size:10px;letter-spacing:.2em;
+    text-transform:uppercase;color:#ff9aa6;margin-bottom:3px;font-weight:500}
+  #status .said{text-transform:none;letter-spacing:.01em;font-size:12px;
+    color:rgba(232,238,252,.8);white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis;max-width:52ch}
+
+  /* ---------- focus sessions ----------
+     The countdown card. Pinned top-right, and it TINTS rather than blinks: the
+     colour is the whole message, readable out of the corner of your eye from a
+     different window, which is precisely where you will be when it matters. */
+  #focusbtn{flex:0 0 auto;width:38px;height:38px;padding:0;border-radius:50%;
+    border:1px solid var(--line);background:transparent;color:var(--muted);
+    cursor:pointer;display:grid;place-items:center;transition:.2s}
+  #focusbtn:hover:not(:disabled){color:#fff;border-color:rgba(140,170,220,.5)}
+  #focusbtn svg{width:16px;height:16px;display:block}
+  #focusbtn.on{color:#4be0b8;border-color:rgba(75,224,184,.65);
+    background:rgba(75,224,184,.14)}
+  #focusbtn.on.drift{color:#ff6b7f;border-color:rgba(255,107,127,.7);
+    background:rgba(255,107,127,.16)}
+
+  #focuscard{position:fixed;z-index:11;top:22px;right:26px;width:238px;display:none;
+    padding:12px 15px 11px;border-radius:15px;
+    background:linear-gradient(200deg,rgba(12,18,34,.9),rgba(6,9,18,.94));
+    border:1px solid var(--line);backdrop-filter:blur(13px);
+    box-shadow:0 14px 44px rgba(0,0,0,.55);
+    transition:border-color .35s,box-shadow .35s,background .35s}
+  #focuscard.live{display:block}
+  #focuscard .fh{display:flex;align-items:center;gap:7px;font-size:10px;
+    letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
+  #focuscard .fh i{width:6px;height:6px;border-radius:50%;background:#4be0b8;
+    box-shadow:0 0 9px #4be0b8;flex:0 0 auto;transition:.3s}
+  #focuscard .fh b{margin-left:auto;font-weight:500;letter-spacing:.1em;
+    color:rgba(143,160,192,.62);text-transform:none;font-size:9.5px}
+  #focus-clock{margin:7px 0 2px;font-size:34px;line-height:1;font-weight:300;
+    letter-spacing:.02em;color:#fff;font-variant-numeric:tabular-nums;
+    transition:color .3s}
+  #focuscard .fbar{height:3px;border-radius:2px;background:rgba(140,170,220,.14);
+    overflow:hidden;margin:9px 0 8px}
+  #focuscard .fbar span{display:block;height:100%;width:0;border-radius:2px;
+    background:#4be0b8;box-shadow:0 0 10px rgba(75,224,184,.6);
+    transition:width .6s linear,background .3s}
+  #focus-intent{display:none;font-size:11px;line-height:1.45;color:#cdd9f2;
+    margin:-2px 0 7px;padding-left:8px;border-left:2px solid rgba(75,224,184,.55);
+    overflow-wrap:break-word}
+  #focus-stats{font-size:10.5px;letter-spacing:.06em;line-height:1.65;
+    color:rgba(143,160,192,.8);font-variant-numeric:tabular-nums}
+  #focus-stats b{color:#dbe6ff;font-weight:500}
+  #focuscard .frow{display:flex;gap:6px;margin-top:10px}
+  #focuscard .frow button{flex:1;border:1px solid var(--line);border-radius:999px;
+    background:transparent;color:var(--muted);cursor:pointer;font-family:inherit;
+    font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;padding:6px 0;
+    transition:.2s}
+  #focuscard .frow button:hover{color:#fff;border-color:rgba(140,170,220,.55)}
+  /* The override, and the one control on this card that changes what is WATCHED
+     rather than what the clock is doing - so it flashes its own confirmation the
+     instant it is pressed, and wears the on-target colour while it does. */
+  #focuscard .frow.flock{margin-top:9px}
+  #focus-lock{letter-spacing:.16em}
+  #focus-lock.done{color:#4be0b8;border-color:rgba(75,224,184,.7);
+    background:rgba(75,224,184,.16)}
+  /* Off target. Not a flash you can ignore after the third one - a colour the
+     whole card wears until you come back. */
+  #focuscard.drift{border-color:rgba(255,77,94,.72);
+    background:linear-gradient(200deg,rgba(46,10,16,.92),rgba(20,6,10,.95));
+    box-shadow:0 14px 44px rgba(255,0,30,.24),inset 0 0 40px rgba(255,77,94,.07)}
+  #focuscard.drift .fh{color:#ffb4bd}
+  #focuscard.drift .fh i{background:#ff4d5e;box-shadow:0 0 12px #ff4d5e;
+    animation:pulse 1.15s ease-in-out infinite}
+  #focuscard.drift #focus-clock{color:#ffd7dc}
+  #focuscard.drift .fbar span{background:#ff4d5e;box-shadow:0 0 10px rgba(255,77,94,.6)}
+  /* The 800ms grace window, shown rather than hidden: amber is the machine saying
+     "I have noticed, and I am not accusing you yet". */
+  /* Deferred: nothing is being watched yet, and the card should not look like a
+     session quietly getting on with it. Dashed, because it is not settled. */
+  #focuscard.deferred{border-style:dashed;border-color:rgba(140,170,220,.45)}
+  #focuscard.deferred .fh i{background:#8fa0c0;box-shadow:none}
+  #focuscard.deferred #focus-clock{color:rgba(219,230,255,.6)}
+  #focuscard.deferred .fbar span{background:#8fa0c0;box-shadow:none}
+  #focuscard.grace{border-color:rgba(255,179,71,.6)}
+  #focuscard.grace .fh i{background:#ffb347;box-shadow:0 0 11px #ffb347}
+  #focuscard.excused{border-color:rgba(124,196,255,.55)}
+  #focuscard.excused .fh i{background:#7cc4ff;box-shadow:0 0 11px #7cc4ff;
+    animation:none}
+  #focuscard.excused #focus-clock{color:#dceaff}
+  #focuscard.paused{border-color:rgba(140,170,220,.3);opacity:.72}
+  #focuscard.paused .fh i{background:#8fa0c0;box-shadow:none;animation:none}
+  /* Cannot see. Distinct from both on-target and drift on purpose: a watchdog
+     that goes blind and looks calm is worse than one that looks worried. */
+  #focuscard.blind{border-color:rgba(157,124,255,.55)}
+  #focuscard.blind .fh i{background:#9d7cff;box-shadow:0 0 11px #9d7cff}
+  #focuscard.ended{border-color:rgba(75,224,184,.5)}
+  #focuscard.ended .fh i{animation:none}
+  @media (max-width:720px){#focuscard{display:none !important}}
+
+  /* ---------- boot / error ---------- */
+  #boot{position:fixed;inset:0;z-index:20;display:grid;place-items:center;
+    background:#000;transition:opacity .6s;text-align:center;padding:30px}
+  #boot.gone{opacity:0;pointer-events:none;visibility:hidden}
+  #boot .t{font-size:12px;letter-spacing:.34em;text-transform:uppercase;color:var(--muted)}
+  #boot .e{margin-top:14px;font-size:13px;color:#ffc9a8;max-width:52ch;line-height:1.7}
+  .scene-tooltip{font:12.5px/1.4 inherit !important;color:#fff !important;
+    background:rgba(8,12,24,.9) !important;border:1px solid rgba(140,170,220,.24);
+    border-radius:9px;padding:7px 11px !important;backdrop-filter:blur(8px);
+    letter-spacing:.02em}
+  .scene-tooltip .tg{display:block;font-size:10px;letter-spacing:.18em;
+    text-transform:uppercase;color:#8fa0c0;margin-top:3px}
+  @media (max-width:720px){
+    #legend{display:none} #title{max-width:22ch}
+  }
+</style>
+</head>
+<body>
+
+<canvas id="stars"></canvas>
+<div id="nebula"></div>
+<div id="graph"></div>
+<div id="vignette"></div>
+
+<div class="hud" id="title">
+  <h1>Knowledge Galaxy</h1>
+  <p id="stats">mapping…</p>
+  <button id="density" type="button"></button>
+  <p class="hint">click a star &middot; drag to orbit &middot; scroll to zoom &middot; ask below</p>
+</div>
+
+<div class="hud" id="legend"></div>
+
+<!-- The brain chip. Painted only from what the server reports, never from what the
+     page asked for: a swap that was refused must leave this untouched. -->
+<div id="brainchip" role="button" tabindex="0"
+     title="the model answering right now — click to change it"><i></i><b id="brain-label">…</b></div>
+<!-- Filled in from GET /brains. Empty until the server says what it has. -->
+<div id="brainmenu" role="menu" aria-label="change the answering brain"></div>
+
+<!-- The countdown, pinned top-right. Every number on it comes from the SERVER's
+     session, never from a timer in this page: reload the tab and it rejoins the
+     session already in progress rather than starting a new one. -->
+<div id="focuscard">
+  <div class="fh"><i></i><span id="focus-state">on target</span><b id="focus-mode"></b></div>
+  <div id="focus-clock">--:--</div>
+  <div class="fbar"><span id="focus-fill"></span></div>
+  <!-- Your own answer to "what are we focusing on?", in your own words. The only
+       string on this card that did not come from a template in focus.py, which is
+       why it is only ever written with textContent. -->
+  <div id="focus-intent"></div>
+  <div id="focus-stats"></div>
+  <!-- Moving the lock, by hand. The deferred lock infers, and inference is
+       occasionally wrong - so the override sits on the same card that is telling you
+       it is watching the wrong thing. Its own row because the label is a sentence: a
+       pill reading "LOCK" would be a mystery button on a card about time. -->
+  <div class="frow flock">
+    <button id="focus-lock" type="button"
+            title="Watch the tab you are actually working in">lock this tab</button>
+  </div>
+  <div class="frow">
+    <button id="focus-pause" type="button" title="Pause the clock">pause</button>
+    <button id="focus-extend" type="button" title="Five more minutes">+5</button>
+    <button id="focus-end" type="button" title="End and hear the report">end</button>
+  </div>
+</div>
+
+<div id="sharewash"></div>
+
+<!-- Live-share indicator. Shown only while a stream is genuinely live: it is
+     painted from the track's own readyState, never from a flag we set hopefully. -->
+<div id="sharing">
+  <span class="rec"></span>
+  <span>screen share live</span>
+  <span class="dim" id="share-dim"></span>
+  <button id="share-stop" type="button">stop</button>
+</div>
+
+<!-- The watch. Its own chip rather than a word added to the share chip: a share you
+     started to ask a question about is a different claim from a share that is being
+     diffed every five seconds and may speak without being asked. The stillness is
+     shown as a running number because that is the entire state of the feature. -->
+<div id="watching">
+  <span class="eye"></span>
+  <!-- Counted, not claimed. "No frame sent" is the truth for as long as the screen
+       keeps moving, and the moment that stops being true this says how many. -->
+  <span id="watch-sent">watching · no frame sent</span>
+  <span class="dim" id="watch-dim"></span>
+  <button id="watch-stop" type="button">stop</button>
+</div>
+
+<!-- THE FACE. Filled from FACE_MARKUP, the same markup the Document
+     Picture-in-Picture window gets, so there is one face with two possible homes. -->
+<div id="facecard"></div>
+
+<!-- The eyes. Painted from the camera track's own readyState, like the share chip,
+     and it says the one thing worth saying about a camera that is on: what leaves.
+     "posture only" is not a slogan here - see eyeReport(), whose whole payload is
+     three booleans and a word about the ears. -->
+<div id="eyeing">
+  <span class="lid"></span>
+  <span>eyes on · posture only</span>
+  <span class="dim" id="eye-dim"></span>
+  <button id="eye-stop" type="button">close</button>
+</div>
+
+<!-- Where a frame is grabbed. All four are display:none and none of them holds a
+     frame between questions: the videos are the live streams, and each canvas is
+     overwritten at the moment of asking. One pair for the screen, one for the
+     camera, so neither organ can ever hand the other one's picture to the brain. -->
+<video id="shot" muted playsinline autoplay style="display:none"></video>
+<canvas id="frame" style="display:none"></canvas>
+<!-- Where the watch does its thinking: 32x18 pixels of the screen above, which is
+     576 grey numbers. Nothing is uploaded from this canvas and nothing can be - the
+     diff reads it back with getImageData and the only thing that leaves the function
+     is a count of how many of those numbers moved. -->
+<canvas id="thumb" width="32" height="18" style="display:none"></canvas>
+<video id="cam" muted playsinline autoplay style="display:none"></video>
+<canvas id="camframe" style="display:none"></canvas>
+
+<aside id="panel">
+  <button id="close" title="Close (Esc)">&times;</button>
+  <div class="kicker"><i></i><span id="p-group"></span></div>
+  <h2 id="p-label"></h2>
+  <div class="meta" id="p-meta"></div>
+  <div class="body">
+    <p id="p-excerpt"></p>
+    <h3 id="p-nb-head" style="display:none">Connected</h3>
+    <div class="chips" id="p-neighbours"></div>
+  </div>
+</aside>
+
+<div id="brain">
+  <div id="answer">
+    <div class="q" id="a-q"></div>
+    <div class="a" id="a-text"></div>
+    <div class="src" id="a-src" style="display:none">
+      <div class="lbl">Drawn from</div>
+      <div class="chips" id="a-chips"></div>
+    </div>
+    <div class="saw" id="a-saw">
+      <img id="a-frame" alt="the frame that was sent" />
+      <div class="fm" id="a-frame-meta"></div>
+    </div>
+  </div>
+  <div id="status"><i></i><span id="status-text">ready</span><span class="said" id="status-said"></span></div>
+  <form id="bar" autocomplete="off">
+    <span class="dot" id="dot"></span>
+    <input id="q" placeholder="Ask your notes anything…  (press / to focus)" />
+    <button id="screen" type="button" title="Share a screen and ask about it">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="2" y="3.5" width="20" height="14" rx="2.5"/>
+        <path d="M8 21h8M12 17.5V21"/>
+      </svg>
+    </button>
+    <button id="eye" type="button"
+            title="Open the eyes · posture only, no frame leaves this machine">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M1.8 12S5.6 5.4 12 5.4 22.2 12 22.2 12 18.4 18.6 12 18.6 1.8 12 1.8 12z"/>
+        <circle cx="12" cy="12" r="3.1"/>
+      </svg>
+    </button>
+    <button id="focusbtn" type="button" title="Start a focus session (or say “thirty minutes on this”)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+           stroke-linecap="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.4"/>
+        <path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3"/>
+      </svg>
+    </button>
+    <!-- THE EAR BUTTON. Named that in the tooltip because the assistant names it in a
+         sentence - "tap the ear button and just talk" - and a control the voice refers
+         to by a name it does not answer to is a control you hunt for. It is also the
+         only thing in this page that opens the microphone: no organ may. -->
+    <button id="mic" type="button" title="Your ears · tap the ear button and just talk">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+        <path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4"/>
+      </svg>
+    </button>
+    <button id="reset" type="button" title="Forget this conversation">&#8635;</button>
+    <button id="send" type="submit">Ask</button>
+  </form>
+</div>
+
+<div id="boot"><div>
+  <div class="t">igniting the galaxy</div>
+  <div class="e" id="boot-err"></div>
+</div></div>
+
+<script src="graph-data.js"></script>
+<script>
+/* ---------------------------------------------------------------------------
+   Speech recognition finalises a phrase every time you pause for breath, and
+   people pause in the middle of sentences. This is how long we wait after the
+   last words before deciding a thought is actually over. One knob, one place:
+   raise it if you think slowly, lower it if you want a snappier trigger.      */
+const FINISH_MS = 900;
+/* ------------------------------------------------------------------------- */
+
+/* ============================================================ starfield ==== */
+(function () {
+  const cvs = document.getElementById('stars');
+  const ctx = cvs.getContext('2d');
+  let stars = [], w = 0, h = 0, dpr = Math.min(devicePixelRatio || 1, 2);
+
+  function seed() {
+    w = cvs.width = innerWidth * dpr;
+    h = cvs.height = innerHeight * dpr;
+    cvs.style.width = innerWidth + 'px';
+    cvs.style.height = innerHeight + 'px';
+    const count = Math.round((innerWidth * innerHeight) / 5200);
+    stars = new Array(count).fill(0).map(function () {
+      const layer = Math.random();
+      return {
+        x: Math.random() * w,
+        y: Math.random() * h,
+        r: (layer * 1.5 + 0.25) * dpr,
+        a: 0.25 + Math.random() * 0.6,
+        tw: 0.4 + Math.random() * 1.9,
+        ph: Math.random() * Math.PI * 2,
+        vx: (0.012 + layer * 0.05) * dpr,
+        hue: Math.random() < 0.14 ? 'rgba(190,215,255,' : 'rgba(255,252,244,'
+      };
+    });
+  }
+
+  function frame(t) {
+    ctx.clearRect(0, 0, w, h);
+    for (let i = 0; i < stars.length; i++) {
+      const s = stars[i];
+      s.x -= s.vx;
+      if (s.x < -2) { s.x = w + 2; s.y = Math.random() * h; }
+      const a = s.a * (0.62 + 0.38 * Math.sin(t / 1000 * s.tw + s.ph));
+      ctx.beginPath();
+      ctx.fillStyle = s.hue + a.toFixed(3) + ')';
+      ctx.arc(s.x, s.y, s.r, 0, 6.2832);
+      ctx.fill();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  seed();
+  addEventListener('resize', seed);
+  requestAnimationFrame(frame);
+})();
+
+/* ============================================================== helpers ==== */
+const PALETTE = ['#7cc4ff','#ffb347','#9d7cff','#4be0b8','#ff7a9c','#d6e35b',
+                 '#ff9d5c','#6ce0ff','#c0a5ff','#9ee87f'];
+const $ = function (id) { return document.getElementById(id); };
+
+function hexToRgba(hex, alpha) {
+  const n = parseInt(hex.slice(1), 16);
+  return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) +
+         ',' + alpha + ')';
+}
+/* Blend a group colour towards white by t (0..1) - the flare of a new note. */
+function mixToWhite(hex, t) {
+  const n = parseInt(hex.slice(1), 16);
+  const k = Math.max(0, Math.min(1, t));
+  const up = function (v) { return Math.round(v + (255 - v) * k); };
+  return 'rgb(' + up((n >> 16) & 255) + ',' + up((n >> 8) & 255) + ',' +
+         up(n & 255) + ')';
+}
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+  });
+}
+function bootFail(msg) {
+  $('boot').classList.remove('gone');
+  $('boot').querySelector('.t').textContent = 'galaxy offline';
+  $('boot-err').innerHTML = msg;
+}
+
+/* ============================================== load 3d-force-graph (CDN) === */
+const CDNS = [
+  'https://cdn.jsdelivr.net/npm/3d-force-graph@1/dist/3d-force-graph.min.js',
+  'https://unpkg.com/3d-force-graph@1/dist/3d-force-graph.min.js',
+  'https://cdn.jsdelivr.net/npm/3d-force-graph@1.73.0/dist/3d-force-graph.min.js'
+];
+function loadScript(url) {
+  return new Promise(function (res, rej) {
+    const s = document.createElement('script');
+    s.src = url; s.async = true;
+    s.onload = res;
+    s.onerror = function () { rej(new Error(url)); };
+    document.head.appendChild(s);
+  });
+}
+async function loadLib() {
+  for (let i = 0; i < CDNS.length; i++) {
+    try {
+      await loadScript(CDNS[i]);
+      if (window.ForceGraph3D) return true;
+    } catch (e) { /* try the next mirror */ }
+  }
+  return false;
+}
+
+/* ================================================================= boot ==== */
+(async function main() {
+  if (typeof GRAPH === 'undefined' || !GRAPH || !GRAPH.nodes) {
+    return bootFail('<code>graph-data.js</code> is missing or empty.<br>' +
+      'Run <code>python build.py</code> in the project root, then reload.');
+  }
+  if (!GRAPH.nodes.length) {
+    return bootFail('The index contains no notes. Add .md files under ' +
+      '<code>notes/</code> and run <code>python build.py</code> again.');
+  }
+  const ok = await loadLib();
+  if (!ok) {
+    return bootFail('Could not load <code>3d-force-graph</code> from any CDN.<br>' +
+      'This page needs an internet connection the first time it runs.');
+  }
+
+  /* ---- groups & colours ---- */
+  const groups = (GRAPH.meta && GRAPH.meta.groups && GRAPH.meta.groups.length)
+    ? GRAPH.meta.groups.slice()
+    : Array.from(new Set(GRAPH.nodes.map(function (n) { return n.group; }))).sort();
+  const colorOf = {};
+  groups.forEach(function (g, i) { colorOf[g] = PALETTE[i % PALETTE.length]; });
+  const groupColor = function (n) { return colorOf[n.group] || '#9fb4d8'; };
+
+  /* ---- copy data: the layout engine mutates what you hand it ---- */
+  const nodes = GRAPH.nodes.map(function (n) { return Object.assign({}, n); });
+  const links = GRAPH.links.map(function (l) { return Object.assign({}, l); });
+  const byId = new Map(nodes.map(function (n) { return [n.id, n]; }));
+  function idOf(v) { return (v && typeof v === 'object') ? v.id : v; }
+
+  /* ---- density: a small corpus can be near-fully connected, which reads as a
+     hairball. Default to each note's strongest few edges; the toggle in the HUD
+     shows every link build.py actually found. ---- */
+  const KIND_RANK = { wikilink: 0, mention: 1, shared: 2 };
+  const STRONG_PER_NODE = 4;
+
+  function strongSubset(all, k) {
+    const buckets = new Map(nodes.map(function (n) { return [n.id, []]; }));
+    all.forEach(function (l) {
+      buckets.get(idOf(l.source)).push(l);
+      buckets.get(idOf(l.target)).push(l);
+    });
+    const keep = new Set();
+    buckets.forEach(function (arr) {
+      arr.sort(function (a, b) {
+        return (KIND_RANK[a.kind] - KIND_RANK[b.kind]) ||
+               ((b.weight || 1) - (a.weight || 1));
+      });
+      arr.slice(0, k).forEach(function (l) { keep.add(l); });
+    });
+    return all.filter(function (l) { return keep.has(l); });
+  }
+
+  const allLinks = links;
+  const strongLinks = strongSubset(allLinks, STRONG_PER_NODE);
+  let activeLinks = strongLinks;
+  let neighbours = new Map();
+
+  function rebuildNeighbours() {
+    neighbours = new Map(nodes.map(function (n) { return [n.id, new Set()]; }));
+    activeLinks.forEach(function (l) {
+      neighbours.get(idOf(l.source)).add(idOf(l.target));
+      neighbours.get(idOf(l.target)).add(idOf(l.source));
+    });
+  }
+  rebuildNeighbours();
+  function degOf(id) { return (neighbours.get(id) || { size: 0 }).size; }
+
+  const hidden = new Set();                 // groups toggled off in the legend
+  const hiNodes = new Set();
+  const hiLinks = new Set();
+  let selected = null;
+
+  /* ---- birth pulse: a newly captured note flares white and swells, then settles.
+     Read by nodeVal and nodeColor below, so it survives every other repaint. ---- */
+  const PULSE_MS = 1600;
+  let pulseId = null, pulseAmt = 0;
+
+  /* ---- the graph ---- */
+  const Graph = ForceGraph3D()(document.getElementById('graph'))
+    .backgroundColor('rgba(0,0,0,0)')
+    .showNavInfo(false)
+    .nodeId('id')
+    .nodeRelSize(4.4)
+    .nodeResolution(16)
+    .nodeOpacity(1)
+    .nodeVal(function (n) {
+      const base = 1.1 + degOf(n.id) * 0.8;
+      return (n.id === pulseId) ? base + pulseAmt * base * 3.2 : base;
+    })
+    .nodeLabel(function (n) {
+      return '<div>' + esc(n.label) + '<span class="tg">' + esc(n.group) +
+             ' &middot; ' + degOf(n.id) + ' links</span></div>';
+    })
+    .nodeColor(function (n) {
+      const c = groupColor(n);
+      // A pulsing node ignores dimming and muting: the whole point is being seen.
+      if (n.id === pulseId && pulseAmt > 0) return mixToWhite(c, pulseAmt);
+      if (hidden.has(n.group)) return hexToRgba(c, 0.05);
+      if (!hiNodes.size) return c;
+      if (selected === n.id) return '#ffffff';
+      if (hiNodes.has(n.id)) return c;
+      return hexToRgba(c, 0.09);
+    })
+    .linkColor(function (l) {
+      const s = byId.get(idOf(l.source)), t = byId.get(idOf(l.target));
+      if (!s || !t || hidden.has(s.group) || hidden.has(t.group)) {
+        return 'rgba(120,150,200,0.02)';
+      }
+      if (hiLinks.has(l)) return hexToRgba(groupColor(s), 0.9);
+      return hiLinks.size ? 'rgba(120,150,200,0.06)' : 'rgba(140,175,225,0.32)';
+    })
+    .linkWidth(function (l) { return hiLinks.has(l) ? 1.2 : 0.35; })
+    .linkOpacity(0.85)
+    .linkDirectionalParticles(function (l) { return hiLinks.has(l) ? 3 : 0; })
+    .linkDirectionalParticleWidth(1.1)
+    .linkDirectionalParticleSpeed(0.006)
+    .linkDirectionalParticleColor(function (l) {
+      const s = byId.get(idOf(l.source));
+      return s ? groupColor(s) : '#ffffff';
+    })
+    .onNodeClick(function (n) { focusNode(n, true); })
+    .onNodeHover(function (n) {
+      document.body.style.cursor = n ? 'pointer' : '';
+      if (selected !== null) return;              // a selection wins over hover
+      setHighlight(n ? n.id : null, false);
+    })
+    .onBackgroundClick(clearSelection)
+    .graphData({ nodes: nodes, links: activeLinks });
+
+  Graph.d3Force('charge').strength(-165);
+  Graph.d3Force('link')
+    .distance(function (l) {
+      return l.kind === 'wikilink' ? 52 : l.kind === 'mention' ? 74 : 96;
+    })
+    .strength(function (l) { return l.kind === 'shared' ? 0.18 : 0.42; });
+  Graph.d3VelocityDecay(0.28);
+
+  function refresh() {
+    Graph.nodeColor(Graph.nodeColor())
+         .nodeVal(Graph.nodeVal())
+         .linkColor(Graph.linkColor())
+         .linkWidth(Graph.linkWidth())
+         .linkDirectionalParticles(Graph.linkDirectionalParticles());
+  }
+
+  function setHighlight(id, isSelection) {
+    hiNodes.clear(); hiLinks.clear();
+    if (isSelection) selected = id;
+    if (id !== null && id !== undefined) {
+      hiNodes.add(id);
+      (neighbours.get(id) || new Set()).forEach(function (x) { hiNodes.add(x); });
+      activeLinks.forEach(function (l) {
+        const a = idOf(l.source), b = idOf(l.target);
+        if (a === id || b === id) hiLinks.add(l);
+      });
+    }
+    refresh();
+  }
+
+  /* ---- camera: fly to a node ----
+     Graph.cameraPosition(pos) with no lookAt argument silently resets the look-at
+     to the origin, so the idle orbit below has to be told what to orbit around or
+     it drags the view back to the centre of the galaxy a moment after every
+     flight, pulling the note we just flew to out of frame. */
+  let viewTarget = { x: 0, y: 0, z: 0 };
+  let flying = false, flights = 0;
+  function focusNode(node, select) {
+    const n = (typeof node === 'number') ? byId.get(node) : node;
+    if (!n) return;
+    if (select) { selected = n.id; setHighlight(n.id, true); openPanel(n); }
+    if (n.x === undefined) return;
+    flights++;      // idle rotation never touches this, so it means "we flew"
+    // Far enough back that the lit neighbours stay in frame - flying right up to
+    // the sphere fills the screen with one node and loses all sense of place.
+    const dist = 190;
+    const len = Math.hypot(n.x, n.y, n.z) || 1;
+    const k = 1 + dist / len;
+    flying = true;
+    viewTarget = { x: n.x, y: n.y, z: n.z };   // keep orbiting this note afterwards
+    Graph.cameraPosition({ x: n.x * k, y: n.y * k, z: n.z * k }, n, 1700);
+    setTimeout(function () { flying = false; }, 1850);
+  }
+
+  function clearSelection() {
+    selected = null;
+    hiNodes.clear(); hiLinks.clear();
+    refresh();
+    $('panel').classList.remove('open');
+  }
+
+  /* ---- slow idle rotation, yielding to the mouse ---- */
+  let autoRotate = true, idleTimer = null, dragging = false;
+  let last = performance.now();
+  function nudgeInteraction() {
+    autoRotate = false;
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(function () { autoRotate = true; }, 5200);
+  }
+  ['pointerdown', 'wheel', 'touchstart'].forEach(function (ev) {
+    $('graph').addEventListener(ev, nudgeInteraction, { passive: true });
+  });
+
+  /* A drag may be a deliberate pan, which is the one legitimate way for the
+     look-at to change - so adopt it when the drag ends. Between drags the
+     look-at is ours to defend; see the orbit loop below for why it needs
+     defending at all. */
+  $('graph').addEventListener('pointerdown', function () { dragging = true; },
+                              { passive: true });
+  ['pointerup', 'pointercancel'].forEach(function (ev) {
+    addEventListener(ev, function () {
+      if (!dragging) return;
+      dragging = false;
+      if (flying) return;                    // the flight owns the look-at
+      const t = Graph.controls() && Graph.controls().target;
+      if (t) viewTarget = { x: t.x, y: t.y, z: t.z };
+    }, { passive: true });
+  });
+
+  (function orbit(now) {
+    const dt = Math.min(now - last, 60); last = now;
+
+    /* Hold the look-at where we put it. OrbitControls quietly eases its target
+       back towards the origin after a gesture, and the rotation below is the only
+       thing that re-asserts it - so with rotation paused (the 5s after any mouse
+       input) a note we just flew to would slide out of frame, and the idle timer
+       would then adopt that drifted centre for good. Not while flying, which owns
+       the look-at, and not mid-drag, where a pan is the user changing it. */
+    const ctrl = Graph.controls();
+    if (!flying && !dragging && ctrl && ctrl.target) {
+      const t = ctrl.target;
+      if (Math.hypot(t.x - viewTarget.x, t.y - viewTarget.y,
+                     t.z - viewTarget.z) > 0.5) {
+        t.set(viewTarget.x, viewTarget.y, viewTarget.z);
+      }
+    }
+
+    if (autoRotate && !flying) {
+      const cam = Graph.camera();
+      const tgt = viewTarget;
+      const dx = cam.position.x - tgt.x, dz = cam.position.z - tgt.z;
+      const r = Math.hypot(dx, dz);
+      if (r > 1) {
+        const a = Math.atan2(dx, dz) + 0.000075 * dt;   // ~1 turn per 4 minutes
+        // lookAt passed explicitly: without it the library snaps it to the origin.
+        Graph.cameraPosition({
+          x: tgt.x + r * Math.sin(a),
+          y: cam.position.y,
+          z: tgt.z + r * Math.cos(a)
+        }, tgt);
+      }
+    }
+    requestAnimationFrame(orbit);
+  })(last);
+
+  let fitted = false;
+  Graph.onEngineStop(function () {
+    if (!fitted) { fitted = true; Graph.zoomToFit(1400, 62); }
+  });
+  setTimeout(function () {
+    if (!fitted) { fitted = true; Graph.zoomToFit(1400, 62); }
+  }, 4200);
+
+  /* ---- side panel ---- */
+  function openPanel(n) {
+    const c = groupColor(n);
+    $('panel').querySelector('.kicker').style.color = c;
+    $('p-group').textContent = n.group;
+    $('p-label').textContent = n.label;
+    $('p-meta').textContent = n.file + ' · ' + (n.words || 0) + ' words · ' +
+                              degOf(n.id) + ' connections';
+    $('p-excerpt').textContent = n.excerpt || '(no text)';
+
+    const nb = Array.from(neighbours.get(n.id) || [])
+      .map(function (id) { return byId.get(id); })
+      .filter(Boolean)
+      .sort(function (a, b) { return degOf(b.id) - degOf(a.id); });
+    const box = $('p-neighbours');
+    box.innerHTML = '';
+    $('p-nb-head').style.display = nb.length ? '' : 'none';
+    nb.forEach(function (m) { box.appendChild(chip(m)); });
+    $('panel').classList.add('open');
+  }
+
+  function chip(n) {
+    const b = document.createElement('button');
+    b.className = 'chip';
+    b.style.color = groupColor(n);
+    b.innerHTML = '<i></i><span style="color:var(--ink)">' + esc(n.label) + '</span>';
+    b.onclick = function () { focusNode(n, true); };
+    return b;
+  }
+
+  $('close').onclick = clearSelection;
+  addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { clearSelection(); $('q').blur(); }
+    if (e.key === '/' && document.activeElement !== $('q')) {
+      e.preventDefault(); $('q').focus();
+    }
+  });
+
+  /* ---- legend ----
+     Repaintable rather than built once: a capture can create a whole new folder
+     (captures/), and a cluster the galaxy contains but the legend does not is a
+     cluster you cannot mute. ---- */
+  const legend = $('legend');
+  function paintLegend() {
+    const counts = {};
+    nodes.forEach(function (n) { counts[n.group] = (counts[n.group] || 0) + 1; });
+    legend.innerHTML = '';
+    groups.forEach(function (g) {
+      const row = document.createElement('div');
+      row.className = 'lg' + (hidden.has(g) ? ' off' : '');
+      row.style.color = colorOf[g];
+      row.innerHTML = '<b>' + (counts[g] || 0) + '</b><span style="color:inherit">' +
+                      esc(g) + '</span><i></i>';
+      row.onclick = function () {
+        if (hidden.has(g)) { hidden.delete(g); row.classList.remove('off'); }
+        else { hidden.add(g); row.classList.add('off'); }
+        refresh();
+      };
+      legend.appendChild(row);
+    });
+  }
+  paintLegend();
+  function paintStats() {
+    $('stats').textContent = nodes.length + ' notes · ' + activeLinks.length +
+      ' connections · ' + groups.length + ' clusters';
+    $('density').textContent = (activeLinks === strongLinks)
+      ? 'showing strongest links · see all ' + allLinks.length + ' →'
+      : 'showing all ' + allLinks.length + ' links · simplify →';
+  }
+  $('density').onclick = function () {
+    activeLinks = (activeLinks === strongLinks) ? allLinks : strongLinks;
+    rebuildNeighbours();
+    Graph.graphData({ nodes: nodes, links: activeLinks });
+    if (selected !== null) setHighlight(selected, true);
+    else { hiNodes.clear(); hiLinks.clear(); refresh(); }
+    paintStats();
+  };
+  paintStats();
+
+  /* ================================================================ brain == */
+  const SESSION = 'galaxy-' + Math.random().toString(36).slice(2, 10);
+  let busy = false;
+
+  /* Four or more sources and flying to one of them would be a lie about where the
+     answer came from, so the camera stays put and the whole cluster lights up. */
+  const CLUSTER_MIN = 4;
+
+  /* The server is the real classifier (it can see the retrieval scores). This is
+     only a backstop for an older or misbehaving server, so that "good morning"
+     still cannot drag the camera around. */
+  const SMALLTALK_RE = new RegExp('^(?:' +
+    'hi|hello+|hey+|yo|hiya|howdy|greetings|good\\s*(?:morning|afternoon|evening|day|night)|' +
+    'morning|afternoon|evening|thanks?(?:\\s+you)?|ty|ta|cheers|ok|okay|cool|nice|great|' +
+    'lovely|awesome|brilliant|perfect|sweet|please|sorry|bye|goodbye|see\\s+you|later|cya|' +
+    'lol|ha(?:ha)+|hmm+|yay|how\\s+are\\s+you(?:\\s+doing)?(?:\\s+today)?|' +
+    "what(?:'s|s)?\\s+up|sup|who\\s+are\\s+you|what\\s+are\\s+you|what\\s+can\\s+you\\s+do|" +
+    'tell\\s+me\\s+a\\s+joke|knock\\s+knock|are\\s+you\\s+(?:a\\s+)?(?:robot|human|real|ai|bot)' +
+    ')[\\s,.!?;:]*$', 'i');
+  function localKind(question) {
+    return SMALLTALK_RE.test(String(question).trim()) ? 'chat' : 'notes';
+  }
+
+  /* The note is on screen to be read; the voice only ever says the short answer.
+     A cap here means a long error dump or a chatty model cannot turn into a
+     minute of narration. */
+  const SPOKEN_MAX_CHARS = 260;
+  function spokenForm(text) {
+    const line = String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
+    if (line.length <= SPOKEN_MAX_CHARS) return line;
+    const sentences = line.match(/[^.!?]+[.!?]+/g) || [];
+    let out = '';
+    for (let i = 0; i < sentences.length; i++) {
+      if ((out + sentences[i]).length > SPOKEN_MAX_CHARS) break;
+      out += sentences[i];
+    }
+    if (out.trim()) return out.trim();
+    return line.slice(0, SPOKEN_MAX_CHARS).replace(/\s+\S*$/, '') + '…';
+  }
+
+  /* Nothing else in the file is allowed to move the camera in response to an
+     answer. Whether the question was about the notes is decided FIRST, and a
+     "chat" reply can never reach the 'fly' or 'cluster' branches below. */
+  function decideCamera(kind, used, isError) {
+    if (kind === 'chat') return 'hold';       // small talk never touches the graph
+    /* A screen answer came from the screen, not from the collection. Flying to a
+       note, or lighting one, would be claiming a source it does not have - so this
+       is refused here rather than left to depend on the nodes array being empty. */
+    if (kind === 'screen') return 'hold';
+    /* Changing brains is not an answer about the notes at all - it cites nothing,
+       so it moves nothing. Refused swaps included. */
+    if (kind === 'model') return 'hold';
+    /* And a callout from the focus timer cites nothing either. It has an opinion
+       about where you ARE, which is not a claim about any note - so the graph does
+       not move to illustrate it. */
+    if (kind === 'focus') return 'hold';
+    if (!used.length) return 'hold';          // nothing was cited, nothing to prove
+    if (isError) return 'cluster';            // no answer yet: show matches, do not fly
+    return used.length >= CLUSTER_MIN ? 'cluster' : 'fly';
+  }
+
+  function renderAnswer(question, text, isError, ids) {
+    /* Every answer starts by clearing the frame thumbnail. A picture left sitting
+       beside the next answer would read as the evidence for it, which it is not. */
+    hideProof();
+    $('a-q').textContent = question ? '“' + question + '”' : '';
+    $('a-text').textContent = text;
+    $('answer').classList.toggle('err', !!isError);
+    const src = $('a-src'), box = $('a-chips');
+    box.innerHTML = '';
+    const used = (ids || []).map(function (i) { return byId.get(i); }).filter(Boolean);
+    src.style.display = used.length ? '' : 'none';
+    used.forEach(function (n) { box.appendChild(chip(n)); });
+    $('answer').classList.add('show');
+    return used;
+  }
+
+  let lastPlan = 'hold';
+  function applyCamera(plan, used) {
+    lastPlan = plan;
+    if (plan === 'hold') return;              // graph untouched: no light, no flight
+
+    if (plan === 'fly') {
+      // One clear source: light it AND its direct neighbours, fly to it, open it.
+      const top = used[0];
+      setHighlight(top.id, true);              // also lights every direct neighbour
+      used.forEach(function (n) { hiNodes.add(n.id); });
+      refresh();
+      openPanel(top);
+      focusNode(top, false);
+      return;
+    }
+
+    // cluster: light exactly the notes that were used, and the links between them.
+    hiNodes.clear(); hiLinks.clear();
+    used.forEach(function (n) { hiNodes.add(n.id); });
+    activeLinks.forEach(function (l) {
+      if (hiNodes.has(idOf(l.source)) && hiNodes.has(idOf(l.target))) hiLinks.add(l);
+    });
+    selected = used[0].id;
+    refresh();
+    openPanel(used[0]);                        // the panel opens; the camera does not move
+  }
+
+  /* ================================================================ brain ==
+     "switch to Astra", "try on Claude Fable 5.1", "go back to your normal brain".
+
+     Nothing here decides WHICH model is real - the server owns the allowlist and
+     the refusals, and this page only ever paints what the server reports back. A
+     chip painted from what we asked for would show the wrong brain for exactly the
+     case the whole feature exists to prevent. */
+  const RESTORE_RE = /\b(?:normal|usual|default|original|config(?:ured)?|own|proper|old)\s+(?:brain|model|self|mind|brains)\b|\bback\s+to\s+(?:normal|yourself|your\s+(?:normal|usual|own|old)\b)/i;
+  const SWAP_RE = /^\s*["'“‘(\[]*(?:please\s+)?(?:switch|swap|change|flip|turn|put|try|use|load|run|become|be|revert|go\s+back|come\s+back|return|restore)\b(?:\s+[\w.]+){0,4}?\s+(?:sonnet|astra|brains|fable|haiku|opus|brain|mind|self|gpt)\b/i;
+  function isSwap(text) {
+    return SWAP_RE.test(String(text)) || RESTORE_RE.test(String(text));
+  }
+
+  let brain = null;                 // last state the SERVER reported, or null
+  function paintBrain(state) {
+    if (!state || !state.label) return;
+    brain = state;
+    const chip = $('brainchip');
+    $('brain-label').textContent = state.label;
+    chip.classList.toggle('swapped', !!state.swapped);
+    chip.classList.toggle('nokey', state.keyConfigured === false);
+    chip.title = state.model +
+      (state.provider ? '  ·  via ' + state.provider : '') +
+      (state.swapped ? '  ·  swapped at runtime; a restart returns to ' +
+        (state.configLabel || state.configModel) : '  ·  from config.json') +
+      (state.keyConfigured === false ? '  ·  NO KEY: it cannot answer yet' : '');
+  }
+
+  async function refreshBrain() {
+    try {
+      const res = await fetch('/health');
+      const data = await res.json();
+      if (data && data.brain) paintBrain(data.brain);
+    } catch (e) { /* the chip keeps whatever it last knew to be true */ }
+  }
+
+  /* ONE PATH OUT OF THIS PAGE. The ask bar and the chip's menu both end up here,
+     with a different body and the same everything else - the same status, the same
+     rendering, the same speaking, and above all the same sentence, because the
+     sentence is the server's. A button that composed its own line would be a second
+     voice, and two voices is what this whole arrangement exists to prevent. */
+  async function swapBrain(text, body) {
+    if (busy || !String(text).trim()) return;
+    busy = true;
+    $('send').disabled = true;
+    $('dot').classList.add('busy');
+    setStatus('thinking', 'changing brains', text);
+    renderAnswer(text, 'Changing brains…', false, null);
+
+    function done(message, isError, state) {
+      /* The chip moves only on the server's word. A refusal reports the state it
+         did NOT change, so painting it is still correct - and still honest. */
+      if (state) paintBrain(state);
+      renderAnswer(text, message, isError, null);
+      if (!speak(spokenForm(message))) idleStatus();
+      // A brain swap cites no note, so the camera holds. Same rule as a screen
+      // answer: flying somewhere would claim a source this answer does not have.
+      applyCamera(decideCamera('model', [], isError), []);
+    }
+
+    try {
+      const res = await fetch('/model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body || { say: text, door: 'voice' })
+      });
+      let data = null;
+      try { data = await res.json(); } catch (e) { data = null; }
+      if (!data) {
+        done('I could not change brains: the server replied with something that was ' +
+             'not JSON (HTTP ' + res.status + ').', true, null);
+      } else {
+        // ok:false is a refusal, already phrased in character by the server. It is
+        // shown as an error precisely because it must not read like a success.
+        done(data.answer || data.error || 'Something went wrong changing brains.',
+             !data.ok, data.label ? data : null);
+      }
+    } catch (e) {
+      done('Could not reach the brain to change it (' + e.message + ').', true, null);
+    } finally {
+      busy = false;
+      $('send').disabled = false;
+      $('dot').classList.remove('busy');
+    }
+  }
+
+  /* THE BUTTON DOOR. The chip is the button: it already says which brain is in play,
+     so making it the way to change one saves inventing a second control that says the
+     same thing. What it offers comes from GET /brains - the server's own allowlist -
+     so the menu cannot offer a model the voice would be refused. */
+  let brainList = null;             // [{say,id,label,pretty,current}], or null
+
+  async function loadBrains() {
+    try {
+      const res = await fetch('/brains');
+      const data = await res.json();
+      if (data && Array.isArray(data.models)) brainList = data.models;
+      if (data && data.brain) paintBrain(data.brain);
+    } catch (e) { brainList = null; }
+    return brainList;
+  }
+
+  function brainMenuOpen() { return $('brainmenu').classList.contains('open'); }
+
+  function closeBrainMenu() { $('brainmenu').classList.remove('open'); }
+
+  function paintBrainMenu() {
+    const menu = $('brainmenu');
+    menu.textContent = '';
+    if (!brainList || !brainList.length) {
+      const dead = document.createElement('button');
+      dead.type = 'button';
+      dead.className = 'home';
+      dead.textContent = 'the server has not said what it has';
+      menu.appendChild(dead);
+      return;
+    }
+    const here = brain && brain.model;
+    brainList.forEach(function (m) {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.setAttribute('role', 'menuitem');
+      row.dataset.id = m.id;
+      row.textContent = m.pretty || m.label;
+      if (m.id === here) row.classList.add('on');
+      /* The id, not the spoken name: the button knows exactly which model it means,
+         and the server checks it against the same allowlist either way. */
+      row.onclick = function () {
+        closeBrainMenu();
+        swapBrain('switch to ' + (m.pretty || m.label),
+                  { model: m.id, door: 'button' });
+      };
+      menu.appendChild(row);
+    });
+    const rule = document.createElement('div');
+    rule.className = 'hr';
+    menu.appendChild(rule);
+    const home = document.createElement('button');
+    home.type = 'button';
+    home.className = 'home';
+    home.setAttribute('role', 'menuitem');
+    home.textContent = 'back to ' +
+      ((brain && (brain.configLabel || brain.configModel)) || 'the configured brain');
+    home.onclick = function () {
+      closeBrainMenu();
+      swapBrain('go back to your normal brain',
+                { say: 'go back to your normal brain', door: 'button' });
+    };
+    menu.appendChild(home);
+  }
+
+  async function toggleBrainMenu() {
+    if (brainMenuOpen()) return closeBrainMenu();
+    if (!brainList) await loadBrains();
+    paintBrainMenu();
+    $('brainmenu').classList.add('open');
+  }
+
+  $('brainchip').onclick = toggleBrainMenu;
+  $('brainchip').onkeydown = function (e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleBrainMenu(); }
+  };
+  // Anywhere else, and Escape, closes it. A menu that stays open over a galaxy you
+  // are trying to drag is a menu you will resent.
+  document.addEventListener('pointerdown', function (e) {
+    if (!brainMenuOpen()) return;
+    if ($('brainmenu').contains(e.target) || $('brainchip').contains(e.target)) return;
+    closeBrainMenu();
+  }, true);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && brainMenuOpen()) closeBrainMenu();
+  });
+
+  /* ================================================================ focus ==
+     The accountability timer. Read one thing before changing anything here: this
+     page owns NO part of the session. The countdown, the drift, the callouts and
+     the report all live on the server's one-second tick, and everything below is
+     a display and a set of buttons. That is what makes a reload rejoin a session
+     in progress instead of quietly starting a fresh one, and it is why the numbers
+     survive closing the tab entirely.
+
+     The state that arrives is a whitelist of booleans and counters - there is no
+     app name and no site in it, by construction, and focus.py has a test that
+     proves it. So this file cannot display where you went even if it wanted to,
+     which is why the card shows a colour and a count rather than a name.
+
+     One exception, and it is deliberate: a callout may NAME the site or application
+     you drifted into - "Sir, Instagram can wait" - so the name arrives here inside
+     the sentence, is spoken by speak(), and is gone from the next /focus response
+     entirely. The server scrubs the line one tick after sending it. Nothing on this
+     page may hold on to it: no variable, no dataset, no DOM node of its own. Speak
+     it and let it go, which is all this page does with any say-line. */
+
+  const FOCUS_DEFAULT_MIN = 30;    // what the button starts; the voice can say any
+  const FOCUS_EXTEND_MIN = 5;      // what the +5 button adds
+  const FOCUS_PAINT_MS = 250;      // local repaint between server pushes
+  const FOCUS_HOME_BEAT_MS = 1500; // "this tab has focus" while it does
+  const FOCUS_POLL_MS = 2500;      // fallback only, used when the stream is down
+  const FOCUS_ANSWER_MS = 20000;   // the answer window: one reply, no wake word
+  const FOCUS_ANSWER_WAIT_MS = 900;// let the question finish being spoken first
+  const FOCUS_LOCK_FLASH_MS = 1000;// how long the lock pill reads LOCKED after a press
+
+  let fx = null;                   // the last state the SERVER sent, or null
+  let fxAt = 0;                    // when it arrived, so the clock can tick between
+  let fxSpoken = 0;                // highest say-seq already out of the speakers
+  let fxStream = null, fxPoll = null, fxAdopted = false;
+  let fxAnswerUntil = 0;           // while > now, the next thought heard is the intent
+  let fxAnswerTimer = null;
+  /* The tail of focus.py's "arming" line. Matched against what this tab just spoke,
+     so the microphone opens for a question this tab genuinely asked. */
+  const FOCUS_ASKED_RE = /what are we focusing on\s*\?/i;
+
+  function fxLive() {
+    return !!fx && (fx.state === 'arming' || fx.state === 'running' ||
+                    fx.state === 'paused');
+  }
+
+  function fxSecs(n) {
+    const s = Math.max(0, Math.round(n));
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  /* Every focus line reaches the voice through here and through nowhere else.
+     Lines are spoken in seq order and each seq exactly once, which is the whole
+     defence against a reload or a second tab shouting the same callout twice. */
+  function fxAbsorb(lines) {
+    const fresh = (lines || []).filter(function (l) {
+      return l && l.seq && l.seq > fxSpoken;
+    });
+    if (!fresh.length) return '';
+    fxSpoken = fresh[fresh.length - 1].seq;
+    if (!fxAdopted) return '';     /* see fxApply: a rejoin adopts, it does not replay */
+
+    /* More than one line can land in a single push - "twenty five minutes, go to
+       the thing" and "locked on" arrive together when you were never at home base.
+       They are spoken as ONE utterance, because speak() cancels whatever is already
+       talking: firing them separately would leave only the last one audible, and the
+       one it would silence is the instruction you were waiting to hear confirmed. */
+    let text = fresh.map(function (l) { return l.text; }).join(' ');
+    while (fresh.length > 1 && text.length > SPOKEN_MAX_CHARS) {
+      fresh.shift();               // the oldest goes; the newest must always be heard
+      text = fresh.map(function (l) { return l.text; }).join(' ');
+    }
+    renderAnswer('', text, false, null);
+    /* No ids, so decideCamera holds the graph still: a callout cites no note and
+       must not drag the camera anywhere to make its point. */
+    applyCamera(decideCamera('focus', [], false), []);
+    /* The return value is what was actually SPOKEN, and it is only used to decide
+       whether this tab heard the question it is about to open a microphone for. A
+       tab that is muted, or whose audio is still locked, heard nothing. */
+    if (!speak(spokenForm(text))) { idleStatus(); return ''; }
+    return text;
+  }
+
+  function fxApply(state) {
+    if (!state || typeof state !== 'object') return;
+    fx = state;
+    fxAt = performance.now();
+    /* A sequence that went BACKWARDS means the server process restarted under us
+       and started counting again. Re-base on it rather than treating the new lines
+       as already spoken, which would run the next session in total silence. */
+    const top = (state.say || []).reduce(function (m, l) {
+      return Math.max(m, (l && l.seq) || 0);
+    }, 0);
+    if (top < fxSpoken) { fxSpoken = top; fxAdopted = false; }
+    /* The first state of the tab's life is ADOPTED, not replayed: a tab that opens
+       into a session already running takes the sequence number as read and speaks
+       from the next line on. Otherwise a reload mid-session would deliver the last
+       five minutes of being told off, all at once, in one breath. */
+    const said = fxAbsorb(state.say);
+    fxAdopted = true;
+    /* The microphone opens only in the tab that actually ASKED, out loud, just now -
+       hence the test against what was spoken rather than against the state alone. A
+       second tab, or a tab rejoining a session whose question is still technically
+       open, would otherwise start listening at nobody. The server's awaitingIntent is
+       the other half: once answered anywhere, no tab asks again. */
+    if (state.awaitingIntent && FOCUS_ASKED_RE.test(said)) fxAnswerOpen();
+    else if (!state.awaitingIntent) fxAnswerClose();
+    fxPaint();
+  }
+
+  function fxPaint() {
+    const card = $('focuscard'), btn = $('focusbtn');
+    if (!fx || !fxLive()) {
+      card.className = '';
+      btn.className = '';
+      $('legend').style.top = '';
+      if (fx && fx.state === 'ended' && fx.report) {
+        card.classList.add('live', 'ended');
+        $('focus-state').textContent = 'session over';
+        $('focus-mode').textContent = '';
+        $('focus-clock').textContent = fxSecs(0);
+        $('focus-fill').style.width = '100%';
+        $('focus-intent').textContent = fx.intent || '';
+        $('focus-intent').style.display = fx.intent ? '' : 'none';
+        $('focus-stats').innerHTML =
+          'on target <b>' + fx.cleanPct + '%</b> &middot; drifts <b>' + fx.drifts +
+          '</b><br>streak <b>' + fx.streak + '</b> &middot; best <b>' +
+          fx.bestStreak + '</b>';
+        fxNudgeLegend();
+      }
+      return;
+    }
+
+    // The countdown is interpolated between pushes so it looks like a clock, but
+    // the SERVER's remaining figure is the one that ends the session. This never
+    // decides anything - it only stops the digits from stuttering.
+    const drift = (performance.now() - fxAt) / 1000;
+    const left = fx.state === 'paused' ? fx.remainingS
+                                       : Math.max(0, fx.remainingS - drift);
+
+    const tone = fx.state === 'paused' ? 'paused'
+               : fx.excused ? 'excused'
+               /* Deferred outranks "cannot see": while nothing is locked, an
+                  unreadable window is the reason we are still waiting, not a fault. */
+               : fx.deferred ? 'deferred'
+               : !fx.readable ? 'blind'
+               : fx.drifting ? 'drift'
+               : fx.inGrace ? 'grace' : '';
+    card.className = 'live' + (tone ? ' ' + tone : '');
+    btn.className = 'on' + (tone === 'drift' ? ' drift' : '');
+
+    $('focus-state').textContent =
+      fx.deferred ? 'not locked on yet' :
+      fx.state === 'arming' ? 'waiting for your work' :
+      fx.state === 'paused' ? 'paused' :
+      fx.excused ? 'excused' :
+      /* The eyes' own verdict outranks "cannot see", because a head-down drift is
+         something the server DID see - just not on the glass. */
+      fx.postureDrift ? 'head down' :
+      !fx.readable ? 'cannot see' :
+      fx.drifting ? 'off target' :
+      fx.inGrace ? 'noticing' :
+      fx.atHome ? 'home base' : 'on target';
+
+    /* What it is actually watching, said plainly on the card. Without a browser
+       started on --remote-debugging-port=9222 there is no readable tab, so this
+       reads "app only" - and a session that watches half of what you asked for
+       should say so where you can see it, not only once out loud at the start. */
+    $('focus-mode').textContent =
+      fx.deferred ? (fx.awaitingIntent ? 'go to your work · listening' : 'go to your work')
+                  : (fx.tabWatched ? 'app + site' : 'app only') +
+                    /* The eyes, said on the card as well as on their own chip: a
+                       session that is also counting your posture should say so where
+                       the count is, and the relief valve should be visibly counting
+                       down rather than felt as an unexplained silence. */
+                    (fx.eyesOn ? ' + eyes' : '') +
+                    (fx.snoozed ? ' · hushed ' + fx.snoozeLeftS + 's'
+                     : fx.hushed ? ' · eyes hushed ' + fx.hushLeftS + 's' : '');
+
+    /* Your own words, set with textContent and never innerHTML. This is the one
+       string on the card that did not come from a template in focus.py, and a
+       dictated sentence is not markup. */
+    $('focus-intent').textContent = fx.intent || '';
+    $('focus-intent').style.display = fx.intent ? '' : 'none';
+
+    $('focus-clock').textContent = fxSecs(left);
+    $('focus-fill').style.width =
+      Math.max(0, Math.min(100, 100 * (1 - left / Math.max(1, fx.plannedS)))) + '%';
+    $('focus-stats').innerHTML =
+      'on target <b>' + fxSecs(fx.onTargetS) + '</b> of <b>' +
+      fxSecs(fx.plannedS) + '</b><br>drifts <b>' + fx.drifts + '</b>' +
+      (fx.tier > 1 ? ' &middot; tier <b>' + fx.tier + '</b>' : '') +
+      ' &middot; clean <b>' + fx.cleanPct + '%</b>' +
+      (fx.excusedS ? '<br>excused <b>' + fxSecs(fx.excusedS) + '</b>' : '') +
+      (fx.unknownS ? ' &middot; unseen <b>' + fxSecs(fx.unknownS) + '</b>' : '');
+    $('focus-pause').textContent = fx.state === 'paused' ? 'resume' : 'pause';
+    fxNudgeLegend();
+  }
+
+  /* The card is pinned top-right, and so is the legend. Measured rather than
+     guessed at, because a hardcoded offset is wrong the moment the card grows a
+     line - and a countdown sitting on top of the legend is not a countdown. */
+  function fxNudgeLegend() {
+    const card = $('focuscard');
+    const h = card.classList.contains('live') ? card.offsetHeight : 0;
+    $('legend').style.top = h ? (22 + h + 16) + 'px' : '';
+  }
+
+  async function fxSend(body) {
+    try {
+      const res = await fetch('/focus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (data && data.focus) fxApply(data.focus);
+      /* On success the spoken confirmation is already in the say queue, so it is
+         NOT spoken from here as well. Only a rejected instruction is, since that
+         never became a session line. */
+      /* The server says which of the two it was, and viaSession is the field that
+         says it: true means the reply is in the say queue and fxApply above has
+         already spoken it in every open tab, so this must not. False means the
+         sentence exists nowhere else - a refusal, or the relief valve with no session
+         to hold it - and this tab is the only one that can say it. */
+      if (data && data.answer && !data.viaSession) {
+        renderAnswer('', data.answer, !data.ok, null);
+        if (!speak(spokenForm(data.answer))) idleStatus();
+      }
+      return data;
+    } catch (e) {
+      const line = 'I could not reach the timer (' + e.message + ').';
+      renderAnswer('', line, true, null);
+      if (!speak(spokenForm(line))) idleStatus();
+      return null;
+    }
+  }
+
+  /* ---- the answer window: one reply, no wake word ----
+     The deferred start line ends with a question - "And what are we focusing on?" -
+     and a question the assistant asks itself should not need a wake word to answer.
+     So the microphone opens for exactly one thought, and the next thing you say goes
+     to the session as its intent instead of to the notes brain.
+
+     Two deliberate limits. It is ONE answer: the window closes on the first thought
+     heard, so the sentence after it is an ordinary question again. And it expires on
+     its own after FOCUS_ANSWER_MS, because a window that stays open because nobody
+     answered a question is not a feature.
+
+     AND THE EAR LAW, which arrived later and took something away from this function:
+     no organ may turn the microphone on. This one used to. It now ARMS the window and
+     stops there - if your ears are already open your answer lands as the intent, and if
+     they are not, the assistant says so in as many words instead of reaching for the
+     mic on your behalf. The window stays armed either way, so tapping the ear button
+     five seconds later still puts your answer where it was going. */
+  function fxAnswerOpen() {
+    if (!Recogniser) return;                 // no recognition here; typing still works
+    if (fxAnswerUntil > performance.now()) return;         // already open
+    /* Wait for the question to be spoken before listening for its answer, or the
+       recogniser hears the assistant and answers on your behalf. */
+    clearTimeout(fxAnswerTimer);
+    fxAnswerTimer = setTimeout(function () {
+      if (!fxLive()) return;
+      fxAnswerUntil = performance.now() + FOCUS_ANSWER_MS;
+      if (listening) { setStatus('listening', 'what are we focusing on?'); return; }
+      setStatus('', 'what are we focusing on? · tap the ear button, or type it');
+      if (!speak(spokenForm(EARS_OFF_LINE))) idleStatus();
+    }, FOCUS_ANSWER_WAIT_MS);
+  }
+
+  function fxAnswerArmed() {
+    return fxAnswerUntil > performance.now();
+  }
+
+  function fxAnswerClose() {
+    fxAnswerUntil = 0;
+    clearTimeout(fxAnswerTimer);
+    fxAnswerTimer = null;
+  }
+
+  /* Called by flushThought() instead of ask() while the window is armed. */
+  function fxAnswer(text) {
+    fxAnswerClose();
+    /* Shown as your own words on the card, never read back to you: the server's whole
+       reply to this is "Noted, sir." */
+    fxSend({ cmd: 'intent', text: text });
+  }
+
+  /* ---- the channel: a stream, because a hidden tab's timers are throttled ----
+     Chrome throttles setInterval in a background tab down to roughly once a
+     minute. A background tab is EXACTLY where you are when a callout matters, so
+     polling alone could not meet "hear it within three seconds". An open stream
+     is not throttled: the server pushes the moment its tick changes something. */
+  function fxStopPolling() {
+    if (fxPoll) { clearInterval(fxPoll); fxPoll = null; }
+  }
+
+  function fxStartPolling() {
+    if (fxPoll) return;
+    fxPoll = setInterval(fxFetch, FOCUS_POLL_MS);
+  }
+
+  /* home: true says "this tab has the keyboard right now", false says "it just lost
+     it, forget that I said so", and undefined says nothing about focus at all. */
+  async function fxFetch(home) {
+    const q = home === undefined ? '' : (home ? '?home=1' : '?home=0');
+    try {
+      const res = await fetch('/focus' + q);
+      const data = await res.json();
+      if (data && data.focus) fxApply(data.focus);
+    } catch (e) { /* the card keeps whatever it last knew to be true */ }
+  }
+
+  function fxConnect() {
+    if (!('EventSource' in window)) return fxStartPolling();
+    try {
+      fxStream = new EventSource('/focus/stream');
+      fxStream.addEventListener('focus', function (e) {
+        try { fxApply(JSON.parse(e.data)); } catch (err) { /* ignore a bad frame */ }
+      });
+      fxStream.onopen = function () { fxStopPolling(); };
+      /* EventSource reconnects by itself; polling covers the gap and is harmless
+         if the stream returns, because applying a state twice changes nothing. */
+      fxStream.onerror = function () { fxStartPolling(); };
+    } catch (e) { fxStartPolling(); }
+  }
+
+  /* HOME BASE. A boolean about THIS page and nothing else - never a claim about
+     any other tab - and it expires in seconds on the server, so a tab that goes
+     away cannot leave a permanent excuse behind. Coming back here to talk is the
+     one excursion that is never a drift. */
+  setInterval(function () {
+    if (fxLive() && document.hasFocus()) fxFetch(true);
+  }, FOCUS_HOME_BEAT_MS);
+
+  /* Leaving is worth saying immediately rather than waiting for the claim to time
+     out. Without this, "go to the thing you actually mean to do" would sit there
+     for the remainder of the TTL before locking on, and the first three seconds of
+     your work would be spent watching me not watch it. */
+  addEventListener('blur', function () { if (fxLive()) fxFetch(false); });
+  addEventListener('visibilitychange', function () {
+    if (fxLive() && document.hidden) fxFetch(false);
+  });
+
+  // Repaint so the digits move between pushes. Throttled to nothing in a hidden
+  // tab, which costs us exactly nothing: the speaking is driven by the stream.
+  setInterval(function () { if (fxLive()) fxPaint(); }, FOCUS_PAINT_MS);
+
+  $('focusbtn').onclick = function () {
+    unlockAudio();                     // a real gesture: the callouts need a voice
+    if (fxLive()) return fxSend({ cmd: 'status' });
+    fxSend({ cmd: 'start', minutes: FOCUS_DEFAULT_MIN });
+  };
+  $('focus-pause').onclick = function () {
+    fxSend({ cmd: (fx && fx.state === 'paused') ? 'resume' : 'pause' });
+  };
+  $('focus-extend').onclick = function () {
+    fxSend({ cmd: 'extend', minutes: FOCUS_EXTEND_MIN });
+  };
+  $('focus-end').onclick = function () { fxSend({ cmd: 'finish' }); };
+
+  /* MOVING THE LOCK from the card. Identical to saying "lock on this tab", with one
+     flag added: the press itself is what brought this card - and therefore this tab -
+     to the front, so the server must not read the foreground and dutifully lock us.
+     source:'card' is how it knows to ask the browser which of its tabs is visible
+     instead. See _probe_front_window() in focus.py. */
+  let fxLockFlash = null;
+  $('focus-lock').onclick = function () {
+    unlockAudio();                     // a real gesture: the confirmation is spoken
+    /* LOCKED for a second, from the PRESS and not from the reply. The press is a fact
+       and the button should say so at once; what actually happened - "Locked on, sir."
+       or, from this tab, the re-arm - arrives out loud, because only the server knows
+       which of those it was. */
+    const pill = $('focus-lock');
+    pill.textContent = 'locked';
+    pill.classList.add('done');
+    clearTimeout(fxLockFlash);
+    fxLockFlash = setTimeout(function () {
+      pill.textContent = 'lock this tab';
+      pill.classList.remove('done');
+    }, FOCUS_LOCK_FLASH_MS);
+    fxSend({ cmd: 'retarget', source: 'card' });
+  };
+
+  /* Is this an instruction to the timer rather than a question about the notes?
+     Conservative on purpose: the SERVER has the authoritative classifier and the
+     same phrases are checked again there, so a phrase this misses still reaches
+     the timer through /chat. A phrase it wrongly claims would not. */
+  const FOCUS_WORDS = '(?:focus|deep work|session|sprint|pomodoro)';
+  const FOCUS_START_RE = new RegExp(
+    '(?:\\b(?:start|begin|kick off)\\b[^.]{0,20}\\b' + FOCUS_WORDS + '\\b)' +
+    '|(?:\\b' + FOCUS_WORDS + '\\b[^.]{0,24}\\b(?:for|of)\\b[^.]{0,20}' +
+      '\\b(?:minutes?|mins?|hours?)\\b)' +
+    '|(?:\\b(?:minutes?|mins?|hour|hours|half an hour|quarter of an hour)\\b' +
+      '[^.]{0,18}\\b(?:on|of)\\s+(?:this|that|it|work|focus)\\b)' +
+    '|(?:\\blet\'?s\\s+do\\b[^.]{0,26}\\b(?:on this|on that|of ' + FOCUS_WORDS + ')\\b)',
+    'i');
+  const FOCUS_CMD_RE = new RegExp(
+    '\\b(?:call me out|nag me|tell me off|check on me)\\b|\\bevery\\b[^.]{0,14}\\bseconds?\\b' +
+    '|\\bgive me\\b[^.]{0,14}\\bseconds?\\b|\\b(?:snooze|hush|shush|be quiet)\\b' +
+    '|\\b(?:it\'?s|its|this is|that\'?s)\\s+(?:ok|okay|fine|alright|all right|deliberate)\\b' +
+    '|\\b(?:i\'?m|i am)\\s+(?:doing\\s+)?(?:research|reading|looking (?:it|this) up)\\b' +
+    '|\\b(?:extend|another|add)\\b[^.]{0,20}\\b(?:minutes?|mins?)\\b|\\b(?:minutes?|mins?)\\s+more\\b' +
+    '|\\bpause\\b|\\bstop the clock\\b|\\b(?:resume|unpause|carry on)\\b' +
+    '|\\b(?:abort|scrap|kill|cancel)\\b[^.]{0,20}\\b(?:' + FOCUS_WORDS + '|timer|clock|it)\\b' +
+    '|\\b(?:end|finish|stop|wrap up)\\b[^.]{0,20}\\b(?:' + FOCUS_WORDS + '|timer|clock)\\b' +
+    '|\\b(?:i\'?m|we\'?re)\\s+done\\b|\\bthat\'?s (?:it|enough)\\b' +
+    '|\\bhow (?:long|much longer|much time|am i doing|is it going)\\b' +
+    '|\\btime (?:left|remaining)\\b' +
+    /* THE REGISTER. Mirrored from focus.py's _DRILL_RE and _GENTLE_RE, and here for
+       the same reason as the rest: a phrase this page does not recognise as a focus
+       instruction goes to the notes brain, which has nothing to say about it. */
+    '|\\b(?:drill[ -]?sergeant|no mercy|tough love)\\b' +
+    '|\\bbe (?:harsh|harsher|brutal|blunt|nice|nicer|gentle|gentler|kind|kinder|civil|polite)\\b' +
+    '|\\bdon\'?t be (?:nice|polite|gentle|kind)\\b' +
+    '|\\b(?:call me out|tell me off)\\s+(?:harder|properly|like you mean it)\\b' +
+    '|\\b(?:ease up|go easy|stand down)\\b',
+    'i');
+
+  /* MOVING THE LOCK, mirrored from focus.py's _RETARGET_RE. It matters that it is
+     here and not only there: ask() checks focus phrases BEFORE the screen share, and
+     the share's own matcher claims "this tab" - so without these lines, "lock on this
+     tab" mid-session would be answered with a photograph of the tab instead of by
+     watching it. Wide on purpose, because this is the sentence you reach for when the
+     lock is already wrong. */
+  const FX_SURFACE = '(?:tab|window|page|app|application|site|screen|thing|one)';
+  const FX_THIS = '(?:this|that)';
+  const FX_THIS_SURFACE = '(?:this|that|the current|the)\\s+' + FX_SURFACE;
+  const FOCUS_RETARGET_RE = new RegExp(
+    '\\block(?:\\s+(?:on|onto|in|into|me\\s+(?:on|onto|in|into|to)))?\\s+' +
+      '(?:' + FX_THIS_SURFACE + '|here)\\b' +
+    '|\\bkeep\\s+(?:me|us)\\s+(?:in|on|with)\\s+' +
+      '(?:' + FX_THIS + '(?:\\s+' + FX_SURFACE + ')?|here)\\b' +
+    '|\\bkeep\\s+(?:me|us)\\s+(?:right\\s+)?here\\b' +
+    '|\\b(?:stay|hold)\\s+(?:on|in|with)\\s+' +
+      '(?:' + FX_THIS + '(?:\\s+' + FX_SURFACE + ')?|here)\\b' +
+    '|\\bstay\\s+(?:right\\s+)?here\\b' +
+    '|\\bthis\\s+is\\s+(?:the|my)\\s+(?:\\w+\\s+){0,2}' + FX_SURFACE + '\\b' +
+    '|\\bwatch\\s+(?:' + FX_THIS_SURFACE + '|here)\\b',
+    'i');
+
+  /* THE RELIEF VALVE, mirrored from focus.py's _RELIEF_RE. "No Jarvis, I need to do
+     something important." Tested with no session required - the only phrase here that
+     is, apart from starting one - because the EYES nudge whether or not a clock is
+     running, and a valve you have to start a timer to reach is not a valve. */
+  const FOCUS_RELIEF_RE = new RegExp(
+    '\\b(?:need|have)\\s+to\\s+do\\s+something\\b' +
+    '|\\b(?:something|anything)\\s+(?:important|urgent)\\b' +
+    '|\\bgive\\s+me\\s+a\\s+(?:minute|moment|few\\s+minutes)\\b' +
+    '|\\bgive\\s+me\\s+(?:a\\s+)?(?:couple|few)\\s+of\\s+minutes\\b' +
+    '|\\b(?:leave|let)\\s+me\\s+(?:alone|be)\\b' +
+    '|\\b(?:i\'?ll|i\\s+will)\\s+be\\s+(?:right\\s+)?back\\b', 'i');
+
+  function isFocusPhrase(text) {
+    const said = String(text || '');
+    if (FOCUS_START_RE.test(said)) return true;
+    if (FOCUS_RELIEF_RE.test(said)) return true;
+    // Everything else only counts while a session is live, which is what keeps a
+    // perfectly ordinary question about the notes from being read as a snooze.
+    return fxLive() && (FOCUS_RETARGET_RE.test(said) || FOCUS_CMD_RE.test(said));
+  }
+
+  /* ============================================================== capture ==
+     "remember that ..." grows the galaxy live. The server writes the file and
+     re-indexes; everything here is the birth itself - splice the node in at its
+     most related neighbour, flare it, then fly. No reload, and the note is a real
+     citizen the moment this returns: it can be cited by the very next answer. */
+  const CAPTURE_RE = /^\s*[\"'“‘(\[]*remember\s+that\b/i;
+  let lastBirth = null;      // where the newest star was placed, and beside what
+
+  function pulseNode(id) {
+    pulseId = id;
+    const t0 = performance.now();
+    (function frame(now) {
+      const p = (now - t0) / PULSE_MS;
+      if (p >= 1) { pulseId = null; pulseAmt = 0; refresh(); return; }
+      // Snap bright, then ease out - a flare, not a throb.
+      pulseAmt = Math.pow(1 - p, 2.2) * Math.abs(Math.cos(p * Math.PI * 2.2));
+      refresh();
+      requestAnimationFrame(frame);
+    })(t0);
+  }
+
+  /* Splice the server's authoritative graph into the live one. Returns the new
+     node object, already positioned. */
+  function insertCapture(data) {
+    const spec = data.node;
+
+    // A capture can invent a whole new folder, which needs a colour and a legend
+    // row of its own or it shows up as an unnamed grey dot.
+    if (groups.indexOf(spec.group) === -1) {
+      groups.push(spec.group);
+      groups.sort();
+      // The first colour nobody is using. Assigning by index after the sort would
+      // hand "captures" the same blue as "customers", since it sorts ahead of it.
+      const taken = groups.map(function (g) { return colorOf[g]; });
+      colorOf[spec.group] = PALETTE.filter(function (c) {
+        return taken.indexOf(c) === -1;
+      })[0] || '#ffffff';
+    }
+
+    /* Born at its most related note. The anchor comes from the server, which
+       picked it from the links build.py just drew - so the position means
+       something. With no anchor at all (a thought unlike anything in the
+       collection) it starts at the centre rather than somewhere misleading. */
+    const anchor = (data.anchor === null || data.anchor === undefined)
+      ? null : byId.get(data.anchor);
+    const at = (anchor && anchor.x !== undefined) ? anchor : { x: 0, y: 0, z: 0 };
+    const jitter = function () { return (Math.random() - 0.5) * 26; };
+    const node = Object.assign({}, spec, {
+      x: at.x + jitter(), y: at.y + jitter(), z: at.z + jitter(),
+      vx: 0, vy: 0, vz: 0
+    });
+
+    nodes.push(node);
+    byId.set(node.id, node);
+    /* Recorded because it is only true for one frame: the moment graphData()
+       re-heats the layout, repulsion pushes the new star off the note it was born
+       on, so "was it born in the right place" is not answerable after the fact. */
+    lastBirth = {
+      id: node.id, anchor: anchor ? anchor.id : null,
+      at: { x: node.x, y: node.y, z: node.z },
+      anchorAt: { x: at.x, y: at.y, z: at.z }
+    };
+
+    /* Replace the link set wholesale rather than appending the new edges. A new
+       note can resolve a [[wikilink]] that was dangling, which changes edges
+       between notes that were already on screen; the server sends the whole
+       authoritative set so we never have to reason about that. Both arrays are
+       const and referenced elsewhere (activeLinks aliases one of them), so they
+       are emptied and refilled in place. */
+    if (data.links) {
+      allLinks.length = 0;
+      data.links.forEach(function (l) {
+        // Drop any edge whose endpoints this page does not know about. It should
+        // never happen, but a dangling id would throw inside the layout code, and
+        // failing to draw one line is better than losing the note we just wrote.
+        if (byId.has(l.source) && byId.has(l.target)) {
+          allLinks.push(Object.assign({}, l));
+        }
+      });
+      const strong = strongSubset(allLinks, STRONG_PER_NODE);
+      strongLinks.length = 0;
+      strong.forEach(function (l) { strongLinks.push(l); });
+    }
+
+    hiLinks.clear();                  // the old link objects no longer exist
+    rebuildNeighbours();
+    Graph.graphData({ nodes: nodes, links: activeLinks });
+    paintLegend();
+    paintStats();
+    return node;
+  }
+
+  async function capture(text) {
+    if (busy || !text.trim()) return;
+    busy = true;
+    $('send').disabled = true;
+    $('dot').classList.add('busy');
+    setStatus('thinking', 'writing that down', text);
+    renderAnswer(text, 'Writing that down…', false, null);
+
+    /* A capture that fails must SAY so. Every path out of here speaks a line -
+       the silent one is the failure mode this whole feature has to avoid. */
+    function fail(message) {
+      renderAnswer(text, message, true, null);
+      if (!speak(spokenForm(message))) idleStatus();
+    }
+
+    try {
+      const res = await fetch('/remember', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text, session: SESSION })
+      });
+      let data = null;
+      try { data = await res.json(); } catch (e) { data = null; }
+
+      if (!data) {
+        fail('I could not write that down: the server replied with something that ' +
+             'was not JSON (HTTP ' + res.status + ').');
+      } else if (!data.ok || !data.node) {
+        // The server already phrased this in character, including the case where
+        // the file exists but did not make it into the index.
+        fail(data.answer || data.error || 'I could not write that down, sir.');
+      } else {
+        const node = insertCapture(data);
+        renderAnswer(text, data.answer, false, [node.id]);
+        if (!speak(spokenForm(data.answer))) idleStatus();
+        pulseNode(node.id);
+        lastPlan = 'born';
+        // A short beat so the star is visibly born where it belongs before the
+        // camera starts moving; the flare outlasts the flight either way.
+        setTimeout(function () { focusNode(node, true); }, 420);
+      }
+    } catch (e) {
+      fail('I could not write that down: the brain is not answering. Start it with ' +
+           '"python server.py" and try again - nothing has been remembered.');
+    } finally {
+      busy = false;
+      $('send').disabled = false;
+      $('dot').classList.remove('busy');
+    }
+  }
+
+  /* ================================================================== sight ==
+     "What do you think of this?" - a held screen share, and ONE frame of it taken
+     at the instant a question is asked.
+
+     Three things this must never do, and what prevents each:
+
+       - answer from the frame it had earlier. grabFrame() is the only thing that
+         produces a frame, it is called from see() immediately before the request,
+         and no frame is kept between questions. The one image that outlives a
+         question is the thumbnail shown as proof, which is never sent anywhere.
+       - answer at all once the share is over. sharing() reads the track's own
+         readyState rather than a flag we set hopefully, and every path that finds
+         it dead says so out loud instead of falling back.
+       - send bytes that disagree with their label. FRAME_TYPE is the single string
+         used to encode the frame, to check what came back, and to declare it on the
+         wire; the server checks the bytes against the same claim from its side. */
+
+  const FRAME_TYPE = 'image/jpeg';
+  /* Past roughly this edge the models downsample anyway, so a larger frame costs
+     upload time and buys no legibility - and legibility is the entire point when
+     the screen is dense with small text. */
+  const FRAME_MAX_EDGE = 1568;
+  const FRAME_QUALITY = 0.82;
+  /* How long after a share ends a screen-shaped question still gets told the share
+     has ended, rather than being quietly answered from the notes instead. */
+  const SHARE_MEMORY_MS = 60000;
+  /* Note the second alternative: this claims "this tab", and so does the re-target.
+     That collision is settled by ORDER, in ask() - focus phrases are checked first -
+     because mid-session "lock on this tab" is an instruction about what is being
+     watched, and answering it with a photograph would be the wrong half of the
+     feature entirely. Outside a session there is no target to move and this wins. */
+  const SCREEN_RE = new RegExp(
+    'on\\s+(?:my|the|this)\\s+screen' +
+    '|this\\s+(?:screen|window|tab|page|error|code|design|chart|graph|dashboard)\\b' +
+    '|what\\s+(?:am\\s+i|are\\s+we)\\s+(?:looking\\s+at|seeing)' +
+    '|what\\s+do\\s+you\\s+(?:think|make)\\s+of\\s+(?:this|that)\\b' +
+    '|look\\s+at\\s+(?:this|my\\s+screen)', 'i');
+
+  const canShare = !!(navigator.mediaDevices &&
+                      navigator.mediaDevices.getDisplayMedia);
+
+  let shareStream = null, shareEndedAt = 0;
+  /* Display only, and named for what it is: the object URL behind the thumbnail of
+     the frame already sent. Nothing reads this to answer a question - see() takes
+     its bytes from grabFrame() and from nowhere else. */
+  let shownFrame = null;
+
+  /* Spoken, not silent. Every one of these is a case where there is no honest
+     picture to judge, and the answer to that is to say so, never to answer anyway. */
+  const SIGHT_TROUBLE = {
+    ended: 'Your screen share has ended, sir, so there is nothing for me to look ' +
+           'at. Start it again and ask me then.',
+    notready: 'The share has not produced a picture yet. Give it a moment and ask ' +
+              'me again.',
+    encode: 'This browser would not encode a frame of that share, so I have sent ' +
+            'nothing and judged nothing.',
+    wrongtype: 'This browser encoded that frame as {got} rather than ' + FRAME_TYPE +
+               ', so I have not sent it: the bytes and the label must agree or ' +
+               'neither can be trusted.'
+  };
+
+  function sharing() {
+    if (!shareStream) return false;
+    const track = shareStream.getVideoTracks()[0];
+    return !!track && track.readyState === 'live' && shareStream.active;
+  }
+
+  function paintShare() {
+    const live = sharing();
+    $('screen').classList.toggle('on', live);
+    $('sharing').classList.toggle('live', live);
+    $('sharewash').classList.toggle('live', live);
+    $('screen').title = live ? 'Stop sharing this screen'
+                             : 'Share a screen and ask about it';
+    const v = $('shot');
+    $('share-dim').textContent = (live && v.videoWidth)
+      ? v.videoWidth + '×' + v.videoHeight : '';
+  }
+
+  /* hints: the extra getDisplayMedia options the WATCH wants - chiefly
+     displaySurface:'monitor', which opens the picker ON ENTIRE SCREEN. They are
+     hints in the specification's own sense and the man may still pick whatever he
+     likes, so nothing downstream may treat them as a guarantee; the watch asks the
+     track what it actually got. Returns whether there is now a live share, because
+     the watch has to know before it starts a clock. */
+  async function startShare(hints) {
+    if (!canShare) return false;
+    setStatus('', 'choose what to share…');
+    let stream = null;
+    try {
+      const opts = Object.assign({}, hints || {});
+      const surface = opts.displaySurface;
+      delete opts.displaySurface;        // that one belongs inside video, not beside it
+      opts.video = Object.assign({ frameRate: { ideal: 8, max: 15 } },  // stills, not cinema
+                                 surface ? { displaySurface: surface } : {});
+      opts.audio = false;
+      stream = await navigator.mediaDevices.getDisplayMedia(opts);
+    } catch (e) {
+      // Dismissing the picker is a decision, not a fault: no scolding, no speech.
+      setStatus('', (e && e.name === 'NotAllowedError')
+        ? 'screen share cancelled'
+        : 'screen share unavailable · ' + ((e && e.name) || 'unknown'));
+      setTimeout(function () { if (!busy) idleStatus(); }, 2600);
+      return false;
+    }
+    shareStream = stream;
+    const video = $('shot');
+    video.srcObject = stream;
+    try { await video.play(); } catch (e) { /* muted video needs no gesture */ }
+    stream.getVideoTracks().forEach(function (t) {
+      /* The browser's own "Stop sharing" bar ends the track and tells this page
+         nothing else, so this is the signal that must never be missed. */
+      t.addEventListener('ended', function () { endShare(); });
+    });
+    ['loadedmetadata', 'resize'].forEach(function (ev) {
+      video.addEventListener(ev, paintShare);
+    });
+    paintShare();
+    setStatus('', 'sharing your screen · ask about it');
+    setTimeout(function () { if (!busy) idleStatus(); }, 2600);
+    return sharing();
+  }
+
+  function endShare() {
+    const was = !!shareStream;
+    if (shareStream) {
+      shareStream.getTracks().forEach(function (t) {
+        try { t.stop(); } catch (e) { /* already gone */ }
+      });
+    }
+    shareStream = null;
+    try { $('shot').srcObject = null; } catch (e) { /* ignore */ }
+    if (was) shareEndedAt = Date.now();
+    /* The watch has no camera of its own: no share, no watch. Said out loud rather
+       than left as a chip quietly claiming to be watching a screen that is gone. */
+    if (was && watchOn) stopWatch('ended');
+    paintShare();
+    if (was) {
+      setStatus('', 'screen share ended');
+      setTimeout(function () { if (!busy) idleStatus(); }, 2200);
+    }
+  }
+
+  /* Repainted from the track once a second, so the indicator cannot be left
+     claiming a share that has quietly died without firing anything. */
+  setInterval(function () {
+    if (shareStream && !sharing()) endShare();
+    else if (shareStream) paintShare();
+  }, 1000);
+
+  /* The two things a frame can be grabbed FROM. Written as a table rather than as
+     two grabbers, because one grabber is one place where a frame comes into
+     existence, one encoding check, and no second path that could quietly send an
+     older picture or one of some other type - and now that there are two cameras in
+     this page, "which one" has to be a written-down answer rather than a default. */
+  const FRAME_SOURCES = {
+    screen: { video: 'shot', canvas: 'frame',
+              alive: function () { return sharing(); } },
+    cam:    { video: 'cam', canvas: 'camframe',
+              alive: function () { return eyesLive(); } }
+  };
+
+  /* The ONLY producer of a frame. Called from see() and from lookAtMe(), one line
+     before the request, and from nowhere else in either case. */
+  function grabFrame(which) {
+    const src = FRAME_SOURCES[which || 'screen'];
+    return new Promise(function (resolve) {
+      if (!src.alive()) return resolve({ error: 'ended' });
+      const video = $(src.video);
+      if (!video.videoWidth || !video.videoHeight) {
+        return resolve({ error: 'notready' });
+      }
+      const scale = Math.min(1, FRAME_MAX_EDGE /
+                                Math.max(video.videoWidth, video.videoHeight));
+      const w = Math.max(1, Math.round(video.videoWidth * scale));
+      const h = Math.max(1, Math.round(video.videoHeight * scale));
+      const cvs = $(src.canvas);
+      cvs.width = w; cvs.height = h;
+      cvs.getContext('2d').drawImage(video, 0, 0, w, h);
+      const at = performance.now();      // when this frame actually existed
+      cvs.toBlob(function (blob) {
+        if (!blob || !blob.size) return resolve({ error: 'encode' });
+        /* toBlob() falls back to image/png without a word of complaint when it
+           cannot encode the type it was asked for. Left unchecked, that is a
+           request whose header and body disagree - which fails at the far end
+           looking like the whole feature is broken. Check it here too. */
+        if (blob.type !== FRAME_TYPE) {
+          return resolve({ error: 'wrongtype', got: blob.type || 'nothing' });
+        }
+        resolve({ blob: blob, w: w, h: h, at: at });
+      }, FRAME_TYPE, FRAME_QUALITY);
+    });
+  }
+
+  function hideProof() {
+    $('a-saw').classList.remove('show');
+    if (shownFrame) { URL.revokeObjectURL(shownFrame); shownFrame = null; }
+    $('a-frame').removeAttribute('src');
+  }
+
+  /* Show the exact frame that produced the answer beside it. Cheap, and it means
+     the claim "this is what I looked at" is checkable by eye rather than trusted. */
+  function showProof(shot, ageMs, title, note) {
+    if (shownFrame) URL.revokeObjectURL(shownFrame);
+    shownFrame = URL.createObjectURL(shot.blob);
+    $('a-frame').src = shownFrame;
+    /* esc() on both, because the note carries a label that came off the wire - a
+       brain's name - and a label is not markup however harmless it looks. */
+    $('a-frame-meta').innerHTML = '<b>' + esc(title || 'the frame it saw') + '</b>' +
+      shot.w + '×' + shot.h + ' · ' + Math.round(shot.blob.size / 1024) + ' KB · ' +
+      FRAME_TYPE + '<br>grabbed as you asked, sent ' + ageMs + ' ms later' +
+      (note ? '<br>' + esc(note) : '');
+    $('a-saw').classList.add('show');
+  }
+
+  let lastSight = null;      // what was actually sent, for the console and the tests
+
+  async function see(question) {
+    if (busy || !question.trim()) return;
+    busy = true;
+    $('send').disabled = true;
+    $('dot').classList.add('busy');
+    setStatus('looking', 'looking at your screen', question);
+    renderAnswer(question, 'Looking at your screen…', false, null);
+
+    function fail(message) {
+      renderAnswer(question, message, true, null);
+      if (!speak(spokenForm(message))) idleStatus();
+    }
+
+    try {
+      // Grabbed HERE: after the question exists, before anything is sent.
+      const shot = await grabFrame();
+      if (shot.error) {
+        if (shot.error === 'ended') endShare();
+        return fail(SIGHT_TROUBLE[shot.error]
+          .replace('{got}', shot.got || 'something else'));
+      }
+      const age = Math.round(performance.now() - shot.at);
+      lastSight = { w: shot.w, h: shot.h, bytes: shot.blob.size,
+                    type: shot.blob.type, ageMs: age, at: Date.now() };
+
+      const res = await fetch('/see?q=' + encodeURIComponent(question), {
+        method: 'POST',
+        headers: {
+          // The same constant the blob was encoded with. One string, three uses.
+          'Content-Type': FRAME_TYPE,
+          'X-Frame-Width': String(shot.w),
+          'X-Frame-Height': String(shot.h),
+          // Measured by this page against its own clock, so no two clocks are ever
+          // compared - it only has to catch a frame that is older than the question.
+          'X-Frame-Age-Ms': String(age)
+        },
+        body: shot.blob
+      });
+      let data = null;
+      try { data = await res.json(); } catch (e) { data = null; }
+
+      const isError = !data || !!data.error || !data.answer;
+      const text = !data
+        ? 'The brain replied with something that was not JSON (HTTP ' +
+          res.status + ').'
+        : (data.error || data.answer || '(empty answer)');
+      renderAnswer(question, text, isError, null);
+      showProof(shot, age);
+      if (!speak(spokenForm(text))) idleStatus();
+      // Always 'hold': see decideCamera. A screen answer proves nothing about a note.
+      applyCamera(decideCamera('screen', [], isError), []);
+    } catch (e) {
+      fail('I could not reach the brain to look at that. Start it with "python ' +
+           'server.py" and try again - nothing was judged.');
+    } finally {
+      busy = false;
+      $('send').disabled = false;
+      $('dot').classList.remove('busy');
+    }
+  }
+
+  $('screen').onclick = function () {
+    unlockAudio();                     // a real gesture: the voice may as well wake
+    if (sharing()) return endShare();
+    startShare();
+  };
+  $('share-stop').onclick = function () { endShare(); };
+  if (!canShare) {
+    $('screen').disabled = true;
+    $('screen').title = 'This browser cannot share a screen (needs getDisplayMedia)';
+  }
+
+  /* ================================================================= eyes ==
+     A WEBCAM ORGAN THAT DOES NOT UPLOAD A FRAME.
+
+     Everything here obeys one rule, and the rule is structural rather than a promise:
+     the pixels are read by this page and by this page only. The face and pose
+     landmarkers run in this tab, on wasm this tab downloaded; the geometry below turns
+     landmarks into THREE BOOLEANS - present, head down, slouched - and those three
+     booleans, plus a word about whether the ears are open, are the entire payload of
+     POST /eyes. There is no field in that request for an image, a landmark, a
+     coordinate or a measurement of your face, so there is nothing to forget to strip.
+
+     The ONE exception is asked for out loud, every time: "look at me" sends a single
+     frame to the brain, grabbed after the question exists, shown beside the answer it
+     produced, and never kept. A nudge never sends a frame. A heartbeat never sends a
+     frame. Only a sentence of yours does.
+
+     Two more rules worth stating where the code is:
+
+       - THE EAR LAW. This organ never calls startListening(). It reports whether the
+         ears happen to be open so the server can SAY the eyes are on while the mic is
+         off, which is the moment that rule is felt as a fault rather than a promise.
+         An organ may open the conversation; it may never open the microphone.
+
+       - ONE NUDGER. The decision about who speaks a nudge is the SERVER'S - see
+         note_eyes() in focus.py. With a session running the line goes into the say
+         queue and reaches every open tab once through the stream it already has; with
+         no session it comes back in the reply and the tab that posted says it. This
+         page speaks the reply only when the server says viaSession is false.
+
+     The thresholds are relative to YOUR OWN neutral posture, measured in the first two
+     seconds after the lid opens, because a laptop camera pointing up your nose and a
+     monitor camera looking down at you disagree about every absolute number anyone
+     could write here. Until that baseline exists the organ says it is measuring and
+     claims nothing. */
+
+  /* The landmarkers, from the same CDN pattern as the graph library, with a fallback
+     host for when one of them is having a day. Nothing here is bundled: if both are
+     unreachable the eyes say they cannot see rather than inventing a posture. */
+  const EYE_LIBS = [
+    'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs',
+    'https://unpkg.com/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs'
+  ];
+  const FACE_TASK = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/' +
+                    'face_landmarker/float16/1/face_landmarker.task';
+  const POSE_TASK = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/' +
+                    'pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
+
+  const EYE_READ_MS = 140;         // ~7 readings a second: plenty for a 700 ms hold
+  const EYE_BEAT_MS = 2000;        // a heartbeat, so the server's staleness never trips
+  const EYE_CALIBRATE_MIN = 8;     // readings, not milliseconds, decide it is enough
+
+  /* The server's windows, adopted from its own reply and never hardcoded twice. These
+     are the defaults for the one moment before the first reply lands. */
+  let EYE_TUNE = { sustainMs: 700, absenceMs: 12000, cooldownS: 30, staleS: 6,
+                   reliefS: 180, countsAsDrift: true };
+
+  /* How far from YOUR neutral counts. Ratios, so they mean the same thing on a laptop
+     lid and on a monitor above eye level. */
+  const EYE_PITCH_DOWN = 1.30;     // chin foreshortened this much more than neutral
+  const EYE_DROP_DOWN  = 0.72;     // nose fallen this far toward the shoulder line
+  const EYE_SIT_SLUMP  = 0.93;     // eyes sitting this much lower in frame
+  const EYE_DROP_SLUMP = 0.86;     // head sunk this far into the shoulders
+
+  const canSee = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+
+  let camStream = null;            // the live camera, or null
+  let camReader = null;            // { face, pose, from } once the landmarkers exist
+  let camLoading = false, camTimer = null, camStamp = 0, camBeat = 0;
+  let eyeBase = null;              // YOUR neutral posture, measured
+  let eyeSamples = [];             // calibration readings, dropped the moment it is done
+  let eyeRaw = null;               // the last reading, for the console and the checks
+  let eyeStable = { present: false, headDown: false, slouched: false };
+  let eyeSince = { absent: 0, headDown: 0, slouched: 0 };
+  let eyeLastPost = null, eyeTrouble = '', eyeLooks = 0, lastLook = null;
+
+  /* ---- the geometry: the one piece worth testing, so the one piece with no state ----
+     Landmarks in, numbers out. No DOM, no clock, no camera, no fetch. MediaPipe's
+     indices: face 10 forehead, 152 chin, 33/263 outer eye corners; pose 0 nose,
+     11/12 shoulders. Everything is normalised 0..1 with y growing downward. */
+  const POSTURE = {
+    seen: function (p) {
+      // An injected landmark carries no visibility; a real one does. Absent means
+      // "the detector did not say", which is not the same as "not there".
+      return !!p && (p.visibility === undefined || p.visibility === null ||
+                     p.visibility >= 0.5);
+    },
+
+    metrics: function (face, pose) {
+      const f = (face && face.length > 263) ? face : null;
+      const p = (pose && pose.length > 12) ? pose : null;
+      const m = { pitch: null, drop: null, sit: null, span: null, from: [] };
+      if (f) {
+        const fore = f[10], chin = f[152], eL = f[33], eR = f[263];
+        if (fore && chin && eL && eR) {
+          const eyeY = (eL.y + eR.y) / 2;
+          const upper = eyeY - fore.y;      // grows as the head tips down
+          const lower = chin.y - eyeY;      // shrinks as the head tips down
+          if (upper > 0 && lower > 0.004) m.pitch = upper / lower;
+          m.sit = 1 - eyeY;                 // how high you are sitting, in frame
+          m.span = Math.abs(eR.x - eL.x);   // a scale proxy: how close you are
+          m.from.push('face');
+        }
+      }
+      if (p) {
+        const nose = p[0], sL = p[11], sR = p[12];
+        if (POSTURE.seen(nose) && POSTURE.seen(sL) && POSTURE.seen(sR)) {
+          const shoulderY = (sL.y + sR.y) / 2;
+          const width = Math.abs(sL.x - sR.x);
+          if (width > 0.02) m.drop = (shoulderY - nose.y) / width;
+          if (m.sit === null) m.sit = 1 - nose.y;
+          m.from.push('pose');
+        }
+      }
+      return m.from.length ? m : null;      // nobody there is null, not a guess
+    },
+
+    /* The mean of your neutral readings. Each field needs its own quorum, because the
+       pose landmarker can find your shoulders in frames where the face detector lost
+       you and the average must not be built from whichever half happened to arrive. */
+    baseline: function (samples, need) {
+      const want = Math.max(2, need || EYE_CALIBRATE_MIN);
+      const base = {};
+      ['pitch', 'drop', 'sit'].forEach(function (key) {
+        const got = (samples || []).filter(function (s) {
+          return s && typeof s[key] === 'number' && isFinite(s[key]);
+        }).map(function (s) { return s[key]; });
+        base[key] = got.length >= want
+          ? got.reduce(function (a, b) { return a + b; }, 0) / got.length
+          : null;
+      });
+      // Pitch or drop: one of the two head measures must be real, or there is nothing
+      // to compare a bent neck against and no baseline worth having.
+      return (base.pitch !== null || base.drop !== null) ? base : null;
+    },
+
+    /* metrics + your own baseline -> the three booleans, and nothing else. */
+    judge: function (m, base) {
+      const out = { present: !!m, headDown: false, slouched: false };
+      if (!m || !base) return out;
+      const downFace = m.pitch !== null && base.pitch !== null &&
+                       m.pitch > base.pitch * EYE_PITCH_DOWN;
+      const downPose = m.drop !== null && base.drop !== null &&
+                       m.drop < base.drop * EYE_DROP_DOWN;
+      out.headDown = !!(downFace || downPose);
+      if (!out.headDown) {
+        // A slouch is what is left when the head is not bent: you have sunk, not
+        // looked away. Reported second, and never at the same time as the phone.
+        const sank = m.sit !== null && base.sit !== null &&
+                     m.sit < base.sit * EYE_SIT_SLUMP;
+        const sunk = m.drop !== null && base.drop !== null &&
+                     m.drop < base.drop * EYE_DROP_SLUMP;
+        out.slouched = !!(sank || sunk);
+      }
+      return out;
+    }
+  };
+
+  function eyesLive() {
+    if (!camStream) return false;
+    const track = camStream.getVideoTracks()[0];
+    return !!track && track.readyState === 'live' && camStream.active;
+  }
+
+  function paintEyes() {
+    const live = eyesLive();
+    const bent = live && (eyeStable.headDown || eyeStable.slouched);
+    $('eye').classList.toggle('on', live);
+    $('eye').classList.toggle('bent', !!bent);
+    $('eyeing').classList.toggle('live', live);
+    $('eye').title = live
+      ? 'Close the eyes (no frame of you was ever uploaded)'
+      : 'Open the eyes · posture only, no frame leaves this machine';
+    $('eye-dim').textContent = !live ? ''
+      : eyeTrouble ? eyeTrouble
+      : !camReader ? 'waking the landmarkers'
+      : !eyeBase ? 'measuring your neutral posture'
+      : !eyeStable.present ? 'chair empty'
+      : eyeStable.headDown ? 'head down'
+      : eyeStable.slouched ? 'slouched'
+      : 'upright';
+  }
+
+  /* ---- the report: three booleans and a word about the ears ---- */
+  const EYE_UNREACHABLE = 'the server is not answering';
+
+  async function eyeReport(cmd) {
+    camBeat = Date.now();
+    /* THE WHOLE PAYLOAD. Read these four names and you have read everything this organ
+       has ever sent about your body. `ears` is the ear law: false is what earns the
+       sentence about the mic being off, and this page has no line of code that would
+       turn it on. */
+    const body = {
+      cmd: cmd || 'posture',
+      present: !!eyeStable.present,
+      headDown: !!eyeStable.headDown,
+      slouched: !!eyeStable.slouched,
+      ears: !!listening
+    };
+    let data = null;
+    try {
+      const res = await fetch('/eyes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      data = await res.json();
+    } catch (e) {
+      eyeTrouble = EYE_UNREACHABLE;
+      paintEyes();
+      return null;
+    }
+    if (eyeTrouble === EYE_UNREACHABLE) eyeTrouble = '';   // it answered after all
+    eyeLastPost ={ at: Date.now(), sent: body, via: !!(data && data.viaSession),
+                    spoke: !!(data && data.answer) };
+    // One source of truth for the windows: the server's own numbers, every time.
+    if (data && data.tuning) EYE_TUNE = Object.assign({}, EYE_TUNE, data.tuning);
+    if (data && data.focus) fxApply(data.focus);
+    /* ONE NUDGER. An answer here means there was no session to carry it - fxApply
+       above has already spoken anything that went into the say queue - so this is the
+       only tab that can say this, and it says it exactly once. */
+    if (data && data.answer) {
+      renderAnswer('', data.answer, false, null);
+      if (!speak(spokenForm(data.answer))) idleStatus();
+    }
+    paintEyes();
+    return data;
+  }
+
+  /* ---- the pipeline: reading -> sustained posture -> at most one report ---- */
+  function eyeObserve(m, now) {
+    // No camera, no report. A posture published by a page whose lid is shut would be
+    // a claim about a room nobody is looking at.
+    if (!camStream) return null;
+    now = now || Date.now();
+
+    if (!eyeBase) {
+      if (m) eyeSamples.push(m);
+      if (eyeSamples.length > 60) eyeSamples.shift();
+      eyeBase = POSTURE.baseline(eyeSamples, EYE_CALIBRATE_MIN);
+      if (!eyeBase) { paintEyes(); return null; }
+      eyeSamples = [];              // measured, and the readings are not kept
+      paintEyes();
+    }
+
+    const raw = POSTURE.judge(m, eyeBase);
+    eyeRaw = { at: now, present: raw.present, headDown: raw.headDown,
+               slouched: raw.slouched, metrics: m };
+
+    /* THE SUSTAIN. When each condition began, or 0 while it is not true. A posture has
+       to hold before it is worth a word: the whole difference between noticing and
+       nagging is that a glance down at a notification never starts a sentence. */
+    eyeSince.headDown = raw.headDown ? (eyeSince.headDown || now) : 0;
+    eyeSince.slouched = raw.slouched ? (eyeSince.slouched || now) : 0;
+    eyeSince.absent   = raw.present ? 0 : (eyeSince.absent || now);
+    const held = function (since, ms) { return !!since && (now - since) >= ms; };
+
+    const next = {
+      // Absence gets the long grace, and it is the only one that counts DOWN from
+      // true: you are present until you have been gone for twelve seconds.
+      present: !held(eyeSince.absent, EYE_TUNE.absenceMs),
+      headDown: held(eyeSince.headDown, EYE_TUNE.sustainMs),
+      slouched: held(eyeSince.slouched, EYE_TUNE.sustainMs)
+    };
+    if (next.headDown) next.slouched = false;      // one posture at a time
+    if (!next.present) { next.headDown = false; next.slouched = false; }
+
+    const changed = next.present !== eyeStable.present ||
+                    next.headDown !== eyeStable.headDown ||
+                    next.slouched !== eyeStable.slouched;
+    eyeStable = next;
+    paintEyes();
+    /* Posted on a CHANGE, so the nudge arrives inside a second of the posture being
+       real, and on a heartbeat otherwise, so the server never has to guess whether a
+       quiet page is upright or closed. */
+    if (changed || (now - camBeat) >= EYE_BEAT_MS) return eyeReport('posture');
+    return null;
+  }
+
+  /* The seam between the camera and the judgement, and the only way in. The reader
+     below hands landmarks to this; so does a check, which is the point - the geometry
+     and the timing can be driven from recorded landmarks with no camera in the room,
+     and the camera has no path that goes round it. */
+  function eyeFeed(face, pose) {
+    return eyeObserve(POSTURE.metrics(face, pose), Date.now());
+  }
+
+  function eyeTick() {
+    if (!eyesLive()) { stopEyes('blind'); return; }
+    const video = $('cam');
+    if (!camReader || !video.videoWidth) return;
+    let face = null, pose = null;
+    try {
+      // Strictly increasing, or the video-mode detectors refuse the frame.
+      const at = Math.max(camStamp + 1, Math.round(performance.now()));
+      camStamp = at;
+      const f = camReader.face.detectForVideo(video, at);
+      const p = camReader.pose.detectForVideo(video, at);
+      face = (f && f.faceLandmarks && f.faceLandmarks[0]) || null;
+      pose = (p && p.landmarks && p.landmarks[0]) || null;
+    } catch (e) {
+      eyeTrouble = 'the landmarker stumbled · ' + ((e && e.name) || 'error');
+      paintEyes();
+      return;
+    }
+    eyeFeed(face, pose);
+  }
+
+  async function loadLandmarkers() {
+    if (camReader || camLoading) return camReader;
+    camLoading = true;
+    paintEyes();
+    let last = null;
+    for (let i = 0; i < EYE_LIBS.length && !camReader; i++) {
+      const lib = EYE_LIBS[i];
+      try {
+        const V = await import(lib);
+        const files = await V.FilesetResolver.forVisionTasks(
+          lib.replace(/\/vision_bundle\.mjs$/, '/wasm'));
+        // GPU where it exists, CPU where it does not. A machine without a working
+        // GPU delegate gets slower eyes, not blind ones.
+        for (let d = 0; d < 2 && !camReader; d++) {
+          const delegate = d === 0 ? 'GPU' : 'CPU';
+          try {
+            const face = await V.FaceLandmarker.createFromOptions(files, {
+              baseOptions: { modelAssetPath: FACE_TASK, delegate: delegate },
+              runningMode: 'VIDEO', numFaces: 1
+            });
+            const pose = await V.PoseLandmarker.createFromOptions(files, {
+              baseOptions: { modelAssetPath: POSE_TASK, delegate: delegate },
+              runningMode: 'VIDEO', numPoses: 1
+            });
+            camReader = { face: face, pose: pose, from: lib, delegate: delegate };
+          } catch (e) { last = e; }
+        }
+      } catch (e) { last = e; }
+    }
+    camLoading = false;
+    /* HONEST FAILURE. No landmarker means no posture, and no posture means this organ
+       publishes nothing and says so on the chip. The alternative - a cheerful
+       "upright" from a page that cannot see - is the one outcome worth refusing. */
+    eyeTrouble = camReader ? '' : 'cannot read this camera · ' +
+                                  ((last && last.name) || 'offline?');
+    paintEyes();
+    return camReader;
+  }
+
+  async function startEyes() {
+    if (!canSee || camStream) return false;
+    setStatus('', 'opening the camera…');
+    let stream = null;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        /* audio:false is not a tidy default here, it is THE EAR LAW in code: this
+           organ asks for pixels and has nowhere to ask for sound. */
+        audio: false,
+        video: { width: { ideal: 640 }, height: { ideal: 480 },
+                 frameRate: { ideal: 10, max: 15 }, facingMode: 'user' }
+      });
+    } catch (e) {
+      // Refusing a camera is a decision, not a fault: no scolding, no speech.
+      setStatus('', (e && e.name === 'NotAllowedError')
+        ? 'camera refused · the eyes stay shut'
+        : 'no camera available · ' + ((e && e.name) || 'unknown'));
+      setTimeout(function () { if (!busy) idleStatus(); }, 2600);
+      return false;
+    }
+    camStream = stream;
+    const video = $('cam');
+    video.srcObject = stream;
+    try { await video.play(); } catch (e) { /* a muted video needs no gesture */ }
+    stream.getVideoTracks().forEach(function (t) {
+      // Unplugged, or taken by another app: the lid has shut whatever this page thinks.
+      t.addEventListener('ended', function () { stopEyes('blind'); });
+    });
+    eyeBase = null;
+    eyeSamples = [];
+    eyeSince = { absent: 0, headDown: 0, slouched: 0 };
+    // Present until told otherwise, so opening the lid cannot fire an empty-chair
+    // nudge at the man who just pressed the button.
+    eyeStable = { present: true, headDown: false, slouched: false };
+    eyeRaw = null;
+    eyeTrouble = '';
+    paintEyes();
+    /* The ear law is SAID here, by the server, because `ears` goes with this report.
+       This page never turns the microphone on - not here, not anywhere below. */
+    await eyeReport('on');
+    loadLandmarkers();
+    clearInterval(camTimer);
+    camTimer = setInterval(eyeTick, EYE_READ_MS);
+    return true;
+  }
+
+  function stopEyes(why) {
+    const was = !!camStream;
+    clearInterval(camTimer);
+    camTimer = null;
+    if (camStream) {
+      camStream.getTracks().forEach(function (t) {
+        try { t.stop(); } catch (e) { /* already gone */ }
+      });
+    }
+    camStream = null;
+    try { $('cam').srcObject = null; } catch (e) { /* ignore */ }
+    eyeStable = { present: false, headDown: false, slouched: false };
+    eyeSince = { absent: 0, headDown: 0, slouched: 0 };
+    eyeRaw = null;
+    eyeBase = null;
+    eyeSamples = [];
+    eyeTrouble = '';
+    paintEyes();
+    // The landmarkers are kept: they cost a download, they hold no frame, and the
+    // next open should not have to fetch them again.
+    if (was) eyeReport(why === 'blind' ? 'blind' : 'off');
+    return was;
+  }
+
+  $('eye').onclick = function () {
+    unlockAudio();                     // a real gesture: the confirmation is spoken
+    if (eyesLive()) return stopEyes('off');
+    startEyes();
+  };
+  $('eye-stop').onclick = function () { stopEyes('off'); };
+  if (!canSee) {
+    $('eye').disabled = true;
+    $('eye').title = 'This browser will not give this page a camera (needs getUserMedia)';
+  }
+  /* Repainted once a second like the share chip, so the indicator cannot be left
+     claiming eyes that have quietly died without firing anything. */
+  setInterval(function () {
+    if (camStream && !eyesLive()) stopEyes('blind');
+    else if (camStream) paintEyes();
+  }, 1000);
+
+  /* ---- LOOK AT ME: the one frame, asked for out loud ----
+     Disjoint from SCREEN_RE by construction and by test. That one is about THIS and
+     THAT - the thing on the glass - and this one is about ME and MY things, so "what
+     do you think of this screen" stays with the screen organ where it belongs. The
+     nouns that belong to the glass are excluded from the possessive branch as well,
+     so "what do you think of my screen" cannot be dragged over here either. */
+  const LOOK_NOT_MINE = '(?:screen|monitor|display|desktop|tab|page|window|code|' +
+                        'error|chart|graph|dashboard|design|notes|galaxy|terminal|' +
+                        'browser|editor|diagram)';
+  const LOOK_MINE = 'my\\s+(?!' + LOOK_NOT_MINE + '\\b)\\w+';
+  const LOOK_RE = new RegExp(
+    'look\\s+at\\s+me\\b' +
+    '|(?:how|what)\\s+do\\s+i\\s+look\\b' +
+    '|\\bdo\\s+i\\s+look\\b' +
+    '|check\\s+me\\s+out\\b' +
+    '|what\\s+am\\s+i\\s+wearing\\b' +
+    '|what\\s+do\\s+you\\s+(?:think|make)\\s+of\\s+' + LOOK_MINE +
+    '|(?:do\\s+you\\s+like|what\\s+about|how\\s+about)\\s+' + LOOK_MINE +
+    '|(?:see|look\\s+at|rate|judge)\\s+' + LOOK_MINE +
+    '|how\\s+(?:is|does)\\s+' + LOOK_MINE, 'i');
+
+  /* Spoken, never silent, and never answered anyway. Each of these is a moment when
+     there is no honest photograph to judge. */
+  const LOOK_TROUBLE = {
+    shut: 'My eyes are shut, sir. Tap the eye button and ask me again - I will not ' +
+          'open a camera on you because of a sentence.',
+    unsupported: 'This browser will not give me a camera, so there is nothing of you ' +
+                 'for me to look at.',
+    ended: 'The camera has stopped, sir, so my eyes are shut again. Open them and ask ' +
+           'me then.',
+    notready: 'The camera has not produced a picture yet. Give it a moment, sir, and ' +
+              'ask me again.',
+    encode: 'This browser would not encode a frame of that camera, so I have sent ' +
+            'nothing and judged nothing.',
+    wrongtype: 'This browser encoded that frame as {got} rather than ' + FRAME_TYPE +
+               ', so I have not sent it: the bytes and the label must agree or ' +
+               'neither can be trusted.'
+  };
+
+  async function lookAtMe(question) {
+    if (busy || !question.trim()) return;
+
+    function fail(message) {
+      renderAnswer(question, message, true, null);
+      if (!speak(spokenForm(message))) idleStatus();
+    }
+
+    if (!canSee) return fail(LOOK_TROUBLE.unsupported);
+    if (camStream && !eyesLive()) { stopEyes('blind'); return fail(LOOK_TROUBLE.ended); }
+    /* The eyes do not open themselves for this. A sentence is not consent to a
+       camera, and a camera that opens on a phrase is a camera you stop trusting. */
+    if (!eyesLive()) return fail(LOOK_TROUBLE.shut);
+
+    busy = true;
+    $('send').disabled = true;
+    $('dot').classList.add('busy');
+    setStatus('looking', 'having a look at you', question);
+    renderAnswer(question, 'Having a look…', false, null);
+
+    try {
+      // Grabbed HERE: after the question exists, before anything is sent. ONE frame.
+      const shot = await grabFrame('cam');
+      if (shot.error) {
+        if (shot.error === 'ended') stopEyes('blind');
+        return fail(LOOK_TROUBLE[shot.error]
+          .replace('{got}', shot.got || 'something else'));
+      }
+      const age = Math.round(performance.now() - shot.at);
+      lastLook = { w: shot.w, h: shot.h, bytes: shot.blob.size, type: shot.blob.type,
+                   ageMs: age, at: Date.now(), brain: null, asAsked: null };
+
+      const res = await fetch('/look?q=' + encodeURIComponent(question), {
+        method: 'POST',
+        headers: {
+          'Content-Type': FRAME_TYPE,
+          'X-Frame-Width': String(shot.w),
+          'X-Frame-Height': String(shot.h),
+          'X-Frame-Age-Ms': String(age)
+        },
+        body: shot.blob
+      });
+      let data = null;
+      try { data = await res.json(); } catch (e) { data = null; }
+
+      const isError = !data || !!data.error || !data.answer;
+      const text = !data
+        ? 'The brain replied with something that was not JSON (HTTP ' +
+          res.status + ').'
+        : (data.error || data.answer || '(empty answer)');
+      if (data && data.brain) {
+        lastLook.brain = data.brain;
+        lastLook.asAsked = !!data.asAsked;
+      }
+      eyeLooks++;
+      renderAnswer(question, text, isError, null);
+      /* WHICH BRAIN ANSWERED, under the frame it answered about. The look asks for
+         Astra by name; when that key is missing the server routes to the configured
+         brain instead and says so, and a fallback you cannot see is a lie. */
+      showProof(shot, age, 'the one frame sent',
+                data && data.brain ? 'answered by ' + data.brain +
+                  (data.asAsked === false ? ' (Astra was not reachable)' : '') : null);
+      if (!speak(spokenForm(text))) idleStatus();
+      // 'screen' is the honest kind here: a photograph of you cites no note, so the
+      // graph holds still rather than flying somewhere to make a point about a shirt.
+      applyCamera(decideCamera('screen', [], isError), []);
+    } catch (e) {
+      fail('I could not reach the brain to look at you. Start it with "python ' +
+           'server.py" and try again - nothing was sent.');
+    } finally {
+      busy = false;
+      $('send').disabled = false;
+      $('dot').classList.remove('busy');
+    }
+  }
+
+  /* ================================================================ watch ==
+     A SCREEN WATCH THAT COSTS NOTHING UNTIL IT NEEDS TO THINK.
+
+     "Watch my screen." Then, every five seconds, one frame of the share is drawn into
+     a 32x18 canvas - 576 grey numbers - and compared with the last 576. That is the
+     entire running cost: no upload, no model, no network, no disk. A screen that keeps
+     changing is a man at work and is left alone. A screen that has not changed for a
+     minute earns ONE frame sent to the brain and one dry nudge about what he is stuck
+     on, and then three minutes of quiet.
+
+     Four things this must never do, and what stops each:
+
+       - upload anything while it is merely watching. The diff runs on the canvas and
+         returns a count. There is exactly one fetch in this organ and it is inside
+         nudgeNow(), guarded by the stillness threshold; a tick that is not a nudge has
+         no code path to a network call at all.
+       - police tabs with a tab. See THE TAB-SHARE TRAP below: a captured tab keeps
+         painting itself while you wander off to another one, and its own scrolling
+         reads as change, so it is the one surface on which this feature would quietly
+         lie in both directions. It is refused out loud, never worked around.
+       - touch the camera. This organ reads FRAME_SOURCES.screen and nothing else, and
+         the two sources have separate videos and separate canvases precisely so that
+         neither organ can reach the other's pixels. Want posture too? Open the eyes.
+       - nudge while the man has asked for silence. The relief valve belongs to the
+         eyes and covers every organ: POST /stuck refuses while it is open, on the
+         server, where the valve actually lives.
+
+     The windows are the server's (GET /stuck) for the same reason the eyes' are: the
+     page owns the clock, the server owns the purse. */
+
+  /* Defaults only. Every one of these is replaced by the server's own numbers the
+     moment the watch starts, and the chip would rather say so than apply a stale
+     rule - see watchTune(). */
+  let WATCH_TUNE = { stillS: 60, cooldownS: 180, tickMs: 5000,
+                     thumbW: 32, thumbH: 18, cellDelta: 10, changedFraction: 0.015 };
+
+  /* "Watch my screen", and the off switch. Note what is NOT in here: "look at this",
+     "what do you think of this screen". Those are questions about a picture and they
+     belong to sight; this is an instruction to sit and watch, and the two must not
+     collide - ask() checks this one first and a live check proves they are disjoint. */
+  const WATCH_RE = new RegExp(
+    '\\b(?:watch|keep\\s+an\\s+eye\\s+on|monitor)\\s+' +
+    '(?:my|the|this)\\s+(?:screen|desktop|display|monitor)\\b' +
+    '|\\bwatch\\s+(?:me|what\\s+i(?:\'m|\\s+am)\\s+doing)\\b' +
+    '|\\bwatch\\s+my\\s+work\\b', 'i');
+  const WATCH_OFF_RE = new RegExp(
+    '\\b(?:stop|quit|end|cease)\\s+watching\\b' +
+    '|\\bstop\\s+(?:the\\s+)?(?:screen\\s+)?watch\\b' +
+    '|\\b(?:don\'?t|do\\s+not)\\s+watch\\s+(?:my|the|this)\\s+screen\\b', 'i');
+
+  /* Spoken, every one of them. A watch that failed to start silently is a watch you
+     will believe is running. */
+  const WATCH_TROUBLE = {
+    unsupported: 'This browser cannot share a screen at all, sir, so there is ' +
+                 'nothing for me to watch.',
+    cancelled: 'You thought better of it, sir. Nothing is being watched.',
+    /* THE TAB-SHARE TRAP, said in full. It names what it got, why that surface
+       cannot do this job, and the one thing to do about it - a refusal that leaves
+       you guessing which of the three options to pick is barely a refusal. */
+    tab: 'That is a single browser tab, sir, and a tab cannot watch a desk: it ' +
+         'carries on painting itself while you wander off to another one, and its ' +
+         'own scrolling would read as work. Say "watch my screen" again and choose ' +
+         'Entire Screen in the picker.',
+    window: 'That is one application window, sir, which I would go on watching ' +
+            'contentedly while you worked somewhere else entirely. Say "watch my ' +
+            'screen" again and choose Entire Screen.',
+    ended: 'The share has ended, sir, so I have stopped watching.',
+    blind: 'The share is not producing a picture, so I have stopped watching rather ' +
+           'than pretend to: {detail}'
+  };
+  const WATCH_LINES = {
+    on: 'Watching your screen, sir. Nothing leaves this machine unless you have sat ' +
+        'still for a minute, and then only one frame.',
+    off: 'No longer watching, sir.',
+    /* Said when the desktop card could not be pinned. Honest about which half
+       worked: the watch is running, the face simply has nowhere to sit yet. */
+    nopin: 'I am watching, sir, though this browser will not let my face off the ' +
+           'page. Click anywhere and I shall pin it to the desktop.'
+  };
+
+  const canPin = !!(window.documentPictureInPicture &&
+                    window.documentPictureInPicture.requestWindow);
+
+  let watchOn = false, watchTimer = null, watchThumb = null;
+  let watchStillFrom = 0;        // when the screen last changed (Date.now())
+  let watchSurface = '';         // what the track says it is: monitor / window / browser
+  let watchTicks = 0, watchChanges = 0, watchNudges = 0;
+  let watchLastDiff = null, watchLastNudge = null, watchTrouble = '';
+  let watchBusyHold = 0;         // ticks deferred because a question was in flight
+  /* Whose share is it. A share the watch opened is the watch's to close when it stops;
+     one that was already running belongs to the man who started it, and ending it
+     under him because the watch happened to finish would be a liberty. */
+  let watchOpenedShare = false;
+  let faceWin = null, facePinWanted = false;
+
+  function watchStillMs() {
+    return watchStillFrom ? Date.now() - watchStillFrom : 0;
+  }
+
+  /* ---- the diff: the one piece worth testing, so the one piece with no state ----
+     Grey numbers in, a verdict out. No DOM, no clock, no share, no fetch. Exported
+     whole on __galaxy.watch.DIFF so it can be checked against synthetic screens
+     nobody had to sit in front of. */
+  const WATCH_DIFF = {
+    /* One 8-bit luma value per cell, from the RGBA that getImageData returns. Grey
+       because colour buys nothing here: the question is "did this region change",
+       and a thumbnail that big has no hue worth keeping. */
+    luma: function (rgba) {
+      const out = new Uint8ClampedArray(rgba.length / 4);
+      for (let i = 0, j = 0; j < out.length; i += 4, j++) {
+        out[j] = (rgba[i] * 0.299 + rgba[i + 1] * 0.587 + rgba[i + 2] * 0.114) | 0;
+      }
+      return out;
+    },
+    /* Two thumbnails -> did the screen change? TWO thresholds, and the second one is
+       the feature rather than a tolerance: a cell must move by cellDelta to count at
+       all (JPEG-ish noise and a blinking caret do not), and enough cells must move to
+       clear changedFraction (a clock ticking in the corner does not). Without the
+       fraction, any desktop with a clock on it would reset the stillness timer for
+       ever and the nudge would never once fire. */
+    diff: function (a, b, tune) {
+      const t = tune || WATCH_TUNE;
+      if (!a || !b || a.length !== b.length || !a.length) {
+        return { cells: 0, total: (a && a.length) || 0, fraction: 0,
+                 changed: true, comparable: false };
+      }
+      let cells = 0, worst = 0;
+      for (let i = 0; i < a.length; i++) {
+        const d = Math.abs(a[i] - b[i]);
+        if (d > worst) worst = d;
+        if (d > t.cellDelta) cells++;
+      }
+      const fraction = cells / a.length;
+      return { cells: cells, total: a.length, worst: worst,
+               fraction: +fraction.toFixed(4),
+               changed: fraction > t.changedFraction, comparable: true };
+    }
+  };
+
+  /* The current screen as those grey numbers, or null if there is no picture yet.
+     Reads the SAME video element the share's frame grabber reads, which is the whole
+     of "answer from the same share": one stream, one video, two consumers. */
+  function watchThumbNow() {
+    const video = $('shot');
+    if (!sharing() || !video.videoWidth || !video.videoHeight) return null;
+    const cvs = $('thumb');
+    cvs.width = WATCH_TUNE.thumbW; cvs.height = WATCH_TUNE.thumbH;
+    const ctx = cvs.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(video, 0, 0, cvs.width, cvs.height);
+    return WATCH_DIFF.luma(ctx.getImageData(0, 0, cvs.width, cvs.height).data);
+  }
+
+  /* ---- THE FACE ----
+     One markup, two possible homes: a Document Picture-in-Picture window, which sits
+     above every other application, or - when the browser has no such thing, or has
+     not been given a gesture to open one with - the in-page card, which says so. */
+  const FACE_CSS =
+    'html,body{margin:0;height:100%;background:#0b0803;color:#ffe7c2;' +
+    'font:12px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;' +
+    '-webkit-user-select:none;user-select:none;overflow:hidden}' +
+    '.wrap{height:100%;display:flex;align-items:center;gap:11px;padding:10px 12px;' +
+    'box-sizing:border-box;border:1px solid rgba(255,183,77,.45);border-radius:14px}' +
+    '.mark{width:42px;height:42px;flex:0 0 auto}' +
+    '.t{text-transform:uppercase;letter-spacing:.2em;font-size:10px}' +
+    '.s{color:rgba(255,231,194,.66);font-variant-numeric:tabular-nums;margin-top:3px}' +
+    '.wrap.think{border-color:rgba(255,183,77,.95);' +
+    'box-shadow:inset 0 0 26px rgba(255,150,0,.22)}';
+
+  /* A face rather than a dot, because the request was for a face: a ring, two eyes
+     and a mouth that is a single dry line. It breathes at the diff cadence, so what
+     you are looking at is the feature's own pulse. */
+  const FACE_MARKUP =
+    '<div class="wrap" id="wrap">' +
+    '<svg class="mark" viewBox="0 0 48 48" fill="none" stroke="#ffb74d"' +
+    ' stroke-width="2" stroke-linecap="round">' +
+    '<circle cx="24" cy="24" r="21" stroke="rgba(255,183,77,.45)"/>' +
+    '<circle cx="24" cy="24" r="15.5" stroke="rgba(255,183,77,.22)">' +
+    '<animate attributeName="r" values="15.5;17;15.5" dur="5s"' +
+    ' repeatCount="indefinite"/></circle>' +
+    '<circle cx="17.5" cy="21" r="2.6" fill="#ffb74d" stroke="none"/>' +
+    '<circle cx="30.5" cy="21" r="2.6" fill="#ffb74d" stroke="none"/>' +
+    '<path d="M17 31.5h14"/></svg>' +
+    '<div><div class="t">watching</div><div class="s" id="face-s">still 0:00</div></div>' +
+    '</div>';
+
+  function paintFace() {
+    const secs = Math.floor(watchStillMs() / 1000);
+    const text = watchOn
+      ? 'still ' + Math.floor(secs / 60) + ':' + ('0' + (secs % 60)).slice(-2)
+      : 'not watching';
+    [faceWin && faceWin.document, document].forEach(function (doc) {
+      if (!doc) return;
+      const s = doc.getElementById('face-s');
+      if (s) s.textContent = text;
+    });
+    const card = $('facecard');
+    card.classList.toggle('show', watchOn && !faceWin);
+    if (watchOn && !faceWin && !card.dataset.built) {
+      card.innerHTML = '<div class="row">' + FACE_MARKUP + '</div>' +
+        (canPin ? '<button class="pin" id="face-pin" type="button">' +
+                  'pin me to the desktop</button>' : '');
+      card.dataset.built = '1';
+      const pin = $('face-pin');
+      if (pin) pin.onclick = function () { openFace(); };
+    }
+  }
+
+  /* The desktop card. Document PiP needs a fresh user gesture, and the gesture that
+     started this watch was spent on the share picker - so a refusal here is ordinary
+     and is handled by arming the next click rather than by complaining. */
+  async function openFace() {
+    if (!canPin || faceWin || !watchOn) return false;
+    let win = null;
+    try {
+      win = await window.documentPictureInPicture.requestWindow({
+        width: 236, height: 96, disallowReturnToOpener: true,
+        preferInitialWindowPlacement: true
+      });
+    } catch (e) {
+      facePinWanted = true;        // the next real click will try again
+      return false;
+    }
+    faceWin = win;
+    facePinWanted = false;
+    const doc = win.document;
+    const style = doc.createElement('style');
+    style.textContent = FACE_CSS;
+    doc.head.appendChild(style);
+    doc.body.innerHTML = FACE_MARKUP;
+    doc.title = 'Jarvis · watching';
+    /* Asked for, not assumed: the top-right of the real desktop. Chrome decides
+       where a PiP window may sit and may well ignore this, which is why the request
+       is in a try and the feature does not depend on it landing. */
+    try { win.moveTo(Math.max(0, (win.screen.availWidth || 1280) - 252), 24); }
+    catch (e) { /* the browser's placement it is */ }
+    /* Closing the face stops the watch. That is deliberate: the card exists so you
+       always know it is watching, and a watch running with its face shut would be
+       exactly the thing this is for. */
+    win.addEventListener('pagehide', function () {
+      faceWin = null;
+      if (watchOn) stopWatch('face');
+    });
+    paintFace();
+    return true;
+  }
+
+  function closeFace() {
+    const win = faceWin;
+    faceWin = null;                      // before close(), so pagehide is a no-op
+    if (win) { try { win.close(); } catch (e) { /* already gone */ } }
+    $('facecard').classList.remove('show');
+    facePinWanted = false;
+  }
+
+  /* One held gesture, exactly like unlockAudio(): if the pin was refused for want of
+     activation, the next thing you click pins it. */
+  document.addEventListener('pointerdown', function () {
+    if (facePinWanted && watchOn && !faceWin) openFace();
+  }, true);
+
+  function paintWatch() {
+    $('watching').classList.toggle('live', watchOn);
+    $('screen').classList.toggle('watching', watchOn);
+    if (watchOn) {
+      const secs = Math.floor(watchStillMs() / 1000);
+      $('watch-dim').textContent = 'still ' + secs + 's / ' + WATCH_TUNE.stillS + 's' +
+        (watchSurface ? ' · ' + watchSurface : '');
+      $('watch-sent').textContent = 'watching · ' + (watchNudges
+        ? watchNudges + (watchNudges === 1 ? ' frame sent' : ' frames sent')
+        : 'no frame sent');
+    }
+    paintFace();
+  }
+
+  /* The server's windows, applied rather than assumed. A watch that is about to spend
+     money on a threshold should be using the threshold the purse agrees with. */
+  async function watchTune() {
+    try {
+      const res = await fetch('/stuck');
+      const data = await res.json();
+      if (data && data.tuning) WATCH_TUNE = Object.assign({}, WATCH_TUNE, data.tuning);
+    } catch (e) { /* the defaults above are the same numbers; carry on */ }
+    return WATCH_TUNE;
+  }
+
+  /* What surface did we actually get? The one question the whole trap turns on, and
+     it is asked of the TRACK rather than of what we requested: asking for a monitor
+     and being handed a tab is precisely the case that must be caught. */
+  function surfaceOf() {
+    if (!shareStream) return '';
+    const track = shareStream.getVideoTracks()[0];
+    if (!track || !track.getSettings) return '';
+    return String(track.getSettings().displaySurface || '');
+  }
+
+  function refuseSurface(surface) {
+    const key = surface === 'browser' ? 'tab' : 'window';
+    watchTrouble = key;
+    renderAnswer('watch my screen', WATCH_TROUBLE[key], true, null);
+    if (!speak(spokenForm(WATCH_TROUBLE[key]))) idleStatus();
+  }
+
+  async function startWatch() {
+    if (watchOn) return true;
+    if (!canShare) {
+      watchTrouble = 'unsupported';
+      renderAnswer('watch my screen', WATCH_TROUBLE.unsupported, true, null);
+      if (!speak(spokenForm(WATCH_TROUBLE.unsupported))) idleStatus();
+      return false;
+    }
+    watchTrouble = '';
+    await watchTune();
+
+    /* ANSWER FROM THE SAME SHARE, and this is where that is decided: if a share is
+       already live it is used as it is. Two shares of one desktop is two pickers, two
+       streams and two chips for one screen, and the second one buys nothing. */
+    const had = sharing();
+    if (!had) {
+      /* THE PICKER OPENS ON ENTIRE SCREEN. displaySurface is a hint and the user may
+         still pick a tab, which is what the refusal below is for; selfBrowserSurface
+         keeps this very tab out of the list, since watching the watcher is the one
+         choice that is never right. */
+      const got = await startShare({
+        displaySurface: 'monitor',
+        selfBrowserSurface: 'exclude',
+        surfaceSwitching: 'include',
+        monitorTypeSurfaces: 'include'
+      });
+      if (!got) {
+        watchTrouble = 'cancelled';
+        return false;
+      }
+    }
+
+    watchSurface = surfaceOf();
+    /* The trap. A tab is refused outright; so is a single window, for the first of
+       the same two reasons. If this call opened the share, it closes it again -
+       leaving a capture running that nothing is allowed to use would be rude. */
+    if (watchSurface === 'browser' || watchSurface === 'window') {
+      refuseSurface(watchSurface);
+      if (!had) endShare();
+      return false;
+    }
+
+    watchOn = true;
+    watchOpenedShare = !had;
+    watchThumb = watchThumbNow();
+    watchStillFrom = Date.now();
+    watchTicks = 0; watchChanges = 0; watchLastDiff = null;
+    watchTimer = setInterval(watchTick, WATCH_TUNE.tickMs);
+    /* A surface swapped mid-share through Chrome's own bar is the same question
+       again, so it is asked again rather than answered from the first reading. */
+    const track = shareStream && shareStream.getVideoTracks()[0];
+    if (track && track.addEventListener) {
+      track.addEventListener('configurationchange', function () {
+        if (!watchOn) return;
+        watchSurface = surfaceOf();
+        if (watchSurface === 'browser' || watchSurface === 'window') {
+          stopWatch('surface');
+          refuseSurface(watchSurface);
+        } else {
+          watchThumb = null;            // a new surface is not a still old one
+          watchStillFrom = Date.now();
+          paintWatch();
+        }
+      });
+    }
+    paintWatch();
+    const pinned = await openFace();
+    const line = WATCH_LINES.on + (pinned || !canPin ? '' : ' ' + WATCH_LINES.nopin);
+    renderAnswer('watch my screen', line, false, null);
+    if (!speak(spokenForm(line))) idleStatus();
+    return true;
+  }
+
+  /* reason: 'said' | 'chip' | 'face' | 'ended' | 'surface' | 'blind'. Only the first
+     two are the man changing his mind, and only they are worth a pleasantry. */
+  function stopWatch(reason) {
+    const was = watchOn;
+    watchOn = false;
+    if (watchTimer) { clearInterval(watchTimer); watchTimer = null; }
+    watchTimer = null;
+    watchThumb = null;
+    watchStillFrom = 0;
+    watchSurface = '';
+    closeFace();
+    paintWatch();
+    if (!was) return false;
+    /* A capture nobody is using is a red light on the taskbar for no reason, so a
+       share this organ opened goes out with it. 'ended' is the share dying of its own
+       accord, and there is nothing left to close. */
+    const mine = watchOpenedShare;
+    watchOpenedShare = false;
+    if (mine && reason !== 'ended' && sharing()) endShare();
+    if (reason === 'said' || reason === 'chip' || reason === 'face') {
+      renderAnswer('stop watching', WATCH_LINES.off, false, null);
+      if (!speak(spokenForm(WATCH_LINES.off))) idleStatus();
+    } else if (reason === 'ended') {
+      if (!speak(spokenForm(WATCH_TROUBLE.ended))) idleStatus();
+    }
+    return true;
+  }
+
+  /* THE TICK. Five seconds apart, and this is the whole of what it costs: one
+     drawImage into a 32x18 canvas, one getImageData, 576 subtractions. */
+  function watchTick() {
+    if (!watchOn) return;
+    if (!sharing()) return stopWatch('ended');
+    const now = watchThumbNow();
+    if (!now) {
+      /* No picture from a live track: worth saying once, and worth stopping for.
+         A watch that cannot see is not watching, whatever the chip says. */
+      watchTrouble = 'blind';
+      const line = WATCH_TROUBLE.blind.replace('{detail}',
+        'the share is live but has produced no frame to compare.');
+      stopWatch('blind');
+      renderAnswer('watch my screen', line, true, null);
+      if (!speak(spokenForm(line))) idleStatus();
+      return;
+    }
+    return watchFeed(now);
+  }
+
+  /* THE SEAM, and it is the same seam the eyes have in their own feed: watchTick() reads
+     the screen and hands the 576 numbers to this, so a test can hand it numbers of
+     its own without a camera, a monitor or a picker. Everything downstream - the
+     diff, the stillness clock, the threshold, the nudge - is the code the
+     five-second timer drives, which is the only reason driving it by hand proves
+     anything. */
+  function watchFeed(now) {
+    if (!watchOn || !now) return null;
+    watchTicks++;
+    const verdict = WATCH_DIFF.diff(watchThumb, now, WATCH_TUNE);
+    watchThumb = now;
+    watchLastDiff = verdict;
+    if (verdict.changed) {
+      watchChanges++;
+      watchStillFrom = Date.now();     // THE STILLNESS CLOCK, reset by pixels alone
+      paintWatch();
+      return verdict;
+    }
+    paintWatch();
+    if (watchStillMs() < WATCH_TUNE.stillS * 1000) return verdict;
+    /* A question in flight owns the answer card and the voice. The nudge waits for
+       the next tick rather than talking over it; the stillness clock keeps running,
+       so nothing is lost but five seconds. */
+    if (busy) { watchBusyHold++; return verdict; }
+    nudgeNow();
+    return verdict;
+  }
+
+  /* THE ONE PLACE IN THIS ORGAN THAT SENDS ANYTHING. */
+  async function nudgeNow() {
+    if (!watchOn || busy) return null;
+    const stillS = Math.round(watchStillMs() / 1000);
+    // Grabbed HERE, after the decision to speak and before anything is sent - the
+    // same rule as every other frame in this page, for the same reason.
+    const shot = await grabFrame('screen');
+    if (shot.error) {
+      if (shot.error === 'ended') { stopWatch('ended'); return null; }
+      return null;                     // notready/encode: try again in five seconds
+    }
+    const age = Math.round(performance.now() - shot.at);
+    busy = true;
+    $('send').disabled = true;
+    $('dot').classList.add('busy');
+    const wrap = faceWin && faceWin.document.getElementById('wrap');
+    if (wrap) wrap.classList.add('think');
+    try {
+      const res = await fetch('/stuck?stillS=' + encodeURIComponent(stillS), {
+        method: 'POST',
+        headers: {
+          'Content-Type': FRAME_TYPE,
+          'X-Frame-Width': String(shot.w),
+          'X-Frame-Height': String(shot.h),
+          'X-Frame-Age-Ms': String(age)
+        },
+        body: shot.blob
+      });
+      let data = null;
+      try { data = await res.json(); } catch (e) { data = null; }
+      if (data && data.tuning) WATCH_TUNE = Object.assign({}, WATCH_TUNE, data.tuning);
+      watchLastNudge = {
+        at: Date.now(), stillS: stillS, status: res.status,
+        bytes: shot.blob.size, w: shot.w, h: shot.h, ageMs: age,
+        spent: !!(data && data.spent), quiet: !!(data && data.quiet),
+        why: (data && data.why) || null,
+        spoke: false,
+        text: (data && (data.answer || data.error)) || ''
+      };
+      /* A SUPPRESSED NUDGE SAYS NOTHING. The relief valve and the cooldown both come
+         back as quiet refusals, and a silence that explains itself out loud is not a
+         silence - it is the interruption wearing a different hat. */
+      if (data && data.quiet) {
+        watchStillFrom = Date.now();   // do not re-ask every five seconds
+        return watchLastNudge;
+      }
+      const text = !data
+        ? 'The brain replied with something that was not JSON (HTTP ' +
+          res.status + ').'
+        : (data.error || data.answer || '');
+      if (!text) return watchLastNudge;
+      const isError = !data || !!data.error;
+      if (data && data.spent) watchNudges++;
+      /* Rendered with the question it answers, which is nobody's: this is the one
+         line in the page that arrives unasked, and the card says so. */
+      renderAnswer('· unasked · your screen has not moved in ' + stillS + ' seconds',
+                   text, isError, null);
+      showProof(shot, age, 'the one frame sent',
+                'sent unasked, after ' + stillS + ' seconds of a still screen');
+      watchLastNudge.spoke = speak(spokenForm(text));
+      if (!watchLastNudge.spoke) idleStatus();
+      // A nudge about a screen cites no note, so the graph holds still.
+      applyCamera(decideCamera('screen', [], isError), []);
+      /* The cooldown is the server's, and the stillness clock restarts here so the
+         next nudge is measured from this one rather than from the last movement. */
+      watchStillFrom = Date.now();
+      return watchLastNudge;
+    } catch (e) {
+      return null;                     // unreachable brain: silence, and try later
+    } finally {
+      busy = false;
+      $('send').disabled = false;
+      $('dot').classList.remove('busy');
+      const w2 = faceWin && faceWin.document.getElementById('wrap');
+      if (w2) w2.classList.remove('think');
+    }
+  }
+
+  /* The chip's stop, and a repaint that keeps the stillness number honest between
+     ticks: the diff runs every five seconds, the clock is read every second. */
+  $('watch-stop').onclick = function () { stopWatch('chip'); };
+  setInterval(function () { if (watchOn) paintWatch(); }, 1000);
+
+  async function ask(question) {
+    if (busy || !question.trim()) return;
+    // Growing the brain is not asking it a question. The server checks this too,
+    // so a stale tab cannot answer a capture instead of performing it.
+    if (CAPTURE_RE.test(question)) return capture(question);
+
+    /* Changing brains is not asking one a question either, and it is checked before
+       the share below: "switch to Astra" while sharing is an instruction, not a
+       request to read my screen. The server checks this too. */
+    if (isSwap(question)) return swapBrain(question);
+
+    /* Neither is telling the timer what to do, and it is checked before the share
+       for the same reason: "give me fifteen seconds" while sharing is a snooze, not
+       a request to read the screen. The server checks this too.
+
+       This is also the line that makes "lock on this tab" mean the TARGET rather than
+       the pixels. SCREEN_RE matches "this tab" as well, and whichever of them is
+       tested first wins - so the one that changes what is being watched goes first,
+       and the share keeps every phrase it had outside a live session. */
+    if (isFocusPhrase(question)) return fxSend({ say: question });
+
+    /* "Look at me", "what do you think of my shirt?" - the eyes' one frame, and
+       checked BEFORE the share for the same reason as everything above it: while a
+       screen share is live, every plain sentence goes to the screen, and a question
+       about your own shirt answered with a photograph of your desktop would be the
+       wrong organ entirely. SCREEN_RE keeps "this" and "that"; this keeps "me". */
+    if (LOOK_RE.test(question)) return lookAtMe(question);
+
+    /* "Watch my screen" / "stop watching" - an instruction about the watch, and it has
+       to be tested before the share branch below, which would otherwise take "watch my
+       screen" while sharing as a question ABOUT the screen and photograph it. Off
+       first: "stop watching my screen" contains "watching my screen". */
+    if (WATCH_OFF_RE.test(question)) {
+      if (!stopWatch('said')) {
+        const line = 'I was not watching, sir.';
+        renderAnswer(question, line, false, null);
+        if (!speak(spokenForm(line))) idleStatus();
+      }
+      return;
+    }
+    if (WATCH_RE.test(question)) return startWatch();
+
+    /* Sharing? Then anything but a pleasantry is a question about what is on the
+       screen - and while the watch is running that is THE SAME SHARE, which is the
+       whole of "answer from the same share": see() takes its frame from FRAME_SOURCES
+       .screen, the diff loop reads the same video, and neither needs a second picker. */
+    if (sharing() && localKind(question) === 'notes') return see(question);
+
+    /* The share is over. A screen-shaped question is told so plainly: it must never
+       be answered from the frame we used to have, and it should not quietly become
+       a question about the notes either. */
+    if (shareEndedAt && (Date.now() - shareEndedAt) < SHARE_MEMORY_MS &&
+        SCREEN_RE.test(question)) {
+      renderAnswer(question, SIGHT_TROUBLE.ended, true, null);
+      if (!speak(spokenForm(SIGHT_TROUBLE.ended))) idleStatus();
+      return;
+    }
+
+    busy = true;
+    $('send').disabled = true;
+    $('dot').classList.add('busy');
+    setStatus('thinking', 'thinking', question);
+    // The interim "Thinking…" line is shown but deliberately never spoken, and it
+    // never touches the graph - the camera waits until we know what was asked.
+    renderAnswer(question, 'Thinking across ' + nodes.length + ' notes…', false, null);
+
+    /* One reply path for answers and errors alike: show it, say it, then let the
+       camera prove it. Speaking starts first so the flight happens mid-sentence. */
+    function respond(text, isError, ids, kind) {
+      const used = renderAnswer(question, text, isError, ids);
+      const plan = decideCamera(kind, used, isError);
+      if (!speak(spokenForm(text))) idleStatus();
+      applyCamera(plan, used);
+    }
+
+    try {
+      const res = await fetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: question, session: SESSION })
+      });
+      let data = null;
+      try { data = await res.json(); } catch (e) { data = null; }
+      // The server classifies; localKind() only covers an older or broken server,
+      // so the small-talk rule holds either way.
+      const kind = (data && data.kind) || localKind(question);
+      if (!data) {
+        respond('The server replied with something that was not JSON (HTTP ' +
+          res.status + ').', true, null, 'chat');
+      } else if (data.error) {
+        respond(data.error, true, data.nodes, kind);
+      } else {
+        respond(data.answer || '(empty answer)', false, data.nodes, kind);
+      }
+    } catch (e) {
+      respond('Could not reach the brain. Start it with "python server.py" and open ' +
+        'http://localhost:4700 (opening index.html straight from disk will not work).',
+        true, null, 'chat');
+    } finally {
+      busy = false;
+      $('send').disabled = false;
+      $('dot').classList.remove('busy');
+    }
+  }
+
+  $('bar').addEventListener('submit', function (e) {
+    e.preventDefault();
+    const v = $('q').value;
+    $('q').value = '';
+    ask(v);
+  });
+  $('reset').onclick = async function () {
+    try {
+      await fetch('/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session: SESSION })
+      });
+    } catch (e) { /* nothing to forget if the server is not there */ }
+    $('answer').classList.remove('show');
+    stopListening();
+    if (canSpeak) { try { speechSynthesis.cancel(); } catch (e2) { /* ignore */ } }
+    idleStatus();
+    $('q').focus();
+  };
+
+  /* ================================================================ voice == */
+
+  /* ?mute=1 silences this tab for good. The check lives inside speak() and
+     nowhere else, so no code path can route around it. */
+  const MUTED = /(^|[?&])mute=1(&|$)/.test(location.search);
+
+  /* Barked interrupts skip the FINISH_MS buffer entirely. Only checked against
+     FINAL results: an interim "stop" is often the start of "stop the roaster". */
+  const INTERRUPTS = new Set(['stop', 'wait', 'cancel', 'halt', 'quiet', 'enough',
+                              'hold on', 'shut up', 'never mind', 'nevermind']);
+
+  const canSpeak = 'speechSynthesis' in window;
+  const Recogniser = window.webkitSpeechRecognition || window.SpeechRecognition;
+
+  let audioUnlocked = false, pendingLine = null, chosenVoice = null;
+  let recogniser = null, listening = false;
+  let phraseBuffer = '', lastInterim = '', finishTimer = null;
+
+  function setStatus(state, text, said) {
+    $('status').className = state || '';
+    $('status-text').textContent = text;
+    $('status-said').textContent = said || '';
+  }
+
+  function idleStatus() {
+    if (MUTED) return setStatus('', 'muted tab · this page will not speak');
+    if (!canSpeak) return setStatus('', 'no speech synthesis in this browser');
+    if (!audioUnlocked) return setStatus('', 'click anywhere to switch the voice on');
+    setStatus('', listening ? 'listening' : 'ready');
+  }
+
+  /* ---- the voice: British English if the system has one ---- */
+  function pickVoice() {
+    if (!canSpeak) return null;
+    const voices = speechSynthesis.getVoices() || [];
+    if (!voices.length) return null;
+    function score(v) {
+      const name = (v.name || '').toLowerCase();
+      const lang = (v.lang || '').replace('_', '-').toLowerCase();
+      let s = 0;
+      if (lang.indexOf('en-gb') === 0) s += 100;                    // British first
+      else if (lang.indexOf('en-ie') === 0 || lang.indexOf('en-au') === 0) s += 40;
+      else if (lang.indexOf('en') === 0) s += 20;
+      if (/uk english|british|libby|sonia|ryan|george|hazel|daniel|arthur|kate|serena|oliver|thomas/.test(name)) s += 25;
+      if (/natural|neural|enhanced|premium/.test(name)) s += 8;
+      if (/google/.test(name)) s += 6;
+      return s;
+    }
+    return voices.slice().sort(function (a, b) { return score(b) - score(a); })[0] || null;
+  }
+
+  function refreshVoice() {
+    chosenVoice = pickVoice();
+    $('status').title = chosenVoice
+      ? 'voice: ' + chosenVoice.name + ' (' + chosenVoice.lang + ')'
+      : 'voice: browser default';
+    return chosenVoice;
+  }
+
+  /* ---- what this page has said, for six seconds ----
+     A muted tab still has to be checkable: the live harnesses load with ?mute=1 so the
+     machine stays quiet, and "did the nudge arrive, and how fast" is a question about
+     the LINE rather than about the sound. So every line that reaches speak() is
+     recorded here with whether it actually reached the speakers.
+
+     The window is six seconds because that is focus.py's LABEL_LINE_TTL_S, and for the
+     same reason: a callout may name the place you drifted to, the server drops that
+     sentence one tick after sending it, and this page must not be the thing that
+     outlives the scrub. Nothing reads this to say anything - it is a record, not a
+     second speaking path. */
+  const SAID_TTL_MS = 6000;
+  const saidLines = [];
+
+  function saidLog() {
+    const cut = Date.now() - SAID_TTL_MS;
+    while (saidLines.length && saidLines[0].at < cut) saidLines.shift();
+    return saidLines.slice();
+  }
+  function noteSaid(line, aloud) {
+    saidLines.push({ at: Date.now(), text: line, aloud: !!aloud });
+    saidLog();
+  }
+  // Pruned on a timer as well as on every read, so a line nobody asks about still goes.
+  setInterval(saidLog, 1000);
+
+  /* ---- THE one function that speaks ---- */
+  function speak(text) {
+    const line = String(text == null ? '' : text).trim();
+    if (!line) return false;
+    if (MUTED) { noteSaid(line, false); return false; }   // the mute gate, the only one
+    if (!canSpeak) { noteSaid(line, false); return false; }
+    if (!audioUnlocked) {
+      // Autoplay policy: hold the line and let the first real click release it.
+      pendingLine = line;
+      setStatus('', 'click anywhere to hear this answer');
+      noteSaid(line, false);
+      return false;
+    }
+    if (!chosenVoice) refreshVoice();
+    try {
+      speechSynthesis.cancel();                    // never stack two answers
+      const u = new SpeechSynthesisUtterance(line);
+      /* A voice we cannot set must not cost the answer its voice: a browser that
+         refuses this assignment still speaks perfectly well in its default. */
+      u.lang = (chosenVoice && chosenVoice.lang) || 'en-GB';
+      if (chosenVoice) {
+        try { u.voice = chosenVoice; } catch (e) { /* default voice it is */ }
+      }
+      u.rate = 1; u.pitch = 1; u.volume = 1;
+      u.onstart = function () { setStatus('speaking', 'speaking'); };
+      u.onend = function () { idleStatus(); };
+      u.onerror = function () { idleStatus(); };
+      speechSynthesis.speak(u);
+      noteSaid(line, true);
+      return true;
+    } catch (e) {
+      noteSaid(line, false);
+      return false;
+    }
+  }
+
+  /* ---- the first gesture unlocks audio and releases any held line ---- */
+  function unlockAudio() {
+    if (audioUnlocked) return;
+    audioUnlocked = true;
+    if (MUTED || !canSpeak) { idleStatus(); return; }
+    try {                                          // prime the engine in-gesture
+      const warm = new SpeechSynthesisUtterance(' ');
+      warm.volume = 0;
+      speechSynthesis.speak(warm);
+    } catch (e) { /* nothing to warm up */ }
+    refreshVoice();
+    if (pendingLine) { const line = pendingLine; pendingLine = null; speak(line); }
+    else idleStatus();
+  }
+  ['pointerdown', 'keydown', 'touchstart'].forEach(function (ev) {
+    addEventListener(ev, unlockAudio, { passive: true });
+  });
+
+  /* ---- listening: buffer phrases until the pause that ends the thought ---- */
+  function armFinishTimer() {
+    clearTimeout(finishTimer);
+    finishTimer = setTimeout(flushThought, FINISH_MS);
+  }
+
+  function heardFinal(text) {
+    const raw = String(text == null ? '' : text).trim();
+    if (!raw) return;
+    const bare = raw.toLowerCase().replace(/[.,!?;:'"]/g, '').replace(/\s+/g, ' ').trim();
+    if (INTERRUPTS.has(bare)) return interrupt(bare);   // straight past the buffer
+    lastInterim = '';
+    phraseBuffer = phraseBuffer ? phraseBuffer + ' ' + raw : raw;
+    armFinishTimer();
+    setStatus('listening', 'listening', phraseBuffer);
+  }
+
+  function heardInterim(text) {
+    // More words are arriving, so that last pause was not the end of anything.
+    lastInterim = String(text == null ? '' : text).trim();
+    armFinishTimer();
+    setStatus('listening', 'listening', (phraseBuffer + ' ' + lastInterim).trim());
+  }
+
+  function flushThought() {
+    clearTimeout(finishTimer);
+    finishTimer = null;
+    // heardFinal() clears lastInterim, so anything still sitting there arrived
+    // after the last final and was never confirmed. Append it rather than lose
+    // the tail of the sentence when the recogniser cuts out mid-phrase.
+    let thought = (phraseBuffer + ' ' + lastInterim).trim().replace(/\s+/g, ' ');
+    phraseBuffer = '';
+    lastInterim = '';
+    if (!thought) { idleStatus(); return; }
+    stopListening();
+    $('q').value = '';
+    /* The answer window takes precedence over everything, and takes exactly one
+       thought. A question the assistant just asked out loud is answered without a
+       wake word; the sentence after this one is an ordinary question again. */
+    if (fxAnswerArmed()) return fxAnswer(thought);
+    ask(thought);                        // exactly the path a typed question takes
+  }
+
+  function interrupt(label) {
+    clearTimeout(finishTimer);
+    finishTimer = null;
+    phraseBuffer = '';
+    lastInterim = '';
+    if (canSpeak) { try { speechSynthesis.cancel(); } catch (e) { /* ignore */ } }
+    /* "Stop" means stop, including the answer window. Leaving it armed would make
+       the next unrelated sentence, whenever it came, the session's intent. */
+    fxAnswerClose();
+    stopListening();
+    setStatus('', '“' + label + '” · stopped');
+  }
+
+  function buildRecogniser() {
+    const r = new Recogniser();
+    r.lang = 'en-GB';
+    r.continuous = true;
+    r.interimResults = true;
+    r.maxAlternatives = 1;
+    r.onstart = function () {
+      listening = true;
+      $('mic').classList.add('on');
+      paintEars();
+      setStatus('listening', 'listening');
+    };
+    r.onresult = function (e) {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const res = e.results[i];
+        const text = (res[0] && res[0].transcript) || '';
+        if (res.isFinal) heardFinal(text); else interim += text;
+      }
+      if (interim.trim()) heardInterim(interim);
+    };
+    r.onerror = function (e) {
+      listening = false;
+      $('mic').classList.remove('on');
+      paintEars();
+      setStatus('', e.error === 'not-allowed' ? 'microphone permission denied'
+              : e.error === 'no-speech' ? 'heard nothing · click the mic again'
+              : 'microphone error · ' + e.error);
+    };
+    r.onend = function () {
+      listening = false;
+      $('mic').classList.remove('on');
+      paintEars();
+      // The service can cut out mid-thought; do not lose what was already said.
+      if (phraseBuffer.trim() || lastInterim.trim()) flushThought();
+      else idleStatus();
+    };
+    return r;
+  }
+
+  function startListening() {
+    if (!Recogniser || listening) return;
+    if (canSpeak) { try { speechSynthesis.cancel(); } catch (e) { /* ignore */ } }
+    phraseBuffer = '';
+    lastInterim = '';
+    if (!recogniser) recogniser = buildRecogniser();
+    try { recogniser.start(); }
+    catch (e) { setStatus('', 'microphone busy · click again'); }
+  }
+
+  function stopListening() {
+    clearTimeout(finishTimer);
+    finishTimer = null;
+    if (recogniser && listening) { try { recogniser.stop(); } catch (e) { /* ignore */ } }
+    listening = false;
+    $('mic').classList.remove('on');
+    paintEars();
+  }
+
+  const EAR_TITLE = 'Your ears · tap the ear button and just talk';
+
+  /* THE EAR LAW, in the assistant's own words. Character-for-character focus.py's
+     LINES["ears_off"], and test_eyes.py compares the two strings rather than trusting
+     this comment: the server says it when the eyes open with the mic off, this page
+     says it when the session asks a question it cannot hear, and one law said two
+     different ways is two laws. */
+  const EARS_OFF_LINE = 'My ears are off, sir - tap the ear button and just talk.';
+
+  /* The ear button, and the ONLY caller of startListening() in this page. Grep for the
+     other callers before changing that: there are none, and the eyes organ above is
+     written the way it is - reporting `ears` rather than opening them - so that there
+     can go on being none. An organ may open the conversation; it may never open the
+     microphone. */
+  $('mic').onclick = function () {
+    unlockAudio();
+    if (listening) { stopListening(); idleStatus(); }
+    else startListening();
+  };
+
+  /* The ear button says which state it is in, and tells the EYES about it - they
+     report the ear state with every posture, and the moment it changes is worth
+     saying at once rather than at the next heartbeat. Called from the recogniser's
+     own events rather than from the click, because the microphone opens when the
+     browser says it did, not when we asked. */
+  function paintEars() {
+    if (!Recogniser) return;
+    $('mic').title = listening ? 'Close your ears (stop listening)' : EAR_TITLE;
+    if (eyesLive()) eyeReport('posture');
+  }
+  if (!Recogniser) {
+    $('mic').disabled = true;
+    $('mic').title = 'This browser has no webkitSpeechRecognition (use Chrome or Edge)';
+  }
+  addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (listening || (canSpeak && speechSynthesis.speaking)) interrupt('escape');
+  });
+
+  if (canSpeak) {
+    refreshVoice();
+    speechSynthesis.addEventListener('voiceschanged', refreshVoice);
+  }
+  idleStatus();
+
+  /* ---- the butler's opening line ----
+     Wording comes from the persona block in server.py; the note count comes from
+     the graph data and the time of day from this machine's clock, so neither is
+     ever hardcoded here. It is shown at once and spoken on the first click, and
+     it never touches the camera - it is a greeting, not an answer. */
+  const GREETING_FALLBACK = {
+    morning: 'Good morning', afternoon: 'Good afternoon', evening: 'Good evening',
+    template: '{salutation}, sir. {notes} indexed, all present and accounted for.',
+    one: '1 note', many: '{n} notes',
+    empty: '{salutation}, sir. Not a single note indexed.'
+  };
+  function salutationFor(hour) {
+    if (hour >= 5 && hour < 12) return 'morning';
+    if (hour >= 12 && hour < 17) return 'afternoon';
+    return 'evening';            // the small hours count as the tail of the evening
+  }
+  async function bootGreeting() {
+    let g = GREETING_FALLBACK;
+    try {
+      const res = await fetch('/persona');
+      const data = await res.json();
+      if (data && data.greeting && data.greeting.template) g = data.greeting;
+    } catch (e) { /* wording falls back; the count never does */ }
+
+    const n = nodes.length;                       // straight from graph-data.js
+    const salutation = g[salutationFor(new Date().getHours())] || 'Good evening';
+    const template = n ? (g.template || GREETING_FALLBACK.template)
+                       : (g.empty || GREETING_FALLBACK.empty);
+    const count = (n === 1) ? (g.one || '1 note')
+                            : String(g.many || '{n} notes').replace('{n}', n);
+    const line = String(template)
+      .replace('{salutation}', salutation)
+      .replace('{notes}', count);
+
+    renderAnswer('', line, false, null);          // no ids, so the graph is untouched
+    if (!speak(line)) idleStatus();               // held until the first click
+  }
+  bootGreeting();
+  refreshBrain();          // the chip shows the real brain from the first moment
+  /* Read the session before opening the stream, so a tab that loads into a session
+     already in progress shows the right countdown on its first frame rather than
+     after the first push - and adopts the say-sequence before any of it is spoken. */
+  fxFetch(document.hasFocus()).then(fxConnect);
+
+  setTimeout(function () { $('boot').classList.add('gone'); }, 450);
+
+  /* A small handle for the console (and for automated checks). */
+  window.__galaxy = {
+    Graph: Graph, nodes: nodes, allLinks: allLinks, strongLinks: strongLinks,
+    focus: focusNode, ask: ask, colorOf: colorOf,
+    get active() { return activeLinks; },
+    get selected() { return selected; },
+    capture: {
+      PULSE_MS: PULSE_MS,
+      isCapture: function (s) { return CAPTURE_RE.test(s); },
+      send: capture,
+      get groups() { return groups.slice(); },
+      get lastBirth() { return lastBirth; },
+      get pulsing() { return pulseId; },
+      get pulseAmt() { return +pulseAmt.toFixed(3); }
+    },
+    brain: {
+      isSwap: isSwap, send: swapBrain, refresh: refreshBrain,
+      /* What the SERVER last said is answering. If this and the chip ever disagree,
+         the chip is lying about which brain you are talking to. */
+      get state() { return brain; },
+      get chip() { return $('brain-label').textContent; },
+      get swappedStyle() { return $('brainchip').classList.contains('swapped'); },
+      get tip() { return $('brainchip').title; },
+      /* The button door, exactly as a hand uses it: open the menu, then click a row.
+         Nothing here posts anything itself - a test that bypassed the click would be
+         testing a function rather than a button. */
+      menu: toggleBrainMenu,
+      load: loadBrains,
+      get menuOpen() { return brainMenuOpen(); },
+      get rows() {
+        return Array.prototype.map.call($('brainmenu').querySelectorAll('button'),
+                                        function (b) { return b.textContent; });
+      },
+      click: function (label) {
+        const rows = $('brainmenu').querySelectorAll('button');
+        for (let i = 0; i < rows.length; i++) {
+          if (rows[i].textContent.toLowerCase().indexOf(String(label).toLowerCase())
+              >= 0) { rows[i].click(); return rows[i].textContent; }
+        }
+        return null;
+      }
+    },
+    sight: {
+      FRAME_TYPE: FRAME_TYPE, FRAME_MAX_EDGE: FRAME_MAX_EDGE,
+      SHARE_MEMORY_MS: SHARE_MEMORY_MS,
+      start: startShare, stop: endShare, see: see, grab: grabFrame,
+      isScreenish: function (s) { return SCREEN_RE.test(s); },
+      get supported() { return canShare; },
+      /* Straight off the track, like the indicator: if this and the red chip ever
+         disagree, the indicator is lying about a live share. */
+      get sharing() { return sharing(); },
+      get indicator() { return $('sharing').classList.contains('live'); },
+      get endedAt() { return shareEndedAt; },
+      get lastSent() { return lastSight; },
+      get proofShown() { return $('a-saw').classList.contains('show'); }
+    },
+    eyes: {
+      EYE_READ_MS: EYE_READ_MS, EYE_BEAT_MS: EYE_BEAT_MS,
+      EYE_CALIBRATE_MIN: EYE_CALIBRATE_MIN,
+      /* The geometry, exported whole. It is pure - landmarks in, numbers out, no DOM,
+         no clock, no camera - so it can be checked against landmarks nobody had to
+         pose for. */
+      POSTURE: POSTURE,
+      start: startEyes,
+      stop: function () { return stopEyes('off'); },
+      /* The seam. feed() is how the camera's landmarks get in, and therefore how
+         recorded landmarks get in too: everything downstream of it - the baseline, the
+         sustain, the report, the nudge - is the same code the camera drives. */
+      feed: eyeFeed, report: eyeReport, look: lookAtMe,
+      isLook: function (s) { return LOOK_RE.test(s); },
+      /* The server's windows, as this page last received them. If these and
+         focus.EYES.tuning() ever disagree, this page is applying a stale rule. */
+      get tuning() { return Object.assign({}, EYE_TUNE); },
+      get supported() { return canSee; },
+      /* Straight off the track, like the share chip: if this and the violet chip
+         disagree, the chip is lying about an open camera. */
+      get on() { return eyesLive(); },
+      get indicator() { return $('eyeing').classList.contains('live'); },
+      get reader() { return camReader ? camReader.from + ' · ' + camReader.delegate : null; },
+      get trouble() { return eyeTrouble; },
+      /* YOUR measured neutral posture, and the last reading against it. Numbers about
+         a body, which is exactly why they stop here: nothing in eyeReport() sends
+         them, and there is no field in POST /eyes that could carry them. */
+      get base() { return eyeBase ? Object.assign({}, eyeBase) : null; },
+      get raw() { return eyeRaw; },
+      get stable() { return Object.assign({}, eyeStable); },
+      get lastPost() { return eyeLastPost; },
+      get lastLook() { return lastLook; },
+      get looks() { return eyeLooks; },
+      get proofShown() { return $('a-saw').classList.contains('show'); }
+    },
+    watch: {
+      /* The diff, exported whole and pure: grey numbers in, a verdict out. No DOM, no
+         clock, no share. Checkable against synthetic screens - a clock ticking in one
+         corner, a window opening - that nobody had to sit in front of. */
+      DIFF: WATCH_DIFF,
+      start: startWatch, stop: function () { return stopWatch('said'); },
+      /* The seam, as feed() is for the eyes: one tick of the loop, driven by hand.
+         Everything downstream of it - the clock, the threshold, the nudge - is the
+         same code the five-second timer drives. */
+      tick: watchTick, feed: watchFeed, nudge: nudgeNow, thumb: watchThumbNow,
+      isWatch: function (s) { return WATCH_RE.test(s); },
+      isWatchOff: function (s) { return WATCH_OFF_RE.test(s); },
+      /* The server's windows, as this page last received them. If these and
+         server.WATCH.tuning() ever disagree, this page is applying a stale rule. */
+      get tuning() { return Object.assign({}, WATCH_TUNE); },
+      get on() { return watchOn; },
+      get indicator() { return $('watching').classList.contains('live'); },
+      /* What the TRACK says it is, not what we asked for: 'monitor' is the only
+         surface this organ will watch, and the trap turns on this one string. */
+      get surface() { return watchSurface; },
+      get trouble() { return watchTrouble; },
+      /* Whether the share is this organ's to close. A share you started yourself
+         survives the watch stopping; one the watch opened does not. */
+      get ownsShare() { return watchOpenedShare; },
+      /* The stillness clock, in seconds. Reset by pixels alone. */
+      get stillS() { return Math.round(watchStillMs() / 1000); },
+      get ticks() { return watchTicks; },
+      get changes() { return watchChanges; },
+      get nudges() { return watchNudges; },
+      get held() { return watchBusyHold; },
+      get lastDiff() { return watchLastDiff; },
+      get lastNudge() { return watchLastNudge; },
+      /* Whether the face is off the page and on the desktop, and whether the in-page
+         fallback card is showing instead. Exactly one of these should be true while
+         the watch is running. */
+      get facePinned() { return !!faceWin; },
+      get faceCard() { return $('facecard').classList.contains('show'); },
+      get canPin() { return canPin; },
+      pin: openFace
+    },
+    /* Named `session` rather than `focus`, because __galaxy.focus is the camera's
+       focusNode and renaming that would break every check written against it. */
+    session: {
+      FOCUS_DEFAULT_MIN: FOCUS_DEFAULT_MIN, FOCUS_PAINT_MS: FOCUS_PAINT_MS,
+      FOCUS_HOME_BEAT_MS: FOCUS_HOME_BEAT_MS,
+      FOCUS_ANSWER_MS: FOCUS_ANSWER_MS,
+      isFocusPhrase: isFocusPhrase, send: fxSend, poll: fxFetch,
+      start: function (m) { return fxSend({ cmd: 'start', minutes: m || FOCUS_DEFAULT_MIN }); },
+      end: function () { return fxSend({ cmd: 'finish' }); },
+      /* The answer window, for tests and for anyone wondering why the microphone
+         opened. answer() is exactly the call flushThought() makes while it is armed.
+         The window belongs to the MICROPHONE on purpose: it was opened by a spoken
+         question, so it closes on a spoken answer. Typing during it is an ordinary
+         question, because a sentence you typed at an arbitrary moment is not
+         self-evidently the answer to something asked fifteen seconds ago. */
+      answer: fxAnswer,
+      get answerArmed() { return fxAnswerArmed(); },
+      get deferred() { return !!(fx && fx.deferred); },
+      get intent() { return (fx && fx.intent) || ''; },
+      /* The whole of what this page knows. No key in it holds an app name or a site -
+         see test_focus_privacy.py, which proves there cannot be one. A callout may
+         name a place inside its sentence for the one tick before the server scrubs
+         the line; that is the only place a name ever appears, here or anywhere. */
+      get state() { return fx; },
+      get live() { return fxLive(); },
+      get card() { return $('focuscard').className; },
+      get clock() { return $('focus-clock').textContent; },
+      get mode() { return $('focus-mode').textContent; },
+      /* Highest say-seq already out of the speakers. If this ever went backwards a
+         reload would repeat a callout. */
+      get spokenSeq() { return fxSpoken; },
+      get streaming() { return !!fxStream && fxStream.readyState === 1; },
+      get polling() { return !!fxPoll; }
+    },
+    camera: {
+      CLUSTER_MIN: CLUSTER_MIN, SPOKEN_MAX_CHARS: SPOKEN_MAX_CHARS,
+      decide: decideCamera, localKind: localKind, spokenForm: spokenForm,
+      get lastPlan() { return lastPlan; },
+      get lit() { return Array.from(hiNodes); },
+      get flights() { return flights; },
+      /* what the idle orbit circles around. If this and target() disagree, the
+         orbit is about to drag the view off whatever we just flew to. */
+      get viewTarget() { return viewTarget; },
+      get autoRotate() { return autoRotate; },
+      /* the look-at point: idle rotation orbits around it and never changes it,
+         so if this moved, the camera was genuinely dragged to a node */
+      get target() {
+        const t = (Graph.controls() && Graph.controls().target) || { x: 0, y: 0, z: 0 };
+        return { x: +t.x.toFixed(2), y: +t.y.toFixed(2), z: +t.z.toFixed(2) };
+      }
+    },
+    speech: {
+      FINISH_MS: FINISH_MS,
+      interrupts: Array.from(INTERRUPTS),
+      speak: speak, refreshVoice: refreshVoice, unlock: unlockAudio,
+      start: startListening, stop: stopListening,
+      feedFinal: heardFinal, feedInterim: heardInterim,
+      /* The last six seconds of lines, and whether each reached the speakers. A muted
+         tab records and does not speak, which is what makes a ?mute=1 tab checkable
+         without making it audible. Older than that and it is gone - see noteSaid. */
+      get said() { return saidLog(); },
+      get muted() { return MUTED; },
+      get unlocked() { return audioUnlocked; },
+      get listening() { return listening; },
+      get buffer() { return phraseBuffer; },
+      get pending() { return pendingLine; },
+      get voice() {
+        return chosenVoice ? chosenVoice.name + ' (' + chosenVoice.lang + ')' : null;
+      }
+    }
+  };
+})();
+</script>
+</body>
+</html>

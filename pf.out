@@ -1,0 +1,78 @@
+
+  preflight  ·  http://127.0.0.1:4700  ·  21 Sep 2026 14:08:20
+  every check below is a live call; nothing here is mocked
+
+  ✓  1. the server is up and serving the viewer            41 ms
+        GET / -> 200, 112392 bytes of the viewer page
+        provider bedrock · model us.anthropic.claude-haiku-4-5-20251001-v1:0 · us-west-2 · serving viewer/ only
+
+  ✓  2. the graph data loads and has nodes                 17 ms
+        30 nodes, 236 links, ids 0..29 all equal to their position
+        the brain agrees: 30 notes indexed
+
+  ✓  3. /chat answers a real question, with nodes        2373 ms
+        asked: What do the notes say about Quarterly OKRs?
+        answered in 265 chars, citing Quarterly OKRs, Subscription Churn Notes, Second Location Analysis, Equipment Loan Terms, Wholesale Accounts
+        “The notes set three objectives for the quarter: grow wholesale to $16,000 a month with two ne...”
+
+  ✓  4. the key in config.json is valid                  1904 ms
+        one real signed call to bedrock.us-west-2.amazonaws.com was accepted
+        credentials from config.json, temporary (session token), region us-west-2
+        81 text models visible to this identity
+
+  ✓  5. the configured model is reachable                1379 ms
+        us.anthropic.claude-haiku-4-5-20251001-v1:0 answered a one-token prompt: “ready”
+
+  ✓  6. /remember writes a note /chat can find at once   1525 ms
+        wrote notes/captures/preflight-canary-zarquon17450a-is-a-live-end-to.md (190 bytes) as node 30, degree 0
+        and /chat retrieved it immediately, with no rebuild
+        “The verdict word is quince7938.”
+        probe note removed, index rebuilt, back to 30 notes
+
+  ✓  7. /see answers a real JPEG                         1791 ms
+        sent 6564 bytes of image/jpeg, 640x320, judged as image/jpeg
+        “The heading reads PREFLIGHT, sir. The three bars beneath it are, from top to bottom: red, green, and gold.”
+        it read the heading 'PREFLIGHT' back out of the pixels
+
+  ✓  8. the served files match the files on disk           11 ms
+        2 file(s) in viewer/ are byte-for-byte what the browser is served
+        graph-data.js, index.html
+        all sent no-store, so the browser cannot hold a stale copy
+
+  ✓  9. config.json is not reachable from the browser     163 ms
+        9 of 11 paths refused outright, including .. traversal, encoded .. and backslashes
+        /config.json -> 404; /../config.json -> 404; /..%2fconfig.json -> 404; /%2e%2e/config.json -> 404; /viewer/../config.json -> 404; /./../config.json -> 404; ...
+        /..\config.json -> /..\config.json/ -> the viewer page, so it never left viewer/
+        /%2e%2e%5cconfig.json -> /%2e%2e%5cconfig.json/ -> the viewer page, so it never left viewer/
+        no credential and no part of config.json appears in any of the 24 responses this run collected
+
+  !  10. /model swaps honestly and refuses the rest         49 ms
+        'astra' -> openai/gpt-6-astra, chip reads GPT 6 ASTRA, and /health agrees
+        and it says so unprompted rather than waiting to fail
+        'fable 95' -> HTTP 409 noid, and the brain did not budge off GPT 6 ASTRA
+        refusal: FABLE 95 is not a model I know of, sir, and I will not hand you a different vinta...
+        bare 'fable' -> HTTP 409 noversion
+        restored to HAIKU 4.5, the model config.json names, with swapped=False - which is also what a restart does, because the override was never written to disk
+        no OpenRouter key in config.json, so the swapped brain's ANSWER chain is unverified here - the id is right, the reply will be a missing-key notice
+
+  ✓  11. a focus session ticks on the server and leaks nothing   2921 ms
+        GET /focus sends exactly the 35 whitelisted keys, no more
+        reader _read_windows can see the frontmost application
+        a browser is reachable on the DevTools port, so a session can lock the site as well as the application
+        "let's do twenty minutes on this" -> 20 minutes planned, state arming
+        the lock is DEFERRED at the start, exposed as a boolean, and said out loud: "20 minutes, sir. Go to what you're working on and I'll lock on ..."
+        a dictated answer is attached as the session's intent, acknowledged in four words, and never recited back
+        the server's own tick moved the clock 2 seconds while no browser was involved at all, and nothing was asked of one
+        it settled on the frontmost application, application only (no readable tab) after 2 ticks, not at the start
+        "lock on this tab" locked what is in front of this machine in ONE read, application only (no readable site)
+        the LOCK THIS TAB pill re-armed the deferred lock and said where it will be looking - the right answer whenever the surface in front cannot be the one meant: home base, where the button lives, or no readable tab behind the card at all
+        /focus/stream pushed a live frame as text/event-stream, which is what a background tab needs to hear a callout in seconds
+        nothing the server sent names the application or site it is watching, in any key or any line, checked against this machine's live reader (naming is on; nothing drifted while this ran)
+        /chat routes a focus instruction to the timer: 19 minutes left, sir. a second on target, not one drift.
+        an ordinary question is refused by /focus: HTTP 400
+        both system prompts teach the one real recovery - go to the tab and say "lock on this tab" - forbid the two answers that would cost a session, and tell the truth about naming: said out loud, written down nowhere
+        naming is ON: 20 named lines across 5 pools, all in LINE_REGISTRY, none of them storable - a name lives for one tick (6s) and no key exists to keep it in
+        the session was aborted, nothing is left running, and the ledger is byte-for-byte what it was before this check ran
+
+  10 pass, 0 fail, 1 warn
+

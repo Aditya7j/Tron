@@ -1,0 +1,13 @@
+{
+  "provider": "bedrock",
+  "aws_region": "us-east-1",
+  "aws_profile": "",
+  "aws_access_key_id": "ASIAQY357H756AYQOVMZ",
+  "aws_secret_access_key": "mIVzNih6Qo08hRYo63qD+4isuYRW55AITGrj6v80",
+  "aws_session_token": "IQoJb3JpZ2luX2VjENX//////////wEaCXVzLWVhc3QtMSJGMEQCIAxoIQR2+k6K34WT18Aesa3/PrCFazv7tW4eXpm78PyFAiB1t70qugEKIBWew0kqXgTzY7XCDbaNtnx0RjErXeHOZirTAwid//////////8BEAAaDDA1MzQxNDQxMjI4MyIMcl7qVG/VTN14Es9+KqcDCXvsrCgbuhTIJRdT1o+gAoN9W2d+i9uQC2GoNetBwpB+E+yC8DUAHnBAOmvgJOhfVqnHUxxSaNa17ESSiUVRqv56wJ0xqfFviNsQjBoXDBHyPItGeMsMtc4tvqwpTNiOhrONaUL2lI8qZf0qjpMEYOP3CKMiNEKB9pypHo4VqpcXx1nluoKL55Nqz07r82IkoEZo8799J5dF9WOetmPZZ65pU2+aagnVJBnpl1s8xxetB/395jQfeKoSmpAOeJ5y9EDm/uHXzrOHN9GcrDCMlGpTlQ54qEg1trM8JoqfspD55l2TYuaqv1mZF+0xrTax3NNQvdBxeqT+es6HUhb5vu9mx4GL+1IfQSRE64hfzTTQt9gyPTuCBhi53qAMf5L6ZdghjdfDhHfhEx7/Za7+bhjhX9Qsq952NGT4TFGxFIwg8u3d8zH1gokE/dckzrxoDFrS/LVZKVGR+E5g/dAWDU8IcRltYlh11r6iopOyeAh4RJbDM+zgPX8oDsVkNNIJrITvbmsEAYhYIzeJQIhG0NcvbGxXhBWHD9DrYvmPpHAz2TqG7sWyMMz+x9UGOqkB1+DP7bemUfTzcQC0RrfEdZXs2W/+9Z0us8KZQtr3xr/NtQT6UASVs+nb/5euqtFItwY9qXNVPB5m2Z3agRbLEZJS0TV61zuTMEV77UXwccyKAuEYXQFCCs6ITMClHYoh9M5tXCc0RLMx13FgytLyNwZDtHRVJ+O1AojCdoGoKrfOoRtBLRQ/a/hL7Ln90mW+ugumig13VFf3kPpoBSaK2VyVFqd4QJ6+5g==",
+  "bedrock_model_id": "us.anthropic.claude-opus-5",
+  "openai_api_key": "xpl_1de971db6b4c9792bffdf5dd28f491ea917b76d8",
+  "model": "claude-opus-5",
+  "openrouter_api_key": "",
+  "openrouter_model": "openai/gpt-6-astra"
+}

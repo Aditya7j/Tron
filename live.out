@@ -1,0 +1,85 @@
+
+  focus sessions · the live loop
+
+    1.48s  server: 30 notes · reader _read_windows
+    1.48s  ok   the server can read the frontmost application
+    1.80s  chrome: Chrome/153.0.8010.52
+    6.01s  ok   with Chrome on the DevTools port the active tab becomes readable
+    8.56s  ok   three tabs: home base, work, distraction
+    8.56s  ok   the viewer exposes the session handle
+    8.57s  ok   the viewer is subscribed to the event stream, not polling
+   10.71s  ok   the FOCUS button starts a session on the server
+   10.71s  ok   the click unlocked the voice, so the callouts can be heard
+   10.71s  ok   clicking FOCUS in the Jarvis tab locks NOTHING - the lock is deferred
+   10.71s  said: "30 minutes, sir. Go to what you're working on and I'll lock on there. And what are we focusing on?"
+   10.71s  ok   and it SAYS the lock is deferred, so a deferred lock is never a silent one
+   10.71s  ok   the same line asks what the session is for
+   10.72s  ok   the countdown card shows the deferred state rather than a confident clock
+   11.93s  ok   the microphone opens itself for one answer, no wake word needed
+   13.15s  ok   the answer is attached to the running session as its intent
+   13.15s  ok   and the window closes on that one answer, so the next sentence is a question again
+   13.15s  ok   the acknowledgement is "Noted, sir." - your sentence is never read back at you
+   13.15s  ok   the card shows the intent, which is where a long answer lives instead of aloud
+   13.16s  -> activated the work site; waiting to settle
+   14.29s  ok   settling on the work site is announced out loud, so a wrong lock is audible
+   14.29s  said after 1141ms: "Locked on, sir."
+   14.29s  ok   it locked on once you settled somewhere that is not home base
+   14.29s  ok   it locked the SITE as well as the application (host-level, not per-page)
+   14.29s  ok   and it did not have to fall back to watching the application only
+   19.16s  buckets before: {"onTargetS":0,"driftS":0,"homeS":0,"unknownS":0}  after: {"onTargetS":4,"driftS":0,"homeS":0,"unknownS":0}
+   19.16s  ok   a changing path on the locked site is not a drift, and still counts as time on target
+   19.17s  -> SWITCHED to the distraction; listening for the callout
+   20.38s  ok   the callout was SPOKEN within 3000ms of the tab switch
+   20.38s  heard after 1218ms: "iana.org is not the invoice importer, sir."
+   20.38s  ok   the FIRST callout uses your own words for the work
+   20.38s  ok   the server counted exactly one drift
+   20.38s  ok   the countdown card is tinted for drift while you are away
+   20.38s  ok   the callout NAMED the site you drifted to, by its bare domain
+   20.38s  ok   and only the domain: no subdomain, no path, no URL in a spoken line
+   20.38s  ok   no field the browser received names the app or either site - only the sentence
+   20.38s  ok   exactly one line in the queue names it, and it is the callout
+   26.55s  ok   the named line is GONE from the state the browser holds, within one TTL
+   26.55s  the name was spoken, then scrubbed after 6162ms
+   29.06s  ok   the drift is still live at the moment of return, not self-resolved
+   29.07s  -> back to the work site
+   29.53s  ok   coming back is acknowledged out loud
+   29.53s  said after 467ms: "Back. Thank you, sir."
+   29.53s  ok   the drift is over and the card is calm again
+   31.48s  ok   set up: back on the distraction, called out for it, and a drift on the books
+   31.61s  said after the sentence: "Locked on, sir."
+   31.61s  ok   saying it from the tab you want locks THAT tab, and says so out loud
+   31.61s  ok   in ONE read - no second tick, because you have just told me
+   31.61s  ok   and the drift is forgiven SILENTLY - no "Back. Thank you, sir." for a correction you made yourself
+   31.61s  ok   forgiven in the ledger too: the drift is taken back off the count, seconds and all
+   31.62s  ok   the share claims that sentence too and lost: nothing was photographed
+   34.84s  ok   the tab that was a distraction ten seconds ago is now simply the work
+   36.60s  said from home base: "Go to it, sir. I'll lock on where you land."
+   36.60s  ok   said from THIS page it locks nothing and says where it will be looking instead
+   36.61s  ok   the deferred lock is re-armed rather than pointed at the page the button is on
+   36.61s  ok   and the card admits it, instead of showing a confident clock over nothing
+   38.58s  ok   and the promise is kept: it locks on the next surface you settle on
+   38.58s  ok   which leaves the lock on the work site, ready for the button
+   42.09s  ok   a second browser window is open behind the card, on another site
+   43.83s  ok   sitting on the Jarvis tab to reach the card is not a drift - home base never counts against you
+   43.83s  ok   the LOCK THIS TAB pill is on the card, next to pause and end
+   43.83s  ok   it flashes LOCKED from the press itself, not from the reply - the press is a fact
+   44.88s  said after the press: "Locked on, sir."
+   44.88s  ok   and it locks the tab BEHIND the card, where reading the foreground would have answered "the card"
+   44.88s  ok   a site, then: not this page, not an application, and not a re-arm
+   46.49s  ok   and goes back to being an offer a second later, so the card is never stuck mid-press
+   49.91s  ok   the window behind the card is the target now: working in it is not a drift
+   51.99s  ok   and the site it was watching before the press is now a distraction - the lock moved, proved without the browser being told one host
+   52.76s  ok   "this is the tab" works as well as "lock on this tab", and ends the drift with it
+   55.61s  ok   ending the session speaks a report card
+   55.61s  REPORT: "Time, sir. On the invoice importer, 15 seconds on target out of 30 minutes planned, one drift. 62 percent clean. No streak yet."
+   55.61s  ok   the session is over and has a report
+   55.61s  ok   the report gives minutes on target out of planned, and a clean percentage
+   55.61s  ok   the report names the drift count
+   55.61s  ok   and the report card is about what you said you sat down to do
+   55.61s  ok   the aggregates-only ledger recorded the session
+   55.61s  ledger: {"sessions":15,"streak":0,"best":3,"clean":"62%"}
+   60.66s  ok   a reloaded tab rejoins the session in progress instead of starting a new one
+   60.66s  ok   the reloaded tab adopted the say-sequence, so no callout is spoken twice
+
+  63 checks, 0 failed
+

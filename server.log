@@ -1,0 +1,330 @@
+  "GET /health HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  captured: notes/captures/preflight-canary-zarquona4ae53-is-a-live-end-to.md
+  "POST /remember HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  saw: 6564 bytes 640x320 -> answer
+  "POST /see?q=Read%20the%20single%20heading%20word%20in%20this%20image%20exactly%20as%20it%20appears%2C%20then%20name%20the%20colours%20of%20the%20three%20bars%20below%20it%2C%20top%20to%20bottom. HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /index.html HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /..%2fconfig.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /%2e%2e/config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /viewer/../config.json HTTP/1.1" 404 -
+  "GET /..\config.json HTTP/1.1" 301 -
+  "GET /..\config.json/ HTTP/1.1" 200 -
+  "GET /%2e%2e%5cconfig.json HTTP/1.1" 301 -
+  "GET /%2e%2e%5cconfig.json/ HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /./../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /notes-index.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /server.py HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /preflight.py HTTP/1.1" 404 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  brain (button): openai/gpt-6-astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (button): openai/not-a-real-brain -> REFUSED (unknown)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): switch to fable 95 -> REFUSED (noid)
+  "POST /model HTTP/1.1" 409 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to fable -> REFUSED (noversion)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  focus: intent -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: retarget -> running
+  "POST /focus HTTP/1.1" 200 -
+  focus: retarget -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  focus: what do my notes say about the roasting profile -> arming
+  "POST /focus HTTP/1.1" 400 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  eyes: on -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 400 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  looked: 6564 bytes 640x320 via OPUS 5 -> answer
+  "POST /look?q=What%20do%20you%20think%20of%20my%20shirt%3F HTTP/1.1" 200 -
+  eyes: off -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /stuck HTTP/1.1" 200 -
+  nudge: 6564 bytes still 4s -> free · moving
+  "POST /stuck?stillS=4 HTTP/1.1" 409 -
+  nudge: 6564 bytes still 90s -> free · mismatch
+  "POST /stuck?stillS=90 HTTP/1.1" 400 -
+  nudge: 6564 bytes still 90s -> free · stale
+  "POST /stuck?stillS=90 HTTP/1.1" 400 -
+  "POST /stuck?stillS=90 HTTP/1.1" 400 -
+  "GET /stuck HTTP/1.1" 200 -
+  nudge: 6564 bytes still 65s -> spoke
+  "POST /stuck?stillS=65 HTTP/1.1" 200 -
+  "GET /stuck HTTP/1.1" 200 -
+  nudge: 6564 bytes still 65s -> free · cooldown
+  "POST /stuck?stillS=65 HTTP/1.1" 429 -
+  "GET /stuck HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  captured: notes/captures/preflight-canary-zarquonfeaf12-is-a-live-end-to.md
+  "POST /remember HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  saw: 6564 bytes 640x320 -> answer
+  "POST /see?q=Read%20the%20single%20heading%20word%20in%20this%20image%20exactly%20as%20it%20appears%2C%20then%20name%20the%20colours%20of%20the%20three%20bars%20below%20it%2C%20top%20to%20bottom. HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /index.html HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /..%2fconfig.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /%2e%2e/config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /viewer/../config.json HTTP/1.1" 404 -
+  "GET /..\config.json HTTP/1.1" 301 -
+  "GET /..\config.json/ HTTP/1.1" 200 -
+  "GET /%2e%2e%5cconfig.json HTTP/1.1" 301 -
+  "GET /%2e%2e%5cconfig.json/ HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /./../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /notes-index.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /server.py HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /preflight.py HTTP/1.1" 404 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  brain (button): openai/gpt-6-astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (button): openai/not-a-real-brain -> REFUSED (unknown)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): switch to fable 95 -> REFUSED (noid)
+  "POST /model HTTP/1.1" 409 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to fable -> REFUSED (noversion)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  focus: intent -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: retarget -> running
+  "POST /focus HTTP/1.1" 200 -
+  focus: retarget -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  focus: what do my notes say about the roasting profile -> running
+  "POST /focus HTTP/1.1" 400 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  eyes: on -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 400 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  looked: 6564 bytes 640x320 via OPUS 5 -> answer
+  "POST /look?q=What%20do%20you%20think%20of%20my%20shirt%3F HTTP/1.1" 200 -
+  eyes: off -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /stuck HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  captured: notes/captures/preflight-canary-zarquon5e3481-is-a-live-end-to.md
+  "POST /remember HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  saw: 6564 bytes 640x320 -> answer
+  "POST /see?q=Read%20the%20single%20heading%20word%20in%20this%20image%20exactly%20as%20it%20appears%2C%20then%20name%20the%20colours%20of%20the%20three%20bars%20below%20it%2C%20top%20to%20bottom. HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /index.html HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /..%2fconfig.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /%2e%2e/config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /viewer/../config.json HTTP/1.1" 404 -
+  "GET /..\config.json HTTP/1.1" 301 -
+  "GET /..\config.json/ HTTP/1.1" 200 -
+  "GET /%2e%2e%5cconfig.json HTTP/1.1" 301 -
+  "GET /%2e%2e%5cconfig.json/ HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /./../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /notes-index.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /server.py HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /preflight.py HTTP/1.1" 404 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  brain (button): openai/gpt-6-astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (button): openai/not-a-real-brain -> REFUSED (unknown)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): switch to fable 95 -> REFUSED (noid)
+  "POST /model HTTP/1.1" 409 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to fable -> REFUSED (noversion)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  focus: intent -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: retarget -> running
+  "POST /focus HTTP/1.1" 200 -
+  focus: retarget -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  focus: what do my notes say about the roasting profile -> arming
+  "POST /focus HTTP/1.1" 400 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  eyes: on -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 400 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  looked: 6564 bytes 640x320 via OPUS 5 -> answer
+  "POST /look?q=What%20do%20you%20think%20of%20my%20shirt%3F HTTP/1.1" 200 -
+  eyes: off -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /stuck HTTP/1.1" 200 -
+  nudge: 6564 bytes still 4s -> free · moving
+  "POST /stuck?stillS=4 HTTP/1.1" 409 -
+  nudge: 6564 bytes still 90s -> free · mismatch
+  "POST /stuck?stillS=90 HTTP/1.1" 400 -
+  nudge: 6564 bytes still 90s -> free · stale
+  "POST /stuck?stillS=90 HTTP/1.1" 400 -
+  "POST /stuck?stillS=90 HTTP/1.1" 400 -
+  "GET /stuck HTTP/1.1" 200 -
+  nudge: 6564 bytes still 65s -> spoke
+  "POST /stuck?stillS=65 HTTP/1.1" 200 -
+  "GET /stuck HTTP/1.1" 200 -
+  nudge: 6564 bytes still 65s -> free · cooldown
+  "POST /stuck?stillS=65 HTTP/1.1" 429 -
+  "GET /stuck HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  brain (voice): Switch your brain model -> REFUSED (empty)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): Switch your brain model to gpt 6 astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  brain (voice): Switch your brain model to previous normal -> REFUSED (unknown)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): Switch your brain model to normal -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET / HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /favicon.ico HTTP/1.1" 404 -
