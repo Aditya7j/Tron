@@ -144,6 +144,7 @@ SETTLE_TICKS = 2          # consecutive ticks on one surface before it is the ta
 DEFER_APP_ONLY_S = 45.0   # never left home base: watch the application, not the site
 CLEAN_RATIO = 0.85        # a session at least this clean grows the streak
 MIN_LEDGER_S = 30.0       # shorter than this is a mis-tap, not a session
+LEDGER_HISTORY_MAX = 50   # rows kept; the oldest falls off rather than growing forever
 
 # THE EYES. A webcam organ in the page publishes three booleans about your body -
 # present, head down, slouched - and nothing else. No frame is uploaded for this and
@@ -564,6 +565,62 @@ PUBLIC_KEYS = {
     # instead of implying you are in the wrong window. Nameless either way.
     "postureDrift": bool,
     "hushed": bool, "hushLeftS": int, "nudges": int,
+}
+
+
+# =============================================================================
+#  THE INSTRUMENT - what /focus/diag may say, which is booleans and statuses
+# =============================================================================
+#
+# This exists because "it isn't working" is not a bug report and guessing is not
+# debugging. Every question you would otherwise ask by adding a print statement is
+# answered here, from the RUNNING process, and answered in a form that cannot name
+# anything: a boolean, a small integer, or one word out of a fixed set.
+#
+# The rule is the same as PUBLIC_KEYS and it is enforced the same way - a copy
+# through this whitelist with a type coercion, so a key that is not declared here
+# cannot reach the wire even if somebody builds a dict with it in.
+#
+# Note what is a STATUS rather than a boolean: a lane is "on", "off", "unknown" or
+# "n/a", because "am I on the right tab" has four honest answers and three of them
+# are not "no". Collapsing "I could not read the tab" into False is how a watchdog
+# ends up accusing you of drifting while blind.
+
+TAB_READS = ("unknown",      # nothing readable in front at all
+             "notbrowser",   # the front app is not a Chrome-family browser
+             "read",         # a site was read out of the front tab
+             "ambiguous",    # the endpoint is alive but two windows both claim front
+             "noendpoint")   # a browser, with no --remote-debugging-port to ask
+LANES = ("on", "off", "unknown", "n/a")
+
+DIAG_KEYS = {
+    # THE PROCESS. First, and not by accident: a fresh interpreter passes every
+    # check in this file while the long-lived one sits frozen on a stale config or a
+    # dead tick thread. pid and uptimeS are how you tell which one answered you, and
+    # tickAgeS is the freeze itself - one second is healthy, forty is the bug.
+    "pid": int, "uptimeS": int, "tickAlive": bool, "tickAgeS": int, "ticks": int,
+    "version": int,
+    # THE FOREGROUND, from one fresh read taken while answering this request. No
+    # cache: a diagnostic that tells you what was true three seconds ago is a
+    # second bug rather than a tool for finding the first.
+    "appReadable": bool, "frontIsBrowser": bool, "tabRead": str,
+    # Is the front tab THIS page. The one surface a target must never be, and the
+    # usual answer to "why won't it lock on" - you are still looking at me.
+    "frontIsHome": bool,
+    "cdpAlive": bool, "backend": str,
+    # THE LOCK. appHash/tabHash are "is there a hash in the slot", never the hash:
+    # twelve salted bytes are not an identity but they are not a diagnostic either,
+    # so what crosses the wire is that a slot is filled.
+    "sessionOn": bool, "state": str, "deferred": bool, "locked": bool,
+    "appHash": bool, "tabHash": bool, "appTarget": bool, "tabTarget": bool,
+    "candidate": bool, "settleTicks": int, "settleNeeded": int, "armingS": int,
+    # ON TARGET, BY LANE, because "not on target" is four different faults.
+    # readerOnTarget is a fresh read; sessionOnTarget is what the tick last decided.
+    # If those two disagree the tick is stale, which is the whole reason both are here.
+    "appLane": str, "tabLane": str, "postureLane": str,
+    "readerOnTarget": bool, "sessionOnTarget": bool, "atHome": bool,
+    "drifting": bool, "inGrace": bool, "excused": bool, "snoozed": bool,
+    "intentOpen": bool, "eyesOn": bool,
 }
 
 
@@ -1385,6 +1442,58 @@ class TargetReader:
                 "home": home, "tab_readable": bool(raw["tab_readable"]),
                 "on_target": on_target, "label": label}
 
+    def diagnose(self):
+        """look(), for a human holding a bug report. Booleans, small ints and words.
+
+        The same one fresh read, the same salted comparison, the same discard - and
+        deliberately NOT built out of look(), because look() answers the question the
+        session asks ("is this a drift") and this answers the question you ask ("which
+        half of the lock is wrong"). A diagnostic that can only speak in the caller's
+        vocabulary cannot tell you the caller is confused.
+
+        There is no label here and no case in which there could be one: nothing on
+        this path is about to say a sentence, so nothing needs a word for where you
+        are. This is the one reader method whose answer is safe to print in full.
+        """
+        out = {"appReadable": False, "frontIsBrowser": False, "tabRead": "unknown",
+               "frontIsHome": False,
+               "appHash": self._app is not None, "tabHash": self._host is not None,
+               "locked": bool(self._locked), "candidate": self._cand is not None,
+               "settleTicks": int(self._cand_ticks),
+               "appLane": "n/a", "tabLane": "n/a", "readerOnTarget": False}
+        raw = _probe_raw()
+        if not raw:
+            return out
+        out["appReadable"] = True
+        out["frontIsBrowser"] = bool(raw["browser"])
+        if not raw["browser"]:
+            out["tabRead"] = "notbrowser"
+        elif raw["host"]:
+            out["tabRead"] = "read"
+        elif raw["tab_readable"]:
+            out["tabRead"] = "ambiguous"
+        else:
+            out["tabRead"] = "noendpoint"
+        out["frontIsHome"] = bool(raw["browser"] and raw["host"] in HOME_BASE_HOSTS)
+        if not self._locked:
+            # No target, so there are no lanes to be on or off. "n/a" rather than
+            # "off": a deferred session is not a session you are failing.
+            return out
+        on_app = self._h(raw["app"]) == self._app
+        out["appLane"] = "on" if on_app else "off"
+        if not self._watch_tab:
+            out["tabLane"] = "n/a"           # app-only lock, by fallback or by machine
+        elif not on_app:
+            out["tabLane"] = "off"           # wrong app; the site is beside the point
+        elif raw["host"] is None:
+            out["tabLane"] = "unknown"       # right app, unreadable site: not a drift
+        else:
+            out["tabLane"] = "on" if self._h(raw["host"]) == self._host else "off"
+        # The same arithmetic as look(): unknown and n/a are not off. If this line and
+        # look()'s ever disagree, this one is wrong and the session is right.
+        out["readerOnTarget"] = bool(on_app and out["tabLane"] != "off")
+        return out
+
     @property
     def watching_tab(self):
         return self._watch_tab
@@ -1395,16 +1504,74 @@ class TargetReader:
 
 
 # =============================================================================
-#  THE LEDGER - aggregates only, and it is not a diary
+#  THE LEDGER - the running totals, and eight numbers per session
 # =============================================================================
 #
-# There is no per-session row in here on purpose. A list of "you were 40% clean on
-# Tuesday at 14:03" is a behavioural log, and this feature does not need one to do
-# its job: the streak is the only thing that has to survive a restart.
+# There is a per-session row now, and the interesting part is what it is NOT allowed
+# to be. A record of your working day is worth having - "was Tuesday afternoon
+# actually as bad as it felt" is a real question and aggregates cannot answer it - but
+# a free-form row is how a helpful summary becomes a behavioural log one field at a
+# time. So the row is a WHITELIST of eight keys, declared once, below, and enforced on
+# the way in and on the way out:
+#
+#   at, plannedMinutes, activeMinutes, onTargetMinutes, drifts, secondsAdrift,
+#   percent, completed
+#
+# Four things are deliberately absent and they are the four somebody would add first:
+# where you were (there is no plaintext to add - see TargetReader), what you said you
+# were doing (`intent` is a sentence you dictated; it may live in memory for the
+# length of a session and it is not going on disk), which app or site you drifted to,
+# and the clock time of each drift. A row that cannot hold them cannot leak them.
+#
+# _write_ledger() rebuilds the file from these whitelists rather than serialising what
+# it was handed, so a caller who mutates the dict it got from read_ledger() cannot
+# smuggle a ninth key past the door. test_focus_privacy.py proves exactly that.
+
+SESSION_ROW_KEYS = {"at": str, "plannedMinutes": int, "activeMinutes": int,
+                    "onTargetMinutes": int, "drifts": int, "secondsAdrift": int,
+                    "percent": int, "completed": bool}
 
 _LEDGER_DEFAULT = {"sessions": 0, "plannedMinutes": 0, "onTargetMinutes": 0,
                    "driftMinutes": 0, "drifts": 0, "cleanSessions": 0,
-                   "streak": 0, "bestStreak": 0, "updated": ""}
+                   "streak": 0, "bestStreak": 0, "updated": "",
+                   "history": []}
+
+
+def session_row(raw):
+    """One end-of-session row, copied through SESSION_ROW_KEYS and coerced.
+
+    The single door for both directions: nothing reaches the file except through
+    here, and nothing comes back out of the file except through here either, so a row
+    hand-edited into focus-ledger.json is filtered on read exactly as one written by
+    _record() is filtered on write.
+    """
+    if not isinstance(raw, dict):
+        return None
+    out = {}
+    for key, kind in SESSION_ROW_KEYS.items():
+        value = raw.get(key)
+        if kind is bool:
+            out[key] = bool(value)
+        elif kind is int:
+            try:
+                out[key] = int(round(float(value or 0)))
+            except (TypeError, ValueError):
+                out[key] = 0
+        else:
+            # The timestamp, and the only string in a row. Kept to the shape _record()
+            # writes - minutes, never seconds - so a truncated or invented value
+            # cannot turn into a paragraph.
+            text = "" if value is None else str(value)
+            out[key] = text[:16]
+    return out
+
+
+def _blank_ledger():
+    """A fresh empty ledger. Copied per call because one value in _LEDGER_DEFAULT is
+    now a list, and handing out the same list to every caller means the first one to
+    append a row silently changes what "empty" means for the rest of the process."""
+    return {key: ([] if isinstance(value, list) else value)
+            for key, value in _LEDGER_DEFAULT.items()}
 
 
 def read_ledger():
@@ -1414,18 +1581,41 @@ def read_ledger():
         if not isinstance(saved, dict):
             raise ValueError
     except Exception:                                          # noqa: BLE001
-        return dict(_LEDGER_DEFAULT)
-    out = dict(_LEDGER_DEFAULT)
+        return _blank_ledger()
+    out = _blank_ledger()
     for key, default in _LEDGER_DEFAULT.items():
         value = saved.get(key, default)
-        out[key] = value if isinstance(value, type(default)) else default
+        if isinstance(default, list):
+            rows = [session_row(item) for item in (value or [])] \
+                if isinstance(value, list) else []
+            out[key] = [row for row in rows if row][-LEDGER_HISTORY_MAX:]
+        else:
+            out[key] = value if isinstance(value, type(default)) else default
     return out
 
 
 def _write_ledger(book):
+    """Write the file from the whitelists, not from the dict handed in.
+
+    Rebuilt rather than dumped on purpose: the alternative is that whether the ledger
+    holds a key nobody approved depends on whether some caller upstream happened to
+    put one in the dict. Here it cannot, and that is a property of this function
+    rather than of everybody who ever calls it.
+    """
+    clean = {}
+    for key, default in _LEDGER_DEFAULT.items():
+        value = book.get(key, default) if isinstance(book, dict) else default
+        if isinstance(default, list):
+            rows = [session_row(item) for item in (value or [])] \
+                if isinstance(value, list) else []
+            clean[key] = [row for row in rows if row][-LEDGER_HISTORY_MAX:]
+        elif isinstance(value, type(default)):
+            clean[key] = value
+        else:
+            clean[key] = default
     tmp = LEDGER_PATH + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(book, fh, indent=2)
+        json.dump(clean, fh, indent=2)
         fh.write("\n")
     os.replace(tmp, LEDGER_PATH)
 
@@ -2420,6 +2610,25 @@ class FocusSession:
         book["onTargetMinutes"] += int(round(self.on_target_s / 60.0))
         book["driftMinutes"] += int(round(self.drift_s / 60.0))
         book["drifts"] += int(self.drifts)
+        # THE ROW. Built from the eight whitelisted keys and handed to session_row()
+        # anyway, so this call site is not the thing standing between the file and a
+        # ninth field - there is nowhere for one to go.
+        book["history"] = list(book.get("history") or [])
+        book["history"].append(session_row({
+            "at": time.strftime("%Y-%m-%d %H:%M"),
+            "plannedMinutes": round(self.planned_s / 60.0),
+            "activeMinutes": round(self.elapsed_s / 60.0),
+            "onTargetMinutes": round(self.on_target_s / 60.0),
+            "drifts": self.drifts,
+            "secondsAdrift": round(self.drift_s),
+            "percent": self.clean_pct,
+            # The clock ran out, rather than you stopping it. Not the same question as
+            # whether the session was clean, and worth keeping apart from it: a
+            # half-hour abandoned at minute four is not a bad session, it is an
+            # interrupted one.
+            "completed": self.ended_reason == "finished",
+        }))
+        book["history"] = book["history"][-LEDGER_HISTORY_MAX:]
         if clean:
             book["cleanSessions"] += 1
             book["streak"] = before + 1
@@ -2448,6 +2657,14 @@ class FocusManager:
         self._session = None
         self._thread = None
         self._version = 0
+        # THE PULSE, for the instrument. A tick thread that died, or one wedged inside
+        # a probe that never came back, looks from the outside exactly like a feature
+        # that does not work - and the difference is not discoverable by reading the
+        # code, only by asking the process that is running it. So the loop stamps
+        # itself, every second, whether or not there is a session to tick.
+        self._born = time.monotonic()
+        self._tick_at = 0.0
+        self._ticks = 0
 
     # -- the tick ----------------------------------------------------------
 
@@ -2464,6 +2681,11 @@ class FocusManager:
         while True:
             time.sleep(TICK_S)
             with self._lock:
+                # Stamped before the early return, because this is a fact about the
+                # THREAD and not about the session: "no session" must read as a quiet
+                # heartbeat, not as a freeze.
+                self._tick_at = time.monotonic()
+                self._ticks += 1
                 session = self._session
                 if session is None or session.state == "ended":
                     continue
@@ -2673,6 +2895,103 @@ class FocusManager:
 
     def _state(self):
         return public_state(self._session)
+
+    # -- the instrument ----------------------------------------------------
+
+    def diag(self):
+        """Everything /focus/diag answers, from THIS process, in DIAG_KEYS' vocabulary.
+
+        Two-phase on purpose. The session's own facts are read under the lock, because
+        a half-updated view of a countdown is worse than a slightly older one. The
+        fresh foreground read is then taken OUTSIDE it, because _probe_raw() can spend
+        the better part of a second on three dead CDP ports and a diagnostic that
+        stalls the tick it is diagnosing is a trap rather than a tool.
+
+        What that costs is precision no debugger needs: the reader may settle between
+        the two phases, and a settle caught mid-flight is a thing worth seeing anyway.
+        """
+        with self._lock:
+            now = time.monotonic()
+            session = self._session
+            live = session is not None and session.state != "ended"
+            facts = {
+                "pid": os.getpid(),
+                "uptimeS": now - self._born,
+                "tickAlive": bool(self._thread and self._thread.is_alive()),
+                # Never ticked at all reads as "as stale as this process is old",
+                # which is the truth and is louder than a zero.
+                "tickAgeS": (now - self._tick_at) if self._tick_at else
+                            (now - self._born),
+                "ticks": self._ticks,
+                "version": self._version,
+                "sessionOn": live,
+                "state": session.state if session is not None else "idle",
+                "deferred": bool(session.deferred) if live else False,
+                "sessionOnTarget": bool(session._on_target_now) if live else False,
+                "atHome": bool(session._at_home_now) if live else False,
+                "drifting": bool(live and session._counted
+                                 and session.state == "running"),
+                "inGrace": bool(live and session._off_since is not None
+                                and not session._counted),
+                "excused": bool(session.excused) if live else False,
+                "snoozed": bool(live and now < session.snooze_until),
+                "intentOpen": bool(session.awaiting_intent) if live else False,
+                "armingS": (now - session._arm_since) if (live and session.deferred)
+                           else 0,
+                "settleNeeded": SETTLE_TICKS,
+            }
+            reader = session.reader if session is not None else None
+        # Outside the lock from here down.
+        post = EYES.posture(time.monotonic())
+        facts["eyesOn"] = bool(post["fresh"])
+        facts["postureLane"] = ("unknown" if not post["fresh"]
+                                else "off" if post["head_down"] else "on")
+        cap = capability()
+        facts["cdpAlive"] = bool(cap["cdp"])
+        facts["backend"] = str(cap["backend"])
+        # With no session there is no reader and therefore no target - and a throwaway
+        # one answers the foreground half correctly while reporting an empty lock,
+        # which is exactly the state of affairs.
+        facts.update((reader or TargetReader()).diagnose())
+        facts["appTarget"] = bool(facts["locked"] and facts["appHash"])
+        facts["tabTarget"] = bool(facts["locked"] and facts["tabHash"])
+        return public_diag(facts)
+
+
+_BACKEND_RE = re.compile(r"^[A-Za-z0-9_]{1,24}$")
+
+
+def public_diag(raw):
+    """Copy through DIAG_KEYS, coerce, and enumerate every word. Same shape of
+    function as public_state() and same reason for existing: the instrument is the
+    first thing anybody reaches for when a feature misbehaves, so it is the first
+    thing that would grow a field holding an app name at two in the morning."""
+    out = {}
+    for key, kind in DIAG_KEYS.items():
+        value = raw.get(key)
+        if kind is bool:
+            out[key] = bool(value)
+        elif kind is int:
+            try:
+                out[key] = int(round(float(value or 0)))
+            except (TypeError, ValueError):
+                out[key] = 0
+        else:
+            text = "" if value is None else str(value)
+            if key in ("appLane", "tabLane", "postureLane"):
+                out[key] = text if text in LANES else "unknown"
+            elif key == "tabRead":
+                out[key] = text if text in TAB_READS else "unknown"
+            elif key == "state":
+                out[key] = text if text in STATES else "idle"
+            elif key == "backend":
+                # A function name out of this module, and the one place a string from
+                # outside could arrive: the privacy test swaps READER_BACKEND for a
+                # callable of its own. An identifier or nothing.
+                out[key] = text if _BACKEND_RE.match(text) else "custom"
+            else:
+                out[key] = text
+    return out
 
 
 def public_state(session):

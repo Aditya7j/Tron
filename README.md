@@ -9,8 +9,9 @@ focus.py            focus sessions: the tick, the reader, the callouts, the ledg
 preflight.py        runs every live chain against the running server and prints a verdict
 test_focus_privacy.py   proves no identity is ever STORED: named out loud, kept nowhere
 focus_live.mjs      the live loop: click FOCUS, settle, hear the callout, move the lock, hear the report
+focus_probe.mjs     the instruments: /focus/diag, the ledger's shape, the probe page, the debug overlay
 config.json         provider, credentials, model  <- project root, never served
-focus-ledger.json   generated - aggregates only: counts, minutes, streak. No history
+focus-ledger.json   generated - totals plus one eight-key row per session. No identities, ever
 notes/              the markdown corpus
 notes/captures/     written by /remember, indexed like any other folder
 viewer/index.html   the galaxy (3d-force-graph from a CDN, no npm, no build step)
@@ -34,7 +35,7 @@ does.
 ## Preflight
 
 ```bash
-python preflight.py           # thirteen live chains, a tick or a cross each
+python preflight.py           # fourteen live chains, a tick or a cross each
 python preflight.py --quiet   # just the summary line
 python preflight.py --keep-note   # leave the probe note in the galaxy
 ```
@@ -60,6 +61,7 @@ a mock is a description of what you believed at the time.
 | 11 | a focus session ticks on the server with no browser involved, streams, and leaks nothing |
 | 12 | the eyes nudge once, cool down, and cannot carry a picture — including under five smuggled names |
 | 13 | the screen watch refuses four ways for nothing, then nudges once, and hands no frame back |
+| 14 | `/focus/diag` answers from the **running** process, in booleans only, agreeing with `/focus` — and both in-browser instruments are in the page that is served |
 
 It finishes with `N pass, N fail, N warn` and exits with the number of failures, so
 `python preflight.py --quiet && deploy` does the right thing.
@@ -720,7 +722,7 @@ one string that came from you rather than from watching you: the `intent` you di
 See ["And what are we focusing on?"](#and-what-are-we-focusing-on) — it has a single
 writer, reached only from the POST body.
 
-`test_focus_privacy.py` proves all of it — **222 checks** — by feeding the reader
+`test_focus_privacy.py` proves all of it — **258 checks** — by feeding the reader
 identities it chose itself and then hunting for them in every byte of every state, in
 both JSON spellings, after every step of a whole session. It is deliberately hostile
 rather than reassuring: it is not enough for a leak to be *unfamiliar*, because every
@@ -843,12 +845,42 @@ percentage, and what that did to the streak.
 > Time, sir. 28 minutes on target out of 30 planned, one drift. 93 percent clean.
 > That extends your streak to 4.
 
-A session at least `CLEAN_RATIO` (85%) clean grows the streak. `focus-ledger.json`
-holds **aggregates only** — `sessions, plannedMinutes, onTargetMinutes, driftMinutes,
-drifts, cleanSessions, streak, bestStreak, updated` — and no history: not when, not
-how long, and certainly not what you were doing. Nothing shorter than `MIN_LEDGER_S`
-(30 s) is written at all, because that is a mis-tap, not a session, and aborting never
-records.
+A session at least `CLEAN_RATIO` (85%) clean grows the streak. Nothing shorter than
+`MIN_LEDGER_S` (30 s) is written at all, because that is a mis-tap, not a session, and
+aborting never records.
+
+#### The ledger
+
+`focus-ledger.json` holds the running totals — `sessions, plannedMinutes,
+onTargetMinutes, driftMinutes, drifts, cleanSessions, streak, bestStreak, updated` —
+and then one row per session in `history`, capped at `LEDGER_HISTORY_MAX` (50) so the
+oldest falls off rather than the file growing forever. A row is **eight numbers and a
+minute stamp**, and that list is the whole of it:
+
+| | |
+|---|---|
+| `at` | `2026-09-22 14:05` — to the minute, no seconds |
+| `plannedMinutes` | what you asked for |
+| `activeMinutes` | what the session actually ran |
+| `onTargetMinutes` | of that, how much was on target |
+| `drifts` | how many times you left |
+| `secondsAdrift` | how long you were gone, in total |
+| `percent` | the clean percentage, the same number that decides the streak |
+| `completed` | did it reach the end, or did you stop it |
+
+What is deliberately **absent** is the part that would make it a surveillance log:
+where you were, the intent you dictated, which app or site you drifted into, and the
+clock time of each individual drift. A row can tell you "Tuesday's 30 minutes went 74
+percent clean across three drifts" and it cannot tell anybody, including you, what the
+three drifts were.
+
+That is enforced rather than intended. `SESSION_ROW_KEYS` is a name→type whitelist and
+`session_row()` is the single door in both directions: `_write_ledger()` **rebuilds**
+the file from the whitelists instead of serialising whatever a caller handed it, and
+`read_ledger()` filters every row on the way back in, so a hand-edited file cannot
+smuggle a field into memory either. `test_focus_privacy.py` proves it from the
+attacker's side — it hands `_record()` a row carrying `app`, `host`, `intent` and a
+`driftLog`, and then asserts the file on disk came back with exactly eight keys.
 
 ### The live loop
 
@@ -918,6 +950,149 @@ moment. So the path-change check asserts that on-target time *grew* across the
 navigations with zero drifts, and logs all four buckets either side of it — a
 surprising total is usually the machine being busy, and it is easier to see that than
 to guess it.
+
+## When it "isn't working"
+
+Every instrument below exists for one reason: so that the answer to *"why didn't it
+lock on?"* is read off a screen instead of guessed at. Guessing costs an afternoon and
+usually ends in three fixes to code that was already correct.
+
+### THE LAW
+
+When focus misbehaves in the field, in this order, **before touching any code**:
+
+1. **Read the diag.** `GET /focus/diag` on the running server. It answers which
+   process spoke, whether its tick is alive, and which lane is off.
+2. **Read the ledger.** `focus-ledger.json` — the last row says whether the previous
+   session ended or was stopped, and whether it was clean. A streak that "reset
+   itself" is usually a session that never reached `MIN_LEDGER_S`.
+3. **Count the browser windows.** Nearly every "it locked on the wrong thing" is two
+   windows: the reader asks the window manager which window is in front, and the
+   tab it then reads is the active tab of *that* window. `tabRead: "ambiguous"` in
+   the diag is this fault saying its own name.
+4. **Check which host the assistant's own tab is on.** `127.0.0.1` and `localhost`
+   are different hosts to the reader. If the Jarvis tab is on one and `HOME_HOSTS`
+   knows the other, home base stops being recognised — and then the session
+   cheerfully tries to lock on to the assistant, `frontIsHome` goes true, and
+   nothing ever settles.
+5. **Only now read the code.**
+
+And the rule that overrides all five: **when several fixes change nothing, the input
+is lying.** Stop editing. Turn the instruments on and reproduce your exact flow —
+your click, your windows, your tabs — because the thing being fixed is not the thing
+that is broken.
+
+A corollary that has caught this more than once: **a fresh process passes every check
+while the long-lived one is frozen.** The server you have been reloading against for an
+hour may be running the module it imported an hour ago. `pid`, `uptimeS` and `tickAgeS`
+are the first three fields in the diag precisely so this cannot hide.
+
+### `GET /focus/diag`
+
+Booleans, counters and words from fixed lists. No identity can be in it, because there
+is no field wide enough to hold one — `DIAG_KEYS` is a whitelist and `public_diag()`
+coerces every value through it, enumerating the strings against `LANES`, `TAB_READS`
+and `STATES`.
+
+| group | fields | what it answers |
+|---|---|---|
+| the process | `pid` `uptimeS` `version` `ticks` `tickAlive` `tickAgeS` | **which process answered you**, and whether its clock is still moving. One second behind is healthy; forty is the bug |
+| the foreground | `appReadable` `frontIsBrowser` `tabRead` `frontIsHome` `cdpAlive` `backend` | can the frontmost app be read at all, is it a browser, did the tab read succeed — and is the thing in front *this page* |
+| the lock | `sessionOn` `state` `deferred` `locked` `appHash` `tabHash` `appTarget` `tabTarget` `candidate` `settleTicks` `settleNeeded` `armingS` | is there a target yet, is one settling, how many ticks in. `appHash`/`tabHash` are "is the slot filled", never the hash |
+| on target, by lane | `appLane` `tabLane` `postureLane` `readerOnTarget` `sessionOnTarget` `atHome` | *"not on target"* is four different faults. `readerOnTarget` is a fresh read; `sessionOnTarget` is what the tick last decided — **if they disagree, the tick is stale** |
+| the session | `drifting` `inGrace` `excused` `snoozed` `intentOpen` `eyesOn` | is it counting a drift right now, or holding off, and why |
+
+One boundary worth knowing, because the two readings look like a contradiction and are
+not: once `sessionOn` goes false the diag's **whole session block reads false**, while
+`GET /focus` goes on publishing the last frame of the session that just ended so the
+card can still show you your report. A diagnostic that says `drifting` about a session
+which finished ten minutes ago sends you hunting a drift that does not exist, so the
+diag refuses to hold that frame. `sessionOn` is the field that tells you which of the
+two questions you are asking.
+
+Lanes are `on` / `off` / `unknown` / `n/a`, and `unknown` is never treated as `off` —
+"I could not see" and "you left" are different sentences. The foreground group comes
+from **one fresh read taken while answering the request**, not from a cache, because a
+diagnostic that reports what was true three seconds ago is a second bug rather than a
+tool for finding the first. That read is deliberately taken *off* the manager's lock,
+so a diag cannot stall the tick it is diagnosing.
+
+### `?focusdebug=1`
+
+The same facts on the glass, in the corner of the viewer, refreshed every second:
+process and tick, the three lanes, the lock and the deferred/settle count, what is in
+front, the reader's verdict against the session's, CDP, the session flags, the drift
+tier and what is excused, the intent window, and the last pixel diff against its gate.
+
+Two details that make it worth having open:
+
+- **The session flags are read from the page's own state**, not recomputed. The panel
+  shows you what the viewer believes, which is the thing that is actually driving the
+  card in front of you.
+- **It says `DISAGREE` in red** when a fresh read and the tick's last decision differ
+  while a session is live, and `STALE` when the diag stops arriving. Both are the
+  failure you would otherwise sit and stare at. With no session live it says
+  "no session to compare with" instead, and the tick row says "not started" rather
+  than `DEAD` on a server that has simply never run one — an instrument that cries
+  wolf teaches you to ignore it on the day it means something.
+
+It is `pointer-events: none` and paints nothing when the flag is absent.
+
+### `?focusprobe=1`
+
+The hermetic battery, run in the browser, with the verdict written into the **page
+title** so a script can read it without a screenshot:
+
+```
+PROBE 16/16 PASS · viewport:PASS visible:PASS timers:PASS frames:PASS clock:PASS …
+```
+
+Sixteen cases: the viewport, visibility and focus, real timer and `requestAnimationFrame`
+latency, the clock formatter, the phrase parser, the countdown card in five states (on
+target, drifting, deferred, blind, head-down), the pixel gate arithmetic, luma, the `seq`
+absorb path, a no-names sweep over the rendered card, and `hermetic` — which counts the
+page's own `fetch` calls and fails if the battery caused a single one.
+
+In probe mode the page does not greet, does not read the brain, does not open the SSE
+stream and does not run the home beat, so nothing it measures is contending with the
+real application, and the run cannot touch your session or your streak.
+
+Runs **queue** rather than overlap. The page runs the battery itself on load and a
+harness runs it again after sizing the window; called while the first run is still
+inside its 250 ms timer case, both would push into one list — thirty cases, half of them
+measured at a viewport nobody asserted, and a merged verdict that can report `FAIL` for
+a case which passes at the asserted size. So a second call waits for the first, and the
+harness asserts exactly sixteen cases, each reported once.
+
+**Run it at 1440×900 and assert the viewport.** A hidden or background tab throttles
+timers and coalesces frames, so every time-based case will quietly lie to you — which
+is why `visible`, `timers` and `frames` are cases in their own right rather than
+assumptions.
+
+### The harness
+
+```bash
+node focus_probe.mjs     # 47 checks, 0 failed — needs the server; Node 24, no npm install
+```
+
+Four sections, and it is **read-only against the server** — it starts no session, so
+your real ledger and streak are untouched:
+
+1. the diag, from the running server, held to `DIAG_KEYS` over the wire;
+2. the ledger file's shape, held to the eight row keys;
+3. the probe page at an **asserted** 1440×900 (`Emulation.setDeviceMetricsOverride`
+   plus `Page.bringToFront`, then the battery re-run), every case reported by name,
+   the title matched against its contract, and `fetches === 0`;
+4. the `?focusdebug=1` overlay, asserted to be in the document, fresh, showing the
+   lanes and the pixels — and naming no app and no site.
+
+It opens its browser on port **9225**, deliberately outside `focus.CDP_PORTS`, so the
+probe browser can never become the server's focus target while it runs.
+
+`preflight.py` check 14 is the same discipline over HTTP: it treats a 404 on
+`/focus/diag` as the stale-process fault **by name**, refuses a diag whose `pid` is
+preflight's own, cross-examines ten facts against `GET /focus`, and looks for both
+instruments in the page the server actually **serves** rather than the file on disk.
 
 ## The eyes
 
@@ -1349,3 +1524,5 @@ background tab you do not want talking at you.
 | `Esc` | stop the voice and the mic, close the panel |
 | `↻` | forget the conversation history |
 | `?mute=1` | this tab never speaks |
+| `?focusdebug=1` | the [focus overlay](#focusdebug1) — flags, lanes, lock, drift, pixels, refreshed every second from `/focus/diag` |
+| `?focusprobe=1` | the [hermetic battery](#focusprobe1) — sixteen cases, PASS/FAIL per case in the page title, no network at all |

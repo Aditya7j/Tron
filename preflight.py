@@ -2041,6 +2041,239 @@ def _page_source():
         return None
 
 
+def check_instruments():
+    """14. The instruments answer, from the RUNNING server, in booleans only.
+
+    This check exists because of a specific failure that has now happened more than
+    once: the code on disk is correct, every unit test passes, a fresh interpreter
+    agrees - and the long-lived process serving the page is running last hour's
+    module, so the feature "does not work" and nothing can explain why.
+
+    So the first thing it does is ask the running server for /focus/diag over HTTP
+    and refuse to accept a 404 as anything but that fault, by name. The pid and the
+    uptime come back in the answer precisely so the reply can say WHICH process
+    spoke, and tickAgeS so it can say whether that process's clock is still moving.
+
+    After that it is the same discipline as everything else here. The diag is checked
+    against focus.DIAG_KEYS as it arrives over the wire, not as focus.public_diag
+    would build it in this interpreter. It is cross-examined against GET /focus,
+    because two views of one session that disagree mean the tick is stale. The ledger
+    is read off disk and held to the eight whitelisted row keys. And the two
+    in-browser instruments are looked for in the SERVED page, since a debug overlay
+    that only exists on disk is no more use than a diag route the server has not
+    loaded.
+
+    Nothing here starts a session or writes anything: the instruments have to be
+    readable while you are working, which means reading them must cost you nothing.
+    """
+    if not state["up"]:
+        return FAIL, ["skipped: the server is not reachable"]
+
+    notes, warnings = [], []
+
+    # -- 1. does the running process even have the route?
+    status, head, body = http_call("GET", "/focus/diag", timeout=30,
+                                   label="GET /focus/diag")
+    if status == 404:
+        try:
+            with open(os.path.join(ROOT, "server.py"), "r", encoding="utf-8") as fh:
+                on_disk = "/focus/diag" in fh.read()
+        except OSError:
+            on_disk = False
+        return FAIL, ["the running server has NO /focus/diag route, and the code on "
+                      "disk does%s have one" % ("" if on_disk else " not"),
+                      "this is the exact fault the route was built to expose: the "
+                      "process serving the page is running older code than the file "
+                      "you are editing - restart it and run preflight again"
+                      if on_disk else
+                      "so this is not a stale process: the route is genuinely gone"]
+    if status != 200:
+        return FAIL, ["GET /focus/diag answered HTTP %s" % status]
+    payload = as_json(body) or {}
+    diag = payload.get("diag")
+    if not isinstance(diag, dict):
+        return FAIL, ["GET /focus/diag answered 200 with no diag object: %s"
+                      % first_line(sorted(payload))]
+    if "no-store" not in (head.get("cache-control") or ""):
+        warnings.append("the diag is cacheable (%s), and a cached diagnostic is a "
+                        "lie with a timestamp on it" % head.get("cache-control"))
+
+    # -- 2. which process answered, and is its clock moving?
+    pid = diag.get("pid")
+    if not isinstance(pid, int) or pid <= 0:
+        return FAIL, ["the diag names no process, so it cannot answer the one "
+                      "question it exists for"]
+    if pid == os.getpid():
+        return FAIL, ["the diag came back with THIS process's pid (%d), which means "
+                      "preflight is reading its own imported module rather than the "
+                      "server" % pid]
+    notes.append("answered by pid %d, up %ds, %d ticks, module v%d - a different "
+                 "process from this one (%d), which is the whole point"
+                 % (pid, diag.get("uptimeS", -1), diag.get("ticks", -1),
+                    diag.get("version", -1), os.getpid()))
+
+    # -- 3. the whitelist, as it arrives over the wire.
+    missing = sorted(set(focus.DIAG_KEYS) - set(diag))
+    extra = sorted(set(diag) - set(focus.DIAG_KEYS))
+    if missing or extra:
+        return FAIL, ["GET /focus/diag does not send the DIAG_KEYS whitelist: "
+                      "missing=%s extra=%s" % (missing, extra)]
+    wrong = []
+    for name, want in sorted(focus.DIAG_KEYS.items()):
+        got = diag[name]
+        if want is bool and not isinstance(got, bool):
+            wrong.append("%s=%r is not a boolean" % (name, got))
+        elif want is int and (isinstance(got, bool) or not isinstance(got, int)):
+            wrong.append("%s=%r is not a number" % (name, got))
+        elif want is str and not isinstance(got, str):
+            wrong.append("%s=%r is not a string" % (name, got))
+    if wrong:
+        return FAIL, ["the diag's own declared types do not hold over the wire:"] + \
+            wrong[:6]
+    notes.append("exactly the %d whitelisted diag keys, every one the declared type: "
+                 "%d booleans, %d counters, %d fixed words"
+                 % (len(focus.DIAG_KEYS),
+                    sum(1 for t in focus.DIAG_KEYS.values() if t is bool),
+                    sum(1 for t in focus.DIAG_KEYS.values() if t is int),
+                    sum(1 for t in focus.DIAG_KEYS.values() if t is str)))
+
+    # -- 4. every string is a word from a fixed list, so none of them can be a name.
+    allowed = set(focus.LANES) | set(focus.TAB_READS) | set(focus.STATES)
+    loose = [(k, v) for k, v in sorted(diag.items())
+             if isinstance(v, str) and k != "backend" and v not in allowed]
+    if loose:
+        return FAIL, ["a diag string is not from the fixed vocabulary, so it could "
+                      "hold an identity: %s" % loose[:4]]
+    if not focus._BACKEND_RE.match(diag["backend"]):
+        return FAIL, ["backend=%r is not an identifier, and that field is the one "
+                      "string wide enough to smuggle something" % diag["backend"]]
+    notes.append("every diag string is a word from LANES / TAB_READS / STATES "
+                 "(backend %r aside, and that is an identifier), so there is nowhere "
+                 "in this answer an app or a site could be" % diag["backend"])
+
+    # -- 5. the tick, which is the freeze itself.
+    live = _focus_now()
+    running = live.get("state") in ("arming", "running")
+    if running and not diag["tickAlive"]:
+        return FAIL, ["a session is %s and the TICK THREAD IS DEAD (last tick %ds "
+                      "ago): the countdown on your screen is a stale frame"
+                      % (live.get("state"), diag["tickAgeS"])]
+    # The thread stamps its heartbeat BEFORE it checks for a session, so once it
+    # exists it is late whether or not anything is being timed - which makes this the
+    # one assertion that catches a frozen process rather than a finished one.
+    if diag["tickAlive"] and diag["tickAgeS"] > focus.TICK_S * 4:
+        return FAIL, ["the tick thread is alive and %ds behind (a tick is %.0fs), so "
+                      "this process is FROZEN rather than idle: %d ticks, up %ds"
+                      % (diag["tickAgeS"], focus.TICK_S, diag["ticks"],
+                         diag["uptimeS"])]
+    if diag["tickAlive"]:
+        notes.append("the tick thread is alive, %d ticks in and %ds behind, inside the "
+                     "%.0fs tick%s" % (diag["ticks"], diag["tickAgeS"], focus.TICK_S,
+                                       "" if running else
+                                       " - it keeps beating between sessions, which is "
+                                       "why being late means frozen and not idle"))
+    else:
+        notes.append("no tick thread yet, and nothing has run in this process (%d "
+                     "ticks) - correct rather than broken: the thread is started by "
+                     "the first session and then lives as long as the process"
+                     % diag["ticks"])
+
+    # -- 6. the two views of one session must agree, or one of them is stale.
+    #
+    # Only while a session is LIVE, and that is not a loophole. /focus goes on
+    # publishing the last frame of an ended session on purpose, so the card can still
+    # show you the report card you just earned; the diag deliberately does the
+    # opposite and zeroes every session field once sessionOn goes false, because a
+    # diagnostic that says "drifting" about a session that finished ten minutes ago
+    # sends you looking for a drift. Both are right, and comparing them across that
+    # boundary compares two different questions - so the boundary itself is what gets
+    # asserted when there is nothing running.
+    if diag["state"] != live.get("state"):
+        return FAIL, ["/focus/diag says state=%r and /focus says state=%r in the same "
+                      "process, so one of the two reads is stale"
+                      % (diag["state"], live.get("state"))]
+    if diag["sessionOn"]:
+        for here, there in (("deferred", "deferred"), ("locked", "locked"),
+                            ("drifting", "drifting"), ("inGrace", "inGrace"),
+                            ("atHome", "atHome"), ("excused", "excused"),
+                            ("snoozed", "snoozed"),
+                            ("intentOpen", "awaitingIntent"),
+                            ("sessionOnTarget", "onTarget")):
+            if there in live and diag[here] != live[there]:
+                return FAIL, ["/focus/diag says %s=%r and /focus says %s=%r about the "
+                              "same live session in the same process"
+                              % (here, diag[here], there, live[there])]
+        notes.append("a session is %s, and the diag and /focus agree on all ten facts "
+                     "they both hold (deferred %s, on target %s), so neither read is "
+                     "stale" % (diag["state"], diag["deferred"],
+                                diag["sessionOnTarget"]))
+    else:
+        # `locked` is left out: it is a fact about the READER, and an ended session's
+        # reader may legitimately still be holding the target it settled on.
+        stuck = [k for k in ("deferred", "drifting", "inGrace", "atHome", "excused",
+                             "snoozed", "intentOpen", "sessionOnTarget")
+                 if diag[k]]
+        if stuck:
+            return FAIL, ["no session is live and the diag still reports %s true, "
+                          "which would send you hunting a drift that ended" % stuck]
+        notes.append("no live session (state %r), and the diag's whole session block "
+                     "reads false rather than holding the last frame - /focus keeps "
+                     "that frame for the report card, and the diag deliberately "
+                     "does not" % diag["state"])
+    if diag["sessionOn"] and diag["readerOnTarget"] != diag["sessionOnTarget"]:
+        warnings.append("a fresh read says on-target=%s and the tick last decided %s; "
+                        "that is either a lock that just moved or a stale tick, and "
+                        "?focusdebug=1 marks it DISAGREE on the glass"
+                        % (diag["readerOnTarget"], diag["sessionOnTarget"]))
+
+    # -- 7. the ledger, held to the eight keys, as it sits on disk.
+    try:
+        with open(focus.LEDGER_PATH, "rb") as fh:
+            raw = fh.read()
+    except OSError:
+        raw = b""
+    book = json.loads(raw.decode("utf-8", "replace")) if raw.strip() else {}
+    if not isinstance(book, dict):
+        return FAIL, ["the ledger on disk is not an object at all"]
+    stray = sorted(set(book) - set(focus._LEDGER_DEFAULT))
+    if stray:
+        return FAIL, ["the ledger holds keys nobody declared: %s" % stray]
+    rows = [r for r in (book.get("history") or []) if isinstance(r, dict)]
+    bad_rows = sorted({k for r in rows for k in r} - set(focus.SESSION_ROW_KEYS))
+    if bad_rows:
+        return FAIL, ["a session row on disk carries keys outside the whitelist, so "
+                      "something bypassed session_row(): %s" % bad_rows]
+    notes.append("the ledger carries %d session%s of %d, each row exactly the %d "
+                 "whitelisted keys (%s) - no site, no app, no intent, no clock times"
+                 % (len(rows), "" if len(rows) == 1 else "s",
+                    focus.LEDGER_HISTORY_MAX, len(focus.SESSION_ROW_KEYS),
+                    ", ".join(sorted(focus.SESSION_ROW_KEYS))))
+    if not rows:
+        notes.append("nothing in the history yet: a session has to run past %ds to "
+                     "earn a row" % int(focus.MIN_LEDGER_S))
+
+    # -- 8. and the two in-browser instruments, in the SERVED page.
+    _, _, page = http_call("GET", "/", timeout=15, label="GET / (instruments)")
+    text = page.decode("utf-8", "replace")
+    wanted = {"the ?focusdebug=1 overlay": "focusdebug",
+              "the ?focusprobe=1 battery": "focusprobe",
+              "the overlay reading /focus/diag": "/focus/diag",
+              "the probe's asserted viewport": "PROBE_W = 1440",
+              "the verdict in the page title": "document.title = 'PROBE "}
+    absent = sorted(name for name, token in wanted.items() if token not in text)
+    if absent:
+        return FAIL, ["the page the server SERVES is missing %s - which, with check 8 "
+                      "passing, means the file on disk is missing it too"
+                      % "; ".join(absent)]
+    notes.append("the served page carries both instruments: the overlay reads "
+                 "/focus/diag and the battery asserts 1440x900 and writes PASS/FAIL "
+                 "per case into the title, where a script can read it")
+
+    if warnings:
+        return WARN, notes + warnings
+    return PASS, notes
+
+
 CHECKS = [
     ("the server is up and serving the viewer", check_server),
     ("the graph data loads and has nodes", check_graph),
@@ -2055,6 +2288,7 @@ CHECKS = [
     ("a focus session ticks on the server and leaks nothing", check_focus),
     ("the eyes report posture and nothing else", check_eyes),
     ("the screen watch costs nothing until it thinks", check_watch),
+    ("the instruments answer from the running server", check_instruments),
 ]
 
 

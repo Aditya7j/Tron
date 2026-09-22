@@ -2671,6 +2671,22 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
         if route == "/focus/stream":
             return self._focus_stream()
 
+        if route == "/focus/diag":
+            # THE INSTRUMENT. Booleans, small integers and words out of fixed sets -
+            # see focus.DIAG_KEYS, which this payload is copied through and which has
+            # no key that could hold an app, a site or a window title.
+            #
+            # It is answered by the LONG-LIVED process on purpose, and that is the
+            # whole point of the route rather than a script that imports focus.py and
+            # asks: a fresh interpreter passes every check while the one actually
+            # holding your session sits on a config it read before you fixed it, or on
+            # a tick thread that died forty minutes ago. `pid`, `uptimeS` and
+            # `tickAgeS` are the three fields that tell you which one you are talking
+            # to; read them first and the other twenty are worth reading.
+            return self._send_json(200, {
+                "ok": True, "kind": "focus", "nodes": [], "answer": "",
+                "diag": focus.MANAGER.diag()})
+
         if route == "/stuck":
             # The windows and the purse, with no frame and no model call. The page asks
             # for this when the watch starts, so the numbers it applies for the next

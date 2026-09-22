@@ -1,11 +1,33 @@
 {
-  "sessions": 19,
-  "plannedMinutes": 590,
-  "onTargetMinutes": 16,
-  "driftMinutes": 16,
-  "drifts": 20,
+  "sessions": 21,
+  "plannedMinutes": 650,
+  "onTargetMinutes": 17,
+  "driftMinutes": 17,
+  "drifts": 27,
   "cleanSessions": 10,
-  "streak": 4,
+  "streak": 0,
   "bestStreak": 4,
-  "updated": "2026-09-22"
+  "updated": "2026-09-22",
+  "history": [
+    {
+      "at": "2026-09-22 17:14",
+      "plannedMinutes": 30,
+      "activeMinutes": 2,
+      "onTargetMinutes": 1,
+      "drifts": 4,
+      "secondsAdrift": 30,
+      "percent": 58,
+      "completed": false
+    },
+    {
+      "at": "2026-09-22 17:25",
+      "plannedMinutes": 30,
+      "activeMinutes": 1,
+      "onTargetMinutes": 0,
+      "drifts": 3,
+      "secondsAdrift": 17,
+      "percent": 51,
+      "completed": false
+    }
+  ]
 }

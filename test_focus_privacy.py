@@ -18,6 +18,17 @@ Three separate claims, because "no leak" is really three different promises:
      field cannot arrive quietly, and the reader is searched for plaintext held in
      an attribute where a later refactor might expose it.
 
+Two more sections carry the same three claims into the two places that outlive a
+session and the one place a debugger reaches for first:
+
+  4. THE LEDGER ROW. There is one row per session on disk, whitelisted to eight
+     keys, and "nothing else can be stored" is proved from the attacker's side: a
+     row handed four extra fields, a dict mutated after read_ledger() handed it
+     over, a file hand-edited with a ninth key, and a row that is not a row.
+  5. THE INSTRUMENT. /focus/diag is a copy through DIAG_KEYS, so every string it
+     can emit has to be a word from a fixed set - which is claim (2) again, and it
+     is what catches a hash or a truncated app name in a debug field.
+
 Run it:  python test_focus_privacy.py
 Exit status is the number of failures.
 """
@@ -424,9 +435,13 @@ if os.path.isfile(focus.LEDGER_PATH):
 hits = [s for s in SENTINELS if s.lower() in raw.lower()]
 ok(raw and not hits, "the ledger on disk holds no identity", "leaked: %s" % hits)
 book = json.loads(raw or "{}")
-ok(all(isinstance(v, (int, str)) for v in book.values())
-   and not any(isinstance(v, (list, dict)) for v in book.values()),
-   "the ledger is aggregates only - no per-session rows")
+ok(set(book) <= set(focus._LEDGER_DEFAULT),
+   "the ledger on disk holds no key outside the declared shape",
+   "extra: %s" % sorted(set(book) - set(focus._LEDGER_DEFAULT)))
+stray = sorted({key for row in (book.get("history") or []) if isinstance(row, dict)
+                for key in row} - set(focus.SESSION_ROW_KEYS))
+ok(not stray, "and every session row on it carries only whitelisted keys",
+   "extra: %s" % stray)
 
 # 3. The reader's own attributes: hashes, never names.
 held = json.dumps({k: repr(v) for k, v in vars(session.reader).items()})
@@ -1326,6 +1341,249 @@ ok(focus.parse_command("be harsh with me", True) == ("drill", {})
 ok(focus.parse_command("call me out every 30 seconds", True)
    == ("nag", {"seconds": 30}),
    "while an instruction about the cadence is still an instruction about the cadence")
+
+# ============================================ the ledger row: eight keys, no ninth
+#
+# The ledger keeps one row per session now, so the promise it used to keep by having
+# no rows at all has to be kept by a whitelist instead. This section is the proof,
+# and it is written from the attacker's side: every check below is somebody trying to
+# get a ninth key onto disk, through the call site, through a mutated dict, through a
+# hand-edited file, or through a row that is not a row.
+
+print("")
+print("  the ledger  |  eight whitelisted keys, and nothing else can be stored\n")
+
+ASKED_FOR = ["at", "plannedMinutes", "activeMinutes", "onTargetMinutes", "drifts",
+             "secondsAdrift", "percent", "completed"]
+ok(sorted(focus.SESSION_ROW_KEYS) == sorted(ASKED_FOR),
+   "the row is the eight keys that were asked for, and no others",
+   json.dumps(sorted(focus.SESSION_ROW_KEYS)))
+
+# 1. THE DOOR. session_row() is the only way in, and it drops what it does not know.
+hostile = focus.session_row({
+    "at": "2026-01-01 09:30 and then a whole paragraph about " + HOST_TARGET,
+    "plannedMinutes": "25", "activeMinutes": None, "onTargetMinutes": 3.7,
+    "drifts": True, "secondsAdrift": "junk", "percent": -0.4, "completed": "yes",
+    # the four fields somebody would add first, all of them refused
+    "app": APP_TARGET, "host": HOST_TARGET, "intent": "the " + HOST_ELSEWHERE + " job",
+    "driftLog": [{"at": "09:31", "to": HOST_ELSEWHERE}]})
+ok(set(hostile) == set(focus.SESSION_ROW_KEYS),
+   "a row handed four extra fields comes back with exactly eight",
+   json.dumps(sorted(hostile)))
+ok(not [s for s in SENTINELS if s.lower() in json.dumps(hostile).lower()],
+   "and no identity survives the trip through it", json.dumps(hostile))
+ok(hostile["plannedMinutes"] == 25 and hostile["activeMinutes"] == 0
+   and hostile["onTargetMinutes"] == 4 and hostile["secondsAdrift"] == 0
+   and hostile["drifts"] == 1 and hostile["percent"] == 0
+   and hostile["completed"] is True,
+   "every number is coerced to a number, and junk becomes zero rather than text",
+   json.dumps(hostile))
+ok(len(hostile["at"]) == 16,
+   "the one string in a row is cut to a timestamp's length, so it cannot hold prose",
+   hostile["at"])
+ok(focus.session_row("not a row") is None and focus.session_row(None) is None,
+   "and something that is not a dict is not a row")
+
+# 2. THE REAL THING. A session driven to the end, and what it actually wrote.
+try:
+    os.remove(focus.LEDGER_PATH)
+except OSError:
+    pass
+frontmost.update({"app": APP_TARGET, "host": HOST_TARGET})
+keeper = focus.FocusSession(minutes=30)
+keeper.set_intent("shipping the " + HOST_WEIRD + " rewrite")
+for _ in range(focus.SETTLE_TICKS + 1):
+    clock.advance(2.0)
+    keeper.tick()
+frontmost.update({"app": APP_ELSEWHERE, "host": HOST_ELSEWHERE})
+for _ in range(15):
+    clock.advance(2.0)
+    keeper.tick()
+frontmost.update({"app": APP_TARGET, "host": HOST_TARGET})
+for _ in range(20):
+    clock.advance(2.0)
+    keeper.tick()
+keeper.finish("finished")
+rows = focus.read_ledger()["history"]
+ok(len(rows) == 1 and set(rows[0]) == set(focus.SESSION_ROW_KEYS),
+   "a finished session writes one row, with exactly the eight keys",
+   json.dumps(rows))
+row = rows[0] if rows else {}
+ok(row.get("plannedMinutes") == 30 and row.get("activeMinutes") >= 1
+   and row.get("drifts") >= 1 and row.get("secondsAdrift") >= 1
+   and 0 <= row.get("percent", -1) <= 100 and row.get("completed") is True,
+   "and the eight numbers in it are the session that just ran", json.dumps(row))
+with open(focus.LEDGER_PATH, "r", encoding="utf-8") as fh:
+    on_disk = fh.read()
+hits = [s for s in SENTINELS if s.lower() in on_disk.lower()]
+ok(not hits, "the file holds no app, no site and no dictated sentence",
+   "leaked: %s" % hits)
+ok("rewrite" not in on_disk and "shipping" not in on_disk,
+   "the intent in particular stays in memory, where it was dictated")
+short = focus.FocusSession(minutes=30)
+clock.advance(focus.MIN_LEDGER_S - 5)
+short.tick()
+short.finish("ended-early")
+ok(len(focus.read_ledger()["history"]) == 1,
+   "a mis-tap shorter than MIN_LEDGER_S writes no row at all")
+early = focus.FocusSession(minutes=30)
+# One tick can only ever credit TICK_S * 5, however long the wall clock jumped - so
+# passing MIN_LEDGER_S takes ticks, not one enormous advance.
+for _ in range(12):
+    clock.advance(5.0)
+    early.tick()
+early.finish("ended-early")
+rows = focus.read_ledger()["history"]
+ok(len(rows) == 2 and rows[-1]["completed"] is False,
+   "`completed` is about the clock running out, not about behaving yourself",
+   json.dumps(rows[-1:]))
+
+# 3. THE MUTATED DICT. read_ledger() hands out a plain dict; anybody can add to it.
+#    _write_ledger() rebuilds the file from the whitelists, so nobody can.
+smuggler = focus.read_ledger()
+smuggler["secretApp"] = APP_TARGET
+smuggler["updated"] = "2026-01-01"
+smuggler["history"] = list(smuggler["history"]) + [{
+    "at": "2026-01-01 10:00", "plannedMinutes": 30, "activeMinutes": 30,
+    "onTargetMinutes": 10, "drifts": 4, "secondsAdrift": 600, "percent": 33,
+    "completed": True, "app": APP_ELSEWHERE, "wentTo": HOST_ELSEWHERE}]
+focus._write_ledger(smuggler)
+with open(focus.LEDGER_PATH, "r", encoding="utf-8") as fh:
+    on_disk = fh.read()
+written = json.loads(on_disk)
+ok(set(written) == set(focus._LEDGER_DEFAULT),
+   "a top-level key added to the dict does not reach the file",
+   json.dumps(sorted(set(written) - set(focus._LEDGER_DEFAULT))))
+stray = sorted({k for r in written["history"] for k in r}
+               - set(focus.SESSION_ROW_KEYS))
+ok(not stray, "and neither does one added to a row", json.dumps(stray))
+hits = [s for s in SENTINELS if s.lower() in on_disk.lower()]
+ok(not hits, "so the file is still free of identities after a hostile write",
+   "leaked: %s" % hits)
+
+# 4. THE HAND-EDITED FILE. The read path filters too, or the guarantee only holds
+#    for files this process happened to write.
+with open(focus.LEDGER_PATH, "w", encoding="utf-8") as fh:
+    json.dump({"streak": 3, "mood": "disappointed in you",
+               "history": [{"at": "2026-01-01 11:00", "percent": 50,
+                            "app": APP_TARGET, "wentTo": HOST_ELSEWHERE},
+                           "not a row", 7, None]}, fh)
+got = focus.read_ledger()
+ok(set(got) == set(focus._LEDGER_DEFAULT),
+   "a key nobody declared is dropped on the way back in",
+   json.dumps(sorted(set(got) - set(focus._LEDGER_DEFAULT))))
+ok(len(got["history"]) == 1 and set(got["history"][0]) == set(focus.SESSION_ROW_KEYS),
+   "a hand-written row is filtered to eight keys, and a non-row is not a row",
+   json.dumps(got["history"]))
+ok(not [s for s in SENTINELS if s.lower() in json.dumps(got).lower()],
+   "so an identity typed into the file by hand cannot be read back out")
+ok(got["streak"] == 3 and got["history"][0]["percent"] == 50,
+   "while the values that ARE declared survive being read")
+
+# 5. THE CAP. A row per session, forever, is a file that grows forever.
+many = focus.read_ledger()
+many["history"] = [{"at": "2026-01-01 12:%02d" % (i % 60), "plannedMinutes": i,
+                    "activeMinutes": i, "onTargetMinutes": i, "drifts": 0,
+                    "secondsAdrift": 0, "percent": 100, "completed": True}
+                   for i in range(focus.LEDGER_HISTORY_MAX + 12)]
+focus._write_ledger(many)
+kept = focus.read_ledger()["history"]
+ok(len(kept) == focus.LEDGER_HISTORY_MAX
+   and kept[-1]["plannedMinutes"] == focus.LEDGER_HISTORY_MAX + 11,
+   "the history is capped, and it is the OLDEST rows that fall off",
+   json.dumps({"kept": len(kept), "last": kept[-1] if kept else None}))
+
+# 6. AND THE BROWSER NEVER SEES A ROW. The whitelist that guards the wire has no key
+#    for them, so the history is a file on this machine and nothing more.
+ok("history" not in focus.PUBLIC_KEYS and "history" not in focus.public_state(None)
+   and "history" not in focus.DIAG_KEYS,
+   "no row reaches the client: not in the state, not in the instrument")
+
+
+# ======================================= the instrument: booleans, statuses, no names
+#
+# /focus/diag is the first thing anybody reads when a feature misbehaves, which makes
+# it the first thing that would grow a field holding an app name. It is built the same
+# way the state is - a copy through a whitelist - and it is audited here the same way.
+
+print("")
+print("  the instrument  |  /focus/diag answers in booleans and fixed words\n")
+
+frontmost.update({"app": APP_TARGET, "host": HOST_TARGET})
+probe = focus.TargetReader()
+for _ in range(focus.SETTLE_TICKS):
+    probe.settle()
+seen = probe.diagnose()
+ok(probe.locked and seen["appLane"] == "on" and seen["tabLane"] == "on"
+   and seen["readerOnTarget"] and seen["appHash"] and seen["tabHash"],
+   "where you said you would be: both lanes on, both hash slots filled",
+   json.dumps(seen))
+frontmost.update({"app": APP_ELSEWHERE, "host": HOST_ELSEWHERE})
+away = probe.diagnose()
+ok(away["appLane"] == "off" and away["tabLane"] == "off"
+   and not away["readerOnTarget"],
+   "somewhere else entirely: both lanes off", json.dumps(away))
+frontmost.update({"app": APP_TARGET, "host": None})
+blind = probe.diagnose()
+ok(blind["appLane"] == "on" and blind["tabLane"] == "unknown"
+   and blind["readerOnTarget"] and blind["tabRead"] == "noendpoint",
+   "the right app with an unreadable site is UNKNOWN, and unknown is not a drift",
+   json.dumps(blind))
+frontmost.update({"app": APP_TARGET, "host": "127.0.0.1"})
+mine = probe.diagnose()
+ok(mine["frontIsHome"] and mine["tabRead"] == "read",
+   "and this page is named as home base rather than as a place you went",
+   json.dumps(mine))
+frontmost.update({"app": APP_TARGET, "host": HOST_TARGET})
+
+blob = json.dumps([seen, away, blind, mine])
+hits = [s for s in SENTINELS if s.lower() in blob.lower()]
+ok(not hits, "none of the four verdicts contains an identity", "leaked: %s" % hits)
+ok(not [s for s in SENTINELS
+        if s.lower() in json.dumps({k: repr(v) for k, v in vars(probe).items()}).lower()],
+   "and diagnose() puts nothing new on the reader while it works")
+
+# The whole payload, from the manager, with a session in flight.
+live = focus.FocusSession(minutes=30)
+focus.MANAGER._session = live
+for _ in range(focus.SETTLE_TICKS + 1):
+    clock.advance(2.0)
+    live.tick()
+diag = focus.MANAGER.diag()
+ok(set(diag) == set(focus.DIAG_KEYS),
+   "the payload's key set is DIAG_KEYS exactly, so a field cannot arrive quietly",
+   json.dumps(sorted(set(diag) ^ set(focus.DIAG_KEYS))))
+hits = [s for s in SENTINELS if s.lower() in json.dumps(diag).lower()]
+ok(not hits, "and it holds no identity with a session locked on", "leaked: %s" % hits)
+# Claim (2) for the instrument: it is not enough for a leak to be unfamiliar. Every
+# string it can emit has to be a word from a fixed set, so a hash, a truncation or a
+# base64 of an app name fails here even though it would trip no sentinel.
+VOCABULARY = set(focus.LANES) | set(focus.TAB_READS) | set(focus.STATES)
+words = {k: v for k, v in diag.items() if isinstance(v, str)}
+loose = {k: v for k, v in words.items()
+         if k != "backend" and v not in VOCABULARY}
+ok(not loose, "every word in it comes from a fixed set, backend aside",
+   json.dumps(loose))
+ok(re.match(r"^[A-Za-z0-9_]{1,24}$", diag["backend"] or ""),
+   "and backend is an identifier out of this module, or the word custom",
+   diag["backend"])
+ok(all(isinstance(v, (bool, int, str)) for v in diag.values())
+   and not any(isinstance(v, (list, dict)) for v in diag.values()),
+   "nothing nested: there is no container in it for a name to hide in")
+ok(diag["sessionOn"] and diag["locked"] and diag["appTarget"]
+   and diag["sessionOnTarget"] and diag["readerOnTarget"],
+   "it reports the session it was actually asked about", json.dumps(diag))
+poisoned = focus.public_diag({
+    "appLane": HOST_TARGET, "tabLane": APP_TARGET, "postureLane": HOST_ELSEWHERE,
+    "tabRead": APP_ELSEWHERE, "state": APP_WEIRD, "backend": "x " + HOST_WEIRD,
+    "pid": APP_TARGET, "locked": APP_TARGET, "settleTicks": HOST_TARGET})
+ok(not [s for s in SENTINELS if s.lower() in json.dumps(poisoned).lower()],
+   "and a hostile dict cannot get a word past the coercion", json.dumps(poisoned))
+ok(poisoned["appLane"] == "unknown" and poisoned["tabRead"] == "unknown"
+   and poisoned["state"] == "idle" and poisoned["backend"] == "custom"
+   and poisoned["pid"] == 0 and poisoned["settleTicks"] == 0,
+   "each unknown word falls back to the honest one", json.dumps(poisoned))
+focus.MANAGER._session = None
 
 # --- and nothing in this module writes the name anywhere at all ------------------
 writes = re.findall(r"open\([^)]*?,\s*[\"']([wa][^\"']*)[\"']", module_source)

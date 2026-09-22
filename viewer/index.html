@@ -1365,6 +1365,12 @@ async function loadLib() {
   let fxAt = 0;                    // when it arrived, so the clock can tick between
   let fxSpoken = 0;                // highest say-seq already out of the speakers
   let fxStream = null, fxPoll = null, fxAdopted = false;
+  /* True only while ?focusprobe=1 is running its battery. The probe feeds the card
+     synthetic states, so for those few hundred milliseconds this page must not talk
+     to the server at all - a push landing mid-case would repaint the card under the
+     assertion, and a beat going out would tell the server this tab is at home base
+     when nobody is looking at it. See fxProbeRun(). */
+  let probeRunning = false;
   let fxAnswerUntil = 0;           // while > now, the next thought heard is the intent
   let fxAnswerTimer = null;
   /* The tail of focus.py's "arming" line. Matched against what this tab just spoke,
@@ -1662,6 +1668,7 @@ async function loadLib() {
      away cannot leave a permanent excuse behind. Coming back here to talk is the
      one excursion that is never a drift. */
   setInterval(function () {
+    if (probeRunning) return;          // a synthetic session is not a man at his desk
     if (fxLive() && document.hasFocus()) fxFetch(true);
   }, FOCUS_HOME_BEAT_MS);
 
@@ -3768,12 +3775,458 @@ async function loadLib() {
     renderAnswer('', line, false, null);          // no ids, so the graph is untouched
     if (!speak(line)) idleStatus();               // held until the first click
   }
-  bootGreeting();
-  refreshBrain();          // the chip shows the real brain from the first moment
-  /* Read the session before opening the stream, so a tab that loads into a session
-     already in progress shows the right countdown on its first frame rather than
-     after the first push - and adopts the say-sequence before any of it is spoken. */
-  fxFetch(document.hasFocus()).then(fxConnect);
+  /* ==================================================================
+     ?focusdebug=1  ·  THE OVERLAY
+     ==================================================================
+     Everything you would otherwise learn by adding a console.log, on the glass, once
+     a second, while the thing you are debugging is happening. Two sources and it says
+     which is which: the session flags are the SERVER's own state as this tab last
+     received it, and the lock, the lanes and the foreground come from /focus/diag,
+     read from the running process rather than worked out again here. A debug panel
+     that recomputes what it is meant to be checking can only ever agree with itself.
+
+     Off unless asked for. It reads and prints; it decides nothing, speaks nothing and
+     sends nothing, so leaving it on costs a request a second and changes no
+     behaviour. pointer-events are off so it cannot swallow a click either. */
+  const DEBUG_ON = /(^|[?&])focusdebug=1(&|$)/.test(location.search);
+  const PROBE_ON = /(^|[?&])focusprobe=1(&|$)/.test(location.search);
+  const DEBUG_POLL_MS = 1000;
+  const DEBUG_STALE_MS = 3500;   // older than this and the panel says so, in red
+  let dbgBox = null, dbgDiag = null, dbgAt = 0, dbgTrouble = '';
+
+  function dbgPanel(id, corner) {
+    const box = document.createElement('div');
+    box.id = id;
+    box.style.cssText =
+      'position:fixed;' + corner + ';z-index:9999;pointer-events:none;' +
+      'font:11px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;' +
+      'background:rgba(6,10,16,.88);color:#cfe3ff;border:1px solid #23405f;' +
+      'border-radius:6px;padding:8px 10px;max-width:390px;white-space:pre-wrap;' +
+      'box-shadow:0 6px 24px rgba(0,0,0,.45)';
+    document.body.appendChild(box);
+    return box;
+  }
+
+  /* Only the flags that are TRUE, in a fixed order. A flag being absent is itself
+     information, and a line of "false false false" is unreadable at a glance. */
+  function dbgOn(pairs) {
+    const on = pairs.filter(function (p) { return !!p[1]; })
+                    .map(function (p) { return p[0]; });
+    return on.length ? on.join(' · ') : '—';
+  }
+
+  function dbgRow(label, value, bad) {
+    return '<span style="color:#6d8fb5">' + esc(label.padEnd(9)) + '</span>' +
+           '<span style="color:' + (bad ? '#ff8e7a' : '#cfe3ff') + '">' +
+           esc(value) + '</span>\n';
+  }
+
+  function dbgSpan(s) {
+    return Math.floor(s / 60) + 'm' + String(Math.round(s % 60)).padStart(2, '0') + 's';
+  }
+
+  function fxDebugPaint() {
+    if (!dbgBox) return;
+    const d = dbgDiag;
+    const age = dbgAt ? (performance.now() - dbgAt) : 0;
+    const stale = !d || age > DEBUG_STALE_MS;
+    let html = '<b style="color:#8fd0ff">focus debug</b>  ' +
+               '<span style="color:#6d8fb5">?focusdebug=1</span>\n';
+    if (!d) {
+      html += dbgRow('diag', dbgTrouble || 'no answer yet', true);
+    } else {
+      /* THE PROCESS FIRST, and for the reason the route exists: a fresh interpreter
+         passes every check while the long-lived one is frozen. If tickAgeS is not
+         about one second, stop reading the rest - nothing below it is current. */
+      html += dbgRow('process', 'pid ' + d.pid + ' · up ' + dbgSpan(d.uptimeS) +
+                                ' · ticks ' + d.ticks + ' · v' + d.version);
+      /* "not started" is not "DEAD". The thread is started by the first session and
+         then lives for the process, so a fresh server with no session has never
+         ticked and is perfectly healthy - and an instrument that shouts about that
+         teaches you to ignore it on the day it means something. */
+      const born = !d.tickAlive && d.ticks === 0 && !d.sessionOn;
+      html += dbgRow('tick', born ? 'not started · no session yet, which is correct'
+                                  : (d.tickAlive ? 'alive' : 'DEAD') +
+                                    ' · last ' + d.tickAgeS + 's ago',
+                     !born && (!d.tickAlive || d.tickAgeS > 5));
+      html += dbgRow('lanes', 'app ' + d.appLane + ' · tab ' + d.tabLane +
+                              ' · posture ' + d.postureLane,
+                     d.appLane === 'off' || d.tabLane === 'off');
+      html += dbgRow('lock', dbgOn([['session', d.sessionOn], ['locked', d.locked],
+                                    ['app hash', d.appTarget],
+                                    ['tab hash', d.tabTarget]]));
+      html += dbgRow('deferred', (d.deferred ? 'YES' : 'no') +
+                                 ' · settle ' + d.settleTicks + '/' + d.settleNeeded +
+                                 (d.candidate ? ' · candidate' : '') +
+                                 (d.deferred ? ' · arming ' + d.armingS + 's' : ''),
+                     d.deferred);
+      html += dbgRow('front', (d.appReadable ? 'readable' : 'UNREADABLE') +
+                              ' · ' + (d.frontIsBrowser ? 'browser' : 'native app') +
+                              ' · tab ' + d.tabRead +
+                              ' · jarvis tab ' + (d.frontIsHome ? 'YES' : 'no'),
+                     !d.appReadable);
+      /* DISAGREE is the stale-tick alarm, and it is only meaningful while a session is
+         LIVE: once sessionOn goes false the diag zeroes its whole session block on
+         purpose, so a fresh read that still sees your work would shout about a
+         disagreement with a session that has already ended. */
+      const cmp = d.sessionOn && d.readerOnTarget !== d.sessionOnTarget;
+      html += dbgRow('reader', 'on target ' + (d.readerOnTarget ? 'yes' : 'no') +
+                               (d.sessionOn
+                                  ? ' · session says ' +
+                                    (d.sessionOnTarget ? 'yes' : 'no') +
+                                    (cmp ? ' · DISAGREE' : '')
+                                  : ' · no session to compare with'),
+                     cmp);
+      html += dbgRow('cdp', (d.cdpAlive ? 'reachable' : 'no endpoint · app-only lock') +
+                            ' · ' + d.backend, !d.cdpAlive);
+      if (stale) html += dbgRow('diag', 'STALE ' + Math.round(age / 1000) + 's' +
+                                        (dbgTrouble ? ' · ' + dbgTrouble : ''), true);
+    }
+    /* The session flags, straight off the last push. Never recomputed here. */
+    if (!fx) {
+      html += dbgRow('session', 'nothing pushed yet');
+    } else {
+      html += dbgRow('session', fx.state + ' · seq ' + fx.seq +
+                                ' · clean ' + fx.cleanPct + '%');
+      html += dbgRow('flags', dbgOn([
+        ['onTarget', fx.onTarget], ['drifting', fx.drifting], ['grace', fx.inGrace],
+        ['home', fx.atHome], ['posture', fx.postureDrift], ['excused', fx.excused],
+        ['snoozed', fx.snoozed], ['blind', !fx.readable], ['deferred', fx.deferred],
+        ['tab', fx.tabWatched], ['drill', fx.drill], ['eyes', fx.eyesOn],
+        ['hushed', fx.hushed]]));
+      html += dbgRow('drift', 'drifts ' + fx.drifts + ' · adrift ' +
+                              fxSecs(fx.driftS) + ' · tier ' + fx.tier +
+                              ' · excused ' + fxSecs(fx.excusedS) +
+                              ' · unseen ' + fxSecs(fx.unknownS));
+      html += dbgRow('intent', (fx.awaitingIntent ? 'WINDOW OPEN' : 'window closed') +
+                               ' · ' + (fx.intent ? 'answered' : 'not answered'));
+    }
+    /* THE PIXELS. The last verdict the watch reached and the two thresholds it was
+       judged against, because "the nudge never fires" and "the nudge fires all the
+       time" are the same bug seen from either side of this number. */
+    const v = watchLastDiff;
+    html += dbgRow('pixels', !v
+      ? (watchOn ? 'watching · no frame compared yet' : 'watch off')
+      : v.fraction + ' vs gate ' + WATCH_TUNE.changedFraction +
+        ' → ' + (v.changed ? 'CHANGED' : 'still') +
+        ' · cells ' + v.cells + '/' + v.total + ' · worst ' + v.worst +
+        ' (delta ' + WATCH_TUNE.cellDelta + ')');
+    if (watchOn) {
+      html += dbgRow('still', Math.round(watchStillMs() / 1000) +
+                              's of ' + WATCH_TUNE.stillS +
+                              's · ticks ' + watchTicks + ' · nudges ' + watchNudges +
+                              (watchTrouble ? ' · ' + watchTrouble : ''));
+    }
+    dbgBox.innerHTML = html;
+  }
+
+  async function fxDebugPoll() {
+    try {
+      const res = await fetch('/focus/diag');
+      const data = await res.json();
+      if (data && data.diag) { dbgDiag = data.diag; dbgAt = performance.now(); }
+      dbgTrouble = (data && data.diag) ? '' : 'no diag in the reply';
+    } catch (e) {
+      dbgTrouble = 'unreachable: ' + (e && e.message ? e.message : e);
+    }
+    fxDebugPaint();
+  }
+
+  function fxDebugStart() {
+    dbgBox = dbgPanel('focusdebug', 'left:12px;bottom:12px');
+    fxDebugPaint();
+    fxDebugPoll();
+    setInterval(fxDebugPoll, DEBUG_POLL_MS);
+    /* Repainted between polls as well, so the numbers that move locally - the
+       stillness clock, the interpolated countdown - are not a second stale. */
+    setInterval(fxDebugPaint, 250);
+  }
+
+  /* ==================================================================
+     ?focusprobe=1  ·  THE PROBE PAGE
+     ==================================================================
+     The hermetic battery, run in a real browser, with the verdict written into
+     document.title so a script can read it without a debugger attached.
+
+     HERMETIC means it talks to nothing: no server, no model, no camera, no share.
+     Every case below is this page's own logic fed inputs chosen here - the card's
+     tone mapping, the clock formatter, the pixel gate, the phrase matchers - so a
+     failure is this page being wrong and nothing else. The page is detached from the
+     server before the first case runs, because a push landing mid-battery would
+     repaint the card under an assertion about it, and the fetch counter proves the
+     detachment held: case `hermetic` fails if anything went out on the wire.
+
+     Two of the cases exist to catch the environment lying rather than the code:
+     `viewport` asserts 1440 by 900, and `timers` asserts that a 250 ms timeout
+     actually took about 250 ms. A hidden or minimised tab is throttled hard, which
+     makes every time-based check quietly pass or quietly fail for reasons that have
+     nothing to do with the feature - so the probe says so in the title instead. */
+  const PROBE_W = 1440, PROBE_H = 900;
+  const probeCases = [];
+  let probeDone = false, probeFetches = 0, probeBox = null;
+  let probeChain = Promise.resolve();    // runs queue rather than interleave; see fxProbeRun
+
+  function probeState(over) {
+    /* A whole server state, shaped exactly like focus.public_state() - and with an
+       empty say queue, so applying it speaks nothing and the battery is silent. */
+    return Object.assign({
+      state: 'running', plannedS: 1800, elapsedS: 300, remainingS: 1500,
+      onTargetS: 280, driftS: 20, homeS: 0, excusedS: 0, unknownS: 0,
+      drifts: 1, tier: 1, onTarget: true, drifting: false, inGrace: false,
+      atHome: false, excused: false, snoozed: false, snoozeLeftS: 0, nagS: 45,
+      drill: false, appWatched: true, tabWatched: true, readable: true,
+      locked: true, deferred: false, awaitingIntent: false, intent: '',
+      cleanPct: 93, streak: 2, bestStreak: 5, sessions: 9, endedReason: '',
+      report: '', seq: 0, say: [], eyesOn: false, present: false, headDown: false,
+      slouched: false, postureDrift: false, hushed: false, hushLeftS: 0, nudges: 0
+    }, over || {});
+  }
+
+  function probeCard(over) {
+    fxApply(probeState(over));
+    return { card: $('focuscard').className,
+             state: $('focus-state').textContent,
+             mode: $('focus-mode').textContent };
+  }
+
+  /* One synthetic screen: a grey field, with `cells` of it moved by `delta`. Two
+     numbers in, a verdict out - which is the whole of what the watch decides on. */
+  function probeThumb(base, cells, delta) {
+    const n = WATCH_TUNE.thumbW * WATCH_TUNE.thumbH;
+    const out = new Uint8ClampedArray(n);
+    for (let i = 0; i < n; i++) out[i] = base + (i < cells ? delta : 0);
+    return out;
+  }
+
+  async function probeRun(name, fn) {
+    let ok = false, detail = '';
+    try {
+      const got = await fn();
+      if (got && typeof got === 'object') { ok = !!got.ok; detail = got.detail || ''; }
+      else { ok = !!got; }
+    } catch (e) {
+      ok = false;
+      detail = 'threw: ' + (e && e.message ? e.message : e);
+    }
+    probeCases.push({ name: name, ok: ok, detail: String(detail) });
+    probePaint();
+  }
+
+  function probeVerdict() {
+    const pass = probeCases.filter(function (c) { return c.ok; }).length;
+    return { pass: pass, total: probeCases.length,
+             failed: probeCases.filter(function (c) { return !c.ok; })
+                               .map(function (c) { return c.name; }) };
+  }
+
+  function probePaint() {
+    const v = probeVerdict();
+    /* THE TITLE, and the contract a script reads: the word after the count is the
+       whole verdict, and every case is named with its own PASS or FAIL after it.
+       PENDING while the battery is still running, so a script that reads too early
+       cannot mistake a partial pass for a finished one. */
+    document.title = 'PROBE ' + v.pass + '/' + v.total + ' ' +
+      (!probeDone ? 'PENDING' : v.failed.length ? 'FAIL' : 'PASS') + ' · ' +
+      probeCases.map(function (c) {
+        return c.name + ':' + (c.ok ? 'PASS' : 'FAIL');
+      }).join(' ');
+    if (!probeBox) probeBox = dbgPanel('focusprobe', 'left:12px;top:12px');
+    probeBox.innerHTML =
+      '<b style="color:#8fd0ff">focus probe</b>  ' +
+      '<span style="color:#6d8fb5">?focusprobe=1 · hermetic · detached</span>\n' +
+      dbgRow('verdict', v.pass + '/' + v.total + ' ' +
+                        (!probeDone ? 'running' : v.failed.length ? 'FAIL' : 'PASS'),
+             probeDone && v.failed.length > 0) +
+      '\n' + probeCases.map(function (c) {
+        return '<span style="color:' + (c.ok ? '#7fd39b' : '#ff8e7a') + '">' +
+               (c.ok ? 'PASS ' : 'FAIL ') + '</span>' + esc(c.name.padEnd(10)) +
+               '<span style="color:#6d8fb5">' + esc(c.detail) + '</span>';
+      }).join('\n');
+  }
+
+  async function fxProbeOnce() {
+    probeCases.length = 0;
+    probeDone = false;
+    probeRunning = true;
+    const realFetch = window.fetch;
+    window.fetch = function () {
+      probeFetches++;                       // counted, then allowed: the case that
+      return realFetch.apply(window, arguments);   // reports it must not also hide it
+    };
+    const startedFetches = probeFetches;
+
+    await probeRun('viewport', function () {
+      return { ok: innerWidth === PROBE_W && innerHeight === PROBE_H,
+               detail: innerWidth + 'x' + innerHeight + ' (want ' + PROBE_W + 'x' +
+                       PROBE_H + ')' };
+    });
+    await probeRun('visible', function () {
+      /* A hidden tab throttles every timer on this page, so this is not a nicety:
+         without it the two timing cases below are measuring the browser's power
+         saving rather than anything in this file. */
+      return { ok: document.visibilityState === 'visible',
+               detail: document.visibilityState +
+                       (document.hasFocus() ? ' · focused' : ' · not focused') };
+    });
+    await probeRun('timers', async function () {
+      const t0 = performance.now();
+      await new Promise(function (r) { setTimeout(r, 250); });
+      const dt = Math.round(performance.now() - t0);
+      return { ok: dt >= 240 && dt < 600, detail: dt + 'ms for a 250ms timeout' };
+    });
+    await probeRun('frames', async function () {
+      const t0 = performance.now();
+      const dt = await new Promise(function (r) {
+        const bail = setTimeout(function () { r(9999); }, 900);
+        requestAnimationFrame(function () {
+          clearTimeout(bail);
+          r(Math.round(performance.now() - t0));
+        });
+      });
+      return { ok: dt < 200, detail: dt + 'ms to the next frame' };
+    });
+    await probeRun('clock', function () {
+      const got = [fxSecs(0), fxSecs(9), fxSecs(61), fxSecs(599.6), fxSecs(3600)];
+      return { ok: got.join(' ') === '0:00 0:09 1:01 10:00 60:00',
+               detail: got.join(' ') };
+    });
+    await probeRun('phrases', function () {
+      const yes = isFocusPhrase('start a focus session for twenty five minutes');
+      const no = isFocusPhrase('what did I write about focus in my notes');
+      return { ok: yes && !no, detail: 'start=' + yes + ' question=' + no };
+    });
+    await probeRun('card-on', function () {
+      const c = probeCard({});
+      return { ok: c.card === 'live' && c.state === 'on target' &&
+                   c.mode === 'app + site',
+               detail: c.card + ' / ' + c.state + ' / ' + c.mode };
+    });
+    await probeRun('card-drift', function () {
+      const c = probeCard({ onTarget: false, drifting: true, drifts: 3 });
+      return { ok: /\bdrift\b/.test(c.card) && c.state === 'off target',
+               detail: c.card + ' / ' + c.state };
+    });
+    await probeRun('card-defer', function () {
+      const c = probeCard({ state: 'arming', deferred: true, locked: false,
+                            appWatched: false, tabWatched: false,
+                            awaitingIntent: true });
+      return { ok: /\bdeferred\b/.test(c.card) && c.state === 'not locked on yet' &&
+                   c.mode === 'go to your work · listening',
+               detail: c.card + ' / ' + c.state + ' / ' + c.mode };
+    });
+    await probeRun('card-blind', function () {
+      const c = probeCard({ onTarget: false, readable: false });
+      return { ok: /\bblind\b/.test(c.card) && c.state === 'cannot see',
+               detail: c.card + ' / ' + c.state };
+    });
+    await probeRun('card-phone', function () {
+      /* The eyes' verdict outranks a blind window reader: a head-down drift is
+         something the server DID see, just not on the glass. */
+      const c = probeCard({ onTarget: false, drifting: true, postureDrift: true,
+                            readable: false, eyesOn: true, headDown: true });
+      return { ok: c.state === 'head down', detail: c.card + ' / ' + c.state };
+    });
+    await probeRun('gate', function () {
+      const base = probeThumb(90, 0, 0);
+      const same = WATCH_DIFF.diff(base, probeThumb(90, 0, 0), WATCH_TUNE);
+      const noise = WATCH_DIFF.diff(base, probeThumb(90, 400, 4), WATCH_TUNE);
+      const clockCorner = WATCH_DIFF.diff(base, probeThumb(90, 4, 90), WATCH_TUNE);
+      const window_ = WATCH_DIFF.diff(base, probeThumb(90, 300, 90), WATCH_TUNE);
+      const odd = WATCH_DIFF.diff(base, new Uint8ClampedArray(4), WATCH_TUNE);
+      return { ok: !same.changed && !noise.changed && !clockCorner.changed &&
+                   window_.changed && !odd.comparable && odd.changed,
+               detail: 'same=' + same.changed + ' noise=' + noise.changed +
+                       ' clock=' + clockCorner.fraction + ' window=' +
+                       window_.fraction + ' gate=' + WATCH_TUNE.changedFraction };
+    });
+    await probeRun('luma', function () {
+      const grey = WATCH_DIFF.luma(new Uint8ClampedArray(
+        [255, 255, 255, 255, 0, 0, 0, 255, 255, 0, 0, 255]));
+      return { ok: grey.length === 3 && grey[0] === 255 && grey[1] === 0 &&
+                   grey[2] === 76,
+               detail: Array.from(grey).join(',') };
+    });
+    await probeRun('seq', function () {
+      /* A server that restarted counts from a lower seq. Re-basing on it is what
+         stops a rejoin from replaying the last five minutes of being told off. */
+      const before = fxSpoken;
+      /* Adopted, not replayed, both times - which is what a rejoining tab does and
+         is also what keeps this case silent: fxAbsorb returns before the voice. */
+      fxAdopted = false;
+      fxApply(probeState({ seq: 400, say: [{ seq: 400, kind: 'note', text: 'x' }] }));
+      const high = fxSpoken;
+      fxAdopted = false;
+      fxApply(probeState({ seq: 2, say: [{ seq: 2, kind: 'note', text: 'y' }] }));
+      return { ok: high === 400 && fxSpoken === 2,
+               detail: before + ' → ' + high + ' → ' + fxSpoken };
+    });
+    await probeRun('no-names', function () {
+      /* The browser's half of the privacy promise: there is no key in the state a
+         name could be in, and nothing on the card looks like a host or a binary. */
+      const state = probeState({});
+      const keys = Object.keys(state).filter(function (k) {
+        return /^(app|host|site|url|title|label|window|process)$/i.test(k);
+      });
+      const text = $('focus-state').textContent + ' ' + $('focus-mode').textContent +
+                   ' ' + $('focus-clock').textContent;
+      const looksLikeOne = /\.(com|net|org|io|exe|app)\b/i.test(text);
+      return { ok: !keys.length && !looksLikeOne,
+               detail: 'keys=' + JSON.stringify(keys) + ' card="' + text + '"' };
+    });
+    await probeRun('hermetic', function () {
+      const spent = probeFetches - startedFetches;
+      return { ok: spent === 0, detail: spent + ' requests during the battery' };
+    });
+
+    window.fetch = realFetch;
+    probeRunning = false;
+    probeDone = true;
+    /* The card is left as the last case set it, so whatever failed is still on the
+       screen to be looked at. The page is not going back to being a viewer: reload
+       without ?focusprobe=1 for that, which is said on the panel. */
+    probePaint();
+    return probeVerdict();
+  }
+
+  function fxProbeRun() {
+    /* Re-runnable, and ONE AT A TIME - which is the whole reason this wrapper exists.
+       The page runs the battery itself on load, and a harness then sizes the window to
+       1440x900 and runs it AGAIN so every case answers about the guaranteed viewport.
+       Called while the first run is still in its 250ms timer case, the reset at the top
+       of fxProbeOnce wipes the cases the first run has already recorded and then both
+       runs push into the same list: thirty cases, half of them measured at a viewport
+       nobody asserted, and a merged verdict that can report FAIL for a case which
+       passes at the asserted size. An instrument that does that is worse than none.
+       So calls queue: the second run starts when the first has finished, and each run
+       resets immediately before its own pushes. Sixteen cases, however many times you
+       ask, every one of them from the same run. */
+    probeChain = probeChain.then(fxProbeOnce, fxProbeOnce);
+    return probeChain;
+  }
+
+  function fxProbeStart() {
+    probePaint();                       // PENDING in the title from the first frame
+    /* One frame of settling first: the boot overlay is still fading, and a layout
+       that has not happened yet would make the viewport case measure the wrong
+       thing. Nothing here waits on the network, because nothing here uses it. */
+    setTimeout(fxProbeRun, 300);
+  }
+
+  if (PROBE_ON) {
+    /* THE HERMETIC PAGE. Every call below this comment talks to the server, and a
+       battery sharing a page with three background requests is not hermetic, it is
+       optimistic. So the probe page does not greet, does not read the brain and does
+       not open the session stream - and case `hermetic` proves it. */
+    fxProbeStart();
+  } else {
+    bootGreeting();
+    refreshBrain();        // the chip shows the real brain from the first moment
+    /* Read the session before opening the stream, so a tab that loads into a session
+       already in progress shows the right countdown on its first frame rather than
+       after the first push - and adopts the say-sequence before any of it is spoken. */
+    fxFetch(document.hasFocus()).then(fxConnect);
+    if (DEBUG_ON) fxDebugStart();
+  }
 
   setTimeout(function () { $('boot').classList.add('gone'); }, 450);
 
@@ -3941,6 +4394,34 @@ async function loadLib() {
       get spokenSeq() { return fxSpoken; },
       get streaming() { return !!fxStream && fxStream.readyState === 1; },
       get polling() { return !!fxPoll; }
+    },
+    /* THE INSTRUMENTS. ?focusdebug=1 for the overlay, ?focusprobe=1 for the battery -
+       and both reachable from here so a harness can drive them without a query
+       string, and so the panel's own numbers can be read rather than screen-scraped. */
+    probe: {
+      PROBE_W: PROBE_W, PROBE_H: PROBE_H,
+      run: fxProbeRun, state: probeState, thumb: probeThumb,
+      get on() { return PROBE_ON; },
+      get done() { return probeDone; },
+      get cases() { return probeCases.slice(); },
+      get verdict() { return probeVerdict(); },
+      get title() { return document.title; },
+      get fetches() { return probeFetches; },
+      /* The viewport the battery insists on, and what it actually got. A harness that
+         sizes the window wrongly is told here rather than in a lying result. */
+      get viewport() { return { w: innerWidth, h: innerHeight,
+                                visible: document.visibilityState === 'visible' }; }
+    },
+    debug: {
+      paint: fxDebugPaint, poll: fxDebugPoll, start: fxDebugStart,
+      get on() { return DEBUG_ON; },
+      /* The last /focus/diag payload and its age. If this is stale the overlay says
+         so in red, and so does this. */
+      get diag() { return dbgDiag; },
+      get ageMs() { return dbgAt ? Math.round(performance.now() - dbgAt) : null; },
+      get trouble() { return dbgTrouble; },
+      get shown() { return !!dbgBox; },
+      get text() { return dbgBox ? dbgBox.textContent : ''; }
     },
     camera: {
       CLUSTER_MIN: CLUSTER_MIN, SPOKEN_MAX_CHARS: SPOKEN_MAX_CHARS,
