@@ -1103,3 +1103,170 @@ ConnectionAbortedError: [WinError 10053] An established connection was aborted b
   "POST /model HTTP/1.1" 200 -
   brain (button): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
   "POST /model HTTP/1.1" 200 -
+  brain (button): anthropic/claude-fable-5 -> anthropic/claude-fable-5  [fallback line]
+  "POST /model HTTP/1.1" 200 -
+  brain (button): anthropic/claude-sonnet-4.6 -> anthropic/claude-sonnet-4.6  [fallback line]
+  "POST /model HTTP/1.1" 200 -
+  brain (button): anthropic/claude-sonnet-5 -> anthropic/claude-sonnet-5  [fallback line]
+  "POST /model HTTP/1.1" 200 -
+  brain (button): openai/gpt-6-astra-pro -> openai/gpt-6-astra-pro  [fallback line]
+  "POST /model HTTP/1.1" 200 -
+  brain (button): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  eyes: on -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 502 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 502 -
+  "GET / HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  eyes: on -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  looked: 47470 bytes 640x480 via OPUS 5 -> answer
+  "POST /look?q=Look%20at%20me HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /brains HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  eyes: off -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -

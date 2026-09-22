@@ -228,6 +228,18 @@ LINES = {
     # thing. The second sentence is a question, and the answer window opens on it.
     "arming": "{minutes} minutes, sir. Go to what you're working on and I'll lock on "
               "there. And what are we focusing on?",
+    # The same start line, for the machine that cannot take a tab-level lock at all:
+    # Chrome without --remote-debugging-port. One clause, inserted before the
+    # question, because the question has to stay last - the client opens the
+    # microphone on hearing it, and a sentence after it would be a sentence spoken
+    # into an open microphone. Said ONCE, at the start, and never per tick: the
+    # honesty belongs to the moment you commit to the session, and a caveat repeated
+    # every three seconds is a caveat you stop hearing. THE LAW: the session never
+    # silently downgrades. Silence about a missing lock is a wrong lock in a costume.
+    "arming_app_only": "{minutes} minutes, sir. Go to what you're working on and I'll "
+                       "lock on there. Tab-level locking is unavailable, sir - Chrome "
+                       "was not launched with the DevTools port, so I shall watch the "
+                       "application only. And what are we focusing on?",
     "locked": "Locked on. {minutes} minutes. I am watching, sir.",
     "locked_tab": "Locked on, site and all. {minutes} minutes. I am watching, sir.",
     # Deliberately four words. It is the audible half of the deferred lock: it fires
@@ -1887,7 +1899,7 @@ EYES = Eyes()
 class FocusSession:
     """One session. Every mutation happens under the manager's lock."""
 
-    def __init__(self, minutes, reader=None, seq0=0):
+    def __init__(self, minutes, reader=None, seq0=0, tab_capable=None):
 
         self.planned_s = float(max(MIN_MINUTES, min(MAX_MINUTES, int(minutes)))) * 60
         self.reader = reader or TargetReader()
@@ -1957,7 +1969,18 @@ class FocusSession:
         self._intent_used = False
         self._intent_deadline = time.monotonic() + INTENT_WINDOW_S
 
-        self._note("arming", minutes=int(self.planned_s // 60))
+        # CAN THIS MACHINE TAKE THE LOCK IT IS ABOUT TO PROMISE? Asked here, once, and
+        # kept: capability()["cdp"] is the same boolean /health reports, and it is false
+        # exactly when Chrome was started without --remote-debugging-port. The answer
+        # decides which start line is spoken and is then never re-asked - the tick reads
+        # the world fresh every second and has its own lines for losing the site
+        # mid-session ("notab", "settled_app_only"), so re-deciding this one here would
+        # only produce the same caveat twice. Passed in by tests and by any caller that
+        # already knows; None means find out.
+        self.tab_capable = bool(capability()["cdp"] if tab_capable is None
+                                else tab_capable)
+        self._note("arming" if self.tab_capable else "arming_app_only",
+                   minutes=int(self.planned_s // 60))
 
     # -- the one thing you tell me, rather than the many I read ---------------
 

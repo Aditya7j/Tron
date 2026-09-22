@@ -12,11 +12,52 @@
     --line:rgba(140,170,220,.16);
     --glass:rgba(10,16,30,.72);
     --accent:#7cc4ff;
+    /* The web's colour, and nothing else's. Kept in step with WEB_CYAN in the script
+       below, which washes the galaxy with the same value. */
+    --web:#22e0ff;
   }
   *{box-sizing:border-box}
   html,body{height:100%;margin:0;background:#000;color:var(--ink);
     font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
     overflow:hidden;-webkit-font-smoothing:antialiased}
+
+  /* ======================= THE STACK, WRITTEN DOWN ==========================
+     Every z-index in this file is in this list, and nothing outside this list has
+     one. Read it top to bottom and you know what covers what:
+
+         0   #stars      \
+         1   #nebula      |  THE GALAXY. Painted, never interactive.
+         2   #graph       |
+         5   #vignette   /
+         6   .hud           #title, #legend - the corners
+         7   #brainchip     which brain is answering
+         8   #brainmenu     and the door to change it
+         9   #brain         THE TOAST: the answer, the status line, the ask bar
+        10   #panel         the note side panel
+        11   #sharewash     the share's red frame - about the whole window, so over
+                            the panel as well
+        12   #focuscard     THE IN-PAGE CARD: the countdown
+        13   #sharing #watching #eyeing   the live-organ chips
+        14   #facecard      the watching face
+        20   #boot          the ignition curtain, over everything
+      -----   Document Picture-in-Picture: another WINDOW, above every application
+              on the desktop, and therefore above this entire list by the OS rather
+              than by anything CSS can say. See THE CARD'S SECOND HOME.
+        9999 the instruments (?focusdebug=1, ?focusprobe=1) - deliberately above
+             everything, because an overlay you have to hunt for is not an overlay.
+
+     THE LAW THAT SHAPES IT: galaxy < toast < panel < in-page card < PiP. The toast
+     sits UNDER the panel, which is the opposite of what it used to do and the reason
+     a spoken report no longer buries the panel's Connected chips. The card sits over
+     the panel, and THE LAYOUT GOVERNOR (in the script below) is what keeps it from
+     ever needing to: no surface may cover another surface's content, so the stack is
+     the last line of defence rather than the plan.
+
+     AND WHERE THE RECTANGLES ARE: not here. Every top/right/left/bottom of the four
+     governed surfaces - the panel, the in-page card, the toast, and the chip row
+     that includes the brain chip - is set by layout() and by nothing else. The rules
+     below carry appearance and the odd transition, and are silent about position.
+     ========================================================================= */
 
   /* ---------- deep space ---------- */
   #stars{position:fixed;inset:0;z-index:0;display:block}
@@ -34,6 +75,8 @@
 
   /* ---------- chrome ---------- */
   .hud{position:fixed;z-index:6}
+  /* #title is the one fixed corner nothing else competes for: top-left, its own
+     column, nothing ever docks beside it. So it keeps its own two numbers. */
   #title{top:22px;left:26px;max-width:38ch}
   #title h1{margin:0;font-size:15px;letter-spacing:.34em;text-transform:uppercase;
     font-weight:600;color:#fff;text-shadow:0 0 18px rgba(124,196,255,.45)}
@@ -48,7 +91,7 @@
      swap lands - a chip that lags is worse than no chip, because it is evidence
      for the wrong thing. Amber while a runtime swap is in force, so "not what
      config.json says" is visible without reading anything. */
-  #brainchip{position:fixed;z-index:7;left:26px;bottom:104px;display:flex;
+  #brainchip{position:fixed;z-index:7;display:flex;
     align-items:center;gap:7px;padding:5px 11px;border-radius:999px;
     border:1px solid var(--line);background:rgba(10,14,26,.72);
     backdrop-filter:blur(7px);font-size:10.5px;letter-spacing:.16em;
@@ -64,12 +107,15 @@
   #brainchip b{font-weight:600;letter-spacing:.16em;color:#fff}
   #brainchip.swapped b{color:#ffd88f}
   #brainchip.nokey b{color:#ffb4b4}
-  @media (max-width:860px){#brainchip{display:none}}
+  /* Too little room to sit beside the toast. The width that decides this is the
+     CANVAS's, not the window's - a wide window with the panel open is a narrow
+     canvas - so the governor sets the class and the old media query is gone. */
+  #brainchip.tight,#brainmenu.tight{display:none !important}
 
   /* THE BUTTON DOOR. The same list the voice can reach, because the menu is built
      from what the SERVER says it has - a hard-coded menu is a menu that offers you a
      model the allowlist will refuse. */
-  #brainmenu{position:fixed;z-index:8;left:26px;bottom:136px;display:none;
+  #brainmenu{position:fixed;z-index:8;display:none;
     flex-direction:column;gap:1px;padding:6px;border-radius:12px;
     border:1px solid var(--line);background:rgba(8,11,20,.94);
     backdrop-filter:blur(9px);min-width:186px;
@@ -85,7 +131,10 @@
   #brainmenu .hr{height:1px;margin:5px 4px;background:var(--line)}
   #brainmenu .home{color:var(--muted)}
 
-  #legend{top:22px;right:26px;text-align:right;max-width:30ch}
+  /* The legend shares the top-right lane with the card and the face, and it is last
+     in it: the governor walks the lane downwards and hands it whatever is left. */
+  #legend{text-align:right;max-width:30ch;
+    transition:top .22s cubic-bezier(.22,.7,.25,1),right .22s cubic-bezier(.22,.7,.25,1)}
   #legend .lg{display:flex;align-items:center;justify-content:flex-end;gap:8px;
     font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
     padding:2.5px 0;cursor:pointer;user-select:none;transition:color .2s,opacity .2s}
@@ -97,7 +146,9 @@
     color:rgba(143,160,192,.5);min-width:2ch}
 
   /* ---------- side panel ---------- */
-  #panel{position:fixed;z-index:7;top:0;right:0;height:100%;width:min(420px,88vw);
+  /* Its width is the governor's, because the width is what every other surface's
+     rectangle is derived FROM: the canvas is the window less this. */
+  #panel{position:fixed;z-index:10;
     background:linear-gradient(200deg,rgba(12,18,34,.94),rgba(6,9,18,.96));
     border-left:1px solid var(--line);backdrop-filter:blur(14px);
     transform:translateX(102%);transition:transform .45s cubic-bezier(.22,.7,.25,1);
@@ -129,9 +180,37 @@
   .chip i{width:6px;height:6px;border-radius:50%;background:currentColor;
     display:inline-block;margin-right:7px;box-shadow:0 0 7px currentColor}
 
-  /* ---------- brain / ask bar ---------- */
-  #brain{position:fixed;z-index:8;left:50%;transform:translateX(-50%);bottom:26px;
-    width:min(760px,calc(100vw - 52px));display:flex;flex-direction:column;gap:10px}
+  /* ---------- the other world: live web sources ----------
+     Cyan throughout, and cyan nowhere else in this file, so the eye learns the rule in
+     one glance: gold-and-folder-coloured means your own notes, cyan means the web. The
+     panel keeps its shape - a source reads like a note, and clicks like a link. */
+  #panel.web .kicker{color:var(--web)}
+  .srclist{display:flex;flex-direction:column;gap:12px;margin-top:2px}
+  a.src-item{display:block;text-decoration:none;border:1px solid rgba(34,224,255,.22);
+    background:rgba(34,224,255,.05);border-radius:12px;padding:11px 13px;
+    transition:.18s;color:var(--ink)}
+  a.src-item:hover{background:rgba(34,224,255,.13);border-color:rgba(34,224,255,.55);
+    transform:translateY(-1px)}
+  a.src-item .t{display:block;font-size:13px;line-height:1.35;color:#fff}
+  a.src-item .u{display:block;margin-top:5px;font-size:11px;color:var(--web);
+    word-break:break-all;letter-spacing:.01em}
+  .src-note{font-size:11.5px;color:rgba(143,160,192,.8);margin:0 0 16px;line-height:1.5}
+  a.wchip{border:1px solid rgba(34,224,255,.3);background:rgba(34,224,255,.07);
+    color:var(--web);border-radius:999px;padding:5px 11px;font-size:11.5px;
+    text-decoration:none;transition:.18s;max-width:100%;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+  a.wchip:hover{background:rgba(34,224,255,.2);border-color:rgba(34,224,255,.6);
+    transform:translateY(-1px)}
+  #answer.web{border-color:rgba(34,224,255,.4);
+    box-shadow:0 20px 60px rgba(0,0,0,.55),0 0 0 1px rgba(34,224,255,.12) inset}
+
+  /* ---------- brain / ask bar ----------
+     THE TOAST. Its column is the canvas's, never the window's: with the panel open it
+     narrows and re-centres in the space that is left, so a spoken report cannot bury
+     the panel's Connected chips. Width and left are the governor's. */
+  #brain{position:fixed;z-index:9;display:flex;flex-direction:column;gap:10px;
+    transition:left .22s cubic-bezier(.22,.7,.25,1),
+               width .22s cubic-bezier(.22,.7,.25,1)}
   #answer{display:none;background:var(--glass);border:1px solid var(--line);
     border-radius:16px;padding:16px 18px;backdrop-filter:blur(16px);
     box-shadow:0 20px 60px rgba(0,0,0,.55)}
@@ -203,13 +282,17 @@
   /* The same share, doing a second job: red for "this screen is being captured",
      amber ring for "and it is being diffed every five seconds". */
   #screen.watching{box-shadow:0 0 0 2px rgba(255,183,77,.55)}
-  #sharewash{position:fixed;inset:0;z-index:9;pointer-events:none;display:none;
+  #sharewash{position:fixed;inset:0;z-index:11;pointer-events:none;display:none;
     box-shadow:inset 0 0 0 2px rgba(255,77,94,.85),inset 0 0 70px rgba(255,77,94,.16);
     animation:washlive 2.4s ease-in-out infinite}
   #sharewash.live{display:block}
   @keyframes washlive{0%,100%{opacity:.55}50%{opacity:1}}
-  #sharing{position:fixed;z-index:12;top:16px;left:50%;transform:translateX(-50%);
-    display:none;align-items:center;gap:10px;padding:8px 10px 8px 14px;
+  /* The three chips are one ROW, stacked by the governor in the order they are loud
+     in: the share first, then the watch, then the eyes. Measured, not cascaded - a
+     hardcoded 62px is wrong the moment a chip wraps to two lines. */
+  #sharing{position:fixed;z-index:13;display:none;
+    align-items:center;gap:10px;padding:8px 10px 8px 14px;
+    transition:top .2s cubic-bezier(.22,.7,.25,1),left .22s cubic-bezier(.22,.7,.25,1);
     border-radius:999px;background:rgba(38,6,10,.86);border:1px solid rgba(255,77,94,.7);
     backdrop-filter:blur(12px);box-shadow:0 10px 34px rgba(255,0,30,.28);
     font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#ffd7dc}
@@ -239,16 +322,14 @@
     background:rgba(157,124,255,.18)}
   #eye.on.bent{color:#ffd08a;border-color:rgba(255,179,71,.8);
     background:rgba(255,179,71,.16)}
-  #eyeing{position:fixed;z-index:12;top:16px;left:50%;transform:translateX(-50%);
-    display:none;align-items:center;gap:10px;padding:8px 10px 8px 14px;
+  #eyeing{position:fixed;z-index:13;display:none;
+    align-items:center;gap:10px;padding:8px 10px 8px 14px;
+    transition:top .2s cubic-bezier(.22,.7,.25,1),left .22s cubic-bezier(.22,.7,.25,1);
     border-radius:999px;background:rgba(20,12,38,.88);
     border:1px solid rgba(157,124,255,.6);backdrop-filter:blur(12px);
     box-shadow:0 10px 34px rgba(110,70,255,.24);font-size:11px;letter-spacing:.2em;
     text-transform:uppercase;color:#e4dbff}
   #eyeing.live{display:flex}
-  /* Both chips can be live at once, and the share is the louder claim, so it keeps
-     the top slot and this one steps down a row rather than hiding behind it. */
-  #sharing.live ~ #eyeing{top:62px}
   #eyeing .lid{width:9px;height:9px;border-radius:50%;background:#9d7cff;
     box-shadow:0 0 12px #9d7cff;animation:pulse 1.6s ease-in-out infinite;
     flex:0 0 auto}
@@ -265,19 +346,14 @@
      camera that uploads nothing: it is a share that sits there costing nothing and
      occasionally decides to spend a thought. The chip counts the stillness out loud
      in numbers, which is the only honest way to show a clock you cannot hear. */
-  #watching{position:fixed;z-index:12;top:16px;left:50%;transform:translateX(-50%);
-    display:none;align-items:center;gap:10px;padding:8px 10px 8px 14px;
+  #watching{position:fixed;z-index:13;display:none;
+    align-items:center;gap:10px;padding:8px 10px 8px 14px;
+    transition:top .2s cubic-bezier(.22,.7,.25,1),left .22s cubic-bezier(.22,.7,.25,1);
     border-radius:999px;background:rgba(36,24,6,.88);
     border:1px solid rgba(255,183,77,.62);backdrop-filter:blur(12px);
     box-shadow:0 10px 34px rgba(255,150,0,.22);font-size:11px;letter-spacing:.2em;
     text-transform:uppercase;color:#ffe7c2}
   #watching.live{display:flex}
-  /* Three chips can be live at once. The share is the loudest claim so it keeps the
-     top slot; the watch IS a share, so it sits under it, and the eyes step down
-     again. Each rule names the chips above it, so no chip can hide behind another. */
-  #sharing.live ~ #watching{top:62px}
-  #sharing.live ~ #eyeing{top:62px}
-  #sharing.live ~ #watching.live ~ #eyeing{top:108px}
   #watching .eye{width:9px;height:9px;border-radius:50%;background:#ffb74d;
     box-shadow:0 0 12px #ffb74d;animation:pulse 2.6s ease-in-out infinite;
     flex:0 0 auto}
@@ -289,16 +365,25 @@
     border:1px solid rgba(255,183,77,.45)}
   #watching button:hover{background:rgba(255,183,77,.38)}
 
-  /* THE FACE, in-page fallback. The real article is a Document Picture-in-Picture
-     window that sits above every other application; this is what you get in a
-     browser that has none, and it says so rather than pretending to be pinned. */
-  #facecard{position:fixed;z-index:14;top:16px;right:16px;display:none;
-    width:196px;padding:12px 13px;border-radius:16px;
+  /* THE FACE. One element, two homes: the top row of the desktop card, or - when the
+     browser will not give us a window - the same row pinned in the page's top-right
+     lane, under the countdown. These rules serve BOTH, because the desktop card
+     inherits this stylesheet whole; the second home is not a second design. */
+  #facecard{position:fixed;z-index:14;display:none;
+    padding:12px 13px;border-radius:16px;
     background:rgba(14,10,4,.92);border:1px solid rgba(255,183,77,.5);
     backdrop-filter:blur(14px);box-shadow:0 18px 50px rgba(0,0,0,.6);
-    color:#ffe7c2;font-size:11px;letter-spacing:.06em}
+    color:#ffe7c2;font-size:11px;letter-spacing:.06em;
+    transition:top .22s cubic-bezier(.22,.7,.25,1),right .22s cubic-bezier(.22,.7,.25,1)}
   #facecard.show{display:block}
   #facecard .row{display:flex;align-items:center;gap:10px}
+  /* FACE_MARKUP's own wrapper, styled here rather than in a string that only the
+     desktop window ever saw - which is why the in-page face used to stack its eye
+     above its words while the pinned one sat in a row. */
+  #facecard .wrap{display:flex;align-items:center;gap:11px}
+  #facecard .wrap.think{border-radius:12px;
+    box-shadow:inset 0 0 26px rgba(255,150,0,.22)}
+  #facecard .t{text-transform:uppercase;letter-spacing:.2em;font-size:10px}
   #facecard .mark{width:38px;height:38px;flex:0 0 auto}
   #facecard .t{text-transform:uppercase;letter-spacing:.2em;font-size:10px}
   #facecard .s{color:rgba(255,231,194,.66);font-variant-numeric:tabular-nums;
@@ -336,12 +421,14 @@
   #focusbtn.on.drift{color:#ff6b7f;border-color:rgba(255,107,127,.7);
     background:rgba(255,107,127,.16)}
 
-  #focuscard{position:fixed;z-index:11;top:22px;right:26px;width:238px;display:none;
+  #focuscard{position:fixed;z-index:12;display:none;
     padding:12px 15px 11px;border-radius:15px;
     background:linear-gradient(200deg,rgba(12,18,34,.9),rgba(6,9,18,.94));
     border:1px solid var(--line);backdrop-filter:blur(13px);
     box-shadow:0 14px 44px rgba(0,0,0,.55);
-    transition:border-color .35s,box-shadow .35s,background .35s}
+    transition:border-color .35s,box-shadow .35s,background .35s,
+      top .22s cubic-bezier(.22,.7,.25,1),right .22s cubic-bezier(.22,.7,.25,1),
+      width .22s cubic-bezier(.22,.7,.25,1)}
   #focuscard.live{display:block}
   #focuscard .fh{display:flex;align-items:center;gap:7px;font-size:10px;
     letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
@@ -408,7 +495,32 @@
   #focuscard.blind .fh i{background:#9d7cff;box-shadow:0 0 11px #9d7cff}
   #focuscard.ended{border-color:rgba(75,224,184,.5)}
   #focuscard.ended .fh i{animation:none}
-  @media (max-width:720px){#focuscard{display:none !important}}
+  /* THE COMPACT PILL. When the canvas left of an open note panel is too narrow for
+     both, the card gives up its words rather than its clock: time and tint, nothing
+     else. It does not fight the panel for room and it does not vanish either, because
+     a countdown you cannot see is a countdown you will overrun. The governor adds
+     this class - never a media query, which cannot know the PANEL is what took the
+     room. */
+  #focuscard.pill{width:auto;padding:9px 13px 8px}
+  /* Narrower than the pill itself: there is no honest rectangle left, so the card
+     stands down rather than sitting on the panel. The governor's last resort. */
+  #focuscard.nofit{display:none !important}
+
+  /* THE STOPWATCH'S FRIEND. Every governed surface moves under a transition, which is
+     right for the eye and useless to a measurement: a rectangle read one frame after a
+     panel opens is a rectangle half way there. The probe's `lane` case turns the motion
+     off, measures the geometry - which is what the no-overlap law is about - and reads
+     the durations separately from computed style. Nothing else in the page sets this. */
+  html.nomove *{transition:none !important;animation:none !important}
+  #focuscard.pill .fh b,#focuscard.pill #focus-intent,
+  #focuscard.pill #focus-stats,#focuscard.pill .frow{display:none}
+  #focuscard.pill #focus-clock{margin:5px 0 0;font-size:22px}
+  #focuscard.pill .fbar{margin:7px 0 0}
+  /* THE RETIREMENT. An ended session's card holds its last line for CARD_RETIRE_S and
+     then leaves; prime real estate is not a graveyard. Slower than a layout move on
+     purpose - this one you are meant to notice going. */
+  #focuscard.retired{opacity:0;transform:translateY(-8px);pointer-events:none;
+    transition:opacity .42s,transform .42s}
 
   /* ---------- boot / error ---------- */
   #boot{position:fixed;inset:0;z-index:20;display:grid;place-items:center;
@@ -662,7 +774,190 @@ const FINISH_MS = 900;
 /* ============================================================== helpers ==== */
 const PALETTE = ['#7cc4ff','#ffb347','#9d7cff','#4be0b8','#ff7a9c','#d6e35b',
                  '#ff9d5c','#6ce0ff','#c0a5ff','#9ee87f'];
-const $ = function (id) { return document.getElementById(id); };
+/* THE SECOND HOME, and the one line in this file that knows about it.
+   The countdown card does not get rebuilt on the desktop - it is MOVED there, into a
+   Document Picture-in-Picture window, so that every listener, every button handler and
+   the live SSE paint keep working on the same element. The cost of moving it is that
+   an element in another document is invisible to this one's getElementById, and the
+   forty-odd $('focus-clock') calls in this file would all start returning null the
+   moment the card left the page. So the lookup itself knows where the card went: the
+   page first, then whichever document is currently hosting it. One null check while
+   nothing has been popped out, which is most of the time. See deskAdopt(). */
+let deskDoc = null;              // the document the card lives in, when not this one
+const $ = function (id) {
+  const el = document.getElementById(id);
+  if (el) return el;
+  return deskDoc ? deskDoc.getElementById(id) : null;
+};
+
+/* ==================================================== THE LAYOUT GOVERNOR ====
+   ONE AUTHORITY over the rectangles of four surfaces:
+
+     1. the note side panel      #panel
+     2. the in-page card         #focuscard   (and #facecard, #legend, which share
+                                               its top-right lane)
+     3. the answer toast         #brain
+     4. the status / chip row    #brainchip, #brainmenu, #sharing, #watching, #eyeing
+
+   Nothing in this file sets top, right, left, bottom, width or the centring
+   transform of any of those elements. They used to set their own, each of them
+   correct in isolation, and the result was a report card written across a note
+   title and a live chip buried under a toast. Overlap is not a styling bug you can
+   fix inside one rule - it is a question about the OTHER surfaces, and only one
+   place can answer it.
+
+   The deciding measurement is the CANVAS, not the window: the panel is 420px of
+   window that no longer belongs to anybody else, so every derived rectangle is
+   computed against `vw - panelW` and re-derived when the panel opens, when it
+   closes, and when the window resizes. Stale rectangles are never trusted.
+
+   Elements that have left for the Document Picture-in-Picture window are skipped -
+   they are laid out by DESK_CSS in a document this function does not own, and the
+   in-page card cannot overlap anything while it is not in the page at all. That is
+   Addendum A's one-card-two-homes law paying for itself.
+
+   Every move is a CSS transition of MOVE_MS, declared on each element's own rule,
+   so this function only ever assigns coordinates - it never animates by hand. */
+const LAYOUT = {
+  EDGE: 26,          // the window margin the title and legend have always used
+  TOP: 22,           // first slot of the top-right lane
+  CHIP_TOP: 16,      // first slot of the top-centre chip stack
+  GAP: 12,           // between two surfaces in the same lane
+  CARD_W: 238,       // the countdown card, full dress
+  CARD_MIN: 290,     // below this much canvas it wears the compact pill
+  CARD_FLOOR: 210,   // and below THIS it stands down entirely
+  TOAST_MAX: 760,    // the toast's full width, panel closed
+  TOAST_MIN: 220,
+  CHIP_MIN: 860,     // the brain chip and its menu hide below this much canvas
+  MOVE_MS: 220,      // every transition in the governed rules matches this
+  PANEL_MAX: 420,    // must match nothing: this IS the panel's width
+  PANEL_VW: 0.88,
+};
+let layoutLast = null;    // the last set of rectangles, for the probe and __galaxy
+
+/* An element this document may position: in the page, and not adopted away. */
+function layoutMine(id) {
+  const el = document.getElementById(id);
+  return el && el.ownerDocument === document ? el : null;
+}
+/* Visible enough to occupy a slot, which is how a chip that is not live gets no room
+   rather than an empty gap. getClientRects() and not offsetParent: every surface here is
+   position:fixed, and offsetParent is null for a fixed element whether it is displayed or
+   not - a test that answers "no" for all four of them is a lane that never advances. */
+function layoutShown(el) {
+  return !!(el && el.getClientRects().length);
+}
+
+/* vwOverride is for the probe and for nothing else: "the canvas is too narrow for both"
+   is a real branch with real consequences, and the only other way to reach it is to
+   resize the harness's window and make every other case measure a viewport it did not
+   ask for. Callers in the page pass nothing - which is also why the two listeners below
+   are wrapped rather than passed directly, since an Event is not a width. */
+function layout(vwOverride) {
+  const vw = vwOverride || window.innerWidth, vh = window.innerHeight;
+  const panel = layoutMine('panel');
+  const panelOpen = !!(panel && panel.classList.contains('open'));
+  const panelW = Math.min(LAYOUT.PANEL_MAX, Math.round(vw * LAYOUT.PANEL_VW));
+  /* THE RESERVED LANE. The canvas is what is left of the window, and the panel edge
+     is a wall: no governed surface is placed to the right of it while it is open. */
+  const taken = panelOpen ? panelW : 0;
+  const canvasW = Math.max(0, vw - taken);
+
+  if (panel) {
+    panel.style.top = '0px';
+    panel.style.right = '0px';
+    panel.style.height = '100%';
+    panel.style.width = panelW + 'px';
+  }
+
+  /* ---- 2. the top-right lane: countdown card, face row, legend ---- */
+  const laneRight = taken + LAYOUT.EDGE;
+  const card = layoutMine('focuscard');
+  if (card) {
+    /* The card decides its DRESS before the lane measures it, because a pill is a
+       different height. Full dress needs room for itself and a margin either side. */
+    const fits = canvasW - LAYOUT.EDGE * 2;
+    card.classList.toggle('nofit', fits < LAYOUT.CARD_FLOOR);
+    card.classList.toggle('pill', fits >= LAYOUT.CARD_FLOOR && fits < LAYOUT.CARD_MIN);
+    if (!card.classList.contains('pill')) card.style.width = LAYOUT.CARD_W + 'px';
+    else card.style.width = '';
+  }
+  let laneTop = LAYOUT.TOP;
+  ['focuscard', 'facecard', 'legend'].forEach(function (id) {
+    const el = layoutMine(id);
+    if (!el) return;
+    el.style.right = laneRight + 'px';
+    el.style.top = laneTop + 'px';
+    if (layoutShown(el)) laneTop += el.offsetHeight + LAYOUT.GAP;
+  });
+
+  /* ---- 3. the answer toast: never wider than the canvas ---- */
+  /* A spoken report is long, and the CONNECTED chips live behind its right-hand end.
+     Panel open, the toast stops at the panel edge; panel closed, it goes back to its
+     full width. The two are never in the same column at the same time. */
+  const toast = layoutMine('brain');
+  if (toast) {
+    const w = Math.max(LAYOUT.TOAST_MIN,
+                       Math.min(LAYOUT.TOAST_MAX, canvasW - LAYOUT.EDGE * 2));
+    toast.style.width = w + 'px';
+    toast.style.left = Math.max(LAYOUT.EDGE / 2, (canvasW - w) / 2) + 'px';
+    toast.style.right = 'auto';
+    toast.style.bottom = LAYOUT.EDGE + 'px';
+    toast.style.transform = 'none';       // the old translateX(-50%) centring, retired
+  }
+
+  /* ---- 4. the status row and the live chips ---- */
+  const bchip = layoutMine('brainchip'), bmenu = layoutMine('brainmenu');
+  if (bchip) {
+    bchip.style.left = LAYOUT.EDGE + 'px';
+    bchip.style.bottom = '104px';
+    bchip.classList.toggle('tight', canvasW < LAYOUT.CHIP_MIN);
+  }
+  if (bmenu) {
+    bmenu.style.left = LAYOUT.EDGE + 'px';
+    bmenu.style.bottom = '136px';
+    bmenu.classList.toggle('tight', canvasW < LAYOUT.CHIP_MIN);
+  }
+  /* Three chips can be live at once and any one of them can be the only one. This
+     stack replaces the sibling-selector cascade that used to hard-code 62px and
+     108px: measured heights, in order, centred on the CANVAS rather than the window
+     so an open panel does not push them under itself. */
+  let chipTop = LAYOUT.CHIP_TOP;
+  const chipMid = Math.round(canvasW / 2);
+  ['sharing', 'watching', 'eyeing'].forEach(function (id) {
+    const el = layoutMine(id);
+    if (!el) return;
+    el.style.left = chipMid + 'px';
+    el.style.transform = 'translateX(-50%)';
+    el.style.top = chipTop + 'px';
+    if (layoutShown(el)) chipTop += el.offsetHeight + 8;
+  });
+
+  layoutLast = {
+    vw: vw, vh: vh, panelOpen: panelOpen, panelW: taken, canvasW: canvasW,
+    laneRight: laneRight, laneBottom: laneTop,
+    card: card ? { pill: card.classList.contains('pill'),
+                   nofit: card.classList.contains('nofit'),
+                   inPage: true } : { inPage: false },
+    toast: toast ? { width: parseFloat(toast.style.width),
+                     left: parseFloat(toast.style.left) } : null,
+    chipsBottom: chipTop, tight: canvasW < LAYOUT.CHIP_MIN,
+  };
+  return layoutLast;
+}
+
+/* A panel toggle and a resize both re-run it. Three places in this file add or
+   remove #panel.open; watching the attribute means none of them has to remember to
+   call the governor, which is the only way "none positions itself" stays true. */
+window.addEventListener('resize', function () { layout(); });
+(function () {
+  const panel = document.getElementById('panel');
+  if (panel && window.MutationObserver) {
+    new MutationObserver(function () { layout(); }).observe(panel,
+      { attributes: true, attributeFilter: ['class'] });
+  }
+})();
+layout();
 
 function hexToRgba(hex, alpha) {
   const n = parseInt(hex.slice(1), 16);
@@ -676,6 +971,28 @@ function mixToWhite(hex, t) {
   const up = function (v) { return Math.round(v + (255 - v) * k); };
   return 'rgb(' + up((n >> 16) & 255) + ',' + up((n >> 8) & 255) + ',' +
          up(n & 255) + ')';
+}
+/* Blend ANY colour this file produces - '#rrggbb' or 'rgba(r,g,b,a)' - towards a hex
+   target by t, leaving the alpha exactly as it was. mixToWhite above cannot do this
+   job: the web pulse washes over colours that have already been dimmed or muted, and
+   re-deriving them from the group would throw away the dimming, which would make a
+   hidden folder light up cyan the moment the web answered something. */
+function washTo(color, hex, t) {
+  const k = Math.max(0, Math.min(1, t));
+  const to = parseInt(hex.slice(1), 16);
+  let r = 255, g = 255, b = 255, a = 1;
+  const parts = /^rgba?\(([^)]+)\)$/.exec(String(color));
+  if (parts) {
+    const p = parts[1].split(',').map(Number);
+    r = p[0]; g = p[1]; b = p[2];
+    if (p.length > 3) a = p[3];
+  } else {
+    const n = parseInt(String(color).slice(1), 16);
+    r = (n >> 16) & 255; g = (n >> 8) & 255; b = n & 255;
+  }
+  const mix = function (from, toward) { return Math.round(from + (toward - from) * k); };
+  return 'rgba(' + mix(r, (to >> 16) & 255) + ',' + mix(g, (to >> 8) & 255) + ',' +
+         mix(b, to & 255) + ',' + a + ')';
 }
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
@@ -791,6 +1108,16 @@ async function loadLib() {
   const PULSE_MS = 1600;
   let pulseId = null, pulseAmt = 0;
 
+  /* ---- web pulse: the OTHER world announcing itself. A note answer lights the one
+     star it came from, in that star's own colour; a web answer came from nowhere in
+     this galaxy at all, so there is nothing to light - and lighting something anyway
+     would be a lie about the source. So the whole sky washes cyan for a moment
+     instead: "that did not come from in here". Cyan because nothing in PALETTE is
+     this colour, which makes it unmistakable and unmistakably not a folder. ---- */
+  const WEB_PULSE_MS = 2200;
+  const WEB_CYAN = '#22e0ff';
+  let webAmt = 0;
+
   /* ---- the graph ---- */
   const Graph = ForceGraph3D()(document.getElementById('graph'))
     .backgroundColor('rgba(0,0,0,0)')
@@ -801,7 +1128,11 @@ async function loadLib() {
     .nodeOpacity(1)
     .nodeVal(function (n) {
       const base = 1.1 + degOf(n.id) * 0.8;
-      return (n.id === pulseId) ? base + pulseAmt * base * 3.2 : base;
+      if (n.id === pulseId) return base + pulseAmt * base * 3.2;
+      // The web swell is deliberately slight - a breath across the whole sky rather
+      // than a flare in one place. A big swell everywhere reads as "all of these
+      // matched", which is the opposite of what a web answer means.
+      return webAmt > 0 ? base + webAmt * base * 0.45 : base;
     })
     .nodeLabel(function (n) {
       return '<div>' + esc(n.label) + '<span class="tg">' + esc(n.group) +
@@ -809,21 +1140,27 @@ async function loadLib() {
     })
     .nodeColor(function (n) {
       const c = groupColor(n);
-      // A pulsing node ignores dimming and muting: the whole point is being seen.
+      // A pulsing node ignores dimming and muting: the whole point is being seen. It
+      // also outranks the cyan wash - a note that was just born came from in here.
       if (n.id === pulseId && pulseAmt > 0) return mixToWhite(c, pulseAmt);
-      if (hidden.has(n.group)) return hexToRgba(c, 0.05);
-      if (!hiNodes.size) return c;
-      if (selected === n.id) return '#ffffff';
-      if (hiNodes.has(n.id)) return c;
-      return hexToRgba(c, 0.09);
+      let out;
+      if (hidden.has(n.group)) out = hexToRgba(c, 0.05);
+      else if (!hiNodes.size) out = c;
+      else if (selected === n.id) out = '#ffffff';
+      else if (hiNodes.has(n.id)) out = c;
+      else out = hexToRgba(c, 0.09);
+      // The wash goes on LAST, over whatever this node was already, so a hidden folder
+      // stays hidden and a dimmed one stays dimmed. See washTo.
+      return webAmt > 0 ? washTo(out, WEB_CYAN, webAmt * 0.85) : out;
     })
     .linkColor(function (l) {
       const s = byId.get(idOf(l.source)), t = byId.get(idOf(l.target));
       if (!s || !t || hidden.has(s.group) || hidden.has(t.group)) {
         return 'rgba(120,150,200,0.02)';
       }
-      if (hiLinks.has(l)) return hexToRgba(groupColor(s), 0.9);
-      return hiLinks.size ? 'rgba(120,150,200,0.06)' : 'rgba(140,175,225,0.32)';
+      const out = hiLinks.has(l) ? hexToRgba(groupColor(s), 0.9)
+                : hiLinks.size ? 'rgba(120,150,200,0.06)' : 'rgba(140,175,225,0.32)';
+      return webAmt > 0 ? washTo(out, WEB_CYAN, webAmt * 0.7) : out;
     })
     .linkWidth(function (l) { return hiLinks.has(l) ? 1.2 : 0.35; })
     .linkOpacity(0.85)
@@ -979,6 +1316,13 @@ async function loadLib() {
   /* ---- side panel ---- */
   function openPanel(n) {
     const c = groupColor(n);
+    // Undo anything openSources() did to this same panel. A note shown in the web
+    // panel's clothes would be claiming to have come from outside, which is the one
+    // confusion this whole colour scheme exists to prevent.
+    $('panel').classList.remove('web');
+    $('p-excerpt').className = '';
+    $('p-neighbours').className = 'chips';
+    $('p-nb-head').textContent = 'Connected';
     $('panel').querySelector('.kicker').style.color = c;
     $('p-group').textContent = n.group;
     $('p-label').textContent = n.label;
@@ -1004,6 +1348,71 @@ async function loadLib() {
     b.innerHTML = '<i></i><span style="color:var(--ink)">' + esc(n.label) + '</span>';
     b.onclick = function () { focusNode(n, true); };
     return b;
+  }
+
+  /* ---- the same panel, the other world ----
+     A web answer cites nothing in the galaxy, so the panel shows what it DOES cite:
+     three links, with their real addresses visible. Never a file path - there is no
+     file - and never a node, because no node had anything to do with it.
+
+     Two rules worth stating, because both are about not lying to the reader:
+     the href is checked to be http(s) HERE as well as on the server, so a malformed
+     or javascript: URL becomes dead text rather than a click; and the address is shown
+     in full rather than prettified, because a citation you cannot read is not one. */
+  function safeUrl(url) {
+    const raw = String(url == null ? '' : url).trim();
+    return /^https?:\/\/[^\s]+$/i.test(raw) ? raw : '';
+  }
+
+  function sourceLink(src, small) {
+    const href = safeUrl(src && src.url);
+    const title = String((src && src.title) || href || 'untitled');
+    const node = document.createElement(href ? 'a' : 'span');
+    node.className = small ? 'wchip' : 'src-item';
+    if (href) {
+      node.href = href;
+      node.target = '_blank';
+      // noopener AND noreferrer: a page opened from here has no handle back on this
+      // tab, and is not told where its reader came from.
+      node.rel = 'noopener noreferrer';
+      node.title = href;
+    }
+    if (small) {
+      node.textContent = title;
+    } else {
+      const t = document.createElement('span');
+      t.className = 't';
+      t.textContent = title;
+      const u = document.createElement('span');
+      u.className = 'u';
+      u.textContent = href || '(no usable address)';
+      node.appendChild(t);
+      node.appendChild(u);
+    }
+    return node;
+  }
+
+  function openSources(question, sources, backend) {
+    const list = (sources || []).filter(function (s) { return safeUrl(s && s.url); });
+    $('panel').classList.add('web');
+    $('panel').querySelector('.kicker').style.color = '';   // the .web rule owns it now
+    $('p-group').textContent = 'live web';
+    $('p-label').textContent = question || 'From the web';
+    $('p-meta').textContent = list.length + ' source' + (list.length === 1 ? '' : 's') +
+      ' · fetched just now' + (backend ? ' · via ' + backend : '');
+
+    // The excerpt slot says what this panel IS, once, plainly. Then the links.
+    $('p-excerpt').className = 'src-note';
+    $('p-excerpt').textContent = list.length
+      ? 'Answered from these pages, not from your notes. Nothing here has been saved.'
+      : 'Nothing usable came back.';
+    $('p-nb-head').style.display = list.length ? '' : 'none';
+    $('p-nb-head').textContent = 'Sources';
+    const box = $('p-neighbours');
+    box.className = 'srclist';
+    box.innerHTML = '';
+    list.forEach(function (s) { box.appendChild(sourceLink(s, false)); });
+    $('panel').classList.add('open');
   }
 
   $('close').onclick = clearSelection;
@@ -1078,6 +1487,22 @@ async function loadLib() {
     return SMALLTALK_RE.test(String(question).trim()) ? 'chat' : 'notes';
   }
 
+  /* The force trigger, and the single reason this page has to know about it at all:
+     while a screen share is running, anything that is not a pleasantry is treated as a
+     question about the screen (see ask()). "Jarvis, look this up" has to escape that,
+     or the one phrase that explicitly asks for the web would be answered from a
+     screenshot. The server owns the real matcher, the peeling and the searching; this
+     copy is a veto on LOCAL routing and nothing more, so it can afford to be looser. */
+  const FORCE_WEB_RE = new RegExp(
+    '(?:^|\\b)(?:' +
+      '(?:hey\\s+|ok(?:ay)?\\s+)?jarvis\\b[\\s,.:;!-]*(?:please\\s+)?(?:can\\s+you\\s+)?' +
+        '(?:look\\s+(?:this|that|it)\\s+up|look\\s+up|search\\s+(?:the\\s+)?' +
+        '(?:web|internet|online)|search\\s+for)' +
+      '|look\\s+(?:this|that|it)\\s+up' +
+      '|(?:search|check|ask)\\s+(?:the\\s+)?(?:web|internet|online)' +
+      '|web\\s+search' +
+    ')', 'i');
+
   /* The note is on screen to be read; the voice only ever says the short answer.
      A cap here means a long error dump or a chatty model cannot turn into a
      minute of narration. */
@@ -1111,12 +1536,18 @@ async function loadLib() {
        about where you ARE, which is not a claim about any note - so the graph does
        not move to illustrate it. */
     if (kind === 'focus') return 'hold';
+    /* A web answer came from outside the galaxy entirely. Flying to a note would be
+       the most dishonest thing this page could do: it would point at a star and say
+       "there", about a fact that arrived over the wire thirty seconds ago. So the
+       camera holds, nothing lights, and the cyan pulse says where it came from
+       instead - see respond(). */
+    if (kind === 'web') return 'hold';
     if (!used.length) return 'hold';          // nothing was cited, nothing to prove
     if (isError) return 'cluster';            // no answer yet: show matches, do not fly
     return used.length >= CLUSTER_MIN ? 'cluster' : 'fly';
   }
 
-  function renderAnswer(question, text, isError, ids) {
+  function renderAnswer(question, text, isError, ids, sources) {
     /* Every answer starts by clearing the frame thumbnail. A picture left sitting
        beside the next answer would read as the evidence for it, which it is not. */
     hideProof();
@@ -1126,8 +1557,17 @@ async function loadLib() {
     const src = $('a-src'), box = $('a-chips');
     box.innerHTML = '';
     const used = (ids || []).map(function (i) { return byId.get(i); }).filter(Boolean);
-    src.style.display = used.length ? '' : 'none';
-    used.forEach(function (n) { box.appendChild(chip(n)); });
+    /* WHERE IT CAME FROM, in the card's own footer, and the two cases are mutually
+       exclusive by construction: a web answer arrives with no ids and a note answer
+       arrives with no sources, so the label can never read "Drawn from" above a list
+       of web links. The label changes too - "Drawn from" is a claim about the
+       collection and would be false here. */
+    const web = (sources || []).filter(function (s) { return safeUrl(s && s.url); });
+    src.querySelector('.lbl').textContent = web.length ? 'According to' : 'Drawn from';
+    src.style.display = (used.length || web.length) ? '' : 'none';
+    $('answer').classList.toggle('web', !!web.length);
+    if (web.length) web.forEach(function (s) { box.appendChild(sourceLink(s, true)); });
+    else used.forEach(function (n) { box.appendChild(chip(n)); });
     $('answer').classList.add('show');
     return used;
   }
@@ -1373,6 +1813,21 @@ async function loadLib() {
   let probeRunning = false;
   let fxAnswerUntil = 0;           // while > now, the next thought heard is the intent
   let fxAnswerTimer = null;
+  /* THE RETIREMENT. An ended session's card is a corpse occupying prime real estate:
+     "SESSION OVER · 0:00", top-right, over your note title, until something else
+     happens to move it. So the report gets eight seconds - long enough to read four
+     numbers off it, short enough that the desk is clear before you have finished
+     thinking about the next thing - and then the card leaves: the desktop window
+     closes, the in-page card fades.
+     Eight and not thirty because of how this card is actually used. It is glanced at,
+     not studied; the numbers it carries are on the answer card as well, in words, and
+     that one stays. A report you wanted to keep looking at is a report you can scroll
+     back to. A card that holds until the next session starts sounds tidier and is
+     worse - it means the ONE state this card spends most of its life in is "describing
+     something that finished a while ago". */
+  const CARD_RETIRE_S = 8;
+  let fxRetireTimer = null;
+  let fxRetired = false;           // this report has had its eight seconds
   /* The tail of focus.py's "arming" line. Matched against what this tab just spoke,
      so the microphone opens for a question this tab genuinely asked. */
   const FOCUS_ASKED_RE = /what are we focusing on\s*\?/i;
@@ -1380,6 +1835,16 @@ async function loadLib() {
   function fxLive() {
     return !!fx && (fx.state === 'arming' || fx.state === 'running' ||
                     fx.state === 'paused');
+  }
+
+  /* SHOWING is not the same as LIVE, and the difference is the report. A finished
+     session's card holds its last line for CARD_RETIRE_S seconds before it retires, and
+     for those eight seconds the card is on screen while no session is running - so the
+     desktop window must not close under it and the layout lane must still leave it room.
+     Everything that asks "is there a card" asks this; only the clock asks fxLive(). */
+  function fxShowing() {
+    if (fxLive()) return true;
+    return !!(fx && fx.state === 'ended' && fx.report && !fxRetired);
   }
 
   function fxSecs(n) {
@@ -1449,10 +1914,14 @@ async function loadLib() {
   function fxPaint() {
     const card = $('focuscard'), btn = $('focusbtn');
     if (!fx || !fxLive()) {
-      card.className = '';
+      /* THE END, and the report that outlives it by eight seconds. The window no longer
+         closes itself here: deskTend() owns that decision now, because the countdown is
+         no longer the only thing in it - a session ending while the screen watch is
+         still running must close the COUNTDOWN row and leave the window standing. What
+         is still decided here is the card's own contents. */
       btn.className = '';
-      $('legend').style.top = '';
-      if (fx && fx.state === 'ended' && fx.report) {
+      if (fx && fx.state === 'ended' && fx.report && !fxRetired) {
+        card.className = '';
         card.classList.add('live', 'ended');
         $('focus-state').textContent = 'session over';
         $('focus-mode').textContent = '';
@@ -1464,10 +1933,22 @@ async function loadLib() {
           'on target <b>' + fx.cleanPct + '%</b> &middot; drifts <b>' + fx.drifts +
           '</b><br>streak <b>' + fx.streak + '</b> &middot; best <b>' +
           fx.bestStreak + '</b>';
-        fxNudgeLegend();
+        /* Armed once per report. An ABORT has no report and is not given eight seconds
+           of anything: you stopped it, you know you stopped it, and the card goes now. */
+        if (fxRetireTimer === null) {
+          fxRetireTimer = setTimeout(fxRetireNow, CARD_RETIRE_S * 1000);
+        }
+      } else if (!fxRetired || !fx || fx.state !== 'ended') {
+        card.className = '';
       }
+      deskTend();
+      layout();
       return;
     }
+    /* A new session un-retires the card: the eight seconds belonged to the last report. */
+    if (fxRetireTimer !== null) { clearTimeout(fxRetireTimer); fxRetireTimer = null; }
+    fxRetired = false;
+    card.classList.remove('retired');
 
     // The countdown is interpolated between pushes so it looks like a clock, but
     // the SERVER's remaining figure is the one that ends the session. This never
@@ -1532,17 +2013,444 @@ async function loadLib() {
       (fx.excusedS ? '<br>excused <b>' + fxSecs(fx.excusedS) + '</b>' : '') +
       (fx.unknownS ? ' &middot; unseen <b>' + fxSecs(fx.unknownS) + '</b>' : '');
     $('focus-pause').textContent = fx.state === 'paused' ? 'resume' : 'pause';
-    fxNudgeLegend();
+    /* A session started by VOICE never had a gesture to open a window with, so the card
+       waits in the page exactly as it did before today and the next click anywhere
+       upgrades it. Deliberately not re-armed after you close the window yourself:
+       shutting it is a decision, and a card that climbs back out of the tab every time
+       you click is not a card, it is a pest. Both halves live in deskTend() now. */
+    deskTend();
+    layout();
   }
 
-  /* The card is pinned top-right, and so is the legend. Measured rather than
-     guessed at, because a hardcoded offset is wrong the moment the card grows a
-     line - and a countdown sitting on top of the legend is not a countdown. */
-  function fxNudgeLegend() {
+  /* THE RETIREMENT, eight seconds after the report was painted. One function for both
+     homes, because there is one card: out on the desktop the row simply goes and the
+     window closes behind it if the countdown was the last organ in there; in the page it
+     fades, and the class is cleared at the far end of the fade so the lane closes up. */
+  function fxRetireNow() {
+    fxRetireTimer = null;
+    fxRetired = true;
     const card = $('focuscard');
-    const h = card.classList.contains('live') ? card.offsetHeight : 0;
-    $('legend').style.top = h ? (22 + h + 16) + 'px' : '';
+    if (deskDoc) {
+      if (card) card.className = '';
+      deskTend();
+      layout();
+      return;
+    }
+    if (!card) return;
+    card.classList.add('retired');
+    setTimeout(function () {
+      if (!fxRetired) return;          // a new session arrived inside the fade
+      card.className = '';
+      layout();
+    }, 460);
   }
+
+  /* Kept as a name because four places call it, and it now means what it always meant:
+     ask the governor. The legend used to duck the card by measuring it here, which was
+     right and was also one surface positioning another - exactly the arrangement the
+     layout governor replaced. */
+  function fxNudgeLegend() { return layout(); }
+
+  /* ================== THE DESKTOP CARD: ONE WINDOW, EVERY ORGAN ==================
+     The countdown lived in the viewer tab, which is the one place you are guaranteed
+     NOT to be looking while it matters: alt-tab to the work and the card goes with the
+     page. Document Picture-in-Picture is the only way a browser gets a window that
+     floats above every other application on Windows without native code, so that is
+     the route, and there are four things about it worth knowing before reading on.
+
+     ONE CARD, NOT TWO. The elements are MOVED - appendChild across documents, which
+     adopts rather than clones - so the live SSE paint, the three clock buttons and the
+     lock pill are the same objects doing the same work in a different window. Nothing
+     is mirrored, nothing is rebuilt, and there is therefore no way for the two homes to
+     disagree, because there is only ever one of each. The one thing this costs is
+     getElementById, and $() pays it at the top of this file.
+
+     ONE CARD FOR ALL OF THEM, which is what changed. The browser allows a single
+     Document PiP window per tab, and the countdown, the watching face and the eyes all
+     wanted it. They used to queue for it and the loser said so out loud - an honest
+     arrangement, and a silly one, because what you actually want on the desktop is ONE
+     card with every live organ in it. So: a shell, and DESK_ORGANS moves into it, in
+     that order. The face row, the countdown, the watch chip, the eyes line. One window,
+     one corner, one close button.
+
+     RENDER ONLY WHAT IS LIVE, and that is not this block's job either - it is the
+     organs' own liveness classes doing it, in whichever document they are in. Watch off
+     and #facecard loses .show; session off and #focuscard loses .live; eyes off and
+     #eyeing loses it too. The shell is a flex column of things that may be display:none,
+     so an organ leaving is a row closing, not a layout to recompute. And when the LAST
+     one goes, deskTend() closes the window: an empty card floating over your work is
+     worse than no card.
+
+     A GESTURE IS THE GATE. requestWindow() only resolves inside a transient user
+     activation, which the FOCUS button click is and a spoken "thirty minutes on this"
+     is not. So the press opens the window itself, and a session started by voice
+     leaves the card where it has always been until the next click upgrades it.
+
+     THE CARD TRAP, which is why the lock pill in there reads the browser's front WINDOW
+     through the DevTools join and never "the frontmost process": pressing a button in
+     this card makes this card frontmost, so a pill that asked the OS what was in front
+     would lock the session to the card itself. That is decided server-side in focus.py;
+     it is written here because this is the window that makes it matter. */
+  const DESK_W = 320, DESK_H = 210;
+  /* The window grows by whole rows as organs arrive, because a fixed 210px holding a
+     face, a countdown, a chip and an eyes line is four things squeezed into the space
+     one was written for. Session-only is exactly DESK_H, which is what the desk proof
+     measures and what the card was drawn at. */
+  const DESK_ROW_FACE = 78;        // the face row, padding included
+  const DESK_ROW_CHIP = 34;        // the watch chip, or the eyes line
+  /* THE PROMISE, and the reason it has to exist: the window is asked for while the click
+     is still warm, which is BEFORE the session it is for has been round-tripped. Sizing
+     it by what is live at that instant asks for a 100px window and then cannot correct
+     it, because resizeTo needs an activation of its own and the request has just eaten
+     the one the press supplied. So a presser says what it is about to start, and the
+     height is the height of the card that is arriving. It lapses after the same grace
+     window the card itself waits through - a promise nothing kept is not a row. */
+  let deskComing = '', deskComingAt = 0;
+  function deskPromise(what) { deskComing = what; deskComingAt = performance.now(); }
+  function deskPromised(what) {
+    return deskComing === what && performance.now() - deskComingAt < DESK_GRACE_MS;
+  }
+  function deskH() {
+    let h = (fxShowing() || deskPromised('session')) ? DESK_H : 88;
+    if (watchOn || deskPromised('watch')) h += DESK_ROW_FACE + DESK_ROW_CHIP;
+    if (eyesLive()) h += DESK_ROW_CHIP;
+    return Math.min(h, 520);
+  }
+  /* BOTTOM-RIGHT, not the top. Top-right is where Windows puts its own notifications,
+     where the watching face sits, and - on a wide screen - roughly where the end of
+     every line of text you are reading is. The clock wants to be somewhere your eye
+     can find without being somewhere it keeps landing. */
+  const DESK_EDGE = 26;            // gap from the screen's working edges
+  const DESK_CHROME = 38;          // the title bar, when the window will not report its own
+  const DESK_GRACE_MS = 2500;      // how long a just-opened window waits for a session
+  /* Said once per page, and only when the browser has actually refused - never as a
+     precaution, and never instead of trying. */
+  /* ONE HONEST LINE, not one per organ. The browser refusing a window is a fact about
+     the browser, and hearing it three times because three organs each asked separately
+     was the old arrangement's other tax. Every organ now falls back to its in-page home
+     and this is said once per page, by whichever one asked first. */
+  const DESK_REFUSED_LINE = 'I will not let the card off the page in this browser, ' +
+    'sir, so it stays in the corner of the tab.';
+
+  const canDesk = !!(window.documentPictureInPicture &&
+                     window.documentPictureInPicture.requestWindow);
+
+  /* WHAT GOES IN THE CARD, in the order it is read: the face first, because it is the
+     only picture; then the countdown, which is the reason the window exists; then the
+     watch chip and the eyes line, which are one line each. Every one of them is an
+     element that already exists in the page with its own liveness class, so this list is
+     the whole of the merge. */
+  const DESK_ORGANS = ['facecard', 'focuscard', 'watching', 'eyeing'];
+
+  let deskWin = null;              // the PiP window, while there is one
+  let deskHomes = [];              // the exact slot in this page each organ came from
+  let deskWanted = false;          // live session, no window: the next click pops it
+  let deskShut = false;            // you closed it; do not climb back out
+  let deskSaid = false;            // the refusal, said once and not again
+  let deskOpening = false;         // a request is in flight; do not start a second
+  let deskAt = 0;                  // when the window opened (see the grace window)
+  /* Why the last request was refused, in the browser's own words. Kept because "it
+     didn't pop out" is otherwise unanswerable: a refusal for want of a gesture and a
+     refusal by policy look identical from the outside and want opposite responses. */
+  let deskTrouble = '';
+  let deskSawLive = false;         // it has painted a live session out there at least once
+  let deskUnfit = false;           // the browser granted a size of its own; see deskFit
+  let deskFits = 0;                // how many times the size had to be corrected by hand
+
+  /* Every stylesheet this page has, as text, because the card's entire appearance is
+     inherited: the --line and --muted variables on :root, the tone classes, the pill
+     rules. A card appended to a fresh document without them arrives naked - unstyled
+     text on white - which is the classic Document PiP mistake. */
+  function deskStyles() {
+    const out = [];
+    Array.from(document.styleSheets).forEach(function (sheet) {
+      try {
+        out.push(Array.from(sheet.cssRules).map(function (r) {
+          return r.cssText;
+        }).join('\n'));
+      } catch (e) {
+        /* A cross-origin sheet will not hand over its rules, and can still be linked.
+           This page has none; the branch is here so that adding one is not a silent
+           regression in a window nobody thought about. */
+        if (sheet.href) out.push('@import url("' + sheet.href + '");');
+      }
+    });
+    return out;
+  }
+
+  /* THE SHELL, and the rules the organs cannot keep once they are in it.
+     Each organ is position:fixed in the corner of a large page; in a window that IS the
+     card, that leaves four of them stacked on one another 16px from the top edge. So the
+     shell is a flex column and every organ becomes a static row in it, in DESK_ORGANS
+     order, keeping its own liveness rule so an organ that is not live is a row that is
+     not there.
+     The countdown also carries the page's `nofit`/`pill` classes, which the layout
+     governor sets from the CANVAS width and which mean nothing out here - a 320px window
+     is, as far as CSS is concerned, a very small viewport, and without these overrides
+     the card would arrive, be perfectly alive, and be invisible.
+     What is deliberately NOT overridden: every tone. .drift keeps its red gradient and
+     its glow, so drifting tints the whole desktop window over whatever application you
+     drifted into, which is the entire point of taking the card out of the tab. */
+  const DESK_CSS =
+    'html,body{margin:0;height:100%;overflow:hidden;background:#05080f;' +
+    'color:#e8eefc;-webkit-user-select:none;user-select:none;' +
+    'font:13.5px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}' +
+    '#deskshell{display:flex;flex-direction:column;height:100%;box-sizing:border-box}' +
+    /* Every organ: static, full width, no lifting off a galaxy that is not here. */
+    '#deskshell>*{position:static !important;top:auto !important;right:auto !important;' +
+    'left:auto !important;bottom:auto !important;width:auto !important;' +
+    'transform:none !important;box-sizing:border-box;border-radius:0;box-shadow:none;' +
+    'backdrop-filter:none;flex:0 0 auto}' +
+    /* The countdown is the one that stretches, because it is the one with a clock. */
+    '#focuscard{display:none !important;height:auto;border-width:0;' +
+    'border-top-width:3px;padding:12px 16px 13px}' +
+    '#focuscard.live{display:flex !important;flex-direction:column;flex:1 1 auto;' +
+    'min-height:0}' +
+    '#focus-clock{font-size:40px;margin:5px 0 0}' +
+    '#focuscard .fbar{margin:9px 0 8px}' +
+    '#focus-stats{font-size:10px;line-height:1.55;overflow:hidden}' +
+    /* Your dictated intent can be a paragraph, and this window is 210px tall. Clamped
+       rather than allowed to push the buttons off the bottom edge: a LOCK THIS TAB
+       pill you cannot reach is worse than an intent you can only half read. */
+    '#focus-intent{max-height:2.9em;overflow:hidden;font-size:10.5px;margin:0 0 6px}' +
+    '#focuscard .frow.flock{margin-top:auto}' +
+    '#focuscard .frow button{padding:7px 0}' +
+    /* The face row. Its pin button is the one control that makes no sense in here: it
+       exists to ASK for this window, and you are looking at it. */
+    '#facecard{display:none !important;border-width:0;border-bottom-width:1px;' +
+    'padding:10px 14px}' +
+    '#facecard.show{display:block !important}' +
+    '#facecard .pin{display:none !important}' +
+    /* The two chip rows, which are pills in the page and lines in here. */
+    '#watching,#eyeing{border-radius:0;border-width:0;border-top-width:1px;' +
+    'padding:7px 14px;font-size:10px;justify-content:flex-start;gap:8px}' +
+    '#watch-stop,#eye-stop{margin-left:auto}';
+
+  /* THE MOVE, and the reverse of it, kept apart from the window so that both can be
+     proved without one: the probe battery moves the card into an iframe's document and
+     back, which is the same operation against the same code with no browser dialog and
+     no network. See case `desk-move`.
+     Inline rectangle props are STRIPPED on the way out rather than fought with more
+     !important: the governor sets top/right/left/width as inline styles on three of
+     these four elements, and an inline style beats any rule in DESK_CSS. It is the
+     governor's own job to put them back when the organ comes home, which it does,
+     because deskRestore() ends by calling it.
+     The same goes for the governor's two CLASSES. `pill` and `nofit` are answers to the
+     question "how much room does this page have left", and `nofit` carries a
+     display:none of its own - so a card popped out of a narrow window would arrive in
+     the desktop card correct, live, and invisible. They are page state; they do not
+     travel. */
+  const DESK_RECT_PROPS = ['top', 'right', 'bottom', 'left', 'width', 'transform'];
+  const DESK_PAGE_CLASSES = ['pill', 'nofit'];
+  function deskStrip(el) {
+    DESK_RECT_PROPS.forEach(function (p) { el.style.removeProperty(p); });
+    DESK_PAGE_CLASSES.forEach(function (c) { el.classList.remove(c); });
+  }
+
+  function deskAdopt(doc) {
+    if (!doc || !doc.body) return false;
+    deskStyles().concat([DESK_CSS]).forEach(function (css) {
+      const style = doc.createElement('style');
+      style.textContent = css;
+      doc.head.appendChild(style);
+    });
+    /* A title, because the OS window manager shows it and - more to the point - the
+       server reads the foreground window's title to work out which tab is in front.
+       "Knowledge Galaxy" here would join this window to the viewer tab; a name of its
+       own joins it to nothing, which is the honest answer for a card. */
+    doc.title = 'Jarvis · focus';
+    const shell = doc.createElement('div');
+    shell.id = 'deskshell';
+    doc.body.appendChild(shell);
+    deskHomes = [];
+    let moved = 0;
+    DESK_ORGANS.forEach(function (id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      deskHomes.push({ el: el, parent: el.parentNode, next: el.nextSibling });
+      deskStrip(el);
+      shell.appendChild(el);              // adopts: listeners and handlers come along
+      moved++;
+    });
+    deskDoc = doc;
+    layout();                             // the page's lane closes up behind them
+    return moved > 0;
+  }
+
+  function deskRestore() {
+    const homes = deskHomes;
+    deskHomes = [];
+    deskDoc = null;
+    /* Backwards, so that each element's saved nextSibling is already back in place by
+       the time the one before it is inserted. Every saved sibling here is a comment or a
+       text node that never moves, so the page ends up byte-identical to how it started -
+       which is what the desk proof means by "back in its own slot". */
+    for (let i = homes.length - 1; i >= 0; i--) {
+      const h = homes[i];
+      if (!h.parent) continue;
+      deskStrip(h.el);
+      h.parent.insertBefore(h.el, h.next);
+    }
+    layout();
+    return homes.length > 0;
+  }
+
+  /* `how` is 'press' for the FOCUS button and 'click' for the armed next-click. It
+     decides only one thing: whether a refusal is worth saying out loud yet. A press can
+     be refused for want of activation the button spent elsewhere, which is ordinary and
+     recoverable - so that arms the next click and stays quiet. When the click that was
+     armed for exactly this is refused too, the browser means it, and it is said. */
+  async function deskOpen(how) {
+    if (deskWin || deskOpening || probeRunning || PROBE_ON) return !!deskWin;
+    if (!canDesk) { deskTrouble = 'unsupported'; deskRefuse(DESK_REFUSED_LINE); return false; }
+    deskOpening = true;
+    let win = null;
+    try {
+      win = await window.documentPictureInPicture.requestWindow({
+        width: DESK_W, height: deskH(), disallowReturnToOpener: true,
+        preferInitialWindowPlacement: true
+      });
+    } catch (e) {
+      deskOpening = false;
+      deskTrouble = (e && (e.name || e.message)) || 'refused';
+      if (how === 'press') { deskWanted = true; return false; }
+      deskRefuse(DESK_REFUSED_LINE);
+      return false;
+    }
+    deskOpening = false;
+    deskTrouble = '';
+    deskWin = win;
+    deskWanted = false;
+    deskShut = false;
+    deskSawLive = false;
+    deskAt = performance.now();
+    deskAdopt(win.document);
+    deskFit();                       // usually too late; see deskFit for why it tries anyway
+    /* And from inside the card itself, for the same reason as the page's two listeners:
+       a press on any of its buttons is an activation the window can be sized with. */
+    win.addEventListener('pointerdown', deskFit, true);
+    win.addEventListener('click', deskFit, true);
+    try {
+      const sw = win.screen.availWidth || 1440, sh = win.screen.availHeight || 900;
+      /* The window's OWN outer size, not the size that was asked for: a browser is free
+         to grant another one (Chrome here grants its own and lets deskFit correct it),
+         and placing a window by a size it does not have puts a corner off the screen. */
+      const ww = win.outerWidth || DESK_W, wh = win.outerHeight || DESK_H + DESK_CHROME;
+      win.moveTo(Math.max(0, sw - ww - DESK_EDGE), Math.max(0, sh - wh - DESK_EDGE));
+    } catch (e) { /* the browser's placement, then; the card still floats */ }
+    /* Closing the window is not ending the session - the clock is the server's and it
+       carries on. The card simply comes home, in silence: you closed a window, you do
+       not need to be told what you just did. */
+    win.addEventListener('pagehide', function () {
+      deskWin = null;
+      deskShut = true;
+      deskSawLive = false;
+      deskRestore();
+      fxPaint();
+      paintWatch();
+      paintEyes();
+    });
+    fxPaint();
+    paintWatch();
+    paintEyes();
+    return true;
+  }
+
+  /* THE SIZE THE BROWSER FELT LIKE. requestWindow is asked for 320x210 and Chrome 153
+     on this machine hands back 1024x606 - eighty per cent of the screen - whatever is
+     asked for; the width and height are a hint it is entitled to ignore, and a card
+     covering most of the desktop is not the feature. resizeTo() fixes it exactly, but
+     resizeTo needs a transient activation of its own and requestWindow has just eaten
+     the one the click supplied ("resizeTo() requires user activation in document
+     picture-in-picture"). So it is tried once on opening for the browsers that allow it,
+     and otherwise on the next pointerdown in either window - which, for a card you have
+     just popped out and are looking at, is a click or two away. It corrects itself in
+     front of you rather than being wrong quietly.
+     A size the browser grants within a few pixels of the ask is left alone: this is a
+     correction, not a policy, and a browser that sizes the window properly keeps its
+     own. `deskUnfit` stays true while the size is still wrong, so it tries again on the
+     next pointerdown and stops the moment it is right - one resizeTo per click at worst,
+     and nothing at all once the window is the size it was asked to be.
+     THE HEIGHT IS NOT A CONSTANT any more: an organ arriving is a row arriving, and
+     deskH() is the current answer. So this is also how the window GROWS when the watch
+     starts mid-session - on the next click, which the watch's own start supplied. */
+  function deskFit() {
+    const win = deskWin;
+    if (!win) return false;
+    const want = deskH();
+    const off = Math.abs((win.outerWidth || DESK_W) - DESK_W) > 8 ||
+                Math.abs((win.outerHeight || want) - want) > 8;
+    if (!off) { deskUnfit = false; return true; }
+    try { win.resizeTo(DESK_W, want); } catch (e) { deskUnfit = true; return false; }
+    deskUnfit = Math.abs((win.outerWidth || DESK_W) - DESK_W) > 8;
+    if (!deskUnfit) deskFits++;
+    return !deskUnfit;
+  }
+
+  function deskClose() {
+    const win = deskWin;
+    deskWin = null;                  // before close(), so pagehide finds nothing to do
+    deskComing = '';                 // whatever was promised, this window is not it
+    deskShut = false;
+    deskSawLive = false;
+    deskRestore();
+    if (win) { try { win.close(); } catch (e) { /* already gone */ } }
+  }
+
+  /* ================== THE ONE DECISION: IS THERE A CARD, AND WHERE ==================
+     Four organs, two homes and one window between them, and every one of the old
+     arrangements' bugs came from that question being answered in six places. It is
+     answered here and nowhere else, and it is called at the end of every organ's paint.
+
+     ARMABLE is not the same as ALIVE, deliberately. A session or a screen watch will
+     pop the window out; the eyes on their own will not. Opening a desktop window
+     because a camera came on for a posture check is a window you did not ask for - but
+     once the card IS out, the eyes line lives in it like everything else, and it will
+     keep the window open while it is the last organ standing. That asymmetry is the
+     honest reading of "render only what is live": arming is about intent, closing is
+     about contents. */
+  function deskArmable() { return fxLive() || watchOn; }
+  function deskOrgansLive() { return fxShowing() || watchOn || eyesLive(); }
+
+  function deskTend() {
+    if (probeRunning || PROBE_ON) return;
+    if (deskWin) {
+      /* THE LAST ORGAN OUT CLOSES THE DOOR. The grace window is the other case: the
+         window is opened inside the very click that starts a session, so for a few
+         hundred milliseconds there is legitimately nothing live yet and closing on
+         sight would close it before it began. deskSawLive is what keeps those apart -
+         without it the window flickered, because the first paint after it appears still
+         holds the PREVIOUS session, very often `ended`. */
+      if (deskOrgansLive()) { deskSawLive = true; return; }
+      if (deskSawLive || performance.now() - deskAt > DESK_GRACE_MS) deskClose();
+      return;
+    }
+    /* Nothing live: forget that you closed it, so the next session may pop out again. */
+    if (!deskOrgansLive()) deskShut = false;
+    deskWanted = canDesk && !deskShut && deskArmable();
+  }
+
+  function deskRefuse(line) {
+    deskWanted = false;
+    if (deskSaid) return;            // once. A refusal repeated is nagging.
+    deskSaid = true;
+    renderAnswer('', line, false, null);
+    if (!speak(spokenForm(line))) idleStatus();
+  }
+
+  /* The held gesture, the same idea as unlockAudio(): a session that began with a spoken
+     sentence gets its window from the next thing you click, wherever you click it. */
+  document.addEventListener('pointerdown', function () {
+    if (deskWanted && deskArmable() && !deskWin) deskOpen('click');
+    else if (deskWin) deskFit();
+  }, true);
+  /* The other half of one press: the click that follows the pointerdown above carries a
+     fresh activation, which is what the size correction needs. Harmless when there is
+     nothing to correct - deskFit() looks at the window before it touches it, and that is
+     also how a window that has just grown a row gets its extra height. */
+  document.addEventListener('click', function () {
+    if (deskWin) deskFit();
+  }, true);
 
   async function fxSend(body) {
     try {
@@ -1667,18 +2575,30 @@ async function loadLib() {
      any other tab - and it expires in seconds on the server, so a tab that goes
      away cannot leave a permanent excuse behind. Coming back here to talk is the
      one excursion that is never a drift. */
+  /* Home base has two windows now, for the same reason the card does. Pressing pause on
+     the desktop card puts the keyboard in a window that is not this tab - but it is
+     still this page's own document, and still you talking to me rather than you wandering
+     into something else. Reading the tab alone would call it an excursion. */
+  function fxHomeFocus() {
+    if (document.hasFocus()) return true;
+    try { return !!(deskWin && deskWin.document.hasFocus()); }
+    catch (e) { return false; }        // a window mid-close answers nothing
+  }
+
   setInterval(function () {
     if (probeRunning) return;          // a synthetic session is not a man at his desk
-    if (fxLive() && document.hasFocus()) fxFetch(true);
+    if (fxLive() && fxHomeFocus()) fxFetch(true);
   }, FOCUS_HOME_BEAT_MS);
 
   /* Leaving is worth saying immediately rather than waiting for the claim to time
      out. Without this, "go to the thing you actually mean to do" would sit there
      for the remainder of the TTL before locking on, and the first three seconds of
      your work would be spent watching me not watch it. */
-  addEventListener('blur', function () { if (fxLive()) fxFetch(false); });
+  addEventListener('blur', function () {
+    if (fxLive() && !fxHomeFocus()) fxFetch(false);
+  });
   addEventListener('visibilitychange', function () {
-    if (fxLive() && document.hidden) fxFetch(false);
+    if (fxLive() && document.hidden && !fxHomeFocus()) fxFetch(false);
   });
 
   // Repaint so the digits move between pushes. Throttled to nothing in a hidden
@@ -1687,9 +2607,34 @@ async function loadLib() {
 
   $('focusbtn').onclick = function () {
     unlockAudio();                     // a real gesture: the callouts need a voice
+    /* THE GESTURE, spent here and nowhere else. requestWindow() is called before the
+       session request rather than after it, and not awaited: a transient activation is
+       a few seconds of credit that the browser may consider spent by the time a fetch
+       has been round-tripped, and the cheapest way never to find out is to ask for the
+       window while the click is still warm. The window opening before there is anything
+       to count is the reason fxPaint has a grace window. */
+    deskPromise('session');            // a session is coming; ask for its height, not 88
+    deskOpen('press');
+    deskFit();                         // the click's own activation, if the press left one
     if (fxLive()) return fxSend({ cmd: 'status' });
     fxSend({ cmd: 'start', minutes: FOCUS_DEFAULT_MIN });
   };
+  /* ONE PRESS, TWO ACTIVATIONS - and this is the whole reason the window is asked for
+     here rather than only in the click above. A mouse press hands out an activation on
+     pointerdown and another on the click that follows it; requestWindow eats whichever
+     one it is given. Asking on pointerdown therefore leaves the click's activation free
+     for the resizeTo that corrects Chrome's oversized window, and the card snaps to its
+     proper size within a frame or two of appearing, off one press of the button.
+     It matters more than it sounds. The alternative was correcting it on the NEXT
+     activation, and the next thing you do after starting a session is click something in
+     another application - which sends this page nothing at all, and leaves a card the
+     size of a browser window sitting over the work you just started.
+     The click handler keeps its own deskOpen for the presses that never send a pointer
+     event: Enter and the space bar on a focused button, and every synthetic click. */
+  $('focusbtn').addEventListener('pointerdown', function () {
+    deskPromise('session');
+    deskOpen('press');
+  });
   $('focus-pause').onclick = function () {
     fxSend({ cmd: (fx && fx.state === 'paused') ? 'resume' : 'pause' });
   };
@@ -1815,6 +2760,26 @@ async function loadLib() {
       if (p >= 1) { pulseId = null; pulseAmt = 0; refresh(); return; }
       // Snap bright, then ease out - a flare, not a throb.
       pulseAmt = Math.pow(1 - p, 2.2) * Math.abs(Math.cos(p * Math.PI * 2.2));
+      refresh();
+      requestAnimationFrame(frame);
+    })(t0);
+  }
+
+  /* The other pulse, and the only one that belongs to no node. Two slow swells of
+     cyan across the whole sky, then gone - long enough to be seen without becoming
+     scenery. Idempotent: asking twice while one is running restarts it rather than
+     stacking two animations that fight over webAmt. */
+  let webPulseSeq = 0;
+  function pulseWeb() {
+    const mine = ++webPulseSeq;
+    const t0 = performance.now();
+    (function frame(now) {
+      if (mine !== webPulseSeq) return;        // a newer pulse took over; stand down
+      const p = (now - t0) / WEB_PULSE_MS;
+      if (p >= 1) { webAmt = 0; refresh(); return; }
+      // Two swells, fading. sin() rather than the flare curve above, because this is
+      // a breath rather than a spark.
+      webAmt = Math.pow(1 - p, 1.5) * Math.abs(Math.sin(p * Math.PI * 2));
       refresh();
       requestAnimationFrame(frame);
     })(t0);
@@ -2411,6 +3376,11 @@ async function loadLib() {
       : eyeStable.headDown ? 'head down'
       : eyeStable.slouched ? 'slouched'
       : 'upright';
+    /* The eyes never ARM the desktop card - a window you did not ask for because a
+       camera came on is a window in the way - but while the card is out they are a row
+       in it, and closing them can be the thing that empties it. */
+    deskTend();
+    layout();
   }
 
   /* ---- the report: three booleans and a word about the ears ---- */
@@ -2857,6 +3827,9 @@ async function loadLib() {
        worked: the watch is running, the face simply has nowhere to sit yet. */
     nopin: 'I am watching, sir, though this browser will not let my face off the ' +
            'page. Click anywhere and I shall pin it to the desktop.'
+    /* There is no longer a line about the countdown having the desktop, because there is
+       no longer anything to queue for: the face and the countdown share one card. If the
+       window is already open, the face joins it; if it is not, the face asks for it. */
   };
 
   const canPin = !!(window.documentPictureInPicture &&
@@ -2872,7 +3845,6 @@ async function loadLib() {
      one that was already running belongs to the man who started it, and ending it
      under him because the watch happened to finish would be a liberty. */
   let watchOpenedShare = false;
-  let faceWin = null, facePinWanted = false;
 
   function watchStillMs() {
     return watchStillFrom ? Date.now() - watchStillFrom : 0;
@@ -2932,20 +3904,12 @@ async function loadLib() {
   }
 
   /* ---- THE FACE ----
-     One markup, two possible homes: a Document Picture-in-Picture window, which sits
-     above every other application, or - when the browser has no such thing, or has
-     not been given a gesture to open one with - the in-page card, which says so. */
-  const FACE_CSS =
-    'html,body{margin:0;height:100%;background:#0b0803;color:#ffe7c2;' +
-    'font:12px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;' +
-    '-webkit-user-select:none;user-select:none;overflow:hidden}' +
-    '.wrap{height:100%;display:flex;align-items:center;gap:11px;padding:10px 12px;' +
-    'box-sizing:border-box;border:1px solid rgba(255,183,77,.45);border-radius:14px}' +
-    '.mark{width:42px;height:42px;flex:0 0 auto}' +
-    '.t{text-transform:uppercase;letter-spacing:.2em;font-size:10px}' +
-    '.s{color:rgba(255,231,194,.66);font-variant-numeric:tabular-nums;margin-top:3px}' +
-    '.wrap.think{border-color:rgba(255,183,77,.95);' +
-    'box-shadow:inset 0 0 26px rgba(255,150,0,.22)}';
+     ONE element, and its home is wherever the card is. It used to open a Document PiP
+     window of its own and therefore had a stylesheet of its own, which is the part that
+     went: #facecard is now the top row of the shared desktop card, or - when the browser
+     will not give up a window at all - the same row in the page's top-right lane, under
+     the countdown. The rules that used to be in a string here are in the page's own
+     stylesheet next to #facecard, which the desktop window inherits whole. */
 
   /* A face rather than a dot, because the request was for a face: a ring, two eyes
      and a mouth that is a single dry line. It breathes at the diff cadence, so what
@@ -2964,80 +3928,32 @@ async function loadLib() {
     '<div><div class="t">watching</div><div class="s" id="face-s">still 0:00</div></div>' +
     '</div>';
 
+  /* The face row, in whichever document it currently sits. It is built once - the markup
+     is the same in both homes, so there is nothing to rebuild when it moves - and shown
+     or hidden by one class, which is the whole of "render only what is live" for this
+     organ. The pin button is only useful in the page, and DESK_CSS hides it out there. */
   function paintFace() {
     const secs = Math.floor(watchStillMs() / 1000);
     const text = watchOn
       ? 'still ' + Math.floor(secs / 60) + ':' + ('0' + (secs % 60)).slice(-2)
       : 'not watching';
-    [faceWin && faceWin.document, document].forEach(function (doc) {
-      if (!doc) return;
-      const s = doc.getElementById('face-s');
-      if (s) s.textContent = text;
-    });
+    const s = $('face-s');
+    if (s) s.textContent = text;
     const card = $('facecard');
-    card.classList.toggle('show', watchOn && !faceWin);
-    if (watchOn && !faceWin && !card.dataset.built) {
+    if (!card) return;
+    if (!card.dataset.built) {
       card.innerHTML = '<div class="row">' + FACE_MARKUP + '</div>' +
         (canPin ? '<button class="pin" id="face-pin" type="button">' +
                   'pin me to the desktop</button>' : '');
       card.dataset.built = '1';
       const pin = $('face-pin');
-      if (pin) pin.onclick = function () { openFace(); };
+      /* The same window every other organ asks for. A refusal is DESK_REFUSED_LINE, said
+         once per page by deskRefuse() - not once per organ, which is what three separate
+         windows used to cost you. */
+      if (pin) pin.onclick = function () { return deskOpen('click'); };
     }
+    card.classList.toggle('show', watchOn);
   }
-
-  /* The desktop card. Document PiP needs a fresh user gesture, and the gesture that
-     started this watch was spent on the share picker - so a refusal here is ordinary
-     and is handled by arming the next click rather than by complaining. */
-  async function openFace() {
-    if (!canPin || faceWin || !watchOn) return false;
-    let win = null;
-    try {
-      win = await window.documentPictureInPicture.requestWindow({
-        width: 236, height: 96, disallowReturnToOpener: true,
-        preferInitialWindowPlacement: true
-      });
-    } catch (e) {
-      facePinWanted = true;        // the next real click will try again
-      return false;
-    }
-    faceWin = win;
-    facePinWanted = false;
-    const doc = win.document;
-    const style = doc.createElement('style');
-    style.textContent = FACE_CSS;
-    doc.head.appendChild(style);
-    doc.body.innerHTML = FACE_MARKUP;
-    doc.title = 'Jarvis · watching';
-    /* Asked for, not assumed: the top-right of the real desktop. Chrome decides
-       where a PiP window may sit and may well ignore this, which is why the request
-       is in a try and the feature does not depend on it landing. */
-    try { win.moveTo(Math.max(0, (win.screen.availWidth || 1280) - 252), 24); }
-    catch (e) { /* the browser's placement it is */ }
-    /* Closing the face stops the watch. That is deliberate: the card exists so you
-       always know it is watching, and a watch running with its face shut would be
-       exactly the thing this is for. */
-    win.addEventListener('pagehide', function () {
-      faceWin = null;
-      if (watchOn) stopWatch('face');
-    });
-    paintFace();
-    return true;
-  }
-
-  function closeFace() {
-    const win = faceWin;
-    faceWin = null;                      // before close(), so pagehide is a no-op
-    if (win) { try { win.close(); } catch (e) { /* already gone */ } }
-    $('facecard').classList.remove('show');
-    facePinWanted = false;
-  }
-
-  /* One held gesture, exactly like unlockAudio(): if the pin was refused for want of
-     activation, the next thing you click pins it. */
-  document.addEventListener('pointerdown', function () {
-    if (facePinWanted && watchOn && !faceWin) openFace();
-  }, true);
 
   function paintWatch() {
     $('watching').classList.toggle('live', watchOn);
@@ -3051,6 +3967,10 @@ async function loadLib() {
         : 'no frame sent');
     }
     paintFace();
+    /* Two organs' worth of consequence, in the two functions that own them: whether
+       there is still a card to be out there at all, and where everything sits. */
+    deskTend();
+    layout();
   }
 
   /* The server's windows, applied rather than assumed. A watch that is about to spend
@@ -3147,7 +4067,13 @@ async function loadLib() {
       });
     }
     paintWatch();
-    const pinned = await openFace();
+    /* THE CARD, asked for by the press that started this watch. If the countdown already
+       has the window open, this joins it - paintWatch() above has already put the face
+       row and the chip in it, and deskOpen returns the window it did not need to open. */
+    const pinned = await deskOpen('press');
+    /* Two endings now rather than three: pinned says nothing extra, and a browser that
+       could have pinned and did not gets the "click anywhere" promise - which is the one
+       of them that is a promise this page can actually keep. */
     const line = WATCH_LINES.on + (pinned || !canPin ? '' : ' ' + WATCH_LINES.nopin);
     renderAnswer('watch my screen', line, false, null);
     if (!speak(spokenForm(line))) idleStatus();
@@ -3164,7 +4090,10 @@ async function loadLib() {
     watchThumb = null;
     watchStillFrom = 0;
     watchSurface = '';
-    closeFace();
+    /* No window to close here any more. paintWatch() drops .live off the chip and .show
+       off the face row, and deskTend() - which it calls - closes the desktop card if the
+       watch was the last organ in it. An organ leaving is a row closing, not a window
+       being taken from whoever else is still using it. */
     paintWatch();
     if (!was) return false;
     /* A capture nobody is using is a red light on the taskbar for no reason, so a
@@ -3245,7 +4174,7 @@ async function loadLib() {
     busy = true;
     $('send').disabled = true;
     $('dot').classList.add('busy');
-    const wrap = faceWin && faceWin.document.getElementById('wrap');
+    const wrap = $('wrap');
     if (wrap) wrap.classList.add('think');
     try {
       const res = await fetch('/stuck?stillS=' + encodeURIComponent(stillS), {
@@ -3303,7 +4232,7 @@ async function loadLib() {
       busy = false;
       $('send').disabled = false;
       $('dot').classList.remove('busy');
-      const w2 = faceWin && faceWin.document.getElementById('wrap');
+      const w2 = $('wrap');
       if (w2) w2.classList.remove('think');
     }
   }
@@ -3359,7 +4288,8 @@ async function loadLib() {
        screen - and while the watch is running that is THE SAME SHARE, which is the
        whole of "answer from the same share": see() takes its frame from FRAME_SOURCES
        .screen, the diff loop reads the same video, and neither needs a second picker. */
-    if (sharing() && localKind(question) === 'notes') return see(question);
+    if (sharing() && localKind(question) === 'notes' &&
+        !FORCE_WEB_RE.test(question)) return see(question);
 
     /* The share is over. A screen-shaped question is told so plainly: it must never
        be answered from the frame we used to have, and it should not quietly become
@@ -3381,10 +4311,18 @@ async function loadLib() {
 
     /* One reply path for answers and errors alike: show it, say it, then let the
        camera prove it. Speaking starts first so the flight happens mid-sentence. */
-    function respond(text, isError, ids, kind) {
-      const used = renderAnswer(question, text, isError, ids);
+    function respond(text, isError, ids, kind, sources, backend) {
+      const used = renderAnswer(question, text, isError, ids, sources);
       const plan = decideCamera(kind, used, isError);
       if (!speak(spokenForm(text))) idleStatus();
+      /* THE VISUAL CUE. A note answer lights its star; a web answer has no star, so
+         the whole sky breathes cyan once and the panel shows the addresses instead.
+         The panel opens before applyCamera, which for kind 'web' is a no-op anyway -
+         see decideCamera - so there is nothing to fight over. */
+      if (kind === 'web') {
+        pulseWeb();
+        openSources(question, sources, backend);
+      }
       applyCamera(plan, used);
     }
 
@@ -3399,13 +4337,19 @@ async function loadLib() {
       // The server classifies; localKind() only covers an older or broken server,
       // so the small-talk rule holds either way.
       const kind = (data && data.kind) || localKind(question);
+      // Sources come from the SERVER or not at all. This page never composes a URL,
+      // never repairs one, and never reads one out of the answer text: a link that has
+      // been through a language model is not a citation, it is a guess with an anchor
+      // tag. safeUrl() then has the last word on every one of them.
+      const sources = (data && Array.isArray(data.sources)) ? data.sources : null;
+      const backend = (data && typeof data.backend === 'string') ? data.backend : '';
       if (!data) {
         respond('The server replied with something that was not JSON (HTTP ' +
           res.status + ').', true, null, 'chat');
       } else if (data.error) {
-        respond(data.error, true, data.nodes, kind);
+        respond(data.error, true, data.nodes, kind, sources, backend);
       } else {
-        respond(data.answer || '(empty answer)', false, data.nodes, kind);
+        respond(data.answer || '(empty answer)', false, data.nodes, kind, sources, backend);
       }
     } catch (e) {
       respond('Could not reach the brain. Start it with "python server.py" and open ' +
@@ -4173,6 +5117,349 @@ async function loadLib() {
       return { ok: !keys.length && !looksLikeOne,
                detail: 'keys=' + JSON.stringify(keys) + ' card="' + text + '"' };
     });
+    await probeRun('web-cue', function () {
+      /* THE OTHER WORLD, proved without a network: hand the renderer a web answer and
+         check that the page says web everywhere it should and note nowhere at all.
+         The camera must hold, the card must say "According to" rather than "Drawn
+         from", the chips and the panel must be real anchors to the real addresses, and
+         nothing in the panel may look like a file on this disk. */
+      const sources = [
+        { title: 'Tokyo Population 2026', url: 'https://worldpopulationreview.com/cities/japan/tokyo' },
+        { title: 'Demographics of Tokyo - Wikipedia', url: 'https://en.wikipedia.org/wiki/Demographics_of_Tokyo' }
+      ];
+      renderAnswer('probe: population of tokyo', 'According to current web sources, x.',
+                   false, [], sources);
+      openSources('probe: population of tokyo', sources, 'ddg-lite');
+      const label = $('a-src').querySelector('.lbl').textContent;
+      const chips = Array.from($('a-chips').children);
+      const links = Array.from($('p-neighbours').children);
+      const hrefs = links.map(function (a) { return a.getAttribute('href'); });
+      const shown = $('p-neighbours').textContent;
+      const meta = $('p-meta').textContent;
+      const held = decideCamera('web', [], false) === 'hold';
+      const anchors = chips.every(function (a) { return a.tagName === 'A'; }) &&
+                      links.every(function (a) { return a.tagName === 'A'; });
+      const blank = links.every(function (a) {
+        return a.target === '_blank' && /noopener/.test(a.rel) && /noreferrer/.test(a.rel);
+      });
+      /* No .md, no notes/ folder, no drive letter: a web answer must not be able to
+         show a local path anywhere, and the panel is where one would leak from. The
+         patterns are anchored to a word start on purpose - "https://" ends in a colon
+         and a slash, and an unanchored drive-letter test matches every URL on earth,
+         which is a check that fails for a reason that has nothing to do with paths. */
+      const localPath = /\.md\b|(?:^|\s)notes[\\/]|(?:^|\s)[A-Za-z]:[\\/]/
+        .test(shown + ' ' + meta);
+      const ok = held && label === 'According to' && chips.length === 2 &&
+                 links.length === 2 && anchors && blank && !localPath &&
+                 hrefs[0] === sources[0].url && hrefs[1] === sources[1].url &&
+                 shown.indexOf(sources[0].url) !== -1 &&
+                 $('panel').classList.contains('web') &&
+                 $('answer').classList.contains('web');
+      return { ok: ok, detail: 'label="' + label + '" chips=' + chips.length +
+                              ' links=' + links.length + ' anchors=' + anchors +
+                              ' blank=' + blank + ' hold=' + held +
+                              ' localPath=' + localPath };
+    });
+    await probeRun('web-safe', function () {
+      /* A URL that is not http(s) is not a source. It becomes dead text rather than a
+         click, here as well as on the server, because two cheap checks are worth less
+         than one leaked javascript: link. The pulse is also checked to have a colour of
+         its own: gold-and-folder means the notes, cyan means the web, and if WEB_CYAN
+         ever drifted into PALETTE the whole cue would stop meaning anything. */
+      const bad = [{ title: 'nope', url: 'javascript:alert(1)' },
+                   { title: 'also nope', url: 'notes/pricing.md' },
+                   { title: 'fine', url: 'https://example.org/real' }];
+      openSources('probe: dodgy sources', bad, 'ddg-lite');
+      const links = Array.from($('p-neighbours').children);
+      const clean = links.length === 1 && links[0].tagName === 'A' &&
+                    links[0].getAttribute('href') === 'https://example.org/real';
+      const rejects = !safeUrl('javascript:alert(1)') && !safeUrl('notes/pricing.md') &&
+                      !safeUrl('') && !safeUrl(null) && !!safeUrl('https://a.example/b');
+      const unique = PALETTE.indexOf(WEB_CYAN) === -1;
+      const washed = washTo('#000000', WEB_CYAN, 1) === 'rgba(34,224,255,1)' &&
+                     washTo('rgba(10,20,30,0.5)', WEB_CYAN, 0) === 'rgba(10,20,30,0.5)';
+      return { ok: clean && rejects && unique && washed,
+               detail: 'kept=' + links.length + ' rejects=' + rejects +
+                       ' unique=' + unique + ' wash=' + washed };
+    });
+    await probeRun('desk-move', function () {
+      /* THE SECOND HOME, proved without a Document PiP window - because a PiP window
+         needs a user gesture, and a battery that needs somebody to click something is
+         not a battery. An iframe's document is a different document in exactly the way
+         that matters here: the page's getElementById cannot see into it, and adopting a
+         node into it is the same DOM operation against the same deskAdopt().
+         What is being proved is that the card MOVES rather than being rebuilt - same
+         element, same button handler object - because everything the feature promises
+         rests on that: the SSE paint, the three clock buttons and the lock pill keep
+         working precisely because they were never re-created. */
+      const card0 = $('focuscard');
+      const home = { parent: card0.parentNode, next: card0.nextSibling };
+      const pill = $('focus-lock'), handler = pill.onclick;
+      const frame = document.createElement('iframe');
+      frame.setAttribute('aria-hidden', 'true');
+      frame.style.cssText = 'position:fixed;left:-9999px;top:0;width:' + DESK_W +
+                            'px;height:' + DESK_H + 'px;border:0';
+      document.body.appendChild(frame);
+      const doc = frame.contentDocument;
+      const adopted = deskAdopt(doc);
+      /* One card, two homes, never both: the page must no longer hold one, and the
+         lookup must find the one that left. */
+      const gone = !document.getElementById('focuscard');
+      const moved = $('focuscard') === card0 && card0.ownerDocument === doc;
+      const same = $('focus-lock') === pill && $('focus-lock').onclick === handler;
+      /* The live paint, landing in the other document. A drifting state, so the tone
+         class that tints the whole desktop window is what gets checked. */
+      const painted = probeCard({ remainingS: 754, drifting: true, onTarget: false });
+      const clock = $('focus-clock').textContent;
+      const tinted = /\blive\b/.test(painted.card) && /\bdrift\b/.test(painted.card);
+      /* The lane closed up behind it: deskAdopt() ends by calling the governor, and with
+         no card in the page the legend goes back to the first slot rather than ducking a
+         measurement taken in another window. */
+      const legend = $('legend').style.top === LAYOUT.TOP + 'px';
+      const back = deskRestore();
+      const returned = $('focuscard') === card0 && deskDoc === null &&
+                       card0.parentNode === home.parent &&
+                       card0.nextSibling === home.next &&
+                       document.getElementById('focuscard') === card0;
+      frame.remove();
+      return { ok: adopted && gone && moved && same && back && returned && legend &&
+                   tinted && clock === '12:34',
+               detail: 'moved=' + moved + ' page-empty=' + gone + ' handler=' + same +
+                       ' painted=' + clock + ' tone="' + painted.card + '"' +
+                       ' home=' + returned };
+    });
+    await probeRun('desk-skin', function () {
+      /* THE NAKED CARD and THE INVISIBLE CARD, the two ways this feature fails while
+         appearing to work. A card appended to a fresh document without the page's
+         stylesheets is unstyled text on white; and every rule that hides #focuscard -
+         DESK_CSS's own display:none for an organ that is not live, and the governor's
+         `nofit` class, which the page may have left on it - hides it just as
+         effectively out here, where there is nothing else in the window to notice is
+         missing. Both are asserted through real computed style in a real 320px-wide
+         document rather than by reading the CSS strings, because what is in DESK_CSS is
+         not the question - what the cascade does with it is. */
+      const frame = document.createElement('iframe');
+      frame.setAttribute('aria-hidden', 'true');
+      frame.style.cssText = 'position:fixed;left:-9999px;top:0;width:' + DESK_W +
+                            'px;height:' + DESK_H + 'px;border:0';
+      document.body.appendChild(frame);
+      const doc = frame.contentDocument;
+      deskAdopt(doc);
+      const view = frame.contentWindow;
+      const card = doc.getElementById('focuscard');
+      /* Live, said explicitly rather than inherited from whatever the previous case left
+         on the element: the shell shows only live organs, so a card without the class is
+         correctly invisible and this case would be measuring the wrong thing. */
+      card.classList.add('live');
+      /* SNAPSHOT, not the live object. getComputedStyle hands back a view that keeps
+         answering about wherever the element is NOW, so reading it after deskRestore()
+         below describes the card sitting back in the page - which is how this case
+         first shipped a PASS whose own detail line quoted the page's numbers. Copy the
+         five strings out while the card is still where the question is about. */
+      const got = function (el, prop) { return String(view.getComputedStyle(el)[prop]); };
+      const seen = {
+        display: got(card, 'display'),           // beat the 720px rule
+        position: got(card, 'position'),         // not pinned 22px from an edge
+        bar: got(card, 'borderTopWidth'),        // the tone's colour, as a top bar
+        size: got(doc.getElementById('focus-clock'), 'fontSize'),   // DESK_CSS won
+        weight: got(doc.getElementById('focus-clock'), 'fontWeight'),
+        /* --line is declared on :root in the page's one stylesheet and the card's border
+           is drawn with it. Present here means the sheets were genuinely copied over,
+           not approximated. */
+        line: view.getComputedStyle(doc.documentElement)
+                  .getPropertyValue('--line').trim()
+      };
+      deskRestore();
+      frame.remove();
+      return { ok: seen.display === 'flex' && seen.position === 'static' &&
+                   seen.bar === '3px' && seen.size === '40px' &&
+                   seen.weight === '300' && !!seen.line,
+               detail: 'display=' + seen.display + ' position=' + seen.position +
+                       ' bar=' + seen.bar + ' clock=' + seen.size + '/' + seen.weight +
+                       ' --line="' + seen.line + '"' };
+    });
+    await probeRun('merge', function () {
+      /* ONE CARD, EVERY ORGAN, and the part of it that can be proved without a window:
+         all four organs move into one shell, in reading order, and every one of them
+         comes home to its own slot. The shell is asserted to be their common parent -
+         four elements each positioned fixed in its own corner would look identical from
+         the outside right up until you opened the window and found them stacked. */
+      const before = DESK_ORGANS.map(function (id) {
+        const el = document.getElementById(id);
+        return { id: id, el: el, parent: el && el.parentNode, next: el && el.nextSibling };
+      });
+      /* Both of the governor's narrow-page verdicts, put on deliberately: `nofit` carries
+         a display:none, so a card that took it into the window would be invisible there. */
+      $('focuscard').classList.add('pill', 'nofit');
+      const frame = document.createElement('iframe');
+      frame.setAttribute('aria-hidden', 'true');
+      frame.style.cssText = 'position:fixed;left:-9999px;top:0;width:' + DESK_W +
+                            'px;height:' + DESK_H + 'px;border:0';
+      document.body.appendChild(frame);
+      const doc = frame.contentDocument;
+      deskAdopt(doc);
+      const shell = doc.getElementById('deskshell');
+      const rows = shell ? Array.from(shell.children).map(function (el) { return el.id; })
+                         : [];
+      const order = rows.join(',') === DESK_ORGANS.join(',');
+      const gone = DESK_ORGANS.every(function (id) {
+        return !document.getElementById(id);
+      });
+      /* The governor set inline top/right on three of these in the page; an inline style
+         beats every rule in DESK_CSS, so the move must strip them or the organs arrive
+         in the window still pinned to the corners of a page that is not there. */
+      const stripped = rows.every(function (id) {
+        const el = doc.getElementById(id);
+        return !el.style.top && !el.style.right && !el.style.left && !el.style.width &&
+               !el.classList.contains('pill') && !el.classList.contains('nofit');
+      });
+      deskRestore();
+      const home = before.every(function (b) {
+        return b.el && b.el.parentNode === b.parent && b.el.nextSibling === b.next &&
+               document.getElementById(b.id) === b.el;
+      });
+      frame.remove();
+      return { ok: !!shell && order && gone && stripped && home && deskDoc === null,
+               detail: 'rows=[' + rows.join(' ') + '] order=' + order +
+                       ' page-empty=' + gone + ' stripped=' + stripped +
+                       ' home=' + home };
+    });
+    await probeRun('stack', function () {
+      /* Z-ORDER IS WRITTEN DOWN, and here it is read back out of the cascade rather than
+         out of the comment: galaxy < toast < panel < in-page card. A stack that is
+         correct in a comment and wrong in the stylesheet is the failure this catches. */
+      const z = function (id) {
+        const el = document.getElementById(id);
+        return parseInt(getComputedStyle(el).zIndex, 10);
+      };
+      const galaxy = z('graph'), toast = z('brain'), panel = z('panel');
+      const card = z('focuscard'), chips = z('watching'), face = z('facecard');
+      const ordered = galaxy < toast && toast < panel && panel < card && card <= chips &&
+                      chips <= face;
+      /* And the one law a number cannot state: the PiP window is above all of them
+         because it is another window, which is the OS's opinion and not the cascade's. */
+      return { ok: ordered,
+               detail: 'graph=' + galaxy + ' toast=' + toast + ' panel=' + panel +
+                       ' card=' + card + ' chips=' + chips + ' face=' + face };
+    });
+    await probeRun('lane', function () {
+      /* THE RESERVED LANE, measured. Panel open, the card must sit LEFT of the panel
+         edge and the toast must stop at it - not by any particular number, but by the
+         one law that matters: no governed surface covers another's content. Rectangles
+         are compared to each other, so this case stays true if every constant changes. */
+      const card = $('focuscard');
+      const wasOpen = $('panel').classList.contains('open');
+      card.className = 'live';                 // a card, to have a rectangle at all
+      /* Geometry, not animation: the motion is turned off for the measurement and the
+         durations are asserted separately, below, from the same stylesheet. */
+      document.documentElement.classList.add('nomove');
+      const R = function () { layout(); return __galaxy.layout.rects; };
+      $('panel').classList.remove('open');
+      const closed = R();
+      const dockedRight = !!closed.focuscard &&
+        Math.abs(innerWidth - closed.focuscard.right - LAYOUT.EDGE) <= 1;
+      const wideToast = !!closed.brain &&
+        closed.brain.w === Math.min(LAYOUT.TOAST_MAX, innerWidth - LAYOUT.EDGE * 2);
+      $('panel').classList.add('open');
+      const open = R();
+      const edge = open.panel.left;
+      const cardClear = open.focuscard.right <= edge;
+      const toastClear = open.brain.right <= edge;
+      const chipsClear = !open.watching || open.watching.right <= edge;
+      /* The legend is last in the same lane, so it must be BELOW the card rather than
+         under it - the overlap that fxNudgeLegend used to prevent by hand. */
+      const legendClear = !open.legend || open.legend.top >= open.focuscard.bottom;
+      /* THE NARROW CANVAS: the card gives up its words rather than the panel's room, and
+         then gives up the card rather than sit on the panel. Driven through layout()'s
+         width override, because the alternative is resizing the harness's window and
+         asserting about a viewport no other case can rely on. */
+      const at = function (vw) {
+        layout(vw);
+        const r = __galaxy.layout.rects, c = document.getElementById('focuscard');
+        return { pill: c.classList.contains('pill'),
+                 nofit: c.classList.contains('nofit'),
+                 right: r.focuscard && r.focuscard.right,
+                 clear: !r.focuscard || !r.panel || r.focuscard.right <= r.panel.left };
+      };
+      const narrow = at(LAYOUT.PANEL_MAX + LAYOUT.CARD_FLOOR + LAYOUT.EDGE * 2 + 40);
+      const gone = at(LAYOUT.PANEL_MAX + LAYOUT.CARD_FLOOR + LAYOUT.EDGE * 2 - 30);
+      narrow.pill = narrow.pill && !narrow.nofit && gone.nofit;
+      $('panel').classList.toggle('open', wasOpen);
+      document.documentElement.classList.remove('nomove');
+      card.className = '';
+      layout();
+      /* AND THE LAW ABOUT MOTION: every governed MOVE is animated, and none of them takes
+         longer than a quarter of a second. Only the rectangle properties count - the
+         card's own tint fades over 350ms and always has, and a check that lumped the two
+         together would be reading "how fast does drift turn the card red". */
+      const moveDur = function (id) {
+        const cs = getComputedStyle(document.getElementById(id));
+        const props = cs.transitionProperty.split(',').map(function (s) { return s.trim(); });
+        const durs = cs.transitionDuration.split(',')
+          .map(function (s) { return parseFloat(s) || 0; });
+        const out = [];
+        props.forEach(function (p, i) {
+          if (/^(top|right|left|bottom|width|all)$/.test(p)) out.push(durs[i % durs.length]);
+        });
+        return out;
+      };
+      const lane = ['focuscard', 'facecard', 'legend', 'brain'].map(moveDur);
+      const moves = lane.every(function (d) { return d.length > 0; });
+      const quick = lane.every(function (d) {
+        return d.every(function (n) { return n > 0 && n <= LAYOUT.MOVE_MS / 1000; });
+      });
+      return { ok: dockedRight && wideToast && cardClear && toastClear && chipsClear &&
+                   legendClear && narrow.pill && narrow.clear && moves && quick,
+               detail: 'panel@' + edge + ' card.right=' + open.focuscard.right +
+                       ' toast.right=' + open.brain.right +
+                       ' toast.w=' + (closed.brain && closed.brain.w) +
+                       ' legend.top=' + (open.legend && open.legend.top) +
+                       '/' + open.focuscard.bottom +
+                       ' docked=' + dockedRight + ' pill=' + narrow.pill +
+                       ' clear=' + narrow.clear + ' animated=' + moves +
+                       ' moves=' + JSON.stringify(lane) };
+    });
+    await probeRun('retire', function () {
+      /* THE RETIREMENT. "SESSION OVER · 0:00" must not outlive its usefulness, and the
+         clock this runs on is a real setTimeout of eight seconds - far too long for a
+         battery - so what is proved here is the mechanism rather than the wait: a report
+         ARMS the timer, an abort does not, and calling the retirement by hand clears the
+         card. The eight seconds themselves are desk_proof's to sit through. */
+      const was = fx;
+      fxRetired = false;
+      if (fxRetireTimer !== null) { clearTimeout(fxRetireTimer); fxRetireTimer = null; }
+      /* An ABORT: ended, no report. Nothing to read, so nothing is held. */
+      fx = { state: 'ended', report: null, say: [] };
+      fxPaint();
+      const abortArmed = fxRetireTimer !== null;
+      const abortCard = $('focuscard').className;
+      /* A REPORT: the card holds, and the timer is running. */
+      fx = { state: 'ended', report: true, say: [], cleanPct: 91, drifts: 1,
+             streak: 3, bestStreak: 5, intent: 'the invoice importer' };
+      fxPaint();
+      const armed = fxRetireTimer !== null;
+      const showing = /\bended\b/.test($('focuscard').className) && fxShowing();
+      const clock = $('focus-clock').textContent;
+      /* And the retirement itself, called rather than waited for. */
+      fxRetireNow();
+      const retired = fxRetired && !fxShowing() &&
+                      $('focuscard').classList.contains('retired');
+      /* A new session un-retires it: the eight seconds belonged to the last report. */
+      fx = { state: 'running', remainingS: 754, plannedS: 1500, onTargetS: 700,
+             drifts: 0, tier: 1, cleanPct: 99, say: [] };
+      fxPaint();
+      const revived = !fxRetired && fxRetireTimer === null &&
+                      !$('focuscard').classList.contains('retired');
+      fx = was;
+      fxRetired = false;
+      if (fxRetireTimer !== null) { clearTimeout(fxRetireTimer); fxRetireTimer = null; }
+      fxPaint();
+      return { ok: !abortArmed && !abortCard && armed && showing && clock === '0:00' &&
+                   retired && revived && CARD_RETIRE_S === 8,
+               detail: 'abort-armed=' + abortArmed + ' report-armed=' + armed +
+                       ' held="' + clock + '" retired=' + retired +
+                       ' revived=' + revived + ' after=' + CARD_RETIRE_S + 's' };
+    });
     await probeRun('hermetic', function () {
       const spent = probeFetches - startedFetches;
       return { ok: spent === 0, detail: spent + ' requests during the battery' };
@@ -4194,11 +5481,11 @@ async function loadLib() {
        1440x900 and runs it AGAIN so every case answers about the guaranteed viewport.
        Called while the first run is still in its 250ms timer case, the reset at the top
        of fxProbeOnce wipes the cases the first run has already recorded and then both
-       runs push into the same list: thirty cases, half of them measured at a viewport
+       runs push into the same list: forty cases, half of them measured at a viewport
        nobody asserted, and a merged verdict that can report FAIL for a case which
        passes at the asserted size. An instrument that does that is worse than none.
        So calls queue: the second run starts when the first has finished, and each run
-       resets immediately before its own pushes. Sixteen cases, however many times you
+       resets immediately before its own pushes. Twenty-four cases, however many times you
        ask, every one of them from the same run. */
     probeChain = probeChain.then(fxProbeOnce, fxProbeOnce);
     return probeChain;
@@ -4353,13 +5640,20 @@ async function loadLib() {
       get held() { return watchBusyHold; },
       get lastDiff() { return watchLastDiff; },
       get lastNudge() { return watchLastNudge; },
-      /* Whether the face is off the page and on the desktop, and whether the in-page
-         fallback card is showing instead. Exactly one of these should be true while
-         the watch is running. */
-      get facePinned() { return !!faceWin; },
-      get faceCard() { return $('facecard').classList.contains('show'); },
+      /* Whether the face row is off the page and in the desktop card, and whether the
+         in-page fallback is showing instead. Exactly one of these should be true while
+         the watch is running - and it is now one ELEMENT in one of two documents, so
+         "both" is not a state that can be reached by accident any more. */
+      get facePinned() {
+        const card = deskDoc && deskDoc.getElementById('facecard');
+        return !!(deskWin && card && card.classList.contains('show'));
+      },
+      get faceCard() {
+        const card = document.getElementById('facecard');
+        return !!(card && card.classList.contains('show'));
+      },
       get canPin() { return canPin; },
-      pin: openFace
+      pin: function () { return deskOpen('click'); }
     },
     /* Named `session` rather than `focus`, because __galaxy.focus is the camera's
        focusNode and renaming that would break every check written against it. */
@@ -4393,7 +5687,82 @@ async function loadLib() {
          reload would repeat a callout. */
       get spokenSeq() { return fxSpoken; },
       get streaming() { return !!fxStream && fxStream.readyState === 1; },
-      get polling() { return !!fxPoll; }
+      get polling() { return !!fxPoll; },
+      /* THE CARD'S TWO HOMES. `out` is the whole question - is the countdown on the
+         desktop or in the tab - and `inPage` is the other half of it, read from the DOM
+         rather than from a flag, so the two can be checked to disagree. Exactly one of
+         them is true whenever a session is running.
+         open() takes a gesture and will be refused without one: over CDP that means
+         Runtime.evaluate with userGesture, or an Input event on the FOCUS button, which
+         is what the live proof does. */
+      desk: {
+        W: DESK_W, H: DESK_H, ORGANS: DESK_ORGANS.slice(),
+        open: deskOpen, close: deskClose, adopt: deskAdopt, restore: deskRestore,
+        tend: deskTend,
+        /* WHAT IS ACTUALLY IN THE CARD, by id, read from whichever document holds it -
+           which is how "render only what is live" is checked rather than asserted: an
+           organ that is not live must not be a row in here. */
+        get organs() {
+          const doc = deskDoc || document;
+          return DESK_ORGANS.filter(function (id) {
+            const el = doc.getElementById(id);
+            if (!el) return false;
+            return el.classList.contains('live') || el.classList.contains('show');
+          });
+        },
+        /* The height the shell wants for the rows it currently has. */
+        get h() { return deskH(); },
+        get armable() { return deskArmable(); },
+        get anyLive() { return deskOrgansLive(); },
+        retireS: CARD_RETIRE_S,
+        retire: fxRetireNow,
+        get retired() { return fxRetired; },
+        get retiring() { return fxRetireTimer !== null; },
+        get can() { return canDesk; },
+        get out() { return !!deskWin; },
+        get inPage() { return !!document.getElementById('focuscard'); },
+        get wanted() { return deskWanted; },
+        get shut() { return deskShut; },
+        get said() { return deskSaid; },
+        get trouble() { return deskTrouble; },
+        get title() { return deskWin ? deskWin.document.title : ''; },
+        /* What the browser actually granted, and whether it still needs correcting. A
+           window of the wrong size is not a failure to pop the card out, and reading
+           these two apart is the difference between a bug and a browser. */
+        fit: deskFit,
+        get size() {
+          return deskWin ? [deskWin.outerWidth, deskWin.outerHeight] : [0, 0];
+        },
+        get unfit() { return deskUnfit; },
+        get fitted() { return deskFits; },
+        get sawLive() { return deskSawLive; }
+      }
+    },
+    /* THE LAYOUT GOVERNOR, so that "no surface covers another surface's content" is a
+       measurement rather than a promise. run() re-derives every rectangle and hands back
+       what it decided; last is what it decided the time before, without disturbing it. */
+    layout: {
+      LAYOUT: LAYOUT,
+      run: layout,
+      get last() { return layoutLast; },
+      /* The four governed surfaces' actual rectangles, as the browser has them. The
+         probe's `lane` case compares these to each other rather than to numbers: the
+         claim is that they do not overlap, not that they are at any particular place. */
+      get rects() {
+        const out = {};
+        ['panel', 'focuscard', 'facecard', 'brain', 'legend',
+         'sharing', 'watching', 'eyeing', 'brainchip'].forEach(function (id) {
+          const el = document.getElementById(id);
+          if (!el) { out[id] = null; return; }
+          const r = el.getBoundingClientRect();
+          out[id] = !layoutShown(el)
+            ? null                                   // display:none: no rectangle at all
+            : { top: Math.round(r.top), left: Math.round(r.left),
+                right: Math.round(r.right), bottom: Math.round(r.bottom),
+                w: Math.round(r.width), h: Math.round(r.height) };
+        });
+        return out;
+      }
     },
     /* THE INSTRUMENTS. ?focusdebug=1 for the overlay, ?focusprobe=1 for the battery -
        and both reachable from here so a harness can drive them without a query

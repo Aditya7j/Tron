@@ -1,9 +1,2025 @@
   "GET /health HTTP/1.1" 200 -
   "GET / HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  captured: notes/captures/preflight-canary-zarquone92c69-is-a-live-end-to.md
+  "POST /remember HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  saw: 6564 bytes 640x320 -> answer
+  "POST /see?q=Read%20the%20single%20heading%20word%20in%20this%20image%20exactly%20as%20it%20appears%2C%20then%20name%20the%20colours%20of%20the%20three%20bars%20below%20it%2C%20top%20to%20bottom. HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /index.html HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /..%2fconfig.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /%2e%2e/config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /viewer/../config.json HTTP/1.1" 404 -
+  "GET /..\config.json HTTP/1.1" 301 -
+  "GET /..\config.json/ HTTP/1.1" 200 -
+  "GET /%2e%2e%5cconfig.json HTTP/1.1" 301 -
+  "GET /%2e%2e%5cconfig.json/ HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /./../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /notes-index.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /server.py HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /preflight.py HTTP/1.1" 404 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  brain (button): openai/gpt-6-astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (button): openai/not-a-real-brain -> REFUSED (unknown)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): switch to fable 95 -> REFUSED (noid)
+  "POST /model HTTP/1.1" 409 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to fable -> REFUSED (noversion)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  focus: intent -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: retarget -> running
+  "POST /focus HTTP/1.1" 200 -
+  focus: retarget -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  focus: what do my notes say about the roasting profile -> arming
+  "POST /focus HTTP/1.1" 400 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  eyes: on -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 400 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  looked: 6564 bytes 640x320 via OPUS 5 -> answer
+  "POST /look?q=What%20do%20you%20think%20of%20my%20shirt%3F HTTP/1.1" 200 -
+  eyes: off -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /stuck HTTP/1.1" 200 -
+  nudge: 6564 bytes still 4s -> free � moving
+  "POST /stuck?stillS=4 HTTP/1.1" 409 -
+  nudge: 6564 bytes still 90s -> free � mismatch
+  "POST /stuck?stillS=90 HTTP/1.1" 400 -
+  nudge: 6564 bytes still 90s -> free � stale
+  "POST /stuck?stillS=90 HTTP/1.1" 400 -
+  "POST /stuck?stillS=90 HTTP/1.1" 400 -
+  "GET /stuck HTTP/1.1" 200 -
+  nudge: 6564 bytes still 65s -> spoke
+  "POST /stuck?stillS=65 HTTP/1.1" 200 -
+  "GET /stuck HTTP/1.1" 200 -
+  nudge: 6564 bytes still 65s -> free � cooldown
+  "POST /stuck?stillS=65 HTTP/1.1" 429 -
+  "GET /stuck HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  web lookup (world) 'What is the current population of Tokyo?' -> 3 results in 1.0s
+      - ddg-lite: 10 raw rows
+      - ddg-lite answered with 3 usable results
+  "POST /chat HTTP/1.1" 200 -
+  web lookup (force) 'Quarterly OKRs' -> 3 results in 0.8s
+      - ddg-lite: 10 raw rows
+      - ddg-lite answered with 3 usable results
+  "POST /chat HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  captured: notes/captures/preflight-canary-zarquon7b6795-is-a-live-end-to.md
+  "POST /remember HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  saw: 6564 bytes 640x320 -> answer
+  "POST /see?q=Read%20the%20single%20heading%20word%20in%20this%20image%20exactly%20as%20it%20appears%2C%20then%20name%20the%20colours%20of%20the%20three%20bars%20below%20it%2C%20top%20to%20bottom. HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /index.html HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /..%2fconfig.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /%2e%2e/config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /viewer/../config.json HTTP/1.1" 404 -
+  "GET /..\config.json HTTP/1.1" 301 -
+  "GET /..\config.json/ HTTP/1.1" 200 -
+  "GET /%2e%2e%5cconfig.json HTTP/1.1" 301 -
+  "GET /%2e%2e%5cconfig.json/ HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /./../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /notes-index.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /server.py HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /preflight.py HTTP/1.1" 404 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  brain (button): openai/gpt-6-astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (button): openai/not-a-real-brain -> REFUSED (unknown)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): switch to fable 95 -> REFUSED (noid)
+  "POST /model HTTP/1.1" 409 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to fable -> REFUSED (noversion)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  focus: intent -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: retarget -> running
+  "POST /focus HTTP/1.1" 200 -
+  focus: retarget -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  focus: what do my notes say about the roasting profile -> arming
+  "POST /focus HTTP/1.1" 400 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  eyes: on -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 400 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  looked: 6564 bytes 640x320 via OPUS 5 -> answer
+  "POST /look?q=What%20do%20you%20think%20of%20my%20shirt%3F HTTP/1.1" 200 -
+  eyes: off -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /stuck HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  web lookup (world) 'What is the current population of Tokyo?' -> 3 results in 0.0s
+      - cache: the same question 64s ago, 3 results reused - asking again would earn a rate limit, not fresher facts
+  "POST /chat HTTP/1.1" 200 -
+  web lookup (force) 'Quarterly OKRs' -> 3 results in 0.0s
+      - cache: the same question 64s ago, 3 results reused - asking again would earn a rate limit, not fresher facts
+  "POST /chat HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  captured: notes/captures/preflight-canary-zarquoncc723d-is-a-live-end-to.md
+  "POST /remember HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 502 -
+  "GET /health HTTP/1.1" 200 -
+  saw: 6564 bytes 640x320 -> answer
+  "POST /see?q=Read%20the%20single%20heading%20word%20in%20this%20image%20exactly%20as%20it%20appears%2C%20then%20name%20the%20colours%20of%20the%20three%20bars%20below%20it%2C%20top%20to%20bottom. HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /index.html HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /..%2fconfig.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /%2e%2e/config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /viewer/../config.json HTTP/1.1" 404 -
+  "GET /..\config.json HTTP/1.1" 301 -
+  "GET /..\config.json/ HTTP/1.1" 200 -
+  "GET /%2e%2e%5cconfig.json HTTP/1.1" 301 -
+  "GET /%2e%2e%5cconfig.json/ HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /./../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /notes-index.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /server.py HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /preflight.py HTTP/1.1" 404 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  brain (button): openai/gpt-6-astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (button): openai/not-a-real-brain -> REFUSED (unknown)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): switch to fable 95 -> REFUSED (noid)
+  "POST /model HTTP/1.1" 409 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to fable -> REFUSED (noversion)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  focus: intent -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: retarget -> running
+  "POST /focus HTTP/1.1" 200 -
+  focus: retarget -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  focus: what do my notes say about the roasting profile -> arming
+  "POST /focus HTTP/1.1" 400 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  eyes: on -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 400 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  looked: 6564 bytes 640x320 via OPUS 5 -> answer
+  "POST /look?q=What%20do%20you%20think%20of%20my%20shirt%3F HTTP/1.1" 200 -
+  eyes: off -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /stuck HTTP/1.1" 200 -
+  nudge: 6564 bytes still 4s -> free � moving
+  "POST /stuck?stillS=4 HTTP/1.1" 409 -
+  nudge: 6564 bytes still 90s -> free � mismatch
+  "POST /stuck?stillS=90 HTTP/1.1" 400 -
+  nudge: 6564 bytes still 90s -> free � stale
+  "POST /stuck?stillS=90 HTTP/1.1" 400 -
+  "POST /stuck?stillS=90 HTTP/1.1" 400 -
+  "GET /stuck HTTP/1.1" 200 -
+  nudge: 6564 bytes still 65s -> spoke
+  "POST /stuck?stillS=65 HTTP/1.1" 200 -
+  "GET /stuck HTTP/1.1" 200 -
+  nudge: 6564 bytes still 65s -> free � cooldown
+  "POST /stuck?stillS=65 HTTP/1.1" 429 -
+  "GET /stuck HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  web lookup (world) 'What is the current population of Tokyo?' -> 3 results in 0.9s
+      - ddg-lite: 10 raw rows
+      - ddg-lite answered with 3 usable results
+  "POST /chat HTTP/1.1" 200 -
+  web lookup (force) 'Quarterly OKRs' -> 3 results in 0.9s
+      - ddg-lite: 12 raw rows
+      - ddg-lite: skipped https://duckduckgo.com/y.js?ad_domain=pmicorp.in&ad_provider - engine or ad host duckduckgo.com
+      - ddg-lite: skipped https://duckduckgo.com/duckduckgo-help-pages/company/ads-by- - engine or ad host duckduckgo.com
+      - ddg-lite answered with 3 usable results
+  "POST /chat HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /?focusprobe=1&mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /?focusdebug=1&mute=1 HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /?focusprobe=1&mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /?focusdebug=1&mute=1 HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /?focusprobe=1&mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /?focusdebug=1&mute=1 HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  captured: notes/captures/preflight-canary-zarquon3a46e2-is-a-live-end-to.md
+  "POST /remember HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  saw: 6564 bytes 640x320 -> answer
+  "POST /see?q=Read%20the%20single%20heading%20word%20in%20this%20image%20exactly%20as%20it%20appears%2C%20then%20name%20the%20colours%20of%20the%20three%20bars%20below%20it%2C%20top%20to%20bottom. HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /index.html HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /..%2fconfig.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /%2e%2e/config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /viewer/../config.json HTTP/1.1" 404 -
+  "GET /..\config.json HTTP/1.1" 301 -
+  "GET /..\config.json/ HTTP/1.1" 200 -
+  "GET /%2e%2e%5cconfig.json HTTP/1.1" 301 -
+  "GET /%2e%2e%5cconfig.json/ HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /./../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /notes-index.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /server.py HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /preflight.py HTTP/1.1" 404 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  brain (button): openai/gpt-6-astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (button): openai/not-a-real-brain -> REFUSED (unknown)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): switch to fable 95 -> REFUSED (noid)
+  "POST /model HTTP/1.1" 409 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to fable -> REFUSED (noversion)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  focus: intent -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: retarget -> running
+  "POST /focus HTTP/1.1" 200 -
+  focus: retarget -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  focus: what do my notes say about the roasting profile -> arming
+  "POST /focus HTTP/1.1" 400 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  eyes: on -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 400 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  looked: 6564 bytes 640x320 via OPUS 5 -> answer
+  "POST /look?q=What%20do%20you%20think%20of%20my%20shirt%3F HTTP/1.1" 200 -
+  eyes: off -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /stuck HTTP/1.1" 200 -
+  nudge: 6564 bytes still 4s -> free � moving
+  "POST /stuck?stillS=4 HTTP/1.1" 409 -
+  nudge: 6564 bytes still 90s -> free � mismatch
+  "POST /stuck?stillS=90 HTTP/1.1" 400 -
+  nudge: 6564 bytes still 90s -> free � stale
+  "POST /stuck?stillS=90 HTTP/1.1" 400 -
+  "POST /stuck?stillS=90 HTTP/1.1" 400 -
+  "GET /stuck HTTP/1.1" 200 -
+  nudge: 6564 bytes still 65s -> spoke
+  "POST /stuck?stillS=65 HTTP/1.1" 200 -
+  "GET /stuck HTTP/1.1" 200 -
+  nudge: 6564 bytes still 65s -> free � cooldown
+  "POST /stuck?stillS=65 HTTP/1.1" 429 -
+  "GET /stuck HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  web lookup (world) 'What is the current population of Tokyo?' -> 3 results in 0.9s
+      - ddg-lite: 10 raw rows
+      - ddg-lite answered with 3 usable results
+  "POST /chat HTTP/1.1" 200 -
+  web lookup (force) 'Quarterly OKRs' -> 3 results in 0.8s
+      - ddg-lite: 10 raw rows
+      - ddg-lite answered with 3 usable results
+  "POST /chat HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
   "GET /graph-data.js HTTP/1.1" 200 -
   "GET /persona HTTP/1.1" 200 -
   "GET /focus?home=0 HTTP/1.1" 200 -
   "GET /focus/stream HTTP/1.1" 200 -
   "GET /health HTTP/1.1" 200 -
+  eyes: on -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  looked: 40925 bytes 640x480 via OPUS 5 -> answer
+  "POST /look?q=look%20at%20me%20and%20describe HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  web lookup (world) 'can you tell me what is the current population of Tokyo' -> 3 results in 0.9s
+      - ddg-lite: 10 raw rows
+      - ddg-lite answered with 3 usable results
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  web lookup (world) 'can you tell me the current population of India' -> 3 results in 1.2s
+      - ddg-lite: 10 raw rows
+      - ddg-lite answered with 3 usable results
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  focus: intent -> running
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  focus: retarget -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  focus: finish -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch your brain to GPT 6 extra -> REFUSED (unknown)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): switch your brain to GPT 6 Astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  brain (voice): switch your brain to GPT 6 Astra -> openai/gpt-6-astra  [already line]
+  "POST /model HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 400 -
+  brain (voice): switch your brain to normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  eyes: on -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  looked: 44329 bytes 640x480 via OPUS 5 -> answer
+  "POST /look?q=look%20at%20me%20and%20describe HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  looked: 33350 bytes 640x480 via OPUS 5 -> answer
+  "POST /look?q=look%20at%20me%20and%20describe HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  web lookup (thin) "let's talk about my physics" -> 3 results in 0.8s
+      - ddg-lite: 10 raw rows
+      - ddg-lite: skipped https://www.youtube.com/@letstalkaboutphysics - snippet too short (53 chars)
+      - ddg-lite answered with 3 usable results
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  looked: 34884 bytes 640x480 via OPUS 5 -> answer
+  "POST /look?q=tell%20about%20can%20you%20look%20at%20me HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  looked: 37701 bytes 640x480 via OPUS 5 -> answer
+  "POST /look?q=look%20at%20me%20and%20describe%20my%20physic HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  eyes: off -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /brains HTTP/1.1" 200 -
+  focus: pause -> ended
+  "POST /focus HTTP/1.1" 200 -
+  focus: finish -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /?focusprobe=1&mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /?focusdebug=1&mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /?focusprobe=1&mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /?focusdebug=1&mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /?mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /?mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 63574)
+Traceback (most recent call last):
+  File "C:\Users\Fullstack Developer\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Fullstack Developer\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Fullstack Developer\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 687, in __init__
+    super().__init__(*args, **kwargs)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\Fullstack Developer\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Fullstack Developer\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 451, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Fullstack Developer\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 439, in handle_one_request
+    method()
+    ~~~~~~^^
+  File "C:\Users\Fullstack Developer\Desktop\2.0\trone\server.py", line 3074, in do_GET
+    return self._send_json(200, {
+           ~~~~~~~~~~~~~~~^^^^^^^
+        "ok": True,
+        ^^^^^^^^^^^
+    ...<27 lines>...
+        },
+        ^^
+    })
+    ^^
+  File "C:\Users\Fullstack Developer\Desktop\2.0\trone\server.py", line 2883, in _send_json
+    self.end_headers()
+    ~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Fullstack Developer\Desktop\2.0\trone\server.py", line 2934, in end_headers
+    SimpleHTTPRequestHandler.end_headers(self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\Fullstack Developer\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 553, in end_headers
+    self.flush_headers()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Fullstack Developer\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 557, in flush_headers
+    self.wfile.write(b"".join(self._headers_buffer))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Fullstack Developer\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 845, in write
+    self._sock.sendall(b)
+    ~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+  "GET /?mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 56095)
+Traceback (most recent call last):
+  File "C:\Users\Fullstack Developer\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Fullstack Developer\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Fullstack Developer\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 687, in __init__
+    super().__init__(*args, **kwargs)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "C:\Users\Fullstack Developer\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "C:\Users\Fullstack Developer\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 451, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Fullstack Developer\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 439, in handle_one_request
+    method()
+    ~~~~~~^^
+  File "C:\Users\Fullstack Developer\Desktop\2.0\trone\server.py", line 3016, in do_GET
+    return self._send_json(200, {
+           ~~~~~~~~~~~~~~~^^^^^^^
+        "ok": True, "kind": "focus", "nodes": [],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        "focus": focus.MANAGER.state(home=self._focus_home_flag())})
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Fullstack Developer\Desktop\2.0\trone\server.py", line 2883, in _send_json
+    self.end_headers()
+    ~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Fullstack Developer\Desktop\2.0\trone\server.py", line 2934, in end_headers
+    SimpleHTTPRequestHandler.end_headers(self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\Fullstack Developer\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 553, in end_headers
+    self.flush_headers()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\Fullstack Developer\AppData\Local\Programs\Python\Python313\Lib\http\server.py", line 557, in flush_headers
+    self.wfile.write(b"".join(self._headers_buffer))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Fullstack Developer\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 845, in write
+    self._sock.sendall(b)
+    ~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+----------------------------------------
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /?mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /?mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /?mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /?mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /?mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /?mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: retarget -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /?mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  focus: retarget -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /?mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  focus: retarget -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /?mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  focus: retarget -> running
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /?mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  focus: retarget -> running
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /?mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /?mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  focus: retarget -> running
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /?mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  focus: retarget -> running
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /?mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  focus: retarget -> running
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /?focusprobe=1&mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /?focusdebug=1&mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  captured: notes/captures/preflight-canary-zarquon3c1e41-is-a-live-end-to.md
+  "POST /remember HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  saw: 6564 bytes 640x320 -> answer
+  "POST /see?q=Read%20the%20single%20heading%20word%20in%20this%20image%20exactly%20as%20it%20appears%2C%20then%20name%20the%20colours%20of%20the%20three%20bars%20below%20it%2C%20top%20to%20bottom. HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /index.html HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
   code 404, message File not found
-  "GET /focus/diag HTTP/1.1" 404 -
+  "GET /config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /..%2fconfig.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /%2e%2e/config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /viewer/../config.json HTTP/1.1" 404 -
+  "GET /..\config.json HTTP/1.1" 301 -
+  "GET /..\config.json/ HTTP/1.1" 200 -
+  "GET /%2e%2e%5cconfig.json HTTP/1.1" 301 -
+  "GET /%2e%2e%5cconfig.json/ HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /./../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /notes-index.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /server.py HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /preflight.py HTTP/1.1" 404 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  brain (button): openai/gpt-6-astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (button): openai/not-a-real-brain -> REFUSED (unknown)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): switch to fable 95 -> REFUSED (noid)
+  "POST /model HTTP/1.1" 409 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to fable -> REFUSED (noversion)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  focus: intent -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: retarget -> running
+  "POST /focus HTTP/1.1" 200 -
+  focus: retarget -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  focus: what do my notes say about the roasting profile -> arming
+  "POST /focus HTTP/1.1" 400 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  eyes: on -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 400 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  looked: 6564 bytes 640x320 via OPUS 5 -> answer
+  "POST /look?q=What%20do%20you%20think%20of%20my%20shirt%3F HTTP/1.1" 200 -
+  eyes: off -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /stuck HTTP/1.1" 200 -
+  nudge: 6564 bytes still 4s -> free � moving
+  "POST /stuck?stillS=4 HTTP/1.1" 409 -
+  nudge: 6564 bytes still 90s -> free � mismatch
+  "POST /stuck?stillS=90 HTTP/1.1" 400 -
+  nudge: 6564 bytes still 90s -> free � stale
+  "POST /stuck?stillS=90 HTTP/1.1" 400 -
+  "POST /stuck?stillS=90 HTTP/1.1" 400 -
+  "GET /stuck HTTP/1.1" 200 -
+  nudge: 6564 bytes still 65s -> spoke
+  "POST /stuck?stillS=65 HTTP/1.1" 200 -
+  "GET /stuck HTTP/1.1" 200 -
+  nudge: 6564 bytes still 65s -> free � cooldown
+  "POST /stuck?stillS=65 HTTP/1.1" 429 -
+  "GET /stuck HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  web lookup (world) 'What is the current population of Tokyo?' -> 3 results in 1.0s
+      - ddg-lite: 10 raw rows
+      - ddg-lite answered with 3 usable results
+  "POST /chat HTTP/1.1" 200 -
+  web lookup (force) 'Quarterly OKRs' -> 3 results in 0.7s
+      - ddg-lite: 10 raw rows
+      - ddg-lite answered with 3 usable results
+  "POST /chat HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  captured: notes/captures/preflight-canary-zarquon278b23-is-a-live-end-to.md
+  "POST /remember HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  saw: 6564 bytes 640x320 -> answer
+  "POST /see?q=Read%20the%20single%20heading%20word%20in%20this%20image%20exactly%20as%20it%20appears%2C%20then%20name%20the%20colours%20of%20the%20three%20bars%20below%20it%2C%20top%20to%20bottom. HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /index.html HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /..%2fconfig.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /%2e%2e/config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /viewer/../config.json HTTP/1.1" 404 -
+  "GET /..\config.json HTTP/1.1" 301 -
+  "GET /..\config.json/ HTTP/1.1" 200 -
+  "GET /%2e%2e%5cconfig.json HTTP/1.1" 301 -
+  "GET /%2e%2e%5cconfig.json/ HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /./../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /notes-index.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /server.py HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /preflight.py HTTP/1.1" 404 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  brain (button): openai/gpt-6-astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (button): openai/not-a-real-brain -> REFUSED (unknown)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): switch to fable 95 -> REFUSED (noid)
+  "POST /model HTTP/1.1" 409 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to fable -> REFUSED (noversion)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  focus: intent -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: retarget -> running
+  "POST /focus HTTP/1.1" 200 -
+  focus: retarget -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  focus: what do my notes say about the roasting profile -> arming
+  "POST /focus HTTP/1.1" 400 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  eyes: on -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 400 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  looked: 6564 bytes 640x320 via OPUS 5 -> answer
+  "POST /look?q=What%20do%20you%20think%20of%20my%20shirt%3F HTTP/1.1" 200 -
+  eyes: off -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /stuck HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  web lookup (world) 'What is the current population of Tokyo?' -> 3 results in 0.0s
+      - cache: the same question 69s ago, 3 results reused - asking again would earn a rate limit, not fresher facts
+  "POST /chat HTTP/1.1" 200 -
+  web lookup (force) 'Quarterly OKRs' -> 3 results in 0.0s
+      - cache: the same question 68s ago, 3 results reused - asking again would earn a rate limit, not fresher facts
+  "POST /chat HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  captured: notes/captures/preflight-canary-zarquonda8997-is-a-live-end-to.md
+  "POST /remember HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  saw: 6564 bytes 640x320 -> answer
+  "POST /see?q=Read%20the%20single%20heading%20word%20in%20this%20image%20exactly%20as%20it%20appears%2C%20then%20name%20the%20colours%20of%20the%20three%20bars%20below%20it%2C%20top%20to%20bottom. HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /index.html HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /..%2fconfig.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /%2e%2e/config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /viewer/../config.json HTTP/1.1" 404 -
+  "GET /..\config.json HTTP/1.1" 301 -
+  "GET /..\config.json/ HTTP/1.1" 200 -
+  "GET /%2e%2e%5cconfig.json HTTP/1.1" 301 -
+  "GET /%2e%2e%5cconfig.json/ HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /./../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /notes-index.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /server.py HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /preflight.py HTTP/1.1" 404 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  brain (button): openai/gpt-6-astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (button): openai/not-a-real-brain -> REFUSED (unknown)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): switch to fable 95 -> REFUSED (noid)
+  "POST /model HTTP/1.1" 409 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to fable -> REFUSED (noversion)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  focus: intent -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: retarget -> running
+  "POST /focus HTTP/1.1" 200 -
+  focus: retarget -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  focus: what do my notes say about the roasting profile -> arming
+  "POST /focus HTTP/1.1" 400 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  eyes: on -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 400 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  looked: 6564 bytes 640x320 via OPUS 5 -> answer
+  "POST /look?q=What%20do%20you%20think%20of%20my%20shirt%3F HTTP/1.1" 200 -
+  eyes: off -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /stuck HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  web lookup (world) 'What is the current population of Tokyo?' -> 3 results in 0.9s
+      - ddg-lite: 10 raw rows
+      - ddg-lite answered with 3 usable results
+  "POST /chat HTTP/1.1" 200 -
+  web lookup (force) 'Quarterly OKRs' -> 3 results in 0.8s
+      - ddg-lite: 10 raw rows
+      - ddg-lite answered with 3 usable results
+  "POST /chat HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  captured: notes/captures/preflight-canary-zarquone80c0d-is-a-live-end-to.md
+  "POST /remember HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  saw: 6564 bytes 640x320 -> answer
+  "POST /see?q=Read%20the%20single%20heading%20word%20in%20this%20image%20exactly%20as%20it%20appears%2C%20then%20name%20the%20colours%20of%20the%20three%20bars%20below%20it%2C%20top%20to%20bottom. HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /index.html HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /..%2fconfig.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /%2e%2e/config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /viewer/../config.json HTTP/1.1" 404 -
+  "GET /..\config.json HTTP/1.1" 301 -
+  "GET /..\config.json/ HTTP/1.1" 200 -
+  "GET /%2e%2e%5cconfig.json HTTP/1.1" 301 -
+  "GET /%2e%2e%5cconfig.json/ HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /./../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /notes-index.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /server.py HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /preflight.py HTTP/1.1" 404 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  brain (button): openai/gpt-6-astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (button): openai/not-a-real-brain -> REFUSED (unknown)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): switch to fable 95 -> REFUSED (noid)
+  "POST /model HTTP/1.1" 409 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to fable -> REFUSED (noversion)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  focus: intent -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: retarget -> running
+  "POST /focus HTTP/1.1" 200 -
+  focus: retarget -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  focus: what do my notes say about the roasting profile -> arming
+  "POST /focus HTTP/1.1" 400 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  eyes: on -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 400 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  looked: 6564 bytes 640x320 via OPUS 5 -> answer
+  "POST /look?q=What%20do%20you%20think%20of%20my%20shirt%3F HTTP/1.1" 200 -
+  eyes: off -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /stuck HTTP/1.1" 200 -
+  nudge: 6564 bytes still 4s -> free � moving
+  "POST /stuck?stillS=4 HTTP/1.1" 409 -
+  nudge: 6564 bytes still 90s -> free � mismatch
+  "POST /stuck?stillS=90 HTTP/1.1" 400 -
+  nudge: 6564 bytes still 90s -> free � stale
+  "POST /stuck?stillS=90 HTTP/1.1" 400 -
+  "POST /stuck?stillS=90 HTTP/1.1" 400 -
+  "GET /stuck HTTP/1.1" 200 -
+  nudge: 6564 bytes still 65s -> spoke
+  "POST /stuck?stillS=65 HTTP/1.1" 200 -
+  "GET /stuck HTTP/1.1" 200 -
+  nudge: 6564 bytes still 65s -> free � cooldown
+  "POST /stuck?stillS=65 HTTP/1.1" 429 -
+  "GET /stuck HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  web lookup (world) 'What is the current population of Tokyo?' -> 3 results in 0.0s
+      - cache: the same question 67s ago, 3 results reused - asking again would earn a rate limit, not fresher facts
+  "POST /chat HTTP/1.1" 200 -
+  web lookup (force) 'Quarterly OKRs' -> 3 results in 0.0s
+      - cache: the same question 66s ago, 3 results reused - asking again would earn a rate limit, not fresher facts
+  "POST /chat HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  captured: notes/captures/preflight-canary-zarquon2655c3-is-a-live-end-to.md
+  "POST /remember HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  saw: 6564 bytes 640x320 -> answer
+  "POST /see?q=Read%20the%20single%20heading%20word%20in%20this%20image%20exactly%20as%20it%20appears%2C%20then%20name%20the%20colours%20of%20the%20three%20bars%20below%20it%2C%20top%20to%20bottom. HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /index.html HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /..%2fconfig.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /%2e%2e/config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /viewer/../config.json HTTP/1.1" 404 -
+  "GET /..\config.json HTTP/1.1" 301 -
+  "GET /..\config.json/ HTTP/1.1" 200 -
+  "GET /%2e%2e%5cconfig.json HTTP/1.1" 301 -
+  "GET /%2e%2e%5cconfig.json/ HTTP/1.1" 200 -
+  code 404, message File not found
+  "GET /./../config.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /notes-index.json HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /server.py HTTP/1.1" 404 -
+  code 404, message File not found
+  "GET /preflight.py HTTP/1.1" 404 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  brain (button): openai/gpt-6-astra -> openai/gpt-6-astra  [curated line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  brain (button): openai/not-a-real-brain -> REFUSED (unknown)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): switch to fable 95 -> REFUSED (noid)
+  "POST /model HTTP/1.1" 409 -
+  "GET /health HTTP/1.1" 200 -
+  brain (voice): switch to fable -> REFUSED (noversion)
+  "POST /model HTTP/1.1" 409 -
+  brain (voice): go back to your normal brain -> us.anthropic.claude-opus-5  [restored line]
+  "POST /model HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  focus: intent -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: retarget -> running
+  "POST /focus HTTP/1.1" 200 -
+  focus: retarget -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  focus: what do my notes say about the roasting profile -> arming
+  "POST /focus HTTP/1.1" 400 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  eyes: on -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 400 -
+  eyes: posture -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  looked: 6564 bytes 640x320 via OPUS 5 -> answer
+  "POST /look?q=What%20do%20you%20think%20of%20my%20shirt%3F HTTP/1.1" 200 -
+  eyes: off -> spoke
+  "POST /eyes HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /stuck HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  web lookup (world) 'What is the current population of Tokyo?' -> 3 results in 0.8s
+      - ddg-lite: 10 raw rows
+      - ddg-lite answered with 3 usable results
+  "POST /chat HTTP/1.1" 200 -
+  web lookup (force) 'Quarterly OKRs' -> 3 results in 0.7s
+      - ddg-lite: 10 raw rows
+      - ddg-lite answered with 3 usable results
+  "POST /chat HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /?focusprobe=1&mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /?focusdebug=1&mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /focus/diag HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /?mute=1 HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  focus: retarget -> running
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  focus: retarget -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  focus: retarget -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  focus: retarget -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  focus: finish -> ended
+  "POST /focus HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  focus: status -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus?home=0 HTTP/1.1" 200 -
+  focus: finish -> ended
+  "POST /focus HTTP/1.1" 200 -
+  "GET / HTTP/1.1" 200 -
+  "GET /graph-data.js HTTP/1.1" 200 -
+  "GET /persona HTTP/1.1" 200 -
+  "GET /focus?home=1 HTTP/1.1" 200 -
+  "GET /focus/stream HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  "POST /chat HTTP/1.1" 200 -
+  "GET /brains HTTP/1.1" 200 -
+  "GET /health HTTP/1.1" 200 -
+  focus: start -> arming
+  "POST /focus HTTP/1.1" 200 -
+  "GET /focus HTTP/1.1" 200 -
+  focus: abort -> ended
+  "POST /focus HTTP/1.1" 200 -

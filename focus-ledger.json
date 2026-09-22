@@ -1,9 +1,9 @@
 {
-  "sessions": 21,
-  "plannedMinutes": 650,
-  "onTargetMinutes": 17,
-  "driftMinutes": 17,
-  "drifts": 27,
+  "sessions": 26,
+  "plannedMinutes": 800,
+  "onTargetMinutes": 21,
+  "driftMinutes": 20,
+  "drifts": 46,
   "cleanSessions": 10,
   "streak": 0,
   "bestStreak": 4,
@@ -27,6 +27,56 @@
       "drifts": 3,
       "secondsAdrift": 17,
       "percent": 51,
+      "completed": false
+    },
+    {
+      "at": "2026-09-22 20:00",
+      "plannedMinutes": 30,
+      "activeMinutes": 2,
+      "onTargetMinutes": 1,
+      "drifts": 5,
+      "secondsAdrift": 59,
+      "percent": 47,
+      "completed": false
+    },
+    {
+      "at": "2026-09-22 21:09",
+      "plannedMinutes": 30,
+      "activeMinutes": 2,
+      "onTargetMinutes": 0,
+      "drifts": 3,
+      "secondsAdrift": 32,
+      "percent": 24,
+      "completed": false
+    },
+    {
+      "at": "2026-09-22 21:57",
+      "plannedMinutes": 30,
+      "activeMinutes": 1,
+      "onTargetMinutes": 0,
+      "drifts": 1,
+      "secondsAdrift": 29,
+      "percent": 33,
+      "completed": false
+    },
+    {
+      "at": "2026-09-22 23:05",
+      "plannedMinutes": 30,
+      "activeMinutes": 3,
+      "onTargetMinutes": 1,
+      "drifts": 8,
+      "secondsAdrift": 69,
+      "percent": 52,
+      "completed": false
+    },
+    {
+      "at": "2026-09-22 23:50",
+      "plannedMinutes": 30,
+      "activeMinutes": 3,
+      "onTargetMinutes": 2,
+      "drifts": 2,
+      "secondsAdrift": 22,
+      "percent": 84,
       "completed": false
     }
   ]

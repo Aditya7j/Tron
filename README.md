@@ -5,11 +5,17 @@ A 3D galaxy of your markdown notes, with a brain you can talk to.
 ```
 build.py            indexer: every .md -> viewer/graph-data.js + notes-index.json
 server.py           static server (viewer/ only) + /chat + /remember + /see + /model + SigV4 by hand
+search.py           the live web lookup: query in, three snippets out, [] on any failure
 focus.py            focus sessions: the tick, the reader, the callouts, the ledger
 preflight.py        runs every live chain against the running server and prints a verdict
 test_focus_privacy.py   proves no identity is ever STORED: named out loud, kept nowhere
 focus_live.mjs      the live loop: click FOCUS, settle, hear the callout, move the lock, hear the report
 focus_probe.mjs     the instruments: /focus/diag, the ledger's shape, the probe page, the debug overlay
+desk_proof.mjs      headed Chrome: the countdown card leaves the tab for a desktop window, and locks a work tab from out there
+layout_proof.mjs    headed Chrome: the governor keeps the card off the panel and the toast off its chips, and retires the card
+port_proof.mjs      the DevTools port: the launcher opens it, and the start line says so out loud when it is missing
+followup_proof.mjs  "who created it?" searches for React while the screen still quotes the pronoun
+launch-chrome.ps1   one double-click: kill stray Chrome, relaunch it with --remote-debugging-port=9222, open the viewer
 config.json         provider, credentials, model  <- project root, never served
 focus-ledger.json   generated - totals plus one eight-key row per session. No identities, ever
 notes/              the markdown corpus
@@ -32,10 +38,31 @@ the index whenever it changes on disk. `config.json` is re-read on every request
 so pasting credentials in does not need a restart — but editing `server.py` itself
 does.
 
+Then open the browser **with the script**, not by hand:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File launch-chrome.ps1                # every day
+powershell -ExecutionPolicy Bypass -File launch-chrome.ps1 -MakeShortcut  # once
+```
+
+`-MakeShortcut` puts *Jarvis Chrome (DevTools)* on your Desktop, and after that it is
+one double-click. This matters more than it looks: [tab-level
+locking](#what-it-locks-on-to) needs Chrome's DevTools port, and a browser opened the
+ordinary way does not have one — the session then watches the *application* only, so
+every tab in the browser looks like the one you promised to work in. The script closes
+stray Chromes, relaunches with `--remote-debugging-port=9222`, opens the viewer, and
+then **proves it** by asking the port for its version and the server for
+`/health → focus.cdp`. A launcher that opens a browser and assumes is a launcher you
+will trust on the one day it silently failed.
+
+Using Edge or Brave? Change the one line marked `THE ONE LINE` at the top of the
+script — `'msedge'` or `'brave'`. The port flag and the CDP join are identical across
+every Chromium browser, so nothing else changes.
+
 ## Preflight
 
 ```bash
-python preflight.py           # fourteen live chains, a tick or a cross each
+python preflight.py           # fifteen live chains, a tick or a cross each
 python preflight.py --quiet   # just the summary line
 python preflight.py --keep-note   # leave the probe note in the galaxy
 ```
@@ -62,6 +89,7 @@ a mock is a description of what you believed at the time.
 | 12 | the eyes nudge once, cool down, and cannot carry a picture — including under five smuggled names |
 | 13 | the screen watch refuses four ways for nothing, then nudges once, and hands no frame back |
 | 14 | `/focus/diag` answers from the **running** process, in booleans only, agreeing with `/focus` — and both in-browser instruments are in the page that is served |
+| 15 | a question the notes cannot answer fetches the live web and cites openable URLs; "look this up" bypasses the local check; a real note question stays local; a greeting searches nothing |
 
 It finishes with `N pass, N fail, N warn` and exits with the number of failures, so
 `python preflight.py --quiet && deploy` does the right thing.
@@ -118,6 +146,16 @@ Some details that are the difference between a harness and a decoration:
   holds exactly the name this machine's own reader would derive, and the check then
   reads the route until that sentence is **gone**. Spoken, then scrubbed, proved over
   HTTP.
+- **Check 15 pins no fact, because the web moves.** Asking for Tokyo's population and
+  asserting a number would make the harness wrong the month the number changes. So it
+  asserts the *shape* of an honest answer instead: `kind` is `"web"`, `sources` is
+  non-empty, every source is an openable `http(s)` URL with a title and carries
+  **exactly two keys** — a third key appearing in `web_sources()` fails the check, which
+  is the same whitelist discipline as `public_state()`. It also asserts the negative
+  half, which is the half a feature like this breaks: a real note question must come
+  back `kind: "notes"` with `nodes` and **no** `sources` and **no** `searched`, and
+  `morning!` must stay `kind: "chat"`. A lookup that works but searches the web for
+  small talk has not passed.
 - **It polls for the clock rather than sleeping and sampling once.** `elapsedS` is
   whole seconds, so a fixed 2.6-second wait leaves about half a second of margin on a
   counter that moves in steps of one. A check that fails occasionally for arithmetic
@@ -127,7 +165,10 @@ Some details that are the difference between a harness and a decoration:
   chain being dead fails. Only failures move the exit code. With no OpenRouter key
   configured, check 10 warns: the swapped id is verified, the swapped *answer* is not.
   With no Chrome on the DevTools port, check 11 warns: the session is verified at
-  application level, tab-level locking is unavailable to verify.
+  application level, tab-level locking is unavailable to verify. With every search
+  door shut — no network, rate limits, a blocked host — check 15 warns: it asserts the
+  answer is exactly `WEB_SILENT_LINE` and moves on, because a silent web is a fact
+  about your network, not a bug in the lookup.
 
 ## The model
 
@@ -422,6 +463,313 @@ as its own outcome rather than rounded up to success, since the file is safe but
 galaxy does not know it yet. The trigger is also checked server-side, so a stale tab
 cannot answer a capture instead of performing it.
 
+## The other world: the live web
+
+Ask something your notes do not cover and the assistant goes and looks — three
+snippets off the live web, an answer built from those and nothing else, and the URLs
+listed beside it as links you can click. Ask something your notes *do* cover and it
+never leaves the machine. The whole feature is that boundary, and the visible half of
+it is a colour: **your notes are gold and folder-coloured, the web is cyan.**
+
+```
+python search.py "current population of tokyo"   # the module, straight from the shell
+```
+
+### The two-step lookup
+
+Step one is the scoring that was always there. Step two happens only for one of three
+reasons, and `/chat` says which in a `searched` field:
+
+| `searched` | why it looked | example |
+|---|---|---|
+| `force` | you told it to. Nothing can veto this | "Jarvis, look this up: …", "search the web for …" |
+| `world` | the answer changes hourly, so a note cannot hold it | "what's the weather", "latest news on …", "who won …", "current price of …" |
+| `thin` | **the notes cannot answer it** — they hold less than a quarter of what you asked, or the question is out of scope | a `note_confidence()` below `WEB_CONFIDENCE_THRESHOLD`, or a raw score below `RELEVANCE_FLOOR` |
+
+Two more fields ride along on a web reply: `searchedFor`, the query as **sent**, and
+`rewrote` when that is not the sentence you typed — see [A pronoun is not a
+subject](#a-pronoun-is-not-a-subject). The viewer renders neither; they are there so the
+reply alone can answer what left the machine.
+
+**The gate, in one sentence:** a question reaches the web when it is *substantial* and
+the notes *cannot answer it*. Substantial is what `substantial_question()` already knew —
+content words survive the filler-strip, and it is not a greeting or a question about the
+assistant. "Cannot answer" is the confidence floor below.
+
+#### A threshold with units
+
+`WEB_CONFIDENCE_THRESHOLD = 0.25` is a **fraction of the question**, not a score.
+`note_confidence()` returns how much of what you asked the collection actually holds, on
+a scale where 0 is "not one word of this appeared in any note" and 1 is "one note
+contains every word of it". So 0.25 reads as a sentence: *a quarter of the question, or
+the notes do not get to answer it.* One shared word in a nine-word question is about
+0.11 and loses; three words of five is 0.6 and wins.
+
+It used to be compared against `score_notes()`'s raw idf total, which is unbounded — a
+bug with a number in front of it. One incidental shared word already clears 0.25 on that
+scale, which is how a question about prime ministers came back "answered" with six notes
+about coffee lit behind it. A threshold with no units cannot be reasoned about at all;
+you cannot say what 0.25 *means*, and a threshold nobody can reason about is a threshold
+nobody notices is wrong.
+
+Two details of the measurement earned their lines in `note_confidence()`:
+
+- **Words are weighted by how rare they are in your corpus**, so a match on a word every
+  note uses is not worth a match on the word the question is *about*. "Who was the first
+  Sikh PM of India" has three content words and thirteen of thirty notes happen to
+  contain "first": the flat fraction is 0.33 and the gate stays shut on the strength of a
+  word nobody asked about. Weighted, it is 0.14 — a loss, which is the right answer.
+  Equal-rarity words give the flat fraction straight back.
+- **It is the best of the retrieved notes, not strictly the top-scoring one.** Ask
+  "what do the notes say about roasting" and the raw score puts *Subscription Churn
+  **Notes*** first, winning on the word "notes" in its title, while the note that
+  answers the question is third. The claim being tested is "can the notes answer this",
+  and that is a claim about the collection rather than about one row of it.
+
+#### No chips for a refusal
+
+If confidence is below the floor the retrieved tail is trimmed to **nothing**: no chips
+lit, no camera fly, no panel opened. A refusal that lights six notes is a provenance lie,
+and the fact that it is a pretty one is why it gets a branch of its own in
+`classify_question()`. The answer becomes a web answer, or a plain refusal — never a
+refusal with six notes glowing behind it.
+
+#### One apology, not two
+
+If the gate opens and the web is silent too, the refusal **gains one clause** rather than
+a second sentence: *"My notes have nothing on that, and the web, asked on your behalf,
+was likewise silent, sir."* That is `WEB_SILENT_LINE`, and it is one sentence on purpose.
+A smalltalk refusal followed by a canned line about the web says sorry twice for one
+failure; a smalltalk refusal alone hides a search that was run on your behalf, which is a
+cost you paid and were not told about.
+
+The out-of-scope path is where this went wrong first. A question scoring between the two
+floors was classified `"chat"` and answered from `SMALLTALK_PROMPT` — *"your notes do not
+cover that"* — while a live lookup sat one branch away, unasked. Both halves of "the
+notes cannot answer it" now report as `thin`, because they are the same fact told to the
+same reader.
+
+Three things never search, and each is a bug that would have been easy to ship:
+
+- **Small talk stays home.** Greetings, jokes and questions about the assistant never
+  reach the web: "good morning" costs nothing and touches nothing. Both vetoes sit
+  *above* the number in `web_intent()`, so no reading of any threshold can send a
+  greeting to a search engine — `substantial_question()` is split out of
+  `classify_question()` for exactly this. The *words* decide whether a question was
+  asked, and only then does confidence decide where the answer comes from. `_peel()`
+  carries the weight there, and it has been wrong once: "hey there, thanks, so…" stopped
+  peeling at "there", left "thanks" behind as a content word, and so counted as a real
+  question — harmless while only a zero score searched, and a greeting posted to
+  DuckDuckGo the moment an out-of-scope question could open the gate.
+- **Questions about this machine.** "How do I move the lock?" matches no note either,
+  and DuckDuckGo will happily return three articles about focus apps and none about
+  this one. `SELF_RE` holds that line — and it also stops "you are being slow, fetch
+  something sharper" being answered with search results instead of being *obeyed*.
+- **The weather used to be small talk** and is not any more. It moved out of
+  `CHATTER_RE` into `REALWORLD_RE`, because the machine can actually find out now and
+  treating it as chatter would be a deliberate refusal to look. The clock stayed put:
+  no search engine knows which chair you are sitting in.
+
+### A pronoun is not a subject
+
+Ask *"what is react"*, then follow up with *"who created it?"*, and the gate opens
+correctly — and the search went out with the pronoun still in it. DuckDuckGo answered
+about the man who created the World Wide Web. The answer was well sourced, confident, and
+about the wrong thing, which is the worst of the three ways to be wrong.
+
+A bare follow-up now inherits its predecessor's subject **before** the search is fired,
+and nothing else. Four parts:
+
+**The memory** is one module-level dict, `_last_ask`, holding the last question and the
+*kind* it turned out to be. It is written once, in the `/chat` handler, after
+`answer_question()` has returned — so the kind stored is the **final** one, `"web"`
+included, which is only known after the lookup has happened. `answer_question()` reads it
+at the top, before anything can write to it, so at the moment a pronoun is resolved the
+memory still holds the question *before* this one. The ↻ button clears it through
+`forget_ask()`, alongside the conversation history: a subject left behind after a
+forgetting is a subject inherited from a conversation that, as far as you are concerned,
+never happened. That call sits *outside* `/reset`'s `with _lock` block, because
+`threading.Lock` is not reentrant and a deadlocked forget button is worse than none.
+
+**Three conditions**, in `resolve_followup()`, all of which must hold:
+
+| | |
+|---|---|
+| there is a remembered question, and it was a **real** one | `prior_kind in ("notes", "web")`. "Good morning" has no subject to lend, and appending one to a follow-up would invent a question nobody asked |
+| the follow-up is **short** — under 8 words | a question long enough to carry its own subject keeps it |
+| it contains an **anaphor** | `it, its, they, them, their, he, him, his, she, her, this, that, these, those` — the actual complaint |
+
+**The quick thinker** is `qwen3:4b` on local Ollama, and getting four words out of a
+thinking model was the whole difficulty. `/api/chat` with `think: false` does not stop the
+reasoning — it relocates it into `content`, so the "search query" came back as *"Okay, the
+user previously asked…"*. `think: true` is clean and takes **24 seconds**, which is longer
+than the search it is meant to improve. The working shape is `/api/generate` with
+`raw: true`, hand-written ChatML, one worked example, and each assistant turn opened with
+an **empty `<think>\n\n</think>` block** — the model accepts that its thinking is already
+done and gets on with it. **0.25–1.5 s, four tokens.** The instruction is one line, exactly
+as specified: *"Given the previous question and this follow-up, output a standalone search
+query. Output the query only, no prose."*
+
+Whatever comes back is then disbelieved on principle. `_quick_clean()` takes the first
+non-empty line and rejects it if it leaks a ChatML or `<think>` marker, opens like prose
+(`QUICK_PROSE_RE`: *okay, sure, here, the user, given, so…*), runs past
+`QUICK_MAX_WORDS`, or — the one that matters — **adds no word the follow-up did not
+already have.** A rewrite that contributes nothing is a failure that happens to be
+syntactically valid.
+
+**The fallback** is arithmetic: `_subject_of()` takes the last run of capitalised
+non-stopwords in the previous question, or its last content word, and
+`heuristic_rewrite()` appends it. `"who created it react"` is not English and no search
+engine cares; it carries the question and the subject, which is the job. With Ollama
+stopped, the trace reads *"the quick thinker (qwen3:4b) did not answer: …"* and the
+search still goes out about React. If both fail, the question is searched **verbatim** —
+that is a normal outcome, not an error, and it costs the search nothing.
+
+#### THE LAW: the voice stays yours
+
+The rewrite changes **one** thing: the string handed to `search.py`. The answer card and
+the sources panel both render the question from the page's own local variable, so
+`#a-q` shows *"who created it?"* and `#p-label` shows *"who created it?"* no matter what
+was searched — true by construction, not by discipline, because the viewer is never told
+the rewrite. It *is* told for the record: every web reply carries `searchedFor`, plus
+`rewrote: "quick" | "heuristic"` when the two differ, and the server logs both on one
+line —
+
+```
+web lookup (thin, notes held 0.00 of it) 'who created react' [quick rewrite of 'who created it?'] -> 3 results in 1.4s
+      - a bare follow-up: 'who created it?' after 'what is react'
+      - qwen3:4b rewrote the follow-up in 6.16s
+```
+
+so "why did it search for *that*?" is answerable from the log at three in the morning
+without anybody guessing.
+
+```
+node followup_proof.mjs <server-log-path>   # 19 checks, 0 failed — needs the server; Node 24, no npm install
+```
+
+Headless Chrome, a real DuckDuckGo, and `fetch` tapped in the page so the claim is about
+what the viewer *was told* and then chose to display. It asks the two questions in order,
+proves the card and the panel quote the pronoun while `searchedFor` says `who created
+react` and the sources are Jordan Walke / react.dev rather than Berners-Lee, checks the
+server's own log off disk for both trace lines, then **presses the ↻ button with a real
+mouse event** and asks the identical follow-up again — which must now search
+`"who created it?"` verbatim, claim no rewrite, and invent no subject out of an empty
+memory. That last check is the one that keeps the feature honest.
+
+### The search tool
+
+`search.py` is the standard library and nothing else — `urllib`, `html.parser`, `json`,
+`re`. No SDK, no pip, no key. One function wide:
+
+```python
+search("current population of tokyo") -> [{"title", "url", "snippet", "host", "backend"}, ...]
+```
+
+and **it never raises**. A dead network, a captcha, a timeout, a redesigned results
+page, a hostile 40 MB response — every one returns `[]`, because the caller's next move
+is identical in all of those cases. An exception here would turn a quiet "I could not
+find out" into a 500.
+
+Five backends, tried in order, first one with usable results wins:
+
+| | | |
+|---|---|---|
+| 1 | `tavily` | only if `config.json` has `search_api_key`. The paid door, **off by default** |
+| 2 | `searxng` | only if `config.json` has `search_url`. Your own instance |
+| 3 | `ddg-lite` | `lite.duckduckgo.com/lite/` by POST. The primary, and no key exists for it |
+| 4 | `ddg-html` | `html.duckduckgo.com/html/` by POST. Same index, different markup |
+| 5 | `wikipedia` | the MediaWiki search API. Always up, real URLs, useless for today's weather |
+
+DuckDuckGo answers a normal question perfectly well and then serves an HTTP **202
+challenge page** to six requests in ten seconds. That is a rate limit to respect, not a
+bug to code around — hence the 120-second in-process cache, the fall-through when a
+200 arrives carrying a captcha instead of results, and Wikipedia at the end so a
+throttled minute still produces something citable. Both DuckDuckGo layouts are parsed
+by **class name** in one `HTMLParser` state machine rather than by regex: a regex over
+a results page works right up until an attribute order changes, and then it fails
+*silently*, which looks exactly like "the web knows nothing about that".
+
+What gets thrown away matters more than what gets fetched:
+
+- a snippet under `MIN_SNIPPET_CHARS` (60) is a headline, not evidence;
+- a snippet that reads like a paywall or a cookie wall describes **the wall**, and a
+  model handed one will cheerfully invent what was behind it — 26 phrases in
+  `PAYWALL_MARKERS`, and the result is dropped, not passed on with a caveat;
+- anything that is not an `http(s)` URL, and every engine redirect or ad hop.
+  DuckDuckGo's `//duckduckgo.com/l/?uddg=` wrapper is **unwrapped back to the real
+  address**, because a citation the reader cannot click is indistinguishable from one
+  that was invented;
+- a second hit from a site already cited. Three pages from one domain are one source.
+
+### The synthesis, and what each side is shown
+
+A web turn gets `WEB_PROMPT` — "answer using ONLY these results", "start with
+*According to current web sources*", and if the snippets do not contain the answer,
+the fixed admission "I searched the web, sir, but found no reliable answer to that."
+
+The message list for a web turn is the shortest in the file, and that is the enforcement
+rather than the prompt: **no notes, and no conversation history either.** A previous
+turn about your own pricing note is precisely the sort of thing a model will fold into
+a paragraph about today's gold price. "Never blend" has to be structural to be true.
+
+Two asymmetries worth knowing:
+
+- **The model is shown the host, never the full URL.** It can say "according to
+  Reuters"; it cannot type out an address, and `WEB_PROMPT` forbids it anyway. A URL
+  that has been through a language model is not a citation.
+- **The browser is shown the URL, never the snippet.** `web_sources()` is a
+  copy-through over a two-key whitelist — `title` and `url` — in the same style as
+  `public_state()` in `focus.py`, so adding a field to `search.py` cannot quietly widen
+  what the page receives. Preflight check 15 fails if a third key ever appears.
+
+### The visual cue
+
+A note answer lights the star it came from. A web answer has no star, so:
+
+- the whole galaxy **washes cyan** twice and settles — `pulseWeb()`, `WEB_CYAN`
+  (`#22e0ff`), which appears nowhere in `PALETTE`, so the colour cannot be mistaken
+  for a folder. The wash is applied *over* each node's current colour, so a hidden
+  folder stays hidden and a dimmed one stays dimmed;
+- the camera **holds**. Flying to a note would be the most dishonest thing this page
+  could do: pointing at a star about a fact that arrived over the wire seconds ago;
+- the side panel shows **the sources**, as real anchors with `target="_blank"` and
+  `rel="noopener noreferrer"`, addresses visible in full rather than prettified. Never
+  a file path — there is no file;
+- the answer card's footer says **"According to"** instead of "Drawn from", and its
+  chips are links rather than note buttons.
+
+`safeUrl()` re-checks every address in the page as well as on the server: a malformed
+or `javascript:` URL becomes dead text rather than a click. Two cheap checks are worth
+less than one leaked link.
+
+### If it all fails
+
+`search()` returns `[]` and the two cases are different:
+
+- the notes have something after all → it falls back to them **silently**, with no
+  mention of the attempt;
+- the notes have nothing either → **one** line, and only one, `WEB_SILENT_LINE`: *"My
+  notes have nothing on that, and the web, asked on your behalf, was likewise silent,
+  sir."* Fixed rather than generated, because a model asked to improvise an admission of
+  failure improvises a fact instead; and one sentence rather than two, because one
+  failure gets one apology (see [One apology, not two](#one-apology-not-two)).
+
+### Keys, and where they are not
+
+`search_api_key` and `search_url` live in `config.json` in the **project root**, which
+the server does not serve — `translate_path()` confines it to `viewer/`. They are read
+in exactly one place each, never logged, and never written into an answer. `/health`
+reports `web.backends`, `web.keyConfigured` and `web.keyChars`: a length is not a
+secret, and a prefix would already be more than the page needs. Preflight check 9
+scans **every response body collected in the whole run** against the live value of
+`search_api_key` along with the AWS and OpenAI credentials.
+
+One thing to be clear about, because it is the honest cost of the feature: when a
+lookup happens, **the question itself leaves the machine**. That is what a web search
+is. Nothing else does — not a note, not an excerpt, not a file name — and nothing comes
+back onto disk.
+
 ## Sight
 
 Click the **monitor button** to start a `getDisplayMedia` share, then ask about what
@@ -474,7 +822,10 @@ sharing — "good afternoon" is not a request for a screenshot review.
 
 An accountability timer that watches where you actually are and calls you out when
 you drift. Say **"thirty minutes on this"**, or click the **crosshair button**. A
-countdown card pins itself top-right and tints when you wander off.
+countdown card pins itself top-right and tints when you wander off — and when you press
+the button, it leaves the page altogether for [a window on the
+desktop](#the-second-home), so the clock is still in front of you after you alt-tab to
+the work you just promised to do.
 
 It does not decide what to watch at the click — it asks you to go to your work, waits
 until you have settled there, and says **"Locked on, sir."** when it has. That is
@@ -545,6 +896,10 @@ title. That needs Chrome started with:
 chrome.exe --remote-debugging-port=9222
 ```
 
+which is what [`launch-chrome.ps1`](#the-launcher) is for — and since Chrome 136 the
+port is *refused* for the default profile, so the flag alone is not enough and getting
+it right by hand is not something to do at the start of every working day.
+
 Without it, tab-level locking is simply unavailable. The session still runs, locks the
 **application** only, and **says so out loud** — the card reads `app only`. It does
 not invent a tab identity, and it does not call an unreadable tab a drift. `GET
@@ -558,6 +913,93 @@ which window is in front, and a guess locks a tab you never looked at. So the jo
 collects every matching tab's host and answers only when there is exactly **one**:
 otherwise it returns nothing and the session waits. Two tabs on the same *host* are
 not an ambiguity, which is a second reason site-level is the right granularity.
+
+### The launcher
+
+```powershell
+powershell -ExecutionPolicy Bypass -File launch-chrome.ps1
+```
+
+Four steps, in this order, and the fourth is the one that makes it worth having:
+
+1. **Close the strays.** `taskkill /IM chrome.exe /F`. Not tidiness — a browser that is
+   already running *owns the profile*, so a second launch hands it the URL and exits,
+   and the one that stays up is the one without the port.
+2. **Relaunch with the flag** — `--remote-debugging-port=9222`, plus a
+   `--user-data-dir` of its own under `%LOCALAPPDATA%\Jarvis`, because since Chrome 136
+   the port is refused for the default profile (any local process could otherwise read
+   your logged-in browser). It is a persistent directory, not a temp one, so the logins
+   and tabs you keep in it survive between launches.
+3. **Open the viewer** at `http://127.0.0.1:4700` in a new window. If the server is not
+   answering it says so *before* opening the browser, rather than leaving you to work
+   out why the tab is blank.
+4. **Prove it.** It polls `/json/version` on the port, then polls
+   `/health → focus.cdp` — the server's own answer, waiting out
+   `CAPABILITY_TTL_S` — and prints a green line for each. If the port never answers it
+   exits non-zero, keeps the window open, and lists the three things that cause it: a
+   same-family browser still running, a stale profile lock, or an enterprise policy.
+
+`-MakeShortcut` writes *Jarvis Chrome (DevTools)* to your Desktop and stops. The
+shortcut is made **by the script itself** so it can be made again after the project
+moves, and so the arguments live in exactly one place. It targets `powershell.exe` with
+`-ExecutionPolicy Bypass -File …` — scoped to one shortcut rather than loosened for the
+machine — borrows Chrome's icon, and starts minimised, because it is a porch light and
+not an application.
+
+**Another browser** is the one line marked `THE ONE LINE`: `'msedge'` or `'brave'`. Each
+family knows its own image name and install paths, and `focus.py` asks all of them the
+same `/json/list` question.
+
+#### The start line owns up
+
+`focus.cdp` is read **once**, when the session is constructed, and it decides which of
+two start lines is spoken:
+
+| | the line |
+|---|---|
+| port open | *"Thirty minutes, sir. Go to what you're working on and I'll lock on there. And what are we focusing on?"* |
+| no port | *"Thirty minutes, sir. Go to what you're working on and I'll lock on there. **Tab-level locking is unavailable, sir — Chrome was not launched with the DevTools port, so I shall watch the application only.** And what are we focusing on?"* |
+
+Three things about that clause are deliberate. It is **one sentence inserted**, not a
+second utterance — the question has to stay last, because the client opens the
+microphone on hearing it and a sentence after it would be a sentence spoken into an
+open mic. It is spoken **once**, at the moment you commit to the session, and never per
+tick: a caveat you hear twenty times an hour is a caveat you stop hearing, and the tick
+has [its own lines](#the-law) for losing the site *mid*-session. And it is a **clause
+in the start line** rather than a warning somewhere — you are being told before you
+spend the half hour, in the one sentence you are certainly listening to.
+
+`preflight.py` says the same thing in writing, and names the fix rather than the
+problem: *"no Chrome-family browser on the DevTools port … to clear this, launch Chrome
+via `launch-chrome.ps1`"*. It stays a **warn**, not a fail, because a session without
+the port is degraded, not broken.
+
+And the law underneath both of them: **the session never silently downgrades.** Silence
+about a missing lock is a wrong lock wearing a costume — it looks exactly like a session
+that is watching what you asked it to watch, right up until the half hour is over.
+
+#### Proving it
+
+```bash
+node port_proof.mjs
+```
+
+Both halves, back to back, on your real machine — *23 checks, 0 failed*. It runs the
+PowerShell script itself, so the script is under test and not just the feature: the port
+opens, `/health` reports `focus.cdp: true`, the start line makes no excuses, settling on
+a work site sets `tabWatched`, and drifting to `iana.org` is called out **by name**
+inside three seconds. Then it kills that Chrome, starts an *ordinary* one — no flag,
+your own profile — and asserts the other half: no port at all, `focus.cdp: false`, the
+clause in the start line, the clause *before* the question, the session still running,
+and the clause carried by exactly **one** say-sequence across seven seconds of ticks.
+That last one is the "said once" promise as a number rather than a hope.
+
+The first half reads what the page actually **spoke** (`speechSynthesis.speak` wrapped,
+not stubbed — you hear the run). The second half reads the server's say-queue, because
+a browser with no DevTools port is by definition one this repo cannot ask. It finishes
+by leaving your ordinary Chrome running, which is both the state that half needs and
+your real profile with your real tabs; double-click the shortcut when you want the port
+back.
 
 ### When it decides — and it is not when you click
 
@@ -615,9 +1057,11 @@ an explicit override with no cleverness in it at all. From the surface you want:
 > "lock on this tab" · "keep me in this tab" · "this is the tab" · "stay on this tab"
 > · "keep me right here" · "okay, I'm gonna need you to keep me in this tab."
 
-Or press the **LOCK THIS TAB** pill on the countdown card, next to pause and end. It
-flashes `LOCKED` for `FOCUS_LOCK_FLASH_MS` (1 s) from the *press* rather than from the
-reply, because the press is a fact and what happened next arrives out loud.
+Or press the **LOCK THIS TAB** pill on the countdown card, next to pause and end — in the
+tab or [out on the desktop](#the-second-home), where the same press has the same effect
+for the same reason. It flashes `LOCKED` for `FOCUS_LOCK_FLASH_MS` (1 s) from the *press*
+rather than from the reply, because the press is a fact and what happened next arrives out
+loud.
 
 Either way it locks in **one read** — `settle_here()`, not `settle()`. Making you hold
 still for two ticks to prove a sentence you just said would be the machine doubting you
@@ -640,6 +1084,12 @@ photograph of it. Outside a live session the share keeps every phrase it had.
 A click on the countdown card is what brings that card — and therefore the Jarvis tab —
 to the front. So a naive re-target reads the foreground, finds *itself*, and locks the
 assistant's own tab: the single worst outcome, reached by the most obvious code.
+
+Out on [the desktop](#the-second-home) it is the same trap wearing a stranger's face: the
+press makes a floating window frontmost, and that window is `about:blank` titled
+`Jarvis · focus`, which joins to no tab at all. It needs no special case — the flag below
+is what the pill posts from either home, and a document that is not an `http(s)` page is
+skipped before it is asked anything.
 
 When the request came from the card (`source: "card"`), or whenever the frontmost
 process is our own, the window manager is not asked at all. The **browser** is asked
@@ -882,6 +1332,275 @@ smuggle a field into memory either. `test_focus_privacy.py` proves it from the
 attacker's side — it hands `_record()` a row carrying `app`, `host`, `intent` and a
 `driftLog`, and then asserts the file on disk came back with exactly eight keys.
 
+### The second home
+
+The countdown card lives in the corner of the viewer tab, which is the one place it is no
+use: you alt-tab to the work you just promised to do and the clock goes with the tab. So
+the card has a second home — a real **always-on-top desktop window**, through **Document
+Picture-in-Picture**. `requestWindow()` is the only way a browser gets a window that floats
+above every other application on Windows without native code or an extension.
+
+Press **FOCUS** and the card leaves the page: a small window appears in the bottom-right
+corner of the desktop and counts down over whatever you are working in, tinting red the
+moment you drift.
+
+**One card, not four windows.** The browser allows a single Document PiP window per tab,
+and there were once several things that wanted it — the countdown, the watching face —
+which meant a queue, a line about who had the desktop, and a sentence you had to read to
+find out why the other one had not appeared. So they share one card. `DESK_ORGANS` is the
+whole of the merge, in reading order:
+
+| in the card | shown when |
+| --- | --- |
+| the watching **face** | the screen watch is on |
+| the **countdown**, with its drift tint, its intent, and **LOCK THIS TAB** | a session is live, or its report has not yet retired |
+| the **watch chip** — frames sent · stillness | the screen watch is on |
+| the **eyes** state line | the eyes are on |
+
+**Render only what is live.** Each organ keeps its own liveness class (`#facecard.show`,
+`#focuscard.live`, `#watching.live`, `#eyeing.live`) and the shell is a flex column, so
+turning the watch off removes the face row and the chip and the window shrinks by exactly
+those rows — `deskH()` is the sum of what is actually showing. When the **last** organ
+leaves, the card closes itself; no line is spoken about it, because you turned the last
+thing off and do not need to be told what that did.
+
+**One card, two homes, never both.** Nothing is rebuilt out there — the existing elements
+are *appended* into the new document, which adopts them, listeners and `onclick` properties
+intact. Every SSE update, every button and the lock pill go on working because they are the
+same objects; nothing was re-wired, and there is no second card to keep in step with the
+first. The page's stylesheets are copied into the new document first, or the card arrives
+as unstyled text on white. While the window is open the page has no card at all — which is
+also what makes the [layout governor](#the-layout-governor)'s hardest case disappear — and
+closing the window puts every organ back in its exact slot in the tab, silently.
+
+**A gesture is the gate.** `requestWindow()` only works inside a transient user
+activation. A press of FOCUS is one; *"thirty minutes on this"* is not. So a session
+started by voice leaves the card in the page exactly as before, and the next click
+anywhere upgrades it to the desktop.
+
+**The card trap applies to every button in the card, and the desktop makes it sharper.**
+Pressing **LOCK THIS TAB** inside a floating window makes *that window* frontmost — not
+your browser, and certainly not the tab you meant. So the pill posts the same
+`source:'card'` flag it always did, and the server reads the browser's own account of which
+of its tabs is showing, through the DevTools join, instead of asking which process is in
+front. The PiP document helps by being unmistakable: it is `about:blank` with the title
+`Jarvis · focus`, so it matches no tab in the DevTools join and `_cdp_front_host()` skips
+it for not being an `http(s)` page.
+
+**One honest line, not one per organ.** If the browser refuses the window — unsupported, or
+denied — every organ falls back to its in-page home and this is said **once per page**, by
+whichever one asked first:
+
+> "I will not let the card off the page in this browser, sir, so it stays in the corner of
+> the tab."
+
+A browser that will not give out windows is one fact about the browser. Hearing it three
+times because three organs each asked separately was the old arrangement's other tax.
+
+**One stream.** The opener tab owns `/focus/stream`, the watch loop and the screen frames;
+the card renders what it is handed and nothing else. A PiP window that opened its own SSE
+connection would be a second client of a single-user server, and the two would disagree the
+first time one of them missed a `seq`.
+
+Aborting closes the desktop card at once. **Finishing** does not: the report is spoken and
+then held for eight seconds — see [The retirement](#the-retirement).
+
+#### The corner, and the size the browser felt like
+
+Bottom-right. Top-right is where Windows puts its own notifications and — on a wide
+screen — roughly where the end of every line you are reading lands. Size and corner are
+taste: `DESK_W`, `DESK_H` and `DESK_EDGE` in `viewer/index.html` are four numbers, and the
+demo setting of top-right is one edit away.
+
+The **height** is not one number, because the card is not one thing: `deskH()` adds a face
+row and a chip row when the watch is on and a line when the eyes are on, so the window is
+as tall as what is actually in it and no taller. A session on its own is 320×210, which is
+what `desk_proof.mjs` measures.
+
+Which needs one small promise, and it is worth knowing about because leaving it out looks
+exactly like a bug: the window is asked for **while the click is still warm**, which is
+before the session it is for has been round-tripped. Sizing it by what is live at that
+instant asks for a 100px window and then cannot correct it, because `resizeTo` needs an
+activation of its own and the request has just eaten the press's. So a presser says what it
+is about to start — `deskPromise('session')` — and the height is the height of the card that
+is *arriving*. The promise lapses after the same grace window the card itself waits through:
+a promise nothing kept is not a row.
+
+`width` and `height` are a **hint the browser may ignore**, and this one does: Chrome 153
+hands back 1039×648 — eighty percent of the screen — whatever is asked for, and a card
+covering most of the desktop is not the feature. `resizeTo()` corrects it exactly, but
+needs a transient activation of its own, and `requestWindow()` has just eaten the one the
+click supplied. Hence the one piece of real cleverness in this feature: **the window is
+asked for on `pointerdown` and sized on the `click`**. A mouse press hands out an
+activation on the way down and another on the way up, so one press of the button both pops
+the card out and snaps it to 320×210. Correcting it on the *next* activation instead was
+the obvious thing and it is wrong: the next thing you do after starting a session is click
+something in another application, which sends this page nothing at all. The same correction
+runs on every later press, which is how the window grows a row when you turn the watch on
+half an hour into a session.
+
+#### Proving it
+
+Three cases in the hermetic battery, so the move is proved with no gesture and no network:
+
+- **`desk-move`** stands an `about:blank` iframe in for the PiP document and asserts the
+  card element moved, the page no longer has one, `$('focus-lock')` is the *same object with
+  the same handler*, a live paint lands out there, and `deskRestore()` puts it back in its
+  exact slot.
+- **`merge`** asserts all four organs land in one `#deskshell`, in `DESK_ORGANS` order, that
+  the page is left with none of them, that the governor's inline rectangles **and** its
+  `pill`/`nofit` classes are stripped on the way out — `nofit` carries a `display:none`, so
+  a card that took it into the window would arrive live, correct and invisible — and that
+  every organ comes home to its own slot, `nextSibling` included.
+- **`desk-skin`** builds a real 320px-wide document and reads **computed style** back out of
+  it, because what is in `DESK_CSS` is not the question — what the cascade does with it is.
+
+And then the real thing, in a real browser, on the real desktop:
+
+```bash
+node desk_proof.mjs      # 25 checks, 0 failed — needs the server; Node 24, no npm install
+```
+
+It runs **headed** on purpose: headless Chrome has no desktop to float above, and
+asserting against a window manager that is not there would be a decoration. Run it and a
+window appears in the bottom-right of your screen. Last run:
+
+```
+  ok   ONE CARD, TWO HOMES, NEVER BOTH: it is in the window and gone from the page
+  note the window is 321x210, and got there by correction: this browser granted its own
+       size and the press's own up-stroke resized it (1 correction, within the one press)
+  note brought to the front: the card, over the work window
+  note the server said: "Locked on, sir."
+  ok   and the work tab is locked, from a press whose front window was the card
+  ok   the card is back in the tab and the window is gone
+  ok   one click somewhere harmless, and the card is on the desktop
+  ok   two sessions started and aborted, and your ledger is byte-for-byte unchanged
+```
+
+It uses port **9222** rather than the probe's 9225, because the lock chain needs the
+*server* to be able to see this browser's tabs — a proof on a port the server cannot reach
+would be asserting against a browser nobody can join. Both sessions it starts end with
+`abort`, the one ending that never writes a row, and the ledger is checksummed either side.
+
+Two honest gaps. It cannot prove the window is above *every* other application:
+always-on-top is the browser's guarantee for this window type and nothing readable from
+the page reports it, so what is asserted instead is that the window is its own OS window,
+of the asked-for size, in the asked-for corner, holding the card while the page holds
+none. And a synthetic click cannot open one at all — Chrome answers
+`Input.dispatchMouseEvent` with *"Document PiP requires user activation"* — so the harness
+supplies the activation with `Runtime.evaluate(userGesture)` and lets the page's own
+button, handler and code path do everything after it. What is supplied is the fact of a
+finger.
+
+One thing worth knowing if the lock ever seems not to land: Chrome tracks window occlusion
+on Windows and reports a **completely covered** window's pages as `hidden`, and a hidden
+page is not a candidate for the lock — correctly, since you cannot be working in a window
+you cannot see. The first run of the pill stage left the work window buried under the
+viewer's and the server re-armed the deferred lock instead, which is the right answer to
+the question it was actually asked.
+
+### The layout governor
+
+Four surfaces in this page are `position: fixed` and all four want the same corner: the
+note **side panel**, the in-page **card**, the answer **toast**, and the **status chips**.
+Each of them used to choose its own `top`, `right` and `z-index`, which works until two are
+open at once — and then the card sits on the panel's title, or a spoken report buries the
+CONNECTED chips, and the only way to find out is a screenshot.
+
+So none of them positions itself any more. `layout()` in `viewer/index.html` owns every
+rectangle, and `LAYOUT` is the one place the numbers live:
+
+```js
+const LAYOUT = { EDGE:26, TOP:22, CHIP_TOP:16, GAP:12, CARD_W:238, CARD_MIN:290,
+                 CARD_FLOOR:210, TOAST_MAX:760, TOAST_MIN:220, CHIP_MIN:860,
+                 MOVE_MS:220, PANEL_MAX:420, PANEL_VW:0.88 };
+```
+
+It runs on load, on `resize`, on every session paint, on every watch and eyes paint, and on
+any change to the panel's class list — which is watched with a `MutationObserver` rather
+than hooked into the two functions that open and close the panel, because a third caller
+would forget. **A resize or a panel toggle re-runs the governor instead of trusting a stale
+rectangle.**
+
+**The canvas, and the reserved lane.** The panel's width is the governor's, so `canvasW` —
+what is left of the window when the panel is open — is knowable rather than guessed. The
+lane is `EDGE` in from the canvas's right edge, and the governor walks it downwards: the
+card first, then the face, then the legend, each offset by the height of whatever is above
+it *and actually showing*. Panel closed, that is the top-right of the window, exactly as
+before. Panel open, the lane moves left with the canvas, under a 220 ms ease. The card
+never sits on the panel; the panel never slides under the card.
+
+**And when there is not room for both**, the card gives way rather than fighting for it:
+below `CARD_MIN` of canvas it collapses to a **pill** — the clock and the drift tint,
+nothing else — and below `CARD_FLOOR` it hides entirely. A countdown you can read at a
+glance is the point of it; the intent line and the stats are not worth a panel you cannot
+read at all.
+
+**The toast's column is the canvas's, never the window's.** With the panel open it narrows
+and re-centres in what is left, so a long spoken report stops at the panel edge. The toast
+and the panel are never in the same column at the same time.
+
+**The stack, written down once**, at the top of the stylesheet, and read back out of the
+cascade by the `stack` case:
+
+```
+galaxy  <  toast  <  panel  <  in-page card  <  Picture-in-Picture
+  0…6        9        10          12…14        another window entirely
+```
+
+The last step is the OS's opinion and not the cascade's, which is the one thing a `z-index`
+cannot say — and it is also why the governor's hardest case mostly does not arise: **while
+the desktop card is live the in-page card does not exist**, so there is nothing in the lane
+to collide with anything.
+
+**Proved by two cases** in the hermetic battery. `stack` reads the six computed
+`z-index`es and asserts the order. `lane` opens the panel for real and compares
+*rectangles to each other* rather than to any constant — the card's right edge against the
+panel's left, the toast's against the same, the legend's top against the card's bottom —
+then narrows the window to prove the pill, and reads `transitionProperty` alongside
+`transitionDuration` so that only the **moves** are held to the 250 ms law and the card's
+350 ms drift tint is not mistaken for one. Measuring animated surfaces at all needs motion
+off for one frame, which is what `html.nomove` is for; the durations are asserted
+separately, from the cascade.
+
+**And then the whole sequence, in a real browser**, because what was being fixed here was a
+screenshot and a screenshot needs a real note in a real panel:
+
+```bash
+node layout_proof.mjs    # 19 checks, 0 failed — needs the server; Node 24, no npm install
+```
+
+Headed, at 1280×860: open a note panel, start a session **by voice** so the card stays in
+the page, and assert the card sits left of the panel edge with the note's title readable;
+end the session and assert the spoken report stops at the panel edge with all of the
+panel's Connected chips legible; wait out the retirement and assert the panel is still
+whole with nothing over it; then press FOCUS and assert the desktop card takes over, the
+in-page card vanishes, and the floating window is sized for the card that is actually in
+it. Last run: the card retired after **7.1 s** holding `0:00`, and the window came up
+**320×211** for a `deskH()` of 210.
+
+It is the only harness here that writes a row to the ledger — a report is the thing being
+watched and `abort` does not produce one — and it stands down without touching anything if
+a session of yours is already running.
+
+#### The retirement
+
+An ended session's card is a corpse in prime real estate. `SESSION OVER · 0:00` at the top
+of the screen an hour later is not information, and on the desktop it is a window you have
+to close.
+
+So after the report is spoken the card holds its final line for **`CARD_RETIRE_S` = 8
+seconds**, then closes (the desktop window) or fades out over 420 ms (in-page). Eight
+seconds is long enough to read a report card and short enough to clear the desk. The other
+tempting setting — hold it until the next session starts — was rejected on the grounds that
+the card would then spend most of its life describing something that finished a while ago.
+One constant, if your desk disagrees.
+
+An **abort** does not get the eight seconds: there is no report to read, so the window
+closes at once. Only a session with a report arms the timer, and only once — a second paint
+of the same report does not restart it. Starting a new session cancels it and revives the
+card, which the `retire` case asserts along with the held line and the eight-second arm.
+
 ### The live loop
 
 ```bash
@@ -958,6 +1677,12 @@ lock on?"* is read off a screen instead of guessed at. Guessing costs an afterno
 usually ends in three fixes to code that was already correct.
 
 ### THE LAW
+
+Before all five, the question that answers a third of these on its own: **was the
+browser launched with the DevTools port?** Without it there is no tab-level lock to
+debug — `/health → focus.cdp` and the overlay's `cdpAlive` both say so, the session
+already said so in its [start line](#the-start-line-owns-up), and the fix is
+`launch-chrome.ps1`, not a code change.
 
 When focus misbehaves in the field, in this order, **before touching any code**:
 
@@ -1044,14 +1769,21 @@ The hermetic battery, run in the browser, with the verdict written into the **pa
 title** so a script can read it without a screenshot:
 
 ```
-PROBE 16/16 PASS · viewport:PASS visible:PASS timers:PASS frames:PASS clock:PASS …
+PROBE 24/24 PASS · viewport:PASS visible:PASS timers:PASS frames:PASS clock:PASS …
 ```
 
-Sixteen cases: the viewport, visibility and focus, real timer and `requestAnimationFrame`
+Twenty-four cases: the viewport, visibility and focus, real timer and `requestAnimationFrame`
 latency, the clock formatter, the phrase parser, the countdown card in five states (on
 target, drifting, deferred, blind, head-down), the pixel gate arithmetic, luma, the `seq`
-absorb path, a no-names sweep over the rendered card, and `hermetic` — which counts the
-page's own `fetch` calls and fails if the battery caused a single one.
+absorb path, a no-names sweep over the rendered card, the two web-source cases —
+`web-cue` proves a web answer holds the camera, says "According to", renders real
+anchors with `noopener noreferrer` and shows no local path anywhere; `web-safe` proves a
+`javascript:` or relative URL becomes dead text and that `WEB_CYAN` is in no folder's
+palette — the four desktop-card cases, `desk-move`, `desk-skin`, `merge` and `retire`,
+described under [The second home](#the-second-home) and [The retirement](#the-retirement),
+the two governor cases, `stack` and `lane`, described under [The layout
+governor](#the-layout-governor) — and `hermetic`, which counts the page's own `fetch` calls
+and fails if the battery caused a single one.
 
 In probe mode the page does not greet, does not read the brain, does not open the SSE
 stream and does not run the home beat, so nothing it measures is contending with the
@@ -1059,10 +1791,10 @@ real application, and the run cannot touch your session or your streak.
 
 Runs **queue** rather than overlap. The page runs the battery itself on load and a
 harness runs it again after sizing the window; called while the first run is still
-inside its 250 ms timer case, both would push into one list — thirty cases, half of them
-measured at a viewport nobody asserted, and a merged verdict that can report `FAIL` for
-a case which passes at the asserted size. So a second call waits for the first, and the
-harness asserts exactly sixteen cases, each reported once.
+inside its 250 ms timer case, both would push into one list — forty-eight cases, half of
+them measured at a viewport nobody asserted, and a merged verdict that can report `FAIL`
+for a case which passes at the asserted size. So a second call waits for the first, and
+the harness asserts exactly twenty-four cases, each reported once.
 
 **Run it at 1440×900 and assert the viewport.** A hidden or background tab throttles
 timers and coalesces frames, so every time-based case will quietly lie to you — which
@@ -1072,7 +1804,7 @@ assumptions.
 ### The harness
 
 ```bash
-node focus_probe.mjs     # 47 checks, 0 failed — needs the server; Node 24, no npm install
+node focus_probe.mjs     # 55 checks, 0 failed — needs the server; Node 24, no npm install
 ```
 
 Four sections, and it is **read-only against the server** — it starts no session, so
@@ -1093,6 +1825,10 @@ probe browser can never become the server's focus target while it runs.
 `/focus/diag` as the stale-process fault **by name**, refuses a diag whose `pid` is
 preflight's own, cross-examines ten facts against `GET /focus`, and looks for both
 instruments in the page the server actually **serves** rather than the file on disk.
+
+`node port_proof.mjs` is the fourth harness and the only one that owns a *launcher*: it
+runs `launch-chrome.ps1`, proves the lock the port buys, and then proves the sentence
+you get when the port is missing. See [Proving it](#proving-it-1) under the launcher.
 
 ## The eyes
 
@@ -1349,16 +2085,22 @@ one switch that opened both would be a switch nobody could describe.
 
 ### The face
 
-While it is watching, a small card with the assistant's face pins itself to the top-right
-corner of the *real desktop*, over the menu bar and across every Space, through
-**Document Picture-in-Picture** — the only route a browser has to a genuinely
-always-on-top window. `requestWindow()` needs transient activation and the share picker
-has just consumed it, so the card first appears in the page and upgrades itself to the
-desktop on your next click. If the browser will not give it a window at all, it says so
-rather than pretending:
+While it is watching, a small card with the assistant's face pins itself to the corner of
+the *real desktop*, over every other application and across every Space, through **Document
+Picture-in-Picture** — the only route a browser has to a genuinely always-on-top window.
+`requestWindow()` needs transient activation and the share picker has just consumed it, so
+the card first appears in the page and upgrades itself to the desktop on your next click.
+If the browser will not give it a window at all, it says so rather than pretending — and it
+is honest about which half worked, because the watch is running either way:
 
-> "I will not let my face off the page in this browser, sir, so the card stays in the
-> corner of the tab."
+> "I am watching, sir, though this browser will not let my face off the page. Click
+> anywhere and I shall pin it to the desktop."
+
+The browser allows **one** such window per tab, so the face does not get one of its own:
+it is a row in the [one desktop card](#the-second-home), above the countdown, alongside the
+watch chip. There is nothing to queue for and no line about who has the desktop. Turn the
+watch off and its two rows leave the card; if they were the only things in it, the card
+closes.
 
 ### Proving it
 
@@ -1437,13 +2179,14 @@ indexes — so it cannot move the camera.
 
 ## Proving where the answer came from
 
-`/chat` returns `nodes` (indexes into `GRAPH.nodes`) and `kind` (`"notes"` or
+`/chat` returns `nodes` (indexes into `GRAPH.nodes`) and `kind` (`"notes"`, `"web"` or
 `"chat"`). The viewer has exactly one function that reads them and decides what the
 camera does — `decideCamera()` in `viewer/index.html`. Nothing else moves it.
 
 | sources | what happens |
 |---|---|
 | `kind: "chat"` | **hold.** Nothing moves, nothing lights, the panel is not touched |
+| `kind: "web"` | **hold.** It came from outside the galaxy, so no star may be lit for it — the whole sky breathes cyan instead and the panel lists the URLs |
 | `kind: "screen"` | **hold.** The answer came from your screen, so it cites no note |
 | `kind: "model"` | **hold.** Changing brains is not a claim about any note |
 | `kind: "focus"` | **hold.** A callout is about where you are, not about any note |
@@ -1466,6 +2209,11 @@ Two supporting decisions make that honest:
   "good morning" and "tell me a joke" cannot reach the camera code even in
   principle. "Thanks! Now what about pricing?" still counts as a real question, and
   a bare follow-up ("why not?") inherits the previous question's context.
+- **And so is a refusal.** A note can score well on one incidental word while holding
+  almost none of the question; `classify_question()` therefore also returns `"chat"`
+  when `note_confidence()` is below `WEB_CONFIDENCE_THRESHOLD`, which empties the
+  indexes. Nothing lights behind an answer the notes did not give — see
+  [No chips for a refusal](#no-chips-for-a-refusal).
 
 The spoken answer stays short and never recites a note — the note is on screen to be
 read. `SPOKEN_MAX_CHARS` (260) caps it at a sentence boundary.
@@ -1499,11 +2247,14 @@ background tab you do not want talking at you.
 |---|---|
 | click a node | fly to it, light its neighbours, open the panel |
 | `remember that …` | write a new note and watch it born into the galaxy |
+| `Jarvis, look this up …` / `search the web for …` | skip the notes entirely and [go straight to the web](#the-other-world-the-live-web) — the galaxy pulses cyan and the panel lists the URLs it read |
+| *"what's the weather in Delhi"* | no trigger needed: real-world questions, and questions your notes have no word in common with, search on their own |
 | `switch to <model>` | change the answering brain; `go back to your normal brain` undoes it |
 | click the brain chip | the same thing with a mouse — a menu of every model the server will answer to, written names only, and the way home at the bottom |
 | *"you're being slow today, fetch something sharper"* | names no model, so the chat brain answers with a `[[brain: …]]` tag and the **server** performs and announces the swap |
 | `thirty minutes on this` | start a focus session; `I'm done` ends it with a report card |
-| ⌖ (crosshair) | start / end a focus session (`FOCUS_DEFAULT_MIN`, 30) |
+| ⌖ (crosshair) | start / end a focus session (`FOCUS_DEFAULT_MIN`, 30) — and the card [pops out onto the desktop](#the-second-home), where it keeps counting over your work |
+| close the desktop card | the card comes back to the corner of the tab, silently; the session itself carries on |
 | *then go to your work* | nothing is locked at the click — the first surface you stay on for two ticks becomes the target, and you hear **"Locked on, sir."** |
 | *then say what it is for* | the mic opens for one answer, no wake word; your words colour the first callout and the report card |
 | `lock on this tab` | [move the lock](#moving-the-lock-on-purpose) to whatever you are on now, in one read; from the Jarvis tab it re-arms instead |
@@ -1525,4 +2276,4 @@ background tab you do not want talking at you.
 | `↻` | forget the conversation history |
 | `?mute=1` | this tab never speaks |
 | `?focusdebug=1` | the [focus overlay](#focusdebug1) — flags, lanes, lock, drift, pixels, refreshed every second from `/focus/diag` |
-| `?focusprobe=1` | the [hermetic battery](#focusprobe1) — sixteen cases, PASS/FAIL per case in the page title, no network at all |
+| `?focusprobe=1` | the [hermetic battery](#focusprobe1) — twenty-four cases, PASS/FAIL per case in the page title, no network at all |

@@ -726,7 +726,7 @@ def check_config_unreachable():
     cfg = state.get("cfg") or server.load_config()[0]
     secrets = []
     for key in ("openai_api_key", "aws_access_key_id", "aws_secret_access_key",
-                "aws_session_token"):
+                "aws_session_token", "openrouter_api_key", "search_api_key"):
         value = str(cfg.get(key) or "").strip()
         if len(value) >= 12 and value.lower() not in server.PLACEHOLDER_KEYS:
             secrets.append((key, value.encode("utf-8")))
@@ -1056,10 +1056,13 @@ def check_focus():
                       % cap.get("backend")]
     notes.append("reader %s can see the frontmost application" % cap.get("backend"))
     if not cap.get("cdp"):
+        # A warn, not a fail: the session still works, and says so out loud in its own
+        # start line. But a warning that only names the problem makes you go and find
+        # the fix, so this one names the fix - one double-click, in the project root.
         warnings.append("no Chrome-family browser on the DevTools port, so TAB-level "
                         "locking is unavailable and a session degrades to the "
-                        "application only - start Chrome with "
-                        "--remote-debugging-port=9222 to lock a site as well")
+                        "application only - to clear this, launch Chrome via "
+                        "launch-chrome.ps1 (it opens the port and the viewer for you)")
     else:
         notes.append("a browser is reachable on the DevTools port, so a session can "
                      "lock the site as well as the application")
@@ -2274,6 +2277,188 @@ def check_instruments():
     return PASS, notes
 
 
+def check_web():
+    """15. The live lookup fetches, cites, and knows which world it is speaking from.
+
+    FOUR live calls, and the fourth is the one that matters most. It is easy to build a
+    search that answers everything and easy to build one that answers nothing; the only
+    interesting question is whether the boundary is in the right place. So:
+
+      1. a question the notes certainly do not cover  -> kind "web", real URLs, and an
+         answer that says where it came from rather than simply knowing;
+      2. the force trigger, on a question the notes DO partly cover -> web anyway,
+         because "look this up" is an instruction and not a hint;
+      3. a real question about a real note            -> kind "notes", no sources, and
+         no lookup anywhere near it;
+      4. a greeting                                   -> kind "chat", and above all NOT
+         a search. Small talk scores nothing, and a threshold read carelessly would
+         send "morning" to a search engine.
+
+    What is deliberately NOT asserted: any particular fact. The population of Tokyo is
+    not this harness's business, and a check that pinned it would fail the day the
+    figure changed - which is the day the feature is working best. What is asserted is
+    the SHAPE of honesty: a URL you can open, a phrase that admits its source, and no
+    note indexes on an answer that came from outside the collection.
+
+    A network that cannot reach any backend is reported as a WARN rather than a FAIL:
+    the code is then untested but not broken, and the fallback line it produces is
+    itself part of the contract, so that is checked instead.
+    """
+    notes, warnings = [], []
+
+    # -- 1. something the notes cannot possibly hold.
+    question = "What is the current population of Tokyo?"
+    status, _, body = post_json("/chat", {"question": question,
+                                          "session": "preflight-web"}, timeout=120)
+    data = as_json(body)
+    if data is None:
+        return FAIL, ["asked: %s" % question,
+                      "HTTP %s and the body was not JSON: %s"
+                      % (status, first_line(body[:200]))]
+    kind = data.get("kind")
+    answer = str(data.get("answer") or "")
+    sources = data.get("sources")
+
+    if kind == "web":
+        if not isinstance(sources, list) or not sources:
+            return FAIL, ["a web answer arrived with no sources array - the panel would "
+                          "have nothing to show, so the citation is a claim and not a "
+                          "link (keys: %s)" % ", ".join(sorted(data))]
+        bad = [s for s in sources
+               if not isinstance(s, dict)
+               or not str(s.get("url") or "").startswith(("http://", "https://"))
+               or not str(s.get("title") or "").strip()]
+        if bad:
+            return FAIL, ["a source came back without an openable http(s) URL and a "
+                          "title: %s" % first_line(json.dumps(bad[:2]))]
+        extra = sorted({k for s in sources for k in s} - {"title", "url"})
+        if extra:
+            return FAIL, ["the sources handed to the browser carry more than a title "
+                          "and a URL (%s) - web_sources() is meant to be a whitelist"
+                          % extra]
+        if data.get("nodes"):
+            return FAIL, ["a web answer cited note indexes %s. Nothing in the galaxy "
+                          "produced this answer, so nothing in the galaxy may be lit "
+                          "for it" % data["nodes"]]
+        # It must SAY where it came from. Either the phrase, or a URL in the prose -
+        # the prompt asks for the phrase and forbids the URL, so either satisfies the
+        # user-visible claim "it cites its source rather than simply knowing".
+        said = ("according to" in answer.lower() or "http" in answer.lower()
+                or "web source" in answer.lower())
+        if not said:
+            return FAIL, ["asked: %s" % question,
+                          "answered from the web without saying so: “%s”"
+                          % first_line(answer),
+                          "the whole point of the cue is that the reader can tell which "
+                          "world an answer came from without asking"]
+        if data.get("searched") not in ("force", "world", "thin"):
+            return FAIL, ["the reply does not say WHY it searched (searched=%r)"
+                          % data.get("searched")]
+        notes.append("asked: %s" % question)
+        notes.append("kind=web via %s (%s), %d source%s: %s"
+                     % (data.get("backend"), data.get("searched"), len(sources),
+                        "" if len(sources) == 1 else "s",
+                        "; ".join(s["url"][:58] for s in sources)))
+        notes.append("“%s”" % first_line(answer))
+    elif kind == "chat" and data.get("webSilent"):
+        warnings.append("the lookup ran and every backend came back empty, so the "
+                        "fetching path is UNTESTED on this network. It failed the way "
+                        "it promises to, though: %r" % first_line(answer))
+        if answer.strip() != server.WEB_SILENT_LINE:
+            return FAIL, ["a silent web produced %r instead of the fixed line %r"
+                          % (first_line(answer), server.WEB_SILENT_LINE)]
+    else:
+        return FAIL, ["asked: %s" % question,
+                      "came back kind=%r, which means no lookup was even attempted for "
+                      "a question the notes certainly do not cover (searched=%r)"
+                      % (kind, data.get("searched")),
+                      "“%s”" % first_line(answer)]
+
+    # -- 2. THE FORCE TRIGGER, aimed at something the notes DO cover, so that a pass
+    # means the trigger genuinely bypassed the local check rather than coinciding with
+    # a thin score.
+    subject = "pricing"
+    if state.get("graph"):
+        top = max(state["graph"]["nodes"], key=lambda n: n.get("degree") or 0)
+        subject = str(top.get("label") or subject)
+    forced = "Jarvis, look this up: %s" % subject
+    status, _, body = post_json("/chat", {"question": forced,
+                                          "session": "preflight-web"}, timeout=120)
+    data = as_json(body) or {}
+    if data.get("kind") == "web":
+        notes.append("“%s” went straight to the web (%s) and cited %d source%s, even "
+                     "though %r is a note in the collection"
+                     % (forced, data.get("backend"), len(data.get("sources") or []),
+                        "" if len(data.get("sources") or []) == 1 else "s", subject))
+    elif data.get("searched") == "force":
+        warnings.append("the force trigger fired on %r and the backends returned "
+                        "nothing usable, so it fell back (kind=%s)"
+                        % (forced, data.get("kind")))
+    else:
+        return FAIL, ["said: %s" % forced,
+                      "and it came back kind=%r searched=%r - the force trigger is "
+                      "meant to bypass the local check entirely"
+                      % (data.get("kind"), data.get("searched")),
+                      "nothing else in this feature is worth having if an explicit "
+                      "instruction can be quietly reinterpreted"]
+
+    # -- 3. a real question about a real note must NOT search.
+    if not state.get("graph"):
+        warnings.append("skipped the local-note half: no graph data to build a real "
+                        "question from")
+    else:
+        nodes = state["graph"]["nodes"]
+        top = max(nodes, key=lambda n: n.get("degree") or 0)
+        local = "What do the notes say about %s?" % top.get("label")
+        status, _, body = post_json("/chat", {"question": local,
+                                             "session": "preflight-web"}, timeout=120)
+        data = as_json(body) or {}
+        if data.get("kind") != "notes":
+            return FAIL, ["asked: %s" % local,
+                          "and the reply came back kind=%r searched=%r. A question the "
+                          "collection answers must be answered FROM the collection - "
+                          "trading it for a stranger's blog is the failure this feature "
+                          "is most likely to introduce"
+                          % (data.get("kind"), data.get("searched"))]
+        if data.get("sources") or data.get("searched"):
+            return FAIL, ["a notes answer carried web fields (sources=%r searched=%r), "
+                          "so the two worlds are bleeding into one another"
+                          % (data.get("sources"), data.get("searched"))]
+        if not data.get("nodes"):
+            return FAIL, ["asked: %s" % local, "answered but cited no notes at all"]
+        notes.append("“%s” stayed local: kind=notes, %d note%s cited, no search, no "
+                     "sources" % (local, len(data["nodes"]),
+                                  "" if len(data["nodes"]) == 1 else "s"))
+
+    # -- 4. and a greeting must not go anywhere near a search engine.
+    status, _, body = post_json("/chat", {"question": "morning!",
+                                          "session": "preflight-web"}, timeout=120)
+    data = as_json(body) or {}
+    if data.get("kind") != "chat" or data.get("searched"):
+        return FAIL, ["“morning!” came back kind=%r searched=%r - small talk scores "
+                      "nothing, and a threshold read without asking whether a question "
+                      "was even ASKED sends every greeting to a search engine"
+                      % (data.get("kind"), data.get("searched"))]
+    notes.append("“morning!” stayed small talk: no lookup, no sources")
+
+    # -- and the wiring, read rather than assumed.
+    _, _, health = http_call("GET", "/health", timeout=15, label="GET /health (web)")
+    web = (as_json(health) or {}).get("web") or {}
+    if not isinstance(web.get("backends"), list) or not web["backends"]:
+        return FAIL, ["/health does not report which search backends this config has"]
+    if web.get("keyChars") and not web.get("keyConfigured"):
+        warnings.append("config.json holds a %d-character search_api_key that "
+                        "backends() is refusing as a placeholder" % web["keyChars"])
+    notes.append("backends in order: %s · threshold %s · key %s"
+                 % (", ".join(web["backends"]), web.get("threshold"),
+                    "configured (%d chars)" % web["keyChars"]
+                    if web.get("keyConfigured") else "none needed"))
+
+    if warnings:
+        return WARN, notes + warnings
+    return PASS, notes
+
+
 CHECKS = [
     ("the server is up and serving the viewer", check_server),
     ("the graph data loads and has nodes", check_graph),
@@ -2289,6 +2474,7 @@ CHECKS = [
     ("the eyes report posture and nothing else", check_eyes),
     ("the screen watch costs nothing until it thinks", check_watch),
     ("the instruments answer from the running server", check_instruments),
+    ("the web lookup fetches, cites, and stays in its lane", check_web),
 ]
 
 

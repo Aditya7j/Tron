@@ -64,6 +64,11 @@ import build
 # focus.MANAGER, focus.handle and focus.is_focus_request.
 import focus
 
+# The live lookup. Query in, at most three snippets out, and it NEVER raises - a dead
+# network, a captcha or a redesigned results page all come back as an empty list, which
+# is the one case this file has to handle anyway. No key, no pip, no SDK.
+import search as websearch
+
 # =============================================================================
 #  THE PERSONA - everything the character is, lives in this one block.
 #
@@ -72,6 +77,7 @@ import focus
 #
 #     SYSTEM_PROMPT    how it answers questions about the notes
 #     SMALLTALK_PROMPT how it handles greetings, jokes and idle chatter
+#     WEB_PROMPT       how it answers from live search results, and only from those
 #     VISION_PROMPT    how it judges one still frame of the user's own screen
 #     WEBCAM_PROMPT    how it answers a question about the person at the desk
 #     STUCK_PROMPT     the unasked-for nudge, when a screen has not moved in a minute
@@ -79,9 +85,10 @@ import focus
 #
 #  Structural rules the rest of the code enforces regardless of character, so
 #  you do not need to restate them: only the retrieved notes are ever sent to
-#  the model; small talk is classified before anything is allowed to move the
-#  camera and arrives with no notes attached; and the reply is capped at
-#  SPOKEN_MAX_CHARS before it is read aloud.
+#  the model, or on a web turn only the fetched snippets and never both at once;
+#  small talk is classified before anything is allowed to move the camera and
+#  arrives with no notes attached; and the reply is capped at SPOKEN_MAX_CHARS
+#  before it is read aloud.
 # =============================================================================
 
 SYSTEM_PROMPT = (
@@ -235,6 +242,46 @@ SMALLTALK_PROMPT = (
     "- One dry line is plenty. No exclamation marks, no emoji, no forced cheer, no "
     "cascade of apology."
 )
+
+WEB_PROMPT = (
+    "You are the butler of a private knowledge galaxy: English, impeccably polite, "
+    "unhurried and very dry. This turn is different from every other, and the "
+    "difference is the whole point of it.\n"
+    "\n"
+    "WHAT YOU HAVE BEEN GIVEN\n"
+    "- You have been provided with live web search results, fetched a second ago "
+    "because your employer's own notes did not cover the question.\n"
+    "- Answer the user's question using ONLY these results. Not your own knowledge, "
+    "however certain you are of it, and not their notes - you have not been shown "
+    "any this turn.\n"
+    "\n"
+    "HOW YOU ANSWER\n"
+    "- Start your answer with \"According to current web sources\" or a close "
+    "variant, so it is unmistakable which world you are speaking from.\n"
+    "- Then the facts: the actual figures, names and dates from the snippets, in one "
+    "or two sentences. A dry remark is welcome; padding is not.\n"
+    "- You may name a publication in passing. Never write out a URL: the sources are "
+    "already listed beside you as links, and a URL spoken aloud is a torture.\n"
+    "- If the results disagree with each other, say so in a few words and give both "
+    "figures rather than quietly picking the tidier one.\n"
+    "\n"
+    "WHEN THEY DO NOT ANSWER IT\n"
+    "- If the results do not contain the answer, say plainly: \"I searched the web, "
+    "sir, but found no reliable answer to that.\" Nothing more, and certainly nothing "
+    "invented to fill the gap.\n"
+    "- Never blend web facts with local notes. Never state a fact the snippets do "
+    "not contain. Never invent, complete or guess at a web address.\n"
+    "- British spelling, no exclamation marks, no emoji, no list of what you tried."
+)
+
+# ONE APOLOGY, NOT TWO. What is said when the lookup came back empty AND the notes have
+# nothing either. Kept as a fixed line rather than a prompt, because a model asked to
+# improvise an admission of failure will improvise a fact instead - and written as ONE
+# sentence on purpose: the refusal is the sentence, and the web merely GAINS A CLAUSE to
+# it. Two sentences would be two apologies for one failure, which reads like a machine
+# saying sorry twice because two different branches each decided to.
+WEB_SILENT_LINE = ("My notes have nothing on that, and the web, asked on your behalf, "
+                   "was likewise silent, sir.")
 
 VISION_PROMPT = (
     "You are the butler of a private knowledge galaxy. Your employer has just "
@@ -589,6 +636,16 @@ DEFAULT_CONFIG = {
         "gpt 6 astra": "openai/gpt-6-astra",
         "gpt-6": "openai/gpt-6-astra",
     },
+
+    # ---- THE WEB LOOKUP. Both blank by default and meant to stay that way: the
+    # search in search.py works with no key and no account, and these exist only so
+    # that a blocked network has somewhere better to point. search_api_key turns on
+    # Tavily; search_url turns on a SearXNG instance you trust. Neither is ever sent
+    # to the browser, printed, or written into an answer - /health reports whether a
+    # key is present and how many characters long it is, and that is the whole story
+    # the page is ever told.
+    "search_api_key": "",
+    "search_url": "",
 }
 PLACEHOLDER_KEYS = {"", "put-your-key-here", "your-key-here", "sk-xxx", "changeme"}
 
@@ -730,6 +787,64 @@ SCORE_FLOOR_RATIO = 0.30
 # A top score below this means nothing in the notes really matched.
 RELEVANCE_FLOOR = 1.0
 
+# THE CONFIDENCE FLOOR, AND ITS UNITS. This is a fraction of the QUESTION, not a score:
+# note_confidence() returns how much of what was asked the collection actually holds, on
+# a scale where 0 is "not one word of this appeared anywhere in the notes" and 1 is "one
+# note contains every word of it". 0.25 therefore reads as a sentence: a quarter of the
+# question, or the notes do not get to answer it.
+#
+# It used to be compared against score_notes()'s raw idf total, which is unbounded, and
+# that was a bug with a number in front of it: one incidental shared word already clears
+# 0.25 on that scale, so a question about prime ministers came back "answered" with six
+# notes about coffee lit behind it. A threshold with no units cannot be reasoned about at
+# all - you cannot say what 0.25 MEANS - and a threshold nobody can reason about is a
+# threshold nobody notices is wrong. In these units: one shared word in a nine-word
+# question is about 0.11 and loses; three words of five is 0.6 and wins.
+WEB_CONFIDENCE_THRESHOLD = 0.25
+# How long a web answer's snippets may take before the whole lookup is abandoned and
+# the notes get their turn back. Two backends at WEB_TIMEOUT each, with room to spare.
+WEB_BUDGET_S = 20.0
+
+# ---- THE QUICK THINKER, and the pronoun it exists to resolve.
+#
+# "what is react" ... "who created it?" - and the word `it` went to a search engine on
+# its own, which answered with Tim Berners-Lee. The question was not wrong and the search
+# was not broken: a pronoun sent alone is a question with its subject cut off, and the
+# engine did the only thing it could with the words it was given.
+#
+# So a bare follow-up inherits its predecessor's subject BEFORE the query is sent, and
+# the job is handed to a small local model on Ollama rather than to the cloud brain. One
+# sentence in, four words out; a round trip to a paid provider for that is a waste of the
+# employer's money and of the second and a half it would cost.
+#
+# THE LAW that shapes every line below: only the SEARCH QUERY is rewritten. The card and
+# the toast quote what was actually said - "who created it" - because those are the
+# employer's words and this machine does not get to improve them. See resolve_followup().
+QUICK_URL = "http://127.0.0.1:11434/api/generate"
+QUICK_MODEL = "qwen3:4b"
+# Generous enough for a cold model to be pulled into memory (7.5s measured on this
+# machine, 0.3s warm), and short enough that a dead Ollama cannot hold a question up:
+# every failure here lands on the heuristic below, which costs nothing.
+QUICK_TIMEOUT_S = 12.0
+# A rewrite is a search query, so anything long is prose that slipped the leash.
+QUICK_MAX_WORDS = 14
+# "Short", per the law: a bare follow-up. Anything longer carries its own subject, and
+# rewriting a real question would be this machine putting words in somebody's mouth.
+REWRITE_MAX_WORDS = 8
+REWRITE_INSTRUCTION = ("Given the previous question and this follow-up, output a "
+                       "standalone search query. Output the query only, no prose.")
+# The words that cannot stand on their own. Possessives and plurals are in because they
+# fail in exactly the same way: "who founded them", "what is its licence".
+ANAPHOR_RE = re.compile(r"""\b(?: it | it'?s | its | they | them | their | theirs
+                                | he | him | his | she | her | hers
+                                | this | that | these | those )\b""",
+                        re.IGNORECASE | re.VERBOSE)
+# A model that decided to explain itself instead of answering. Cheap to spot at the
+# front of the line, and every one of these has actually come back from qwen3:4b.
+QUICK_PROSE_RE = re.compile(r"""^(?: okay | ok | sure | here | we | i | so | first
+                                   | the \s+ user | given | as | let )\b""",
+                            re.IGNORECASE | re.VERBOSE)
+
 # ---- seeing the screen, one frame per question.
 #
 # ONE source of truth for the media type. The viewer encodes with it, declares it in
@@ -859,7 +974,14 @@ TOKEN_RE = re.compile(r"[a-z0-9']+")
 # peeled off. If something substantial is left, it is still a real question:
 # "Thanks! Now what about pricing?" must not be mistaken for chatter.
 PLEASANTRY_RE = re.compile(r"""^(?:
-      hi | hello+ | hey+ | yo | hiya | howdy | greetings | heya
+    # "there" only ever peels as part of the greeting it followed. _peel's own docstring
+    # promises that "hey there, thanks, so..." comes away to nothing, and it did not:
+    # "there" stopped the loop dead, "thanks" is a content word to the tokeniser, and so
+    # a message that was pure pleasantries counted as a substantial question - which,
+    # now that an out-of-scope question knocks on the web, would have sent a greeting to
+    # a search engine. Peeled here rather than in FILLER_RE so that a bare "there is a
+    # note about pricing" keeps its first word.
+      (?: hi | hello+ | hey+ | yo | hiya | howdy | greetings | heya ) (?: \s+ there )?
     | good \s+ (?: morning | afternoon | evening | day )
     | good \s* night | morning | afternoon | evening
     | thanks (?:\s+ (?:a\s+lot|so\s+much|again))? | thank\s+you | ty | ta | cheers
@@ -892,30 +1014,104 @@ CHATTER_RE = re.compile(r"""(?:
       (?: robot | human | real | ai | bot | alive | conscious | sentient | chatgpt )
     | do\s+you\s+(?: like | love | dream | sleep | eat | feel | think | have\s+feelings )
     | how\s+(?:are|do)\s+you\s+feel | are\s+you\s+ok
-    | what (?:'s|s|\s+is)\s+the\s+weather | what\s+time\s+is\s+it
+    # The weather used to live here, and it has moved to REALWORLD_RE below: the
+    # machine can actually find out now, so treating it as chatter would be a
+    # deliberate refusal to look. The clock stays - the time is a local fact, and no
+    # search engine knows which chair you are sitting in.
+    | what\s+time\s+is\s+it
     | what (?:'s|s|\s+is)\s+(?:the\s+)?(?:date|day)\s+today
     | i\s+love\s+you | good\s+bot | bad\s+bot | you (?:'re|re|\s+are)\s+(?:great|amazing|useless|rubbish)
   )""", re.IGNORECASE | re.VERBOSE)
 
 
-def classify_question(question, best_score, prior=""):
-    """"notes" or "chat" - decided BEFORE anything is allowed to move the camera.
+# --------------------------------------------------------- the live web triggers
+#
+# THE FORCE TRIGGER. "Jarvis, look this up" and "search the web for ..." skip the
+# local check entirely: an explicit instruction outranks any score. Written to survive
+# the voice path, which arrives as one unpunctuated run - "jarvis look this up what is
+# the population of tokyo" - so the trigger is matched anywhere and then PEELED OFF,
+# leaving the query. The alternatives are ordered longest-first: `jarvis look this up`
+# must win over the bare `look this up` it contains, or the peel would leave "jarvis".
+FORCE_WEB_RE = re.compile(r"""
+    (?:^|\b)(?:
+        (?: hey \s+ | ok(?:ay)? \s+ )? jarvis \b [\s,.:;!-]*
+          (?: please \s+ )? (?: can \s+ you \s+ )? (?: go \s+ and \s+ )?
+          (?: look \s+ (?: this | that | it ) \s+ up
+            | look \s+ up
+            | search \s+ (?: the \s+ )? (?: web | internet | online )
+            | search \s+ for )
+      | look \s+ (?: this | that | it ) \s+ up
+        (?: \s+ (?: on \s+ the \s+ )? (?: web | internet | online ) )?
+      | (?: search | check | ask ) \s+ (?: the \s+ )? (?: web | internet | online )
+        (?: \s+ (?: for | about | on ) )?
+      | web \s+ search \s+ (?: for \s+ )?
+      | google \s+ (?: it | this | that ) \b
+    )[\s,.:;!?-]*""", re.IGNORECASE | re.VERBOSE)
 
-    A greeting or a joke gets a friendly reply and zero note indexes, so the
-    galaxy holds perfectly still. Only questions that are actually about the
-    notes are ever allowed to fly the camera or light a cluster.
+# THE REAL-WORLD CLASSES. Questions whose answer changes without anybody editing a
+# note: weather, news, results, prices, "current" anything. These go to the web even
+# when a note happens to share a word with them, because a note that mentions Tokyo
+# does not know today's figure and a confident wrong number is the worst outcome here.
+#
+# Kept deliberately narrow. Every phrase below is one somebody would have to go and
+# look up; nothing here matches a question a private collection could answer, because
+# each false positive silently swaps the employer's own writing for a stranger's blog.
+REALWORLD_RE = re.compile(r"""(?:
+      \b (?: what | how ) (?: '?s | \s+ is )? \s+ (?: the \s+ )? weather \b
+    | \b weather \s+ (?: in | at | for | today | tomorrow | this ) \b
+    | \b (?: the \s+ )? forecast \s+ (?: for | in | today | tomorrow ) \b
+    | \b (?: latest | breaking | today'?s? | recent ) \s+ news \b
+    | \b news \s+ (?: on | about | from | for ) \b | \b headlines \b
+    | \b who \s+ (?: won | win | is \s+ winning | came \s+ first ) \b
+    | \b (?: final | latest | current ) \s+ score \b | \b score \s+ of \s+ the \b
+    | \b current \s+ (?: price | value | rate | cost | population | score | weather
+                       | temperature | champion | president | prime \s+ minister
+                       | ceo | version | status | exchange ) \b
+    | \b (?: price | cost | value ) \s+ of \s+ (?: a \s+ | an \s+ | the \s+ )?
+      (?: bitcoin | btc | ethereum | eth | gold | silver | oil | brent
+        | \w+ \s+ (?: stock | share | shares ) ) \b
+    | \b stock \s+ price \b | \b share \s+ price \b | \b exchange \s+ rate \b
+    | \b how \s+ much \s+ is \s+ (?: a \s+ | one \s+ )? (?: bitcoin | btc | ethereum
+        | eth | gold | oil | the \s+ dollar | the \s+ pound | the \s+ euro ) \b
+    | \b who \s+ is \s+ the \s+ (?: current | new | present ) \b
+    | \b (?: right \s+ now | at \s+ the \s+ moment ) \s*[?.!]?\s*$
+  )""", re.IGNORECASE | re.VERBOSE)
 
-    `prior` is the previous question, so that a bare follow-up ("why not?") is
-    read as a real question rather than as chatter for having no content words.
-    """
-    bare = re.sub(r"\s+", " ", re.sub(r"[^\w\s']", " ", question.lower())).strip()
-    if not bare:
-        return "chat"
-    if CHATTER_RE.search(bare):
-        return "chat"
 
-    # Peel greetings, thanks and trailing filler off the front until nothing
-    # more comes away. "hey there, thanks, so..." peels to nothing.
+# QUESTIONS ABOUT THIS MACHINE, which no search engine can answer. They score nothing
+# against the notes - "how do I move the lock?" matches no note - so without this guard
+# the thin-score trigger would send them to DuckDuckGo, which would cheerfully return
+# three articles about focus apps and none about THIS one. Worse, it would swallow the
+# brain-swap tag: "you are being slow, fetch something sharper" is an instruction, and
+# an instruction answered with search results is an instruction ignored. Checked AFTER
+# the force trigger, because "look this up" is explicit and outranks every heuristic.
+SELF_RE = re.compile(r"""(?:
+      \b (?: focus \s+ (?: session | timer | mode ) | countdown | report \s+ card
+           | lock \s+ (?: on | onto | this | that | my | it ) | streak | ledger ) \b
+    | \b (?: the | my | this ) \s+ lock \b
+    | \b (?: my | the | these | those ) \s+ (?: notes? | galaxy | graph | collection
+                                             | nodes? | clusters? ) \b
+    | \b (?: this | the ) \s+ (?: app | page | viewer | assistant | program | server
+                                | tab | galaxy ) \b
+    | \b (?: your | you | you'?re ) \s+ (?: brain | model | memory | prompt | persona
+                                          | voice | eyes | name | maker | job ) \b
+    | \b (?: the \s+ )? (?: camera | webcam | microphone | mic ) \b
+    | \b (?: brain | model ) \s+ (?: swap | change ) \b | \b swap \s+ (?: your | the ) \b
+    | \b (?: sharper | faster | cleverer | different ) \s+ (?: brain | model ) \b
+    | \b can \s+ you \s+ (?: see | hear | watch | look ) \b
+    | \b (?: what | which ) \s+ (?: model | brain ) \b
+    | \b how \s+ do \s+ (?: you \s+ work | i \s+ use \s+ you ) \b
+  )""", re.IGNORECASE | re.VERBOSE)
+
+
+def _bare(question):
+    """Lowercase, punctuation-free, single-spaced. The form both classifiers read."""
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s']", " ", str(question or "").lower())).strip()
+
+
+def _peel(bare):
+    """Greetings, thanks and trailing filler off the front, until nothing more comes
+    away. "hey there, thanks, so..." peels to nothing at all."""
     stripped = bare
     for _ in range(6):
         shorter = PLEASANTRY_RE.sub("", stripped, count=1).strip()
@@ -923,12 +1119,304 @@ def classify_question(question, best_score, prior=""):
         if shorter == stripped:
             break
         stripped = shorter
+    return stripped
+
+
+def substantial_question(question, prior=""):
+    """Is there a real question here, once the pleasantries are peeled off?
+
+    Split out of classify_question so that the web trigger can ask the same thing
+    WITHOUT a score. It matters: a bare "morning!" scores 0.0 and would otherwise sail
+    straight through the "the notes have nothing on this" test and off to a search
+    engine. The words decide whether a question was asked; the score only decides
+    where its answer should come from.
+    """
+    bare = _bare(question)
+    if not bare:
+        return False
+    if CHATTER_RE.search(bare):
+        return False               # about the assistant, not about the world
+    stripped = _peel(bare)
     if not stripped:
-        return "chat"              # the whole message was pleasantries
+        return False               # the whole message was pleasantries
+    # `prior` is the previous question, so that a bare follow-up ("why not?") counts
+    # as a real question rather than as chatter for having no content words.
     if not tokenize(stripped) and not tokenize(prior):
-        return "chat"              # nothing but stopwords, and nothing to lean on
+        return False               # nothing but stopwords, and nothing to lean on
+    return True
+
+
+def web_query(question):
+    """The question with any force trigger peeled off - what actually gets searched.
+
+    "Jarvis, look this up: current population of Tokyo" -> "current population of
+    Tokyo". A trigger with nothing after it peels to "", and the caller asks what to
+    look up rather than searching for the phrase "look this up".
+    """
+    cleaned = FORCE_WEB_RE.sub(" ", str(question or ""))
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.:;!?-\"'")
+    # "look this up for me" and "...will you" leave a tail behind that is not a query.
+    cleaned = re.sub(r"\b(?:for\s+me|please|will\s+you|would\s+you|thanks)\b\s*$", "",
+                     cleaned, flags=re.IGNORECASE).strip(" ,.:;!?-")
+    return cleaned
+
+
+def _trace(trace, line):
+    """One line into the lookup's own log, which the caller writes to stderr."""
+    if trace is not None:
+        trace.append(line)
+
+
+def _quick_prompt(prior, question):
+    """ChatML by hand, with an EMPTY think block and one worked example.
+
+    Both of those are load-bearing, and both were arrived at by watching this model
+    fail. qwen3:4b is a THINKING model: asked the instruction plainly it answers
+    "Okay, the user previously asked..." and reasons for four hundred tokens - twenty-five
+    seconds to produce four words, which is not a price a question can pay. `think:false`
+    on /api/chat does not stop it on Ollama 0.34; opening the assistant turn with a closed
+    `<think></think>` pair does, because the model finds its own reasoning already over.
+    That needs the template out of the way, which is what `raw` buys, and raw means
+    writing the ChatML here.
+
+    The example turn is the difference between prose and a query. Told once what the
+    answer looks like, the model answers in four tokens and a quarter of a second.
+    """
+    nothink = "<think>\n\n</think>\n\n"
+
+    def turn(prev, cur):
+        return ("<|im_start|>user\nPrevious question: %s\nFollow-up: %s<|im_end|>\n"
+                "<|im_start|>assistant\n%s" % (prev, cur, nothink))
+
+    return ("<|im_start|>system\n%s<|im_end|>\n" % REWRITE_INSTRUCTION
+            + turn("what is the Eiffel Tower", "how tall is it?")
+            + "how tall is the Eiffel Tower<|im_end|>\n"
+            + turn(prior, question))
+
+
+def _quick_clean(text, question):
+    """The model's answer, or "" - and "" is a perfectly good outcome here.
+
+    A rewrite that is wrong is worse than no rewrite at all: the heuristic below is
+    predictable and the verbatim query is at least honest, while a hallucinated subject
+    searches for something nobody asked about. So this is a gate and not a parser, and
+    every rule in it has caught a real reply from this model.
+    """
+    line = ""
+    for raw in str(text or "").replace("\r", "").split("\n"):
+        candidate = raw.strip().strip("`\"'“”").strip()
+        if candidate:
+            line = candidate
+            break
+    if not line or "<|" in line or "<think" in line:
+        return ""
+    if QUICK_PROSE_RE.search(line):
+        return ""                  # it explained itself instead of answering
+    words = line.split()
+    if not 1 <= len(words) <= QUICK_MAX_WORDS:
+        return ""
+    # And it must have RESOLVED something. A rewrite that adds no word the follow-up did
+    # not already have is not a rewrite - it is the same pronoun with the same problem,
+    # and passing it on as a fix would hide the failure instead of falling back from it.
+    if not set(tokenize(line)) - set(tokenize(question)):
+        return ""
+    return line.rstrip(" ?!.")
+
+
+def quick_rewrite(prior, question, trace=None):
+    """The local model's standalone query, or "" if anything at all went wrong.
+
+    Nothing here raises. Ollama not installed, Ollama not running, the model not pulled,
+    a socket that hangs - they are all the same event to a question waiting on an answer,
+    and they all mean "use the heuristic".
+    """
+    body = json.dumps({
+        "model": QUICK_MODEL,
+        "prompt": _quick_prompt(prior, question),
+        "raw": True,
+        "stream": False,
+        # Deterministic, and short: a search query that needs more than 32 tokens is
+        # prose. The stops are the two ways this model ends a line it means.
+        "options": {"temperature": 0, "num_predict": 32,
+                    "stop": ["\n", "<|im_end|>"]},
+    }).encode("utf-8")
+    started = time.monotonic()
+    try:
+        req = urllib.request.Request(QUICK_URL, data=body, headers={
+            "Content-Type": "application/json", "User-Agent": USER_AGENT})
+        with urllib.request.urlopen(req, timeout=QUICK_TIMEOUT_S) as fh:
+            payload = json.loads(fh.read().decode("utf-8", "replace"))
+    except Exception as exc:                                   # noqa: BLE001
+        _trace(trace, "the quick thinker (%s) did not answer: %s"
+               % (QUICK_MODEL, str(exc)[:90]))
+        return ""
+    clean = _quick_clean(payload.get("response"), question)
+    if not clean:
+        _trace(trace, "the quick thinker answered with something that was not a query: "
+                      "%r" % str(payload.get("response") or "")[:90])
+        return ""
+    _trace(trace, "%s rewrote the follow-up in %.2fs" % (QUICK_MODEL,
+                                                         time.monotonic() - started))
+    return clean
+
+
+def _subject_of(question):
+    """What the previous question was ABOUT, as one phrase, for the fallback.
+
+    The last run of capitalised words, which is the proper noun in nearly every question
+    anybody types: "what is the population of India" -> India, "what is the Eiffel Tower"
+    -> Eiffel Tower. The first word is skipped because every sentence starts capitalised.
+
+    And when there is no capital at all, the last content word. That is not a flourish:
+    dictated questions arrive from the browser in one unpunctuated lowercase run, so a
+    capital letter cannot be the only evidence this machine will accept of a subject -
+    "what is react" has one all the same.
+    """
+    words = re.findall(r"[\w']+", str(question or ""))
+    runs, current = [], []
+    for i, word in enumerate(words):
+        if i and word[:1].isupper() and word.lower() not in STOPWORDS:
+            current.append(word)
+        elif current:
+            runs.append(current)
+            current = []
+    if current:
+        runs.append(current)
+    if runs:
+        return " ".join(runs[-1])
+    content = tokenize(question)
+    return content[-1] if content else ""
+
+
+def heuristic_rewrite(prior, question):
+    """No model, no network: the previous question's subject, appended. Or "".
+
+    Crude on purpose. "who created it react" is not English and no search engine cares -
+    it carries both the question and the subject, which is the whole job.
+    """
+    subject = _subject_of(prior)
+    if not subject or subject.lower() in str(question or "").lower():
+        return ""                  # nothing to add, or it is already there
+    return "%s %s" % (str(question).strip().rstrip(" ?!.,"), subject)
+
+
+def resolve_followup(query, prior="", prior_kind="", trace=None):
+    """THE REWRITER. A bare follow-up inherits its predecessor's subject - for the
+    search, and for nothing else. Returns (query to send, how it was rewritten).
+
+    Three conditions, all of which must hold, because each one is a way this could put
+    words in somebody's mouth:
+
+      there is a REMEMBERED QUESTION, and it was a real one. `prior_kind` is why the
+        memory keeps the kind at all: "good morning" has no subject to inherit, and
+        appending one to it would invent a question nobody asked.
+      the follow-up is SHORT - under REWRITE_MAX_WORDS. A question long enough to carry
+        its own subject keeps it.
+      and it contains an ANAPHOR, which is the actual complaint: a pronoun searched on
+        its own returns the wrong thing confidently.
+
+    Then the quick thinker, then the heuristic, then verbatim. Falling all the way
+    through is a normal outcome and costs the search nothing.
+    """
+    bare = str(query or "").strip()
+    prior = str(prior or "").strip()
+    if not bare or not prior:
+        return bare, ""
+    if prior_kind not in ("notes", "web"):
+        return bare, ""
+    if len(bare.split()) >= REWRITE_MAX_WORDS or not ANAPHOR_RE.search(bare):
+        return bare, ""
+
+    _trace(trace, "a bare follow-up: %r after %r" % (bare, prior))
+    quick = quick_rewrite(prior, bare, trace)
+    if quick:
+        return quick, "quick"
+    rough = heuristic_rewrite(prior, bare)
+    if rough:
+        _trace(trace, "the heuristic appended the previous subject instead")
+        return rough, "heuristic"
+    _trace(trace, "nothing could be inherited; searching it verbatim")
+    return bare, ""
+
+
+def sent_fields(query, rewrote=""):
+    """What actually left the machine, for the record.
+
+    THE LAW is that the card and the toast quote the employer's own words, so the viewer
+    renders neither of these - it already has the question, because it is the one that
+    typed it. They exist so that a rewrite is auditable from the reply alone: `searchedFor`
+    on every web answer, and `rewrote` ("quick" or "heuristic") only when the sentence that
+    went out was not the sentence that came in.
+    """
+    out = {"searchedFor": str(query or "")}
+    if rewrote:
+        out["rewrote"] = rewrote
+    return out
+
+
+def web_intent(question, confidence, prior="", in_scope=True):
+    """WHY a live lookup is warranted, in one word, or "" for "it is not".
+
+        "force" - they said "look this up". Nothing can veto that.
+        "world" - weather, news, a result, a price: the answer changes hourly.
+        "thin"  - THE NOTES CANNOT ANSWER IT: either they hold less than
+                  WEB_CONFIDENCE_THRESHOLD of what was asked, or the question was
+                  classified out of scope.
+
+    THE GATE, in one sentence: a question reaches the web when it is SUBSTANTIAL and the
+    notes CANNOT ANSWER IT. The two vetoes above the score are what makes the first half
+    true - small talk and questions about this machine are turned back before any number
+    is consulted at all, so "good morning" still costs nothing and touches nothing.
+
+    `in_scope` is the out-of-scope half of "cannot answer", and folding it in here is the
+    whole repair: it used to be the case that an out-of-scope question was classified
+    "chat" and answered from SMALLTALK_PROMPT without the web ever being knocked on -
+    the assistant said "your notes do not cover that" while a live lookup sat one branch
+    away, unasked. Both halves are called "thin" because they are the same fact told to
+    the same reader: the collection does not have this.
+
+    Returned as a reason rather than a boolean because the reason is worth logging and
+    worth testing: "why did it search?" and "why did it not?" are the two questions
+    anybody actually asks of this feature.
+    """
+    if FORCE_WEB_RE.search(str(question or "")):
+        return "force"
+    if not substantial_question(question, prior):
+        return ""                  # small talk never searches. It is not a question.
+    bare = _bare(question)
+    if SELF_RE.search(bare):
+        return ""                  # about this machine; the web has never met it
+    if REALWORLD_RE.search(bare):
+        return "world"
+    if confidence < WEB_CONFIDENCE_THRESHOLD or not in_scope:
+        return "thin"
+    return ""
+
+
+def classify_question(question, best_score, prior="", confidence=1.0):
+    """"notes" or "chat" - decided BEFORE anything is allowed to move the camera.
+
+    A greeting or a joke gets a friendly reply and zero note indexes, so the
+    galaxy holds perfectly still. Only questions that are actually about the
+    notes are ever allowed to fly the camera or light a cluster.
+
+    "web" is NOT returned here: whether a search actually produced anything is not
+    known until it has been attempted, and a kind that might still be wrong is worse
+    than no kind at all. answer_question() promotes this to "web" once snippets are in
+    its hand - see web_intent() for the decision that sends it looking.
+    """
+    if not substantial_question(question, prior):
+        return "chat"
     if best_score < RELEVANCE_FLOOR:
         return "chat"              # the notes genuinely have nothing on this
+    # NO CHIPS FOR A REFUSAL. A note can score well on one incidental word and still
+    # hold almost none of the question - and "notes" is the kind that lights chips,
+    # flies the camera and opens the panel. Six notes lit behind an answer that did not
+    # come from them is a provenance lie, and the fact that it is a pretty one is what
+    # makes it worth a branch of its own. `confidence` defaults to 1.0 so that a caller
+    # asking the old two-argument question gets the old two-argument answer.
+    if confidence < WEB_CONFIDENCE_THRESHOLD:
+        return "chat"
     return "notes"
 
 # ------------------------------------------------------------------ index/config
@@ -936,6 +1424,39 @@ def classify_question(question, best_score, prior=""):
 _lock = threading.Lock()
 _history = {}          # session id -> [ {role, content}, ... ]
 _index = {"notes": [], "docs": [], "df": {}, "mtime": 0.0, "meta": {}}
+
+# THE MEMORY: one question back, and what kind of thing it turned out to be. That is the
+# whole of it, and the smallness is the point - the only reader is resolve_followup(),
+# which needs a subject to lend to a pronoun and nothing else.
+#
+# The KIND is in here because a subject is not the only thing a predecessor can lack.
+# "good morning" is a remembered question too, and lending its words to "who created it?"
+# would invent a question rather than complete one, so only "notes" and "web" are ever
+# borrowed from.
+#
+# One slot, not a dict keyed by session: this is the last thing said to this machine, in
+# the same sense that the notes are its notes, and a per-session copy would make the same
+# follow-up mean different things in two tabs of the same browser. It is written by the
+# /chat door, once, with the kind the answer actually came back as - and cleared by the
+# forget button, which has to clear everything or it is not a forget button.
+_last_ask = {"question": "", "kind": ""}
+
+
+def remember_ask(question, kind):
+    with _lock:
+        _last_ask["question"] = str(question or "").strip()[:2000]
+        _last_ask["kind"] = str(kind or "")
+
+
+def recall_ask():
+    with _lock:
+        return _last_ask["question"], _last_ask["kind"]
+
+
+def forget_ask():
+    with _lock:
+        _last_ask["question"] = ""
+        _last_ask["kind"] = ""
 
 
 def load_config(apply_override=True):
@@ -1085,6 +1606,59 @@ def score_notes(question, prior="", top_k=TOP_K, skip=()):
     return [(i, 0.0) for i in fallback[:top_k]]
 
 
+def note_confidence(question, picked, prior=""):
+    """How much of the QUESTION the collection actually holds. 0..1, and it means it.
+
+    The fraction of the question's own content words that a retrieved note contains -
+    the one number the web gate turns on, and the reason that gate can now be argued
+    about in words: "a quarter of what you asked, or the notes do not answer it".
+
+    Two details in here are deliberate, and both exist because the plain fraction, tried
+    first, got the employer's own examples wrong:
+
+    WEIGHTED BY HOW RARE THE WORD IS, so that a match on a word the corpus uses
+    everywhere is not worth the same as a match on the word the question is ABOUT.
+    "Who was the first Sikh PM of India" has three content words; thirteen of thirty
+    notes happen to contain "first", so the unweighted fraction is 0.33 and the gate
+    stays shut on the strength of a word nobody asked about. Weighted, "first" is worth
+    a sixth of the question and the score is 0.14 - a loss, which is the right answer.
+    Equal-idf words give exactly the plain fraction back, so the arithmetic above still
+    reads as it should.
+
+    THE BEST OF THE RETRIEVED NOTES, not strictly the top-scoring one. Ask "what do the
+    notes say about roasting" and the raw score puts a note called "Subscription Churn
+    NOTES" first - it wins on the word "notes" in its title - while the note that
+    actually covers the question is third. Measuring only the winner would make the
+    gate depend on a scoring artefact and would refuse a question the collection
+    answers perfectly well. The claim being tested is "can the notes answer this",
+    and that is a claim about the collection, not about one row of it.
+
+    `prior` is the previous question, used only when this one has no content words of
+    its own: a bare follow-up ("why not?") is measured against what it is following up.
+    """
+    docs, df = _index["docs"], _index["df"]
+    total = len(_index["notes"])
+    if not picked or not total:
+        return 0.0
+    words = list(dict.fromkeys(tokenize(question))) or \
+        list(dict.fromkeys(tokenize(prior)))
+    if not words:
+        return 0.0
+    weight = {tok: math.log(1.0 + total / (1.0 + df.get(tok, 0))) for tok in words}
+    whole = sum(weight.values())
+    if whole <= 0:
+        return 0.0
+    best = 0.0
+    for i, _score in picked:
+        if not 0 <= i < len(docs):
+            continue
+        doc = docs[i]
+        held = sum(w for tok, w in weight.items()
+                   if tok in doc["title"] or tok in doc["body"])
+        best = max(best, held / whole)
+    return best
+
+
 def build_context(picked):
     notes = _index["notes"]
     blocks = []
@@ -1097,6 +1671,46 @@ def build_context(picked):
                       % (rank, note.get("label", "untitled"),
                          note.get("group", "unfiled"), text))
     return "\n\n".join(blocks)
+
+
+# Backend names search.py is allowed to have answered with. The name is reported to the
+# browser, so it is checked against a fixed vocabulary rather than passed through - the
+# same rule every other string that crosses that line already follows.
+WEB_BACKENDS = ("tavily", "searxng", "ddg-lite", "ddg-html", "wikipedia")
+
+
+def build_web_context(results):
+    """The snippets, as the model sees them: title, host, text. No full URLs.
+
+    The host is there so the butler can say "according to Reuters"; the full address is
+    withheld on purpose, because a model holding a URL will eventually type one out,
+    and a URL that has been through a language model is no longer a citation. The links
+    the page shows come from search.py's own results and never from the answer.
+    """
+    blocks = ["Fetched from the live web just now, %s."
+              % time.strftime("%Y-%m-%d %H:%M")]
+    for rank, item in enumerate(results, start=1):
+        blocks.append("RESULT %d\nTitle: %s\nSource: %s\nSnippet: %s"
+                      % (rank, item.get("title") or "untitled",
+                         item.get("host") or "unknown",
+                         (item.get("snippet") or "").strip()))
+    return "\n\n".join(blocks)
+
+
+def web_sources(results):
+    """What the BROWSER is told: a title and a URL per result, and nothing else.
+
+    A copy-through over a two-key whitelist, like public_state() in focus.py, so that
+    adding a field to search.py cannot quietly widen what the page receives. The
+    snippet, the host and the backend stay on this side of the wall.
+    """
+    out = []
+    for item in results:
+        url = str(item.get("url") or "")
+        if not url.startswith(("http://", "https://")):
+            continue               # never hand the page something it cannot open
+        out.append({"title": str(item.get("title") or url)[:140], "url": url[:500]})
+    return out
 
 
 # ------------------------------------------------------------- aws  credentials
@@ -2452,6 +3066,17 @@ def nudge_for_stuck(frame, declared, width, height, age_ms, still_s):
 
 
 def answer_question(question, session):
+    """One question in, one of four worlds out, and the reply always says which.
+
+        kind "notes" - answered from the retrieved notes. Nodes light, camera flies.
+        kind "web"   - answered from live search results, with the URLs attached.
+        kind "chat"  - small talk, or a polite "your notes do not cover that".
+        kind "swap"  - it was an instruction about the brain, not a question at all.
+
+    The two substantial worlds never mix. A notes answer is never shown a snippet and a
+    web answer is never shown a note, which is enforced by the message lists below
+    rather than by asking the model nicely.
+    """
     ensure_index()
     cfg, cfg_error = load_config()
 
@@ -2463,13 +3088,32 @@ def answer_question(question, session):
     with _lock:
         history = list(_history.get(session, []))
     prior = next((m["content"] for m in reversed(history) if m["role"] == "user"), "")
+    # THE MEMORY, read before anything is written to it: at this moment it still holds
+    # the question BEFORE this one, which is exactly what a pronoun in this one needs.
+    # Read here and passed down by hand rather than reached for from inside the rewriter,
+    # so that what the rewrite was built from is visible at the top of this function.
+    recalled, recalled_kind = recall_ask()
 
     picked = score_notes(question, prior)
+    best_score = picked[0][1] if picked else 0.0
+    # How much of the question the collection actually holds, 0..1. The raw score above
+    # says how loudly a note rang; this says whether it rang for the right question.
+    confidence = note_confidence(question, picked, prior)
 
     # ---- decide what kind of thing was said BEFORE deciding what to return.
     # "chat" carries no note indexes at all, which is what holds the galaxy still.
-    kind = classify_question(question, picked[0][1] if picked else 0.0, prior)
-    if kind == "chat":
+    kind = classify_question(question, best_score, prior, confidence)
+    # ...and, separately, whether this one deserves a look at the live web. Two
+    # decisions rather than one, because they answer different questions: the first is
+    # "was this a question about the notes?", the second is "is the answer somewhere
+    # the notes cannot reach?". A message can fail the first and pass the second, which
+    # is precisely the case this whole feature exists for.
+    reason = web_intent(question, confidence, prior,
+                        in_scope=(best_score >= RELEVANCE_FLOOR))
+    if kind != "notes":
+        # The tail goes to nothing the moment this stops being a notes answer: no chips
+        # lit, no camera fly, no panel opened. Whatever is said next was not said by
+        # these notes.
         picked = []
     node_ids = [int(_index["notes"][i].get("id", i)) for i, _ in picked]
 
@@ -2484,6 +3128,103 @@ def answer_question(question, session):
             missing += (" The %d note%s below are the ones that matched."
                         % (len(node_ids), "" if len(node_ids) == 1 else "s"))
         return 400, {"error": missing, "nodes": node_ids, "kind": kind}
+
+    # ---- THE TWO-STEP LOOKUP. Step one was the score above; this is step two, and it
+    # happens BEFORE the brain is called, because what the brain is told depends
+    # entirely on whether anything came back. Nothing here can raise: search() returns
+    # an empty list for a dead network, a captcha and a redesigned results page alike.
+    web, trace, query, rewrote = [], [], question.strip(), ""
+    if reason:
+        query = web_query(question) if reason == "force" else question.strip()
+        if reason == "force" and len(query) < 2:
+            # "Jarvis, look this up" and then nothing. Searching for the phrase "look
+            # this up" is the one answer that would be actively unhelpful.
+            return 200, {"answer": "Look what up, sir?", "nodes": [], "kind": "chat"}
+        # THE REWRITER, and it goes here for two reasons: after web_query(), so that
+        # "Jarvis, look this up: who made it" is measured and rewritten as the query it
+        # peels down to; and after every kind decision above, so that nothing this local
+        # model says can change where the answer comes from. It shapes the query and
+        # touches nothing else. `question` is still the employer's own words, and
+        # everything the browser is shown is built from those.
+        query, rewrote = resolve_followup(query, recalled, recalled_kind, trace)
+        started = time.monotonic()
+        web = websearch.search(query, cfg=cfg, trace=trace)
+        # stderr, like every other diagnostic here, and for a reason worth the line:
+        # stdout is block-buffered when the server is run with its output redirected,
+        # so a lookup logged there would only surface when the process dies - which is
+        # exactly when nobody is watching. The request log goes to stderr too, so the
+        # two interleave in the right order.
+        # The query as SENT, and - when it is not what was said - what was said, so the
+        # log can answer "why did it search for that?" without anybody guessing.
+        sys.stderr.write("  web lookup (%s, notes held %.2f of it) %r%s -> %d result%s "
+                         "in %.1fs\n"
+                         % (reason, confidence, query[:60],
+                            " [%s rewrite of %r]" % (rewrote, question.strip()[:48])
+                            if rewrote else "",
+                            len(web), "" if len(web) == 1 else "s",
+                            time.monotonic() - started))
+        for line in trace:
+            sys.stderr.write("      - %s\n" % line)
+
+    if web:
+        # THE SYNTHESIS. One world at a time: the snippets go in, the notes do not, and
+        # neither does the history - a previous turn about the employer's own pricing
+        # note is exactly the sort of thing a model will happily fold into a paragraph
+        # about today's gold price. "Never blend" has to be structural to be true, so
+        # this message list is the shortest one in the file.
+        user_msg = ("Question: %s\n\nLive web results you may use, and nothing else:"
+                    "\n\n%s" % (query, build_web_context(web)))
+        messages = [{"role": "system", "content": WEB_PROMPT},
+                    {"role": "user", "content": user_msg}]
+        answer, error = call_model(cfg, messages)
+        sources = web_sources(web)
+        backend = web[0].get("backend")
+        if backend not in WEB_BACKENDS:
+            backend = "web"
+        if error:
+            # The lookup worked and the brain did not. Say so, and still hand over the
+            # links: they are the part that was actually fetched, and they are readable
+            # without any help from a model.
+            return 502, dict({"error": error, "nodes": [], "kind": "web",
+                              "sources": sources, "searched": reason,
+                              "backend": backend}, **sent_fields(query, rewrote))
+        wanted, _cleaned = brain_tag(answer)
+        if wanted:
+            return swap_brain(wanted, door="tag")
+        with _lock:
+            hist = _history.setdefault(session, [])
+            hist.append({"role": "user", "content": question.strip()})
+            hist.append({"role": "assistant", "content": answer})
+            del hist[:max(0, len(hist) - HISTORY_TURNS * 2)]
+        # `nodes` is empty and that is the point: nothing in the galaxy lit this answer,
+        # so nothing in the galaxy may be shown as having done so. The viewer pulses
+        # cyan on `kind` alone and holds the camera exactly where it was.
+        return 200, dict({"answer": answer, "nodes": [], "kind": "web",
+                          "sources": sources, "searched": reason,
+                          "backend": backend}, **sent_fields(query, rewrote))
+
+    if reason and kind != "notes":
+        # THE WEB IS SILENT, and so are the notes - the search found nothing usable and
+        # the score found nothing either. A fixed line rather than a prompt: a model
+        # asked to improvise an admission of failure improvises a fact instead.
+        #
+        # And ONE apology, not two. This is the only exit for a question the gate opened
+        # and nothing answered, so the refusal and the failed lookup are reported in the
+        # same sentence. The alternative shapes are both worse: a SMALLTALK refusal
+        # followed by a canned line about the web says sorry twice for one failure, and a
+        # SMALLTALK refusal alone hides the fact that a search was run on the employer's
+        # behalf - which is a cost they paid and were not told about.
+        with _lock:
+            hist = _history.setdefault(session, [])
+            hist.append({"role": "user", "content": question.strip()})
+            hist.append({"role": "assistant", "content": WEB_SILENT_LINE})
+            del hist[:max(0, len(hist) - HISTORY_TURNS * 2)]
+        return 200, dict({"answer": WEB_SILENT_LINE, "nodes": [], "kind": "chat",
+                          "searched": reason, "webSilent": True},
+                         **sent_fields(query, rewrote))
+    # A failed lookup on a question the notes DO cover falls back to them, silently and
+    # with no mention of the attempt. That is the fallback THE LAW asks for, and the
+    # notes branch below is already exactly it.
 
     if kind == "chat":
         messages = ([{"role": "system", "content": SMALLTALK_PROMPT}] + history +
@@ -2721,6 +3462,7 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             cfg = load_config()[0]
             # Report what is configured, never the credential itself.
             creds = resolve_aws(cfg)[0] if provider_of(cfg) == "bedrock" else None
+            doors = [name for name, _ in websearch.backends(cfg)]
             return self._send_json(200, {
                 "ok": True,
                 "notes": len(_index["notes"]),
@@ -2738,6 +3480,21 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 # is visible before a session is started rather than discovered
                 # halfway through one. Booleans, as everywhere else.
                 "focus": focus.capability(),
+                # THE LOOKUP, described and never disclosed: which backends this config
+                # has in the order they will be tried, whether a key exists, and how
+                # many characters long it is. A length is not a secret; a prefix would
+                # already be more than the page needs.
+                "web": {
+                    "backends": doors,
+                    # "a key that will actually be used", not "a field with something
+                    # in it": a placeholder left in config.json is not configuration,
+                    # and backends() has already made that judgement.
+                    "keyConfigured": "tavily" in doors,
+                    "keyChars": len(str(cfg.get("search_api_key") or "").strip()),
+                    # A fraction of the question, now that it has units: below this much
+                    # of what was asked, the notes do not get to answer it.
+                    "threshold": WEB_CONFIDENCE_THRESHOLD,
+                },
             })
         return SimpleHTTPRequestHandler.do_GET(self)
 
@@ -2794,6 +3551,12 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 status, payload = 500, {
                     "error": "The brain hit an unexpected error: %s" % exc,
                     "nodes": [], "kind": "chat"}
+            # THE MEMORY, written once, here, and with the FINAL kind - "web" is only
+            # known after the lookup, and it is the kind a follow-up most needs to
+            # inherit from. A brain swap is an instruction rather than a question, so it
+            # leaves the last real question standing instead of erasing it.
+            if payload.get("kind") != "swap":
+                remember_ask(question, payload.get("kind", ""))
             return self._send_json(status, payload)
 
         if route == "/remember":
@@ -3015,6 +3778,11 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             session = str(data.get("session") or "default")[:120]
             with _lock:
                 _history.pop(session, None)
+            # The ↻ button forgets the CONVERSATION, and the last question is part of
+            # the conversation: leaving it behind would let a follow-up inherit a subject
+            # from a chat that, as far as the employer is concerned, never happened.
+            # Outside the `with` above on purpose - _lock is not reentrant.
+            forget_ask()
             return self._send_json(200, {"ok": True, "forgotten": session})
 
         return self._send_json(404, {"error": "No such endpoint: %s" % route})
