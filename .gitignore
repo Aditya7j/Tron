@@ -1,0 +1,28 @@
+# CREDENTIALS & CONFIG (NEVER PUSH KEYS)
+config.json
+.env
+
+# PYTHON CACHES
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# LOGS & OUTPUTS
+*.log
+*.out
+server.log
+live.out
+pf.out
+server.out
+
+# GENERATED LOCAL STATE
+notes-index.json
+focus-ledger.json
+
+# OS & IDE FILES
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
