@@ -1,13 +1,13 @@
 {
-  "sessions": 26,
-  "plannedMinutes": 800,
+  "sessions": 27,
+  "plannedMinutes": 830,
   "onTargetMinutes": 21,
-  "driftMinutes": 20,
-  "drifts": 46,
+  "driftMinutes": 21,
+  "drifts": 50,
   "cleanSessions": 10,
   "streak": 0,
   "bestStreak": 4,
-  "updated": "2026-09-22",
+  "updated": "2026-09-23",
   "history": [
     {
       "at": "2026-09-22 17:14",
@@ -77,6 +77,16 @@
       "drifts": 2,
       "secondsAdrift": 22,
       "percent": 84,
+      "completed": false
+    },
+    {
+      "at": "2026-09-23 09:56",
+      "plannedMinutes": 30,
+      "activeMinutes": 1,
+      "onTargetMinutes": 0,
+      "drifts": 4,
+      "secondsAdrift": 45,
+      "percent": 15,
       "completed": false
     }
   ]

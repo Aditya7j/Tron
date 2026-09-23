@@ -28,11 +28,11 @@
  * inherit from must search what it was given; inventing a subject out of an empty memory
  * would be worse than the bug this fixes.
  *
- * Headless, because nothing here is about a window. It reads the server's log from the
- * path given as argv[2] (or --log=...); without one, every check still runs except the
- * two that quote the log.
+ * Headless, because nothing here is about a window. It reads the server's trace from
+ * server-trace.log, or from a path given as argv[2]; with no readable log every check
+ * still runs except the two that quote it.
  *
- * Usage:  node followup_proof.mjs [path-to-server-log]     (server.py running on 4700)
+ * Usage:  python server.py 2> server-trace.log   then   node followup_proof.mjs
  */
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
@@ -43,7 +43,9 @@ const GALAXY = 'http://127.0.0.1:4700';
 const VIEW = GALAXY + '/?mute=1';
 const PORT = 9227;
 const CDP = 'http://127.0.0.1:' + PORT;
-const LOG = (process.argv[2] || '').replace(/^--log=/, '');
+/* The server's stderr, which is where the lookup trace goes. Start the server with
+   `python server.py 2> server-trace.log` and this finds it with no argument at all. */
+const LOG = (process.argv[2] || 'server-trace.log').replace(/^--log=/, '');
 const CHROMES = [
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
   'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',

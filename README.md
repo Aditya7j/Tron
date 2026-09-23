@@ -15,9 +15,11 @@ desk_proof.mjs      headed Chrome: the countdown card leaves the tab for a deskt
 layout_proof.mjs    headed Chrome: the governor keeps the card off the panel and the toast off its chips, and retires the card
 port_proof.mjs      the DevTools port: the launcher opens it, and the start line says so out loud when it is missing
 followup_proof.mjs  "who created it?" searches for React while the screen still quotes the pronoun
+salutation_proof.mjs  "hello good morning Jarvis" costs nothing; "who is JARVIS in the movies?" still travels
 launch-chrome.ps1   one double-click: kill stray Chrome, relaunch it with --remote-debugging-port=9222, open the viewer
 config.json         provider, credentials, model  <- project root, never served
 focus-ledger.json   generated - totals plus one eight-key row per session. No identities, ever
+server-trace.log    only if you redirect stderr into it: the lookup trace the two proof harnesses read
 notes/              the markdown corpus
 notes/captures/     written by /remember, indexed like any other folder
 viewer/index.html   the galaxy (3d-force-graph from a CDN, no npm, no build step)
@@ -557,10 +559,12 @@ Three things never search, and each is a bug that would have been easy to ship:
   greeting to a search engine — `substantial_question()` is split out of
   `classify_question()` for exactly this. The *words* decide whether a question was
   asked, and only then does confidence decide where the answer comes from. `_peel()`
-  carries the weight there, and it has been wrong once: "hey there, thanks, so…" stopped
-  peeling at "there", left "thanks" behind as a content word, and so counted as a real
-  question — harmless while only a zero score searched, and a greeting posted to
-  DuckDuckGo the moment an out-of-scope question could open the gate.
+  carries the weight there, and it has been wrong **twice**: "hey there, thanks, so…"
+  stopped peeling at "there" and left "thanks" behind as a content word, and "hello good
+  morning Jarvis" left the assistant's own name behind — both counted as real questions,
+  harmless while only a zero score searched, and a greeting posted to DuckDuckGo the
+  moment an out-of-scope question could open the gate. See [An address is not a
+  subject](#an-address-is-not-a-subject).
 - **Questions about this machine.** "How do I move the lock?" matches no note either,
   and DuckDuckGo will happily return three articles about focus apps and none about
   this one. `SELF_RE` holds that line — and it also stops "you are being slow, fetch
@@ -569,6 +573,69 @@ Three things never search, and each is a bug that would have been easy to ship:
   `CHATTER_RE` into `REALWORLD_RE`, because the machine can actually find out now and
   treating it as chatter would be a deliberate refusal to look. The clock stayed put:
   no search engine knows which chair you are sitting in.
+
+#### An address is not a subject
+
+`_peel()` was wrong in the same way twice. The second time it left the assistant's **own
+name** behind: *"hello good morning Jarvis"* peeled down to `jarvis`, which is not in
+`STOPWORDS`, so the tokeniser called it a content word and the message counted as a
+substantial question. It scored nothing against the notes, fell through the thin-score
+trigger, lit the LIVE WEB panel and spent a real DuckDuckGo search asking who Jarvis is.
+**Saying good morning cost money.**
+
+So there is a `VOCATIVES` list — `sir, boss, computer, assistant, buddy, mate, pal,
+friend, dude`, plus whatever `config.json` calls the assistant in `assistant_names`
+(`["jarvis", "tron"]` by default; rename it there and the next question honours it, no
+restart, because `set_vocatives()` is refreshed from `load_config()`, which every request
+already goes through).
+
+**The veto is on the address, never on the word.** *"who is JARVIS in the Marvel films?"*
+keeps `who`, `Marvel` and `films`, so it travels exactly as before and comes back cited to
+the MCU. That is why **position** is the entire rule, and why `_strip_address()` runs on the
+raw message rather than on `_bare()` output — a comma is the only thing that tells the two
+apart, and `_bare()` has already thrown the commas away:
+
+| position | example | address? |
+|---|---|---|
+| at the **start** | "jarvis, what is react" | always |
+| after a **comma** | "what is react, jarvis?" | always |
+| at the **end**, no comma | "hello good morning jarvis" | only if everything in front of it peels to nothing |
+
+That third condition is the one worth arguing about, and it is there because the obvious
+version of this rule breaks *"tell me about tron"* — strip a trailing name unconditionally
+and a real question about a film quietly becomes small talk, which is the same mistake as
+the one being fixed, pointing the other way. The test is recursive: "hello jarvis buddy"
+strips `buddy` on the strength of `hello jarvis` itself peeling to nothing, which is the
+same question one word shorter.
+
+What the peel changes is **what the classifiers see**, and nothing else. The query that
+goes to the search engine is still your sentence: `"who is JARVIS in the movies?"` is
+searched exactly as typed, address peel or no address peel — the peel decides *whether* to
+search, never *what* to search for.
+
+**Nothing left, nothing spent**, and the log says so rather than going quiet:
+
+```
+no lookup: 'hello good morning Jarvis' is greeting and address, nothing asked
+no lookup: 'good morning' is greeting and address, nothing asked
+```
+
+A declined lookup prints a line because the absence of a line proves nothing about
+anything. And if a salutation ever does open the gate, that same line gains
+`- AND YET THE GATE OPENED (thin)`, which is the leak saying its own name.
+
+```
+node salutation_proof.mjs    # 19 checks, 0 failed — needs the server; Node 24, no npm install
+```
+
+Headless Chrome, the page's own `fetch` tapped, and the server's trace read off disk. Both
+greetings must produce **the same reply keys** — no `sources`, no `searched`, no
+`searchedFor`, no note indexes — the same closed panel and the same still camera, and
+**zero** `web lookup` lines between them. Then *"who is JARVIS in the movies?"* must come
+back `kind=web`, `searched=thin`, cited to Wikipedia and the MCU wikis, with the LIVE WEB
+panel open and quoting the question as asked, and the log must hold **exactly one** lookup
+for the whole run. Start the server with `python server.py 2> server-trace.log` and the
+harness finds the trace with no argument.
 
 ### A pronoun is not a subject
 

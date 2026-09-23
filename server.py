@@ -637,6 +637,14 @@ DEFAULT_CONFIG = {
         "gpt-6": "openai/gpt-6-astra",
     },
 
+    # ---- WHAT YOU CALL IT. Every name you address the assistant by, so that the name
+    # can be peeled off a greeting instead of being searched for. See VOCATIVES: these
+    # join a fixed list (sir, boss, computer, assistant, buddy, mate...) and are only ever
+    # treated as an address by POSITION, so a real question about the word - "who is
+    # JARVIS in the Marvel films?" - still travels. Rename it here and the next question
+    # honours it; no restart.
+    "assistant_names": ["jarvis", "tron"],
+
     # ---- THE WEB LOOKUP. Both blank by default and meant to stay that way: the
     # search in search.py works with no key and no account, and these exist only so
     # that a blocked network has somewhere better to point. search_api_key turns on
@@ -994,7 +1002,9 @@ PLEASANTRY_RE = re.compile(r"""^(?:
     | how\s+are\s+you (?:\s+doing)? | how (?:'s|s|\s+is)\s+it\s+going
     | how (?:'s|s|\s+is)\s+life | what (?:'s|s)\s+up | sup | wagwan
     | you\s+there | are\s+you\s+there | anyone\s+there
-    | mate | buddy | pal | friend | dude
+    # mate, buddy, pal, friend and dude used to sit here, peeled only at the front.
+    # They are ADDRESSES, so they moved to VOCATIVES below, where the start, the end and
+    # the far side of a comma all count.
   )\b[\s,.!?;:'"-]*""", re.IGNORECASE | re.VERBOSE)
 
 # Filler that can trail a greeting without making it a question: "how are you
@@ -1004,6 +1014,71 @@ FILLER_RE = re.compile(r"""^(?:
       today | now | then | so | anyway | again | still | just | yet
     | this \s+ (?: morning | afternoon | evening ) | right \s+ now
   )\b[\s,.!?;:'"-]*""", re.IGNORECASE | re.VERBOSE)
+
+# ------------------------------------------------------------------- the address
+#
+# THE VOCATIVES. A word that names WHO is being spoken to is not part of WHAT is being
+# asked. "hello good morning Jarvis" is two pleasantries and an address, and it must cost
+# exactly what "good morning" costs, which is nothing.
+#
+# The bug this closes was arithmetic rather than manners. PLEASANTRY_RE peeled "hello" and
+# "good morning" and left "jarvis" standing - a content word as far as the tokeniser is
+# concerned, because it is not in STOPWORDS - so a salutation counted as a substantial
+# question. Harmless while
+# only a zero score searched; now that an out-of-scope question is allowed to knock on the
+# web, it meant a greeting lit the LIVE WEB panel and spent a real search on DuckDuckGo.
+#
+# THE VETO IS ON THE ADDRESS, NEVER ON THE WORD. "who is JARVIS in the Marvel films?" keeps
+# who, Marvel and films and travels exactly as before. That is why POSITION is the whole
+# rule, and why only three positions count:
+#
+#   at the START          "jarvis, what is react"       - always an address
+#   after a COMMA         "what is react, jarvis?"      - always an address
+#   at the END, no comma  "hello good morning jarvis"   - an address only if everything in
+#     front of it peels away to nothing. Without that condition "tell me about tron" loses
+#     its subject and a real question about a film quietly becomes small talk - which is
+#     the same class of mistake as the one being fixed, pointing the other way.
+#
+# The assistant's own names come from config.json (`assistant_names`), because they are
+# the one part of this list that is yours to change; the rest are fixed.
+VOCATIVES = ("sir", "boss", "computer", "assistant", "buddy", "mate",
+             "pal", "friend", "dude")
+
+_VOC = {"names": (), "lead": None, "inner": None, "tail": None}
+
+
+def set_vocatives(names):
+    """Recompile the address peel for whatever config.json calls the assistant.
+
+    Called from load_config(), which every request already goes through, so renaming the
+    assistant takes effect on the next question rather than on the next restart. Cheap by
+    construction: the three patterns are rebuilt only when the name list actually changes.
+    """
+    if isinstance(names, str):
+        names = names.replace(",", " ").split()
+    clean = tuple(dict.fromkeys(str(n).strip().lower()
+                                for n in (names or ()) if str(n).strip()))
+    if clean == _VOC["names"] and _VOC["lead"] is not None:
+        return
+    alts = "|".join(re.escape(w) for w in dict.fromkeys(clean + VOCATIVES))
+    _VOC.update({
+        "names": clean,
+        # The front of the message, punctuation and all: "Jarvis - what is react".
+        "lead": re.compile(r"""^[\s,.!?;:'"-]*(?:%s)\b[\s,.!?;:'"-]*""" % alts,
+                           re.IGNORECASE),
+        # Set off by a comma and followed by the end or more punctuation. The lookahead
+        # is what keeps "React, sir Isaac Newton's favourite" - contrived, but the rule
+        # is "an address stands alone between commas", and that is what this says.
+        "inner": re.compile(r""",\s*(?:%s)\b(?=\s*(?:[,.!?;:]|$))""" % alts,
+                            re.IGNORECASE),
+        # The tail, keeping the separator so the caller can tell a comma from a space.
+        "tail": re.compile(r"""(?P<sep>[\s,;:-]*)\b(?:%s)\b[\s.!?;:'"-]*$""" % alts,
+                           re.IGNORECASE),
+    })
+
+
+set_vocatives(DEFAULT_CONFIG.get("assistant_names"))
+
 
 # Chatter intents, matched anywhere: these are about the assistant, not the notes.
 CHATTER_RE = re.compile(r"""(?:
@@ -1122,6 +1197,45 @@ def _peel(bare):
     return stripped
 
 
+def _strip_address(text, depth=0):
+    """The vocatives off the front, the back and the far side of a comma. Or the lot.
+
+    Runs on the RAW message, before _bare() flattens the punctuation, because a comma is
+    the only thing that tells "what is react, jarvis?" from "who is jarvis in the films?".
+
+    The recursion is the trailing rule doing its one job: "hello jarvis buddy" has to strip
+    "buddy" on the strength of "hello jarvis" itself peeling to nothing, and that is the
+    same question one word shorter. It shrinks every time, and stops at depth 3.
+    """
+    out = str(text or "")
+    for _ in range(6):
+        before = out.strip()
+        out = _VOC["lead"].sub("", out, count=1)
+        out = _VOC["inner"].sub("", out, count=1)
+        match = _VOC["tail"].search(out)
+        if match:
+            head = out[:match.start()]
+            if "," in match.group("sep") or (
+                    depth < 3 and not _peel(_bare(_strip_address(head, depth + 1)))):
+                out = head
+        out = out.strip()
+        if out == before:
+            break
+    return out
+
+
+def address_only(question):
+    """Nothing but greetings and an address: the message asked for nothing.
+
+    The positive half of "nothing left, nothing spent" - answer_question() logs this so
+    that a run can show a salutation costing a search NOTHING, rather than showing the
+    absence of a line and asking to be believed.
+    """
+    if not str(question or "").strip():
+        return False
+    return not _peel(_bare(_strip_address(question)))
+
+
 def substantial_question(question, prior=""):
     """Is there a real question here, once the pleasantries are peeled off?
 
@@ -1131,14 +1245,16 @@ def substantial_question(question, prior=""):
     engine. The words decide whether a question was asked; the score only decides
     where its answer should come from.
     """
-    bare = _bare(question)
+    # The address comes off first, and on the raw text: a vocative is not a subject, and
+    # after _bare() the comma that proves it is one is gone.
+    bare = _bare(_strip_address(question))
     if not bare:
-        return False
+        return False               # nothing but an address - "Jarvis?"
     if CHATTER_RE.search(bare):
         return False               # about the assistant, not about the world
     stripped = _peel(bare)
     if not stripped:
-        return False               # the whole message was pleasantries
+        return False               # the whole message was pleasantries and an address
     # `prior` is the previous question, so that a bare follow-up ("why not?") counts
     # as a real question rather than as chatter for having no content words.
     if not tokenize(stripped) and not tokenize(prior):
@@ -1479,6 +1595,9 @@ def load_config(apply_override=True):
         return dict(DEFAULT_CONFIG), "config.json could not be read (%s)" % exc
     merged = dict(DEFAULT_CONFIG)
     merged.update({k: v for k, v in cfg.items() if v is not None})
+    # What it answers to, refreshed here because this is the one funnel every request
+    # passes through. A rename in config.json is honoured by the next question.
+    set_vocatives(merged.get("assistant_names"))
     # The runtime brain swap is applied HERE, in the one function every request path
     # already goes through, so /chat, /see, /health and the model chip cannot end up
     # disagreeing about which brain is in play. Note what is not happening: the file
@@ -3110,6 +3229,14 @@ def answer_question(question, session):
     # is precisely the case this whole feature exists for.
     reason = web_intent(question, confidence, prior,
                         in_scope=(best_score >= RELEVANCE_FLOOR))
+    # NOTHING LEFT, NOTHING SPENT, said out loud in the log. A salutation must never light
+    # the LIVE WEB panel, and the way to show that is a line saying the search was declined
+    # - not the absence of a line, which proves nothing about anything. If a "web lookup"
+    # line ever appears for a greeting, the gate is leaking and this is where to look.
+    if address_only(question):
+        sys.stderr.write("  no lookup: %r is greeting and address, nothing asked%s\n"
+                         % (question.strip()[:60],
+                            " - AND YET THE GATE OPENED (%s)" % reason if reason else ""))
     if kind != "notes":
         # The tail goes to nothing the moment this stops being a notes answer: no chips
         # lit, no camera fly, no panel opened. Whatever is said next was not said by

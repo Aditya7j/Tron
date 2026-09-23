@@ -2,13 +2,17 @@
   "provider": "bedrock",
   "aws_region": "us-east-1",
   "aws_profile": "",
-  "aws_access_key_id": "ASIAQY357H75V4YYSCVC",
-  "aws_secret_access_key":"pT1T0vCNQmpe1sKfKjKlL4im9M9bWZw1b9b0rkDy",
-  "aws_session_token": "IQoJb3JpZ2luX2VjEOL//////////wEaCXVzLWVhc3QtMSJIMEYCIQCbPU4KX86nwLHuiAo8MYhxXAeT3I88T63CFUzSk8fYlQIhANsT0OpN7MG/2zxdHp6iD+y6hzKZInZtE+yFM42u/LU/KtMDCKv//////////wEQABoMMDUzNDE0NDEyMjgzIgxsxf7AkuuaH6w7n1AqpwOY0+bTwQfQJz0CMZ1hfZQBcTr6TyLBL5ShDwlamljep2bYZ9TKljyN9CVvwcAMeqFwgU0WdvaJRA2vLHb5jwGx7+SatyTEWv9YoC0DhdfjuDY3LVc5LLvU/kYRf/BFciwe0XUk6SyPUXJJXO+0ll0Nn/J5SR7ROeLFF1vtKzTLMvIVTvqUj/uKs79qUGpuwdZfjoEjvHSW9drZ5iZiYHueIyrqnnSZFW3d15Lj/mwsomb9BjY5axIFlYmuat/U2P1oH43yDwplus94EZIENU/ciOx1I2eLPpGyuzQEtCFzPze1+JeD9BmABzAPcV0owHaZylew5TCUEokpuJHAA00F69iJOqhHtE6WATDr1zAPnzHW/dd7JYADIHB02jLefg9H/cDtU9FVS7FBajWb1F0zS3K2Tt3/N/s0IyPxR/dYD7m4Swu9gneOzdcyrLV7sKKFXTZ1nVxCMEkPRqR4KUsgumjVF8KEMWsldBA1QTmLcAWOqtXv4RyH2fVZ+blwkCLlkgmaLAtTjxB1ci1LSvwebFziY5SHXFXFfIkIqbIH2N6YEU8nB90w04LL1QY6pwHinXUXMbLe10SeCDv0B3uxFHilaqticM2TWMdoAsAHWpbDfQx6QBFxSwZn5TlgkU+bYLMzRYSohDUpEtaZVGjYE7pUXE4Kdj+hAIaGxXOoqnLHJe3Ia7zJ2xDk4a6D5c32kqj0yvWHQPgs9Y2pmXNWM+/Etr9kVCFhIzsE87+SNj8o+JyBfavJWxbIdYyj39J6XodMAI4UlJQVEiUzWLADu04ykBwyjw==",
+  "aws_access_key_id": "ASIAQY357H75ZYP3WPDB",
+  "aws_secret_access_key": "6/7nK7JZd9VfH8c6Je9hfWXtiywOkyTtYYVC6ku5",
+  "aws_session_token": "IQoJb3JpZ2luX2VjEO3//////////wEaCXVzLWVhc3QtMSJHMEUCIQD3jjPBcsX+Pp8Sm0OYIkVr2ceyU/6nZ4rsyloYajdVkAIgBt4xw+eAYiF5tMEdzuiAkNzd85rmZU/JuPnqh5nJb4gq0wMItf//////////ARAAGgwwNTM0MTQ0MTIyODMiDI3ghv440ajW+K02ZyqnA/qh7WwHM/BArIeje0kCi7bBelgvdFE7tcPKHnCwphs8qmVc4EShE+oxsKl6yU3fxRht/nnB44nGjD7L00cLz2S327dJAgtlI9aVliZBHNvk6orokFXTnqJY4FiySU2xnnP3/uhWj9o5TCohcP/Bm2hv+yfJ7wBR5s7kKGTulwfL2xmzd7CEIz0ksqV6ITX9U/nPLzf/sgkQJoURnhQcODapJuhPnRv/1Nj9WcZsokxCY8nRijx/nb+ECkt5n3bReSd2SVXOddVbCUYjkn+43fvgQQIgkLNCMDoXOeo6qfmjUEaEK2e81/Q5oNt5CmaZQY6WVgKAczQscjHL+7j06PoqW8wxXa5Ey1nnbnXvBXczUPaus3pjXFk5DVvgNXUPy2UU2k0f7fSPhGFTmrMXGK1GdlasBd/QnYQglKbcU/rQMfCsG7qpMfrt0ImZW77L5ViiYX27SOBE+SiCfaDCkoS33VJ8M8F6srjUZKnkxaSojcbo9xwS/Z+xy9NEMlph2Qns6jarJIwvV3TLuWMaTiO3doWDDMmQb3sipVAKvPILvJmu6JWhDDCcpc3VBjqoAXav/+S7XbTTiAVtijsZ7V8zVmGU2VIelCEYO0fXo38HcLw6B+lpwbEvk0owCbCQ/QWBH+GkwASwEx5e6toX7nFbBBklsAsAL66Xk1xi8p8muqgOpKnS/VArj9a4gD+LmjFS1IjlWuGFWwz7Ju1kk4+eBXNRVK8oHMC8bb0RPfOrbEjPXNZ1TxErwTYba0OzAkadAQEPGeiKTiovMIsB84Bo5gvLcinczA==",
   "bedrock_model_id": "us.anthropic.claude-opus-5",
   "openai_api_key": "xpl_1de971db6b4c9792bffdf5dd28f491ea917b76d8",
   "model": "claude-opus-5",
   "openrouter_api_key": "",
   "openrouter_model": "openai/gpt-6-astra",
-  "search_url": "https://search.sapti.me"
+  "search_url": "https://search.sapti.me",
+  "assistant_names": [
+    "jarvis",
+    "tron"
+  ]
 }
