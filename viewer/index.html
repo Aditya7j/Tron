@@ -1588,6 +1588,12 @@ async function loadLib() {
        camera holds, nothing lights, and the cyan pulse says where it came from
        instead - see respond(). */
     if (kind === 'web') return 'hold';
+    /* A composed answer - a draft, a translation, a summary, a plan - is the
+       assistant's own work. It cites no note and no page, so there is nothing for the
+       camera to point at and nothing to light. Refused here rather than left to the
+       empty-nodes test below, for the same reason as 'screen': the honesty of this
+       page should not depend on an array happening to be empty. */
+    if (kind === 'compose') return 'hold';
     if (!used.length) return 'hold';          // nothing was cited, nothing to prove
     if (isError) return 'cluster';            // no answer yet: show matches, do not fly
     return used.length >= CLUSTER_MIN ? 'cluster' : 'fly';
@@ -4548,6 +4554,11 @@ async function loadLib() {
         pulseWeb();
         openSources(question, sources, backend);
       }
+      /* NO SOURCES ROW OVER PROSE THE ASSISTANT WROTE ITSELF. A composed answer cites
+         nothing, so a LIVE WEB panel left open by the PREVIOUS turn would sit under a
+         draft it had no hand in and read as its provenance. Closed here, and only when
+         it is the web panel, so a note the employer opened themselves stays open. */
+      if (kind === 'compose' && $('panel').classList.contains('web')) clearSelection();
       applyCamera(plan, used);
     }
 

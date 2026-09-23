@@ -19,9 +19,9 @@ focus_probe.mjs     the instruments: /focus/diag, the ledger's shape, the probe 
 desk_proof.mjs      headed Chrome: the countdown card leaves the tab for a desktop window, and locks a work tab from out there
 layout_proof.mjs    headed Chrome: the governor keeps the card off the panel and the toast off its chips, and retires the card
 port_proof.mjs      the DevTools port: the launcher opens it, and the start line says so out loud when it is missing
-followup_proof.mjs  "who created it?" searches for React while the screen still quotes the pronoun
+followup_proof.mjs  "who created it?" searches for React, and still does through an "ok got it" and a task
 tools_live.mjs      headed Chrome: read the params, click No and hear it, click Yes and hear the script
-salutation_proof.mjs  "hello good morning Jarvis" costs nothing; "who is JARVIS in the movies?" still travels
+salutation_proof.mjs  "hello good morning Jarvis" and "ok got it" cost nothing; "who is JARVIS in the movies?" still travels
 launch-chrome.ps1   one double-click: kill stray Chrome, relaunch it with --remote-debugging-port=9222, open the viewer
 config.json         provider, credentials, model, email account  <- project root, never served, gitignored
 focus-ledger.json   generated - totals plus one eight-key row per session. No identities, ever
@@ -645,7 +645,7 @@ anything. And if a salutation ever does open the gate, that same line gains
 `- AND YET THE GATE OPENED (thin)`, which is the leak saying its own name.
 
 ```
-node salutation_proof.mjs    # 19 checks, 0 failed — needs the server; Node 24, no npm install
+node salutation_proof.mjs    # 34 checks, 0 failed — needs the server; Node 24, no npm install
 ```
 
 Headless Chrome, the page's own `fetch` tapped, and the server's trace read off disk. Both
@@ -656,6 +656,122 @@ back `kind=web`, `searched=thin`, cited to Wikipedia and the MCU wikis, with the
 panel open and quoting the question as asked, and the log must hold **exactly one** lookup
 for the whole run. Start the server with `python server.py 2> server-trace.log` and the
 harness finds the trace with no argument.
+
+### The backchannel: "ok got it"
+
+A greeting opens a turn and an acknowledgment closes one, and the arithmetic that made
+*"good morning"* cost a search made **"ok got it"** cost one too. `got it` is not in
+`STOPWORDS` either, so it counted as a substantial question, scored nothing against the
+notes, and fell through the same thin-score trigger — the cheapest thing anybody says to
+this machine was one of the most expensive.
+
+`ACK_RE` is the list: **ok, okay, kk, k, got it, gotcha, understood, noted, thanks, thank
+you, thx, nice, cool, great, perfect, awesome, amazing, good job, well done, cheers, love
+it, wow, hmm, haha, lol** and their neighbours, plus a bare **yes / no** when nothing is
+pending. A message that peels down to nothing but those is a **backchannel**: `kind: chat`,
+one line out of `BACKCHANNEL_LINES`, and then nothing at all.
+
+| a backchannel costs | |
+|---|---|
+| searches | **zero** — the gate is closed above the force trigger |
+| rewrites | **zero** — nothing is sent to the quick thinker |
+| model calls | **zero** — the reply is a fixed butler line, rotated in order so two in a row are never the same |
+| tool tags | **none** — the hands are never offered a message that asked for nothing |
+| chips, camera, panel | untouched |
+| `_last_ask` | **untouched**, and this is the part you feel |
+
+That last row is the whole of it. *"What is React?"* → *"ok got it"* → *"who created it?"*
+still searches for **who created React**, because the `/chat` door skips `remember_ask()`
+for an acknowledgment. An acknowledgment that erased the subject would make the politest
+turn in the conversation the one that broke it. Tasks are skipped for the same reason — see
+[the third door](#the-third-door-a-task-is-not-research).
+
+**Leading acks peel, they do not veto.** *"ok, what is closures in javascript"* is a
+question with an `ok` in front of it and costs exactly what the question costs: the veto
+fires on what is **left**, never on what was found. Same "nothing left, nothing spent"
+discipline as the greeting, applied to the other end of the sentence.
+
+Two peels, two vetoes, and the difference between them is not academic: *"hello good
+morning Jarvis"* also peels to nothing, so the first version of this claimed every greeting
+in the language and answered **"my pleasure, sir"** to *"good morning"*. `_peel_all()`
+therefore returns **two** things — what is left, and whether an *acknowledgment* was among
+what came away. A greeting satisfies the first half and not the second, and goes on to the
+greeting it deserves.
+
+```
+no lookup: 'ok got it' is an acknowledgment, nothing asked
+```
+
+The same shape as the salutation line, on purpose: one family of message, one family of
+evidence, and one string for the leak detector to grep — if this ever gains `- AND YET THE
+GATE OPENED (thin)`, the gate is leaking. Proved in `salutation_proof.mjs`, where both
+acknowledgments must produce the same reply keys and **zero** lookups between them, and the
+`ok,`-prefixed question must still come back `kind=web`.
+
+### The third door: a task is not research
+
+*"Draft a note to the landlord"*, *"translate this into French"*, *"plan my Tuesday"* —
+none of these is a question, and none of them is research. Every one scores nothing against
+the notes, which is exactly the condition the thin-score trigger reads as *"the collection
+cannot answer this, try the web"*, so asking for a letter used to buy a search for the
+phrase **draft a letter** and three strangers' opinions about letters.
+
+`TASK_RE` matches at the **opening**, after the pleasantries, the acknowledgments and the
+address have come away: **draft, write, compose, send, email, remind, schedule, add to
+calendar, translate, summarise, rewrite, calculate, plan** and close neighbours, with a
+polite run-up allowed in front (*"could you please draft…"*). Then one of two things owns it:
+
+| | |
+|---|---|
+| a **registry tool** matches | [the proposal path](#the-hands) takes it: Yes/No, the exact parameters rendered, nothing run until you say so. *"draft an email to …"* goes here — `send_email` claims it |
+| nothing in the registry matches | the brain composes it itself: **`kind: compose`** |
+
+A `compose` reply carries **no `searched`, no `searchedFor`, no `sources` and no note
+indexes**. There is no LIVE WEB panel, no cyan pulse, no chips, and — the point — **never an
+"ACCORDING TO" row over prose the assistant wrote itself**. The viewer closes a web panel
+left open by the previous turn for exactly that reason: a sources list sitting under a draft
+it had no hand in reads as its provenance. `COMPOSE_PROMPT` lives in the persona block and
+is forbidden to cite anything, because there is nothing to cite.
+
+**Research stays research.** *"what is react"*, *"who was the first Sikh PM"*, *"latest
+news"* keep the web door exactly as it stands — and a task verb in front of a real-world
+question does not steal it: `REALWORLD_RE` and the force trigger both outrank `TASK_RE`, so
+*"summarise today's news"* still searches. So does a task **about your own notes**:
+*"summarise my pricing note"* scored above the relevance floor, so the notes door answers it
+with the note lit. Only a task the collection has nothing to do with is composed from thin
+air, which is the one case where thin air is correct.
+
+A task also leaves `_last_ask` standing, like an acknowledgment and like a brain swap — and
+it is kept out of the scoring `prior` too. That second half was a real bug: *"translate good
+evening into french"* followed by *"who made it?"* scored the words **good evening** against
+a café's notes about evening staffing and its autumn menu, so the notes claimed a pronoun
+that belonged to the question before the task.
+
+```
+no lookup: 'translate good evening into french' is a task; composed, not searched
+```
+
+#### The PII shield
+
+Any message carrying an **email address, a telephone number or a street address** is
+private by default and **never becomes a search query** — whatever the intent. This is the
+only rule in the file that outranks the force trigger: *"Jarvis, look up sam@example.com"*
+is an instruction the butler declines rather than obeys, because a search engine logs what
+it is told and is under no obligation to forget it.
+
+> Private identifiers never leave this machine, sir — I shall not ask the web about them.
+
+The tool doors sit **above** the shield, and that is deliberate: *"draft an email to
+sam@example.com"* acts on the address, which is what you asked for and what goes **to** the
+address rather than **about** it. What the shield stops is the query. `PRIVATE_RE` is
+deliberately eager and unbalanced — a false positive costs one search that was not run and
+one sentence saying so, a false negative posts somebody's phone number to a third party for
+ever — though bare five- and six-digit runs are left out, because "private" must not come to
+mean "arithmetic".
+
+```
+no lookup: a private identifier was in the message; the web was not asked
+```
 
 ### A pronoun is not a subject
 
@@ -732,17 +848,27 @@ so "why did it search for *that*?" is answerable from the log at three in the mo
 without anybody guessing.
 
 ```
-node followup_proof.mjs <server-log-path>   # 19 checks, 0 failed — needs the server; Node 24, no npm install
+node followup_proof.mjs <server-log-path>   # 47 checks, 0 failed — needs the server; Node 24, no npm install
 ```
 
 Headless Chrome, a real DuckDuckGo, and `fetch` tapped in the page so the claim is about
 what the viewer *was told* and then chose to display. It asks the two questions in order,
 proves the card and the panel quote the pronoun while `searchedFor` says `who created
-react` and the sources are Jordan Walke / react.dev rather than Berners-Lee, checks the
-server's own log off disk for both trace lines, then **presses the ↻ button with a real
-mouse event** and asks the identical follow-up again — which must now search
-`"who created it?"` verbatim, claim no rewrite, and invent no subject out of an empty
-memory. That last check is the one that keeps the feature honest.
+react` and the sources are Jordan Walke / react.dev rather than Berners-Lee, and checks the
+server's own log off disk for both trace lines.
+
+Then it puts the two **non-questions** over a fresh subject, which is where the memory is
+actually at risk: *"what is svelte"* → *"ok got it"* → *"translate good evening into
+french"* → *"who created it?"*, which must **still** search for Svelte. Exactly two lookups
+across those four turns, the backchannel and the task each declined by name in the trace, the
+composed answer carrying no sources and closing the panel the web answer left open. Then
+*"draft an email to …"* must produce a **proposal** with its parameters rendered — the third
+door handing over to the hands — refused with a real click on **No**, and *"who is
+&lt;that address&gt;"* must come back held, said out loud, with no query and no panel.
+
+Finally it **presses the ↻ button with a real mouse event** and asks the identical follow-up
+again — which must now search `"who created it?"` verbatim, claim no rewrite, and invent no
+subject out of an empty memory. That last check is the one that keeps the feature honest.
 
 ### The search tool
 
@@ -2624,6 +2750,10 @@ background tab you do not want talking at you.
 | `remember that …` | write a new note and watch it born into the galaxy |
 | `Jarvis, look this up …` / `search the web for …` | skip the notes entirely and [go straight to the web](#the-other-world-the-live-web) — the galaxy pulses cyan and the panel lists the URLs it read |
 | *"what's the weather in Delhi"* | no trigger needed: real-world questions, and questions your notes have no word in common with, search on their own |
+| *"ok got it"* / *"thanks"* / *"nice"* | [a backchannel, not a question](#the-backchannel-ok-got-it) — one brief acknowledgment, no search, no panel, and the last real subject **stays**, so a later *"who created it?"* still inherits it |
+| *"ok, what is closures in javascript"* | the *"ok"* peels and the question travels: the veto fires on what is **left**, never on what was found |
+| `draft an email to …` / `translate …` / `summarize …` | [the third door](#the-third-door-a-task-is-not-research) — a task is not research. If a hand matches, the Yes/No proposal owns it; otherwise the brain writes the thing itself, with no LIVE WEB panel and no *"according to"* under prose it composed |
+| *a message with an address or phone number in it* | [the PII shield](#the-pii-shield) — private by default, never a search query, whatever the intent: **"Private identifiers never leave this machine, sir."** |
 | `switch to <model>` | change the answering brain; `go back to your normal brain` undoes it |
 | click the brain chip | the same thing with a mouse — a menu of every model the server will answer to, written names only, and the way home at the bottom |
 | *"you're being slow today, fetch something sharper"* | names no model, so the chat brain answers with a `[[brain: …]]` tag and the **server** performs and announces the swap |

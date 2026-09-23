@@ -434,7 +434,12 @@ ok("if (!had) endShare();" in watch_js,
 # The start phrase and the question about the screen must not collide.
 watch_re = re.search(r"const WATCH_RE = new RegExp\(", watch_js)
 ok(bool(watch_re), "the page has a WATCH_RE")
-ask_block = page_source.split("async function ask(question)", 1)[1][:3000]
+# The window is the head of ask() down to the point where the request is actually sent:
+# every branch this claim is about lives above that line. It used to be a flat 3000
+# characters, which is not a fact about the code - the share branch drifted past it as
+# comments were added above it, and the check failed on a file where all three branches
+# were still in the right order. Anchored on something real instead.
+ask_block = page_source.split("async function ask(question)", 1)[1].split("busy = true", 1)[0]
 ok(ask_block.index("WATCH_OFF_RE.test(question)") < ask_block.index("WATCH_RE.test(question)"),
    "\"stop watching\" is tested before \"watch my screen\", which it contains")
 ok(ask_block.index("WATCH_RE.test(question)") <

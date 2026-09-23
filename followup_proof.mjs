@@ -21,6 +21,17 @@
  *                                 -> and the SERVER's own trace log says the same thing,
  *                                    read off disk, because the log is what a human would
  *                                    check at three in the morning
+ *   ask "what is svelte"          -> a fresh subject, and then TWO NON-QUESTIONS over it:
+ *   ask "ok got it"               -> a backchannel: one line, no search, no rewrite
+ *   ask "translate good evening
+ *        into french"             -> a TASK: kind compose, no search, no sources panel,
+ *                                    no chips and nothing to attribute
+ *   ask "who made it?"            -> and it STILL searches for Svelte, which is the proof
+ *                                    that neither non-question touched the memory
+ *   ask "draft an email to ..."   -> a task with a registry tool behind it, so the
+ *                                    PROPOSAL path owns it: buttons and rendered
+ *                                    parameters, still zero searches. Then "no".
+ *   ask "who is <that address>"   -> the PII shield: held, said out loud, nothing sent
  *   press the real ↻ button       -> the conversation is forgotten, memory included
  *   ask "who created it?" again   -> searchedFor is the pronoun, verbatim, unrewritten
  *
@@ -127,11 +138,27 @@ async function turn(page, question, budget = 120000) {
   if (!got) throw new Error('no reply to ' + JSON.stringify(question) + ' within ' + budget + 'ms');
   await sleep(600);
   return page.json('(function(){var c=window.__tap.filter(function(t){' +
-    'return t.path.indexOf("/chat")>=0});var last=c[c.length-1];return {' +
+    'return t.path.indexOf("/chat")>=0});var last=c[c.length-1];' +
+    'var p=document.getElementById("panel");return {' +
     'sent: JSON.parse(last.sent).question, got: last.got,' +
     'card: document.getElementById("a-q").textContent,' +
-    'panel: document.getElementById("p-label").textContent};})()');
+    'panel: document.getElementById("p-label").textContent,' +
+    // The panel's own classes and the card's chips, for the turns whose whole claim is
+    // that NOTHING was cited: a composed draft has no sources row and lights no note.
+    'panelOpen: p.classList.contains("open"),' +
+    'panelWeb: p.classList.contains("web"),' +
+    'chips: document.getElementById("a-chips").children.length,' +
+    'answer: document.getElementById("a-text").textContent.trim(),' +
+    // The pair of buttons, and the parameter rows under them: the proposal a task with a
+    // registry tool behind it has to produce, rendered, before anything runs.
+    'proposal: document.getElementById("a-ask").classList.contains("show"),' +
+    'rows: document.getElementById("ask-rows").textContent};})()');
 }
+
+/* How many live lookups the server has logged so far. "Zero searches" is a claim about
+   what the server DID, so it is counted off disk rather than inferred from a reply. */
+const lookups = () => (!LOG || !existsSync(LOG)) ? null
+  : (readFileSync(LOG, 'utf8').match(/^ *web lookup /gm) || []).length;
 
 const logSays = (re) => {
   if (!LOG || !existsSync(LOG)) return null;
@@ -226,7 +253,161 @@ async function main() {
        'and names the predecessor it inherited from');
   }
 
-  /* ---- 4. the ↻ button, pressed, and a follow-up with no history --------- */
+  /* ---- 4. THE TWO NON-QUESTIONS, and the subject that survives them -------
+     An acknowledgment and a task are both messages that ask nothing, and the memory this
+     whole file is about must stand through either of them. The sequence is one subject and
+     two interruptions:
+
+       "what is svelte"                       - a real question; the memory holds it
+       "ok got it"                            - a BACKCHANNEL: one line, nothing spent
+       "translate good evening into french"   - a TASK: composed, nothing searched
+       "who made it?"                         - and it STILL inherits Svelte
+
+     The last line is the point. If either interruption had written itself into the memory,
+     the follow-up would have inherited "ok got it" or a request about French, and the
+     politest and the most useful turns in the conversation would be the two that broke it. */
+  const spentBefore = lookups();
+  const subject = await turn(page, 'what is svelte');
+  note('4: ' + JSON.stringify(subject.got.searchedFor) + ' -> kind=' + subject.got.kind);
+  ok(subject.got.kind === 'web',
+     'a fresh subject, asked and answered from the web',
+     JSON.stringify({ kind: subject.got.kind, searchedFor: subject.got.searchedFor }));
+
+  const ack = await turn(page, 'ok got it');
+  note('4b: ' + JSON.stringify(ack.got.answer).slice(0, 96));
+  ok(ack.got.kind === 'chat' && ack.got.backchannel === true,
+     'THE BACKCHANNEL: kind=chat, and the reply says which door it came out of',
+     JSON.stringify({ kind: ack.got.kind, backchannel: ack.got.backchannel }));
+  ok(!('searchedFor' in ack.got) && !('sources' in ack.got) && !('rewrote' in ack.got),
+     'nothing was searched and nothing was rewritten for it',
+     Object.keys(ack.got).sort().join(','));
+  ok(!/svelte/i.test(ack.got.answer || ''),
+     'and it did not ANSWER again: no second lecture about Svelte',
+     JSON.stringify(ack.got.answer));
+  ok(ack.panel === 'what is svelte',
+     'no new sources panel was opened for it - the label is still the old question',
+     JSON.stringify(ack.panel));
+
+  const task = await turn(page, 'translate good evening into french');
+  note('4c: ' + JSON.stringify(task.got.answer).slice(0, 110));
+  ok(task.got.kind === 'compose',
+     'THE THIRD DOOR: a task is neither notes nor web - kind=compose',
+     JSON.stringify({ kind: task.got.kind }));
+  ok(!('searchedFor' in task.got) && !('searched' in task.got) && !('sources' in task.got),
+     'ZERO SEARCHES: no searchedFor, no searched, no sources',
+     Object.keys(task.got).sort().join(','));
+  ok(Array.isArray(task.got.nodes) && task.got.nodes.length === 0 && task.chips === 0,
+     'and no notes are lit behind prose the notes had no hand in',
+     JSON.stringify({ nodes: task.got.nodes, chips: task.chips }));
+  /* The panel is CLOSED, which is the claim: the one left open by the web answer two turns
+     ago would otherwise sit under a sentence the assistant wrote itself and read as its
+     provenance. Its `web` class survives the closing and is cleaned up by openPanel() the
+     moment a note is shown - a class on a hidden element cites nothing. */
+  ok(!task.panelOpen,
+     'NO LIVE WEB PANEL - and the one left open by the last web answer was closed, so no '
+     + 'sources row sits under a sentence it wrote itself',
+     JSON.stringify({ open: task.panelOpen, web: task.panelWeb }));
+  ok(!/according to/i.test(task.got.answer || '') && !/https?:\/\//.test(task.got.answer || ''),
+     'no "ACCORDING TO" row and no link, because there is nothing to attribute',
+     JSON.stringify(task.got.answer));
+  ok(/bonsoir/i.test(task.got.answer || ''),
+     'and it actually did the job: ' + JSON.stringify((task.got.answer || '').slice(0, 60)));
+
+  /* "who created it?" rather than "who made it?", and the difference is worth a line: the
+     notes contain the word "made" and do not contain "created", so "who made it?" scores
+     above the relevance floor on its own and is answered - correctly - from the collection.
+     The claim being tested here is about the MEMORY, so the follow-up has to be one the
+     notes genuinely cannot answer, or the web gate never opens and the test proves
+     nothing either way. */
+  const inherited = await turn(page, 'who created it?');
+  const heir = String(inherited.got.searchedFor || '');
+  note('4d: searched ' + JSON.stringify(heir) + ' [' + (inherited.got.rewrote || 'verbatim') + ']');
+  ok(/\bsvelte\b/i.test(heir),
+     'THE MEMORY STOOD THROUGH BOTH: the follow-up still names Svelte',
+     'searchedFor=' + JSON.stringify(heir));
+  ok(!/\b(got it|french|translate|evening)\b/i.test(heir),
+     'and inherited neither the acknowledgment nor the task', JSON.stringify(heir));
+  ok(inherited.card === '“who created it?”',
+     'THE LAW, unchanged: the card still quotes them', JSON.stringify(inherited.card));
+
+  const spentAfter = lookups();
+  if (spentBefore === null || spentAfter === null) note('skipped the lookup count: no log');
+  else {
+    ok(spentAfter === spentBefore + 2,
+       'EXACTLY TWO lookups across those four turns - the two that were questions',
+       'before=' + spentBefore + ' after=' + spentAfter);
+    ok(logSays(/no lookup: 'ok got it' is an acknowledgment, nothing asked/) === true,
+       'and the trace says why each was declined: the acknowledgment');
+    ok(logSays(/no lookup: 'translate good evening into french' is a task; composed, not searched/) === true,
+       'and the task');
+  }
+
+  /* ---- 5. THE TASK WITH HANDS BEHIND IT ----------------------------------
+     "Draft an email" is a task too, and the third door is explicitly NOT where it goes: a
+     registry tool matches it, so the proposal path owns it and the employer gets a pair of
+     buttons and the parameters to read BEFORE anything is sent. Same door, chosen by
+     whether a tool exists - not by the wording. */
+  const ADDR = 'zqtask@example.invalid';
+  const mail = await turn(page, 'draft an email to ' + ADDR + ' that I am fine');
+  note('5: ' + JSON.stringify(mail.got.answer).slice(0, 110));
+  ok(mail.got.kind === 'tool' && !!mail.got.pending,
+     'THE PROPOSAL PATH OWNS IT: kind=tool, and something is pending',
+     JSON.stringify({ kind: mail.got.kind, pending: !!mail.got.pending }));
+  ok(!('searchedFor' in mail.got) && !('sources' in mail.got),
+     'with zero searches on the way there', Object.keys(mail.got).sort().join(','));
+  ok(mail.proposal && mail.rows.indexOf(ADDR) >= 0,
+     'the parameters are RENDERED for reading before a word is given: '
+     + JSON.stringify(mail.rows.slice(0, 120)));
+  ok((mail.got.pending || {}).tool === 'send_email',
+     'and it is the mailer that was proposed, named by id',
+     JSON.stringify((mail.got.pending || {}).tool));
+
+  /* Refused through the real NO button rather than by typing "no": while a proposal is
+     pending the viewer answers a bare no against /tools, not /chat, so a typed refusal
+     never reaches the endpoint this harness taps. The button is the honest gesture anyway -
+     it is the one under the sentence. */
+  const noBox = await page.json(
+    '(function(){var r=document.getElementById("ask-no").getBoundingClientRect();' +
+    'return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()');
+  for (const type of ['mousePressed', 'mouseReleased']) {
+    await page.send('Input.dispatchMouseEvent',
+      { type, x: noBox.x, y: noBox.y, button: 'left', clickCount: 1 });
+  }
+  const gone = await waitFor(page,
+    '!document.getElementById("a-ask").classList.contains("show")', 12000);
+  ok(gone, 'and NO withdraws it, unrun - nothing was sent by this harness');
+  ok(/let that go|as you wish|very good|not send|withdrawn|left it/i
+     .test(await page.evaluate('document.getElementById("a-text").textContent')),
+     'said once, in the butler\'s own words: '
+     + JSON.stringify(await page.evaluate('document.getElementById("a-text").textContent')));
+
+  /* ---- 6. THE PII SHIELD ------------------------------------------------- */
+  const priv = await turn(page, 'who is ' + ADDR);
+  note('6: ' + JSON.stringify(priv.got.answer).slice(0, 120));
+  ok(priv.got.privateHeld === true && priv.got.kind === 'chat',
+     'a question ABOUT an address is held: privateHeld, kind=chat',
+     JSON.stringify({ kind: priv.got.kind, privateHeld: priv.got.privateHeld }));
+  ok(/Private identifiers never leave this machine/.test(priv.got.answer || ''),
+     'and it says so in one sentence rather than shrugging',
+     JSON.stringify(priv.got.answer));
+  /* No query and no sources, and the panel that is open is the PREVIOUS question's - the
+     address is nowhere on the screen except in the card that quotes them, which is the one
+     place it belongs. Testing "no panel at all" would be testing the last turn's tidiness
+     rather than this turn's discretion. */
+  ok(!('searchedFor' in priv.got) && !('sources' in priv.got)
+     && priv.panel.indexOf(ADDR) < 0,
+     'no query, no sources, and no sources panel quoting it - the address went nowhere',
+     JSON.stringify({ keys: Object.keys(priv.got).sort().join(','), panel: priv.panel }));
+  const spentEnd = lookups();
+  if (spentEnd !== null && spentAfter !== null) {
+    ok(spentEnd === spentAfter,
+       'ZERO lookups across the email, the refusal and the held address (still '
+       + spentEnd + ')', 'after=' + spentAfter + ' end=' + spentEnd);
+    ok(logSays(/no lookup: a private identifier was in the message; the web was not asked/) === true,
+       'and the trace says that one out loud too');
+  }
+
+  /* ---- 7. the ↻ button, pressed, and a follow-up with no history --------- */
   const box = await page.json(
     '(function(){var r=document.getElementById("reset").getBoundingClientRect();' +
     'return {x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()');

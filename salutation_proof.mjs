@@ -14,6 +14,11 @@
  *     zero lookups in the server's own log. Not "nearly the same": the reply shapes are
  *     compared key for key.
  *
+ *   THE BACKCHANNEL, which is the same claim at the other end of the conversation. A
+ *     greeting opens a turn and "ok got it" closes one; neither asks for anything, and
+ *     neither may cost anything. The acknowledgment additionally has to leave the MEMORY
+ *     alone - that half is proved in followup_proof.mjs, where the antecedent lives.
+ *
  *   THE VETO IS ON THE ADDRESS, NEVER ON THE WORD. "who is JARVIS in the movies?" keeps
  *     who, JARVIS and movies, reaches the web exactly as before, and comes back cited to
  *     the Marvel Cinematic Universe. A guard that silenced the word rather than the
@@ -212,7 +217,85 @@ async function main() {
        'no salutation opened the gate - the leak detector never fired');
   }
 
-  /* ---- 3. and the word itself, which is not an address ------------------- */
+  /* ---- 3. THE BACKCHANNEL: the other end of the conversation --------------
+     A greeting opens a turn and an acknowledgment closes one, and both of them ask for
+     nothing. "ok got it" used to score zero against the notes - the exact condition the
+     thin-score trigger reads as "try the web" - so agreeing with the butler cost a search,
+     for the same arithmetic reason that saying good morning once did. Same claim, same
+     evidence, the far end of the sentence. */
+  const backAt = lookups(readLog());
+  const ack = await turn(page, 'ok got it');
+  note('3: ' + JSON.stringify(ack.got.answer).slice(0, 96));
+  ok(ack.got.kind === 'chat' && ack.got.backchannel === true,
+     'kind is chat and the reply says why: backchannel',
+     JSON.stringify({ kind: ack.got.kind, backchannel: ack.got.backchannel }));
+  ok(!('sources' in ack.got) && !('searched' in ack.got) && !('searchedFor' in ack.got)
+     && !('rewrote' in ack.got),
+     'no sources, no searched, no searchedFor, no rewrote - nothing was spent and '
+     + 'nothing was rewritten', shape(ack.got));
+  ok(Array.isArray(ack.got.nodes) && ack.got.nodes.length === 0,
+     'and no note indexes, so the galaxy cannot move');
+  ok(!ack.screen.panelOpen && !ack.screen.panelWeb && ack.screen.chips === 0
+     && ack.screen.selected === 0,
+     'THE LAW: no LIVE WEB panel, no chips, nothing selected',
+     JSON.stringify(ack.screen));
+  ok(/^[^?]{1,60}$/.test(ack.screen.answer)
+     && /very good|quite so|pleasure|as you wish|noted|glad|of course|anytime/i
+        .test(ack.screen.answer),
+     'ONE brief butler acknowledgment, and it asks nothing back: '
+     + JSON.stringify(ack.screen.answer));
+
+  const thanks = await turn(page, 'thanks jarvis');
+  note('3b: ' + JSON.stringify(thanks.got.answer).slice(0, 96));
+  ok(thanks.got.kind === 'chat' && thanks.got.backchannel === true,
+     'and thanking the butler by name is an acknowledgment too, not a question about him',
+     JSON.stringify({ kind: thanks.got.kind, backchannel: thanks.got.backchannel }));
+  ok(shape(thanks.got) === shape(ack.got),
+     'the two acknowledgments have the same fields, key for key',
+     JSON.stringify({ first: shape(ack.got), second: shape(thanks.got) }));
+  ok(thanks.screen.answer !== ack.screen.answer,
+     'and the pool moved on, so two in a row are not the same sentence',
+     JSON.stringify([ack.screen.answer, thanks.screen.answer]));
+
+  const backEnd = lookups(readLog());
+  if (backAt === null || backEnd === null) note('skipped: no readable log');
+  else {
+    ok(backEnd === backAt,
+       'ZERO lookups across both acknowledgments (still ' + backEnd + ')',
+       'before=' + backAt + ' after=' + backEnd);
+    const log = readLog();
+    ok(/no lookup: 'ok got it' is an acknowledgment, nothing asked/.test(log) &&
+       /no lookup: 'thanks jarvis' is an acknowledgment, nothing asked/.test(log),
+       'and the log SAYS it declined, in the same words as the greeting line - which is '
+       + 'what puts the backchannel inside the same leak detector');
+    ok(!/AND YET THE GATE OPENED/.test(log),
+       'no acknowledgment opened the gate either');
+  }
+
+  /* ---- 3c. LEADING ACKS PEEL, THEY DO NOT VETO ----------------------------
+     The mirror image of claim 2, and the reason the veto is written the way it is: it
+     fires on what is LEFT, never on what was found. An "ok" in front of a real question
+     is a manner, not a message, and the question behind it must cost exactly what it
+     would have cost alone. A guard that vetoed on the presence of an acknowledgment would
+     pass every check above and silently swallow this one. */
+  const led = await turn(page, 'ok, what is closures in javascript');
+  note('3c: ' + JSON.stringify(led.got.answer).slice(0, 110));
+  ok(led.got.kind === 'web' && led.got.searched === 'thin',
+     'THE ACK PEELED AND THE QUESTION TRAVELLED: kind=web, searched=thin',
+     JSON.stringify({ kind: led.got.kind, searched: led.got.searched,
+                      backchannel: led.got.backchannel }));
+  ok(!('backchannel' in led.got),
+     'and it was never treated as a backchannel', shape(led.got));
+  ok(led.screen.panelOpen && led.screen.panelWeb,
+     'the LIVE WEB panel lights for it, as it would without the "ok"',
+     JSON.stringify(led.screen));
+  const ledEnd = lookups(readLog());
+  if (ledEnd !== null && backEnd !== null) {
+    ok(ledEnd === backEnd + 1, 'exactly ONE lookup for it: the question, not the manners',
+       'before=' + backEnd + ' after=' + ledEnd);
+  }
+
+  /* ---- 4. and the word itself, which is not an address ------------------- */
   const real = await turn(page, 'who is JARVIS in the movies?');
   const srcs = (real.got.sources || []).map(s => (s.title || '') + ' ' + (s.url || ''));
   note('3: ' + JSON.stringify(real.got.answer).slice(0, 110));
@@ -231,7 +314,10 @@ async function main() {
      'and the panel quotes the question as asked', JSON.stringify(real.screen.panelLabel));
   const end = lookups(readLog());
   if (end !== null && before !== null) {
-    ok(end === before + 1, 'exactly one lookup in the log for the whole run: this one',
+    /* TWO, and both of them were questions: the closures one behind its "ok", and this
+       one about the films. Two greetings and two acknowledgments bought nothing. */
+    ok(end === before + 2,
+       'exactly two lookups in the log for the whole run, both of them questions',
        'before=' + before + ' end=' + end);
   }
   page.close();

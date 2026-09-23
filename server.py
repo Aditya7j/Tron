@@ -591,6 +591,72 @@ BOOT_GREETING = {
              "position here largely ceremonial.",
 }
 
+# THE BACKCHANNEL. What the butler says when the employer says nothing: "ok", "got it",
+# "thanks Jarvis". A fixed pool rather than a prompt, and the reason is the whole rule -
+# an acknowledgment costs NOTHING. Not a search, not a rewrite, and not a model call
+# either, because asking a brain to improvise "very good, sir" is paying a second's
+# latency and a fraction of a penny for a sentence that was already written.
+#
+# Rotated in order rather than chosen at random, so that two acknowledgments in a row are
+# never the same line and the sequence is the same on every machine - which is what makes
+# it testable. Every line is one short sentence, and none of them asks a question back:
+# the turn is over, and a butler who answers "ok" with "is there anything else?" has
+# reopened a conversation his employer just closed.
+BACKCHANNEL_LINES = (
+    "Very good, sir.",
+    "Quite so.",
+    "My pleasure, sir.",
+    "As you wish.",
+    "Noted, sir.",
+    "Glad to be of use.",
+    "Of course, sir.",
+    "Anytime.",
+)
+
+# WHAT THE SHIELD SAYS. Spoken when a message carrying somebody's email address, telephone
+# number or street address asked for research anyway. One sentence, no apology and no
+# offer of a workaround, because there is not one: the refusal IS the feature. Fixed rather
+# than improvised for the same reason as every other refusal in this file - a model asked
+# to explain a privacy rule explains a slightly different rule each time.
+PRIVATE_HELD_LINE = ("Private identifiers never leave this machine, sir — I shall "
+                     "not ask the web about them.")
+
+# THE THIRD DOOR. "Draft a note to the landlord", "translate this into French",
+# "summarise the paragraph below", "plan my Tuesday" - none of these are questions, and
+# none of them are research. They ask the butler to PRODUCE something, out of his own
+# ability, from what is already on the page.
+#
+# It gets a prompt of its own because the other two would each be wrong in a way the
+# employer would have to notice for themselves. SMALLTALK_PROMPT is forbidden to answer
+# from its own knowledge, so it would decline to write the letter and offer to be useful
+# instead. WEB_PROMPT would cite three strangers' pages underneath a paragraph the model
+# composed itself, which is the provenance lie this file spends most of its length
+# refusing to tell. So: no notes, no snippets, no citations, and nothing to attribute -
+# what comes back is the assistant's own work, and it is labelled that way.
+COMPOSE_PROMPT = (
+    "You are the butler of a private knowledge galaxy: English, impeccably polite, "
+    "unhurried and very dry. Your employer has not asked you a question this turn - "
+    "they have given you a task, and your job is to DO it and hand over the result.\n"
+    "\n"
+    "- Produce the thing itself: the draft, the translation, the summary, the "
+    "rewrite, the sum, the plan. Hand it over with at most one short line of framing "
+    "in front of it, and nothing after it.\n"
+    "- Work from what they have given you and from your own competence. You have been "
+    "shown no notes and no web results this turn, so do not pretend to either: never "
+    "say \"according to\" anything, never cite a source, never offer a link, and never "
+    "describe what is or is not in their collection.\n"
+    "- If the task needs a fact you do not have - a name, a date, a figure, a price "
+    "that changes - write the piece and leave a plainly marked gap for it, or say in "
+    "one sentence what you would need. Do not invent it, and do not guess at it.\n"
+    "- If they asked for prose to send to somebody, write it as they would send it: no "
+    "commentary on your own draft, no alternatives, no \"let me know if\".\n"
+    "- Keep the butler's voice for your framing line and drop it inside the piece "
+    "itself, which belongs to them and is written in their voice, not yours.\n"
+    "- Say \"sir\" only now and then, not every time. No exclamation marks, no emoji, "
+    "no forced cheer, no list of your own capabilities, no closing offer of further "
+    "assistance."
+)
+
 # =========================== end of the persona block ========================
 
 # ---------------------------------------------------------------- configuration
@@ -1022,6 +1088,60 @@ FILLER_RE = re.compile(r"""^(?:
     | this \s+ (?: morning | afternoon | evening ) | right \s+ now
   )\b[\s,.!?;:'"-]*""", re.IGNORECASE | re.VERBOSE)
 
+# ------------------------------------------------------------- the backchannel
+#
+# THE ACKNOWLEDGMENTS. "ok", "got it", "thanks Jarvis", "nice one" - a reply TO the
+# assistant rather than a question put to it. Linguists call this the backchannel: the
+# noises a listener makes to show they are still there. It is the cheapest thing anybody
+# says to this machine and, until this list existed, one of the more expensive: "got it"
+# scores nothing against the notes, so the out-of-scope trigger sent it to a search
+# engine, and a search engine has opinions about the phrase "got it".
+#
+# A SEPARATE LIST FROM PLEASANTRY_RE, though the two overlap by half a dozen words, and
+# the separation is worth the duplication:
+#
+#   - The two vetoes say different things in the log and mean different things to a
+#     reader. "greeting and address, nothing asked" and "an acknowledgment, nothing
+#     asked" are both true of "thanks, Jarvis", and the second is the more useful of the
+#     two; a salutation and a sign-off are not the same event.
+#   - PLEASANTRY_RE is a PEEL, and everything in it has to be safe to strip off the front
+#     of a real question. Half of what is here is not: "understood" and "noted" peel to
+#     nothing much, but a bare "yes" and "no" are answers, and they are only
+#     acknowledgments when nothing is pending - which is a fact about the moment, not
+#     about the word, so it cannot live in a regex at all. See backchannel_only().
+#
+# Matched only at the front and then peeled, exactly like the pleasantries, because "ok,
+# what is a closure" is a question with an "ok" in front of it and must cost what the
+# question costs. The veto fires on what is LEFT, never on what was found.
+ACK_RE = re.compile(r"""^(?:
+      ok(?:ay)?(?:\s+then)? | kk+ | k | roger | aye
+    | got \s+ (?: it | that | you ) | gotcha | gotchu | copy \s+ that | copied
+    | understood | i \s+ understand | understand | makes \s+ sense | fair \s+ enough
+    | noted | duly \s+ noted | good \s+ to \s+ know | good \s+ point
+    | thanks (?:\s+ (?:a\s+lot|so\s+much|again|for\s+that))? | thank \s+ you | thx | tx
+    | ty | ta | cheers | much \s+ appreciated | appreciate \s+ (?: it | that )
+    | nice (?:\s+ one)? | cool | great | grand | lovely | perfect | perfecto
+    | awesome | amazing | brilliant | splendid | excellent | superb | wonderful
+    | fantastic | marvellous | marvelous | sweet | neat | sound | ace
+    | good \s+ (?: job | work | one | stuff ) | well \s+ done | nicely \s+ done
+    | love \s+ (?: it | that ) | i \s+ like \s+ (?: it | that ) | that'?s \s+ (?: it | right | great | good | perfect | better | lovely )
+    | wow | woah | whoa | ah+ | oh+ | hmm+ | mhm+ | mm+ | huh
+    | haha+ | hahaha+ | hehe+ | lol | lmao | rofl | heh
+    | indeed | quite | right | alright | true | exactly | absolutely | certainly
+    | of \s+ course | no \s+ worries | no \s+ problem | np | all \s+ good | fine
+    | as \s+ always | as \s+ ever | you \s+ too | same \s+ to \s+ you
+  )\b[\s,.!?;:'"-]*""", re.IGNORECASE | re.VERBOSE)
+
+# The bare answers. Acknowledgments ONLY when nothing is pending: while a proposal waits,
+# _hands_gate owns these words and they mean yes and no, which is the opposite of
+# meaning nothing. Checked separately from ACK_RE so that position is not the only rule -
+# "no" in front of a question ("no, what is react?") must peel, and it does, because the
+# peel runs on the front of the message like every other peel here.
+BARE_ANSWER_RE = re.compile(r"""^(?:
+      y | ye | yes | yeah | yep | yup | yea | sure | okay \s+ sure
+    | n | no | nope | nah | not \s+ now | maybe \s+ later
+  )\b[\s,.!?;:'"-]*""", re.IGNORECASE | re.VERBOSE)
+
 # ------------------------------------------------------------------- the address
 #
 # THE VOCATIVES. A word that names WHO is being spoken to is not part of WHAT is being
@@ -1186,6 +1306,78 @@ SELF_RE = re.compile(r"""(?:
   )""", re.IGNORECASE | re.VERBOSE)
 
 
+# ------------------------------------------------------------------- the third door
+#
+# TASKS ARE NOT RESEARCH. "Draft an email to the landlord", "translate this into French",
+# "summarise that paragraph", "plan my Tuesday" - the employer is not asking what is true,
+# they are asking for a piece of work. Every one of them scores nothing against the notes,
+# which is precisely the condition the thin-score trigger reads as "the collection cannot
+# answer this, try the web" - so before this list existed, asking for a letter bought a
+# search for the phrase "draft a letter" and three strangers' opinions about letters.
+#
+# MATCHED ONLY AT THE OPENING, after the pleasantries, the acknowledgments and the address
+# have come away, because the verb is the whole signal: "draft a note about pricing" is an
+# instruction, while "what do you make of my pricing draft" is a question that happens to
+# contain the word. A polite run-up is allowed in front of it ("could you please draft..."),
+# since that is how anybody actually phrases an order they are embarrassed to give.
+TASK_RE = re.compile(r"""^(?:
+      (?: please | kindly | now | just | quickly | go \s+ ahead \s+ and
+        | (?: could | can | will | would ) \s+ you (?: \s+ please )?
+        | i \s+ (?: need | want | would \s+ like ) \s+ (?: you \s+ to | a | an | some )?
+        | let'?s | lets | help \s+ me | give \s+ me )
+      [\s,.:;-]* ){0,3}
+    (?:
+      draft | write \s+ up | write | compose | pen | type \s+ (?: out | up )
+    | send | e-?mail | mail (?: \s+ to )?
+    | remind | schedule | re-?schedule | book | pencil \s+ in
+    | add \b [^.]{0,30} \b (?: calendar | diary | schedule | list )
+    | put \b [^.]{0,30} \b (?: calendar | diary )
+    | translate | transcribe
+    | summari[sz]e | summari[sz]ation | sum \s+ up | tl;?dr
+    | rewrite | re-?word | rephrase | reformat | proofread | polish | tidy \s+ up
+    | shorten | lengthen | expand \s+ (?: this | that | on )
+    | calculate | compute | work \s+ out | add \s+ up | convert
+    | plan | outline | draw \s+ up | sketch \s+ out | brainstorm
+    | make \s+ me \s+ (?: a | an | some ) | put \s+ together
+    | prepare | generate | invent | suggest \s+ (?: me \s+ )? (?: a | an | some )
+    )\b""", re.IGNORECASE | re.VERBOSE)
+
+# THE PII SHIELD. An email address, a telephone number, a street address: these are the
+# employer's private business and the business of whoever they belong to, and the one
+# thing that must never happen to them is being typed into a search engine - which logs
+# it, keeps it, and is under no obligation to forget it. Private BY DEFAULT, whatever the
+# message seems to want, which is why this outranks even the force trigger: "Jarvis, look
+# up sam@example.com" is an instruction the butler declines rather than obeys.
+#
+# Deliberately blunt about what counts. A false positive here costs one search that was
+# not run and one sentence saying so; a false negative posts somebody's phone number to a
+# third party for ever. Those are not the same mistake and this pattern is not balanced
+# between them. Bare five- and six-digit runs are left out all the same: they are far more
+# often a sum or a year than a postcode, and "private" must not come to mean "arithmetic".
+PRIVATE_RE = re.compile(r"""(?:
+      [\w.+-]{1,64} @ [\w-]{1,255} \. [A-Za-z]{2,24} \b
+    | \+ \d [\d\s().-]{7,} \d
+    # No \b in front of the bracket: there is no word boundary before "(" at the start
+    # of a message, and "(415) 555-2671" is exactly how somebody writes their own number.
+    | \(\d{3}\) \s* \d{3} [\s.-]? \d{4} \b
+    | \b \d{3} [\s.-] \d{3} [\s.-] \d{4} \b
+    | \b \d{4} [\s.-] \d{3} [\s.-] \d{3,4} \b
+    | \b \d{5} [\s.-] \d{5,6} \b
+    | \b \d{10,15} \b
+    | \b (?: phone | mobile | cell | tel | telephone | whatsapp | fax ) \s*
+      (?: number | no\.? | num )? \s* (?: is | :|=)? \s* \+? [\d][\d\s().-]{6,}
+    | \b \d{1,5} [A-Za-z]? (?: \s+ [\w'.-]+ ){1,4} \s+
+      (?: street | st | road | rd | avenue | ave | lane | ln | drive | dr
+        | boulevard | blvd | way | court | ct | close | crescent | cres
+        | place | pl | terrace | square | sq | gardens | grove | nagar | marg
+        | colony | sector | block | apartments? | apt | flat | suite | unit ) \b
+    | \b (?: post \s* code | postcode | zip (?: \s* code )? | pin \s* code | eircode )
+      \s* (?: is | :|=)? \s* [A-Za-z0-9][A-Za-z0-9\s-]{2,9} \b
+    | \b [A-Z]{1,2} \d [A-Z\d]? \s* \d [A-Z]{2} \b
+    | \b \d{5} - \d{4} \b
+  )""", re.IGNORECASE | re.VERBOSE)
+
+
 def _bare(question):
     """Lowercase, punctuation-free, single-spaced. The form both classifiers read."""
     return re.sub(r"\s+", " ", re.sub(r"[^\w\s']", " ", str(question or "").lower())).strip()
@@ -1241,6 +1433,102 @@ def address_only(question):
     if not str(question or "").strip():
         return False
     return not _peel(_bare(_strip_address(question)))
+
+
+def _peel_all(bare, pending=False):
+    """(what is left, whether an acknowledgment was among what came away).
+
+    Acknowledgments off the front, alternating with the pleasantry peel, until nothing
+    more comes away: "ok great, thanks Jarvis" peels to nothing at all.
+
+    THE SECOND RETURN VALUE IS WHAT KEEPS THE TWO VETOES APART, and it was a bug before it
+    was a design. "hello good morning Jarvis" also peels to nothing - it always has, that
+    is what address_only() is - so a backchannel test that asked only "did it peel to
+    nothing?" claimed every greeting in the language and answered "my pleasure, sir" to
+    "good morning". A greeting and a sign-off are different events and get different
+    replies; the difference is whether an ACKNOWLEDGMENT was actually said.
+
+    `pending` is the one fact a regex cannot hold: while a proposal is awaiting a word,
+    "yes" and "no" are that word, and peeling them would turn consent into small talk.
+    So the bare answers are only peeled when nothing is waiting - and _hands_gate has
+    already run and taken the message by then, so in practice this is belt and braces.
+    """
+    stripped, saw = bare, False
+    for _ in range(8):
+        shorter = ACK_RE.sub("", stripped, count=1).strip()
+        saw = saw or shorter != stripped
+        after_ack = shorter
+        shorter = PLEASANTRY_RE.sub("", shorter, count=1).strip()
+        shorter = FILLER_RE.sub("", shorter, count=1).strip()
+        if not pending:
+            plainer = BARE_ANSWER_RE.sub("", shorter, count=1).strip()
+            saw = saw or plainer != shorter
+            shorter = plainer
+        if shorter == stripped and after_ack == stripped:
+            break
+        stripped = shorter
+    return stripped, saw
+
+
+def _peel_acks(bare, pending=False):
+    """What is left after the acknowledgments and the pleasantries, and nothing else."""
+    return _peel_all(bare, pending)[0]
+
+
+def backchannel_only(question, pending=False):
+    """Nothing but acknowledgment: they replied to the butler rather than asked him
+    anything.
+
+    The negative half is what makes this safe. A LEADING ack peels and does not veto -
+    "ok, what is a closure in javascript" comes back False and travels the ordinary road,
+    because the veto fires on what is LEFT rather than on what was found. Exactly the
+    "nothing left, nothing spent" rule the greeting veto runs on, applied to the other end
+    of the conversation.
+
+    The consequence the employer actually feels is in answer_question(): a backchannel
+    costs no search and no rewrite, and - because the /chat door skips the memory for it -
+    it does not overwrite the last real question either. "What is React?" / "ok got it" /
+    "who created it?" has to inherit React through the middle turn, and it does.
+    """
+    if not str(question or "").strip():
+        return False
+    left, saw_ack = _peel_all(_bare(_strip_address(question)), pending)
+    # Nothing left AND something acknowledged. A pure greeting satisfies the first half and
+    # not the second, so it goes on to the greeting it deserves - see _peel_all.
+    return saw_ack and not left
+
+
+def task_intent(question):
+    """Is this an order to produce something, rather than a question about anything?
+
+    Read AFTER the peels, so a polite run-up and an acknowledgment in front make no
+    difference: "ok, now please draft a note to the landlord" is the same order as "draft
+    a note to the landlord". Chooses nothing and performs nothing - answer_question()
+    decides between the registry's hands and the assistant's own prose, and this only says
+    which of the three doors the message was knocking on.
+    """
+    said = str(question or "")
+    if not said.strip():
+        return False
+    peeled = _peel_acks(_bare(_strip_address(said)))
+    if not peeled:
+        return False               # pure acknowledgment; the backchannel owns it
+    # RESEARCH STAYS RESEARCH. "Summarise today's news" and "work out the current bitcoin
+    # price" open with a task verb and are still questions about the world, so the
+    # real-world classes keep their claim on them and the web door stays exactly as it was.
+    if REALWORLD_RE.search(_bare(said)) or FORCE_WEB_RE.search(said):
+        return False
+    return bool(TASK_RE.match(peeled))
+
+
+def private_identifier(question):
+    """Does this message carry an email address, a telephone number or an address?
+
+    One question, asked in two places: web_intent() refuses to build a query out of a
+    message this is true of, and answer_question() says so out loud when the message had
+    no other business than research. See PRIVATE_RE for why it is deliberately eager.
+    """
+    return bool(PRIVATE_RE.search(str(question or "")))
 
 
 def substantial_question(question, prior=""):
@@ -1502,6 +1790,18 @@ def web_intent(question, confidence, prior="", in_scope=True):
     worth testing: "why did it search?" and "why did it not?" are the two questions
     anybody actually asks of this feature.
     """
+    # ABOVE THE FORCE TRIGGER, and the only thing that ever will be. A private identifier
+    # is refused rather than obeyed: "look up sam@example.com" asks this machine to hand a
+    # stranger's address to a company that keeps everything it is told. The employer is
+    # told plainly - see answer_question - rather than quietly given a different answer.
+    if private_identifier(question):
+        return ""
+    # A REPLY IS NOT A QUESTION. "ok got it" scores nothing against the notes, which is
+    # the exact condition "thin" exists for, so without this line the cheapest thing
+    # anybody says here would be the one that spent a search. Above the force trigger for
+    # the same reason as the shield: there is nothing in hand to look up.
+    if backchannel_only(question):
+        return ""
     if FORCE_WEB_RE.search(str(question or "")):
         return "force"
     if not substantial_question(question, prior):
@@ -1569,6 +1869,19 @@ def remember_ask(question, kind):
     with _lock:
         _last_ask["question"] = str(question or "").strip()[:2000]
         _last_ask["kind"] = str(kind or "")
+
+
+# Which acknowledgment comes next. One integer, under the same lock as everything else
+# that is one-of, so that two tabs acknowledging at once still get two different lines.
+_ack_turn = [0]
+
+
+def next_backchannel():
+    """The next butler acknowledgment, in order, forever."""
+    with _lock:
+        line = BACKCHANNEL_LINES[_ack_turn[0] % len(BACKCHANNEL_LINES)]
+        _ack_turn[0] += 1
+    return line
 
 
 def recall_ask():
@@ -3192,12 +3505,16 @@ def nudge_for_stuck(frame, declared, width, height, age_ms, still_s):
 
 
 def answer_question(question, session):
-    """One question in, one of four worlds out, and the reply always says which.
+    """One question in, one of five worlds out, and the reply always says which.
 
-        kind "notes" - answered from the retrieved notes. Nodes light, camera flies.
-        kind "web"   - answered from live search results, with the URLs attached.
-        kind "chat"  - small talk, or a polite "your notes do not cover that".
-        kind "swap"  - it was an instruction about the brain, not a question at all.
+        kind "notes"   - answered from the retrieved notes. Nodes light, camera flies.
+        kind "web"     - answered from live search results, with the URLs attached.
+        kind "compose" - it was a TASK: a draft, a translation, a summary, a plan. The
+                         assistant's own work, so nothing is lit, nothing is cited and
+                         nothing was searched.
+        kind "chat"    - small talk, an acknowledgment, a private identifier held back,
+                         or a polite "your notes do not cover that".
+        kind "swap"    - it was an instruction about the brain, not a question at all.
 
     The two substantial worlds never mix. A notes answer is never shown a snippet and a
     web answer is never shown a note, which is enforced by the message lists below
@@ -3213,7 +3530,15 @@ def answer_question(question, session):
 
     with _lock:
         history = list(_history.get(session, []))
-    prior = next((m["content"] for m in reversed(history) if m["role"] == "user"), "")
+    # THE PREVIOUS QUESTION, and a TASK IS NOT ONE. `prior` is lent to the scorer and to
+    # substantial_question() so that a bare follow-up still has something to be about, and
+    # a task in that slot lends the wrong thing entirely: "translate good evening into
+    # french" followed by "who made it?" scored the words "good evening" against a café's
+    # notes about evening staffing and its autumn menu, so the notes claimed a pronoun that
+    # belonged to the question before the task. Skipped here for the same reason the /chat
+    # door skips the memory for it - see remember_ask's call site.
+    prior = next((m["content"] for m in reversed(history)
+                  if m["role"] == "user" and not task_intent(m["content"])), "")
     # THE MEMORY, read before anything is written to it: at this moment it still holds
     # the question BEFORE this one, which is exactly what a pronoun in this one needs.
     # Read here and passed down by hand rather than reached for from inside the rewriter,
@@ -3263,6 +3588,25 @@ def answer_question(question, session):
                         % (len(node_ids), "" if len(node_ids) == 1 else "s"))
         return 400, {"error": missing, "nodes": node_ids, "kind": kind}
 
+    # ---- THE BACKCHANNEL, and it is the first door for a reason: everything below this
+    # line costs something. "ok", "got it", "thanks Jarvis" is a reply TO the butler, not
+    # a question put to him, so it buys one acknowledgment out of the pool and nothing
+    # else - no search, no rewrite, no brain call, no tool proposal, no chips.
+    #
+    # AND THE MEMORY IS LEFT STANDING, which is the part the employer feels. The /chat
+    # door skips remember_ask for this payload, so "what is React?" / "ok got it" / "who
+    # created it?" still has React to inherit at the third turn. An acknowledgment that
+    # erased the subject would make the politest turn in the conversation the one that
+    # broke it.
+    if backchannel_only(question):
+        # The same line, in the same shape, as the salutation veto above - one family of
+        # message, one family of evidence, and one string for the leak detector to grep.
+        sys.stderr.write("  no lookup: %r is an acknowledgment, nothing asked%s\n"
+                         % (question.strip()[:60],
+                            " - AND YET THE GATE OPENED (%s)" % reason if reason else ""))
+        return 200, {"answer": next_backchannel(), "nodes": [], "kind": "chat",
+                     "backchannel": True}
+
     # ---- THE HANDS, offered before a penny is spent. "remind me to call the client at
     # four" is an INSTRUCTION: it scores nothing against the notes, so the gate below
     # would happily send it to a search engine and come back with somebody's blog about
@@ -3291,6 +3635,61 @@ def answer_question(question, session):
                 return hands.propose(wanted, params, door="tag")
             sys.stderr.write("  tool: %r looked like an instruction and was not one\n"
                              % question.strip()[:60])
+
+    # ---- THE THIRD DOOR: A TASK IS NOT RESEARCH. The hands had their chance just above,
+    # and if a registry tool matched, the proposal path already owns this message and we
+    # never got here. What is left is work the assistant can do itself - a draft, a
+    # translation, a summary, a sum, a plan - and the one thing it must not do with it is
+    # go and read somebody else's page about it.
+    #
+    # THREE THINGS IT DELIBERATELY DOES NOT DO, each of them a lie avoided rather than a
+    # feature declined: no search, so no LIVE WEB panel and no cost; no notes, so no chips
+    # lit behind prose the notes had no hand in; and no "ACCORDING TO" row, because the
+    # only source for a letter the assistant wrote is the assistant that wrote it.
+    #
+    # `kind != "notes"` leaves the notes their claim: "summarise my pricing note" is a task
+    # ABOUT the collection, the retrieval above already found it, and the notes door below
+    # answers it properly with the note lit. Only a task the collection has nothing to do
+    # with is composed from thin air, which is the only case where thin air is correct.
+    if task_intent(question) and kind != "notes":
+        sys.stderr.write("  no lookup: %r is a task; composed, not searched\n"
+                         % question.strip()[:60])
+        messages = ([{"role": "system", "content": COMPOSE_PROMPT}] + history +
+                    [{"role": "user", "content": question.strip()}])
+        answer, error = call_model(cfg, messages)
+        if error:
+            return 502, {"error": error, "nodes": [], "kind": "compose"}
+        wanted, _cleaned = brain_tag(answer)
+        if wanted:
+            return swap_brain(wanted, door="tag")
+        # COMPOSE_PROMPT is not taught the tool tag, and the hands were already offered
+        # and declined this message one branch above. So a tag here is a stray, and it is
+        # stripped rather than honoured - the same rule the web synthesis runs on.
+        stray, _p, cleaned = hands.tool_tag(answer)
+        if stray is not None:
+            sys.stderr.write("  tool: a tool tag came back from the COMPOSE prompt; "
+                             "stripped and ignored\n")
+            answer = cleaned or hands.LINES["instead"]
+        with _lock:
+            hist = _history.setdefault(session, [])
+            hist.append({"role": "user", "content": question.strip()})
+            hist.append({"role": "assistant", "content": answer})
+            del hist[:max(0, len(hist) - HISTORY_TURNS * 2)]
+        return 200, {"answer": answer, "nodes": [], "kind": "compose"}
+
+    # ---- THE PII SHIELD, the last thing between a private identifier and a search box.
+    # An email address, a telephone number or a street address makes a message private BY
+    # DEFAULT: the tool doors above may act on one, because acting on it is what the
+    # employer asked for and it goes to the address rather than about it, but nothing from
+    # here down may put it in a query. Said out loud rather than quietly downgraded to a
+    # shrug - a refusal the employer cannot see is indistinguishable from a failure.
+    if (private_identifier(question) and kind != "notes"
+            and substantial_question(question, prior)
+            and not SELF_RE.search(_bare(question))):
+        sys.stderr.write("  no lookup: a private identifier was in the message; "
+                         "the web was not asked\n")
+        return 200, {"answer": PRIVATE_HELD_LINE, "nodes": [], "kind": "chat",
+                     "privateHeld": True}
 
     # ---- THE TWO-STEP LOOKUP. Step one was the score above; this is step two, and it
     # happens BEFORE the brain is called, because what the brain is told depends
@@ -3816,7 +4215,14 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             # known after the lookup, and it is the kind a follow-up most needs to
             # inherit from. A brain swap is an instruction rather than a question, so it
             # leaves the last real question standing instead of erasing it.
-            if payload.get("kind") != "swap":
+            #
+            # AND SO DO THE OTHER TWO KINDS OF NON-QUESTION. An acknowledgment ("ok got
+            # it") and a task ("draft a note to the landlord") are no more questions than
+            # a brain swap is, and the reason to skip them is the same one, felt one turn
+            # later: whatever "who created it?" is about, it is not about the word "ok".
+            # The last REAL question stands until another real question replaces it.
+            if (payload.get("kind") not in ("swap", "compose")
+                    and not payload.get("backchannel")):
                 remember_ask(question, payload.get("kind", ""))
             # The withdrawal, or a lapse noticed on the way in, spoken in front of the
             # answer rather than instead of it. One sentence, one utterance.
