@@ -69,6 +69,13 @@ import focus
 # is the one case this file has to handle anyway. No key, no pip, no SDK.
 import search as websearch
 
+# THE HANDS. The registry of pre-approved scripts, the proposal, the confirmation gate
+# and the one subprocess call. It lives in its own file for the same reason focus.py
+# does - it owns state, a lock and a ledger - and nothing here reaches into it except
+# through the functions it exports. The important half of that file is what it refuses:
+# no tool outside tools/registry.json exists, and nothing runs without a human word.
+import hands
+
 # =============================================================================
 #  THE PERSONA - everything the character is, lives in this one block.
 #
@@ -3256,6 +3263,35 @@ def answer_question(question, session):
                         % (len(node_ids), "" if len(node_ids) == 1 else "s"))
         return 400, {"error": missing, "nodes": node_ids, "kind": kind}
 
+    # ---- THE HANDS, offered before a penny is spent. "remind me to call the client at
+    # four" is an INSTRUCTION: it scores nothing against the notes, so the gate below
+    # would happily send it to a search engine and come back with somebody's blog about
+    # productivity. So a message that looks like a request to DO something gets one
+    # chance to become a proposal first, and the search never runs if it does.
+    #
+    # Three separate judgements, kept separate on purpose:
+    #   hands_wanted()        - might this be an instruction? A registry trigger, and it
+    #                           chooses nothing.
+    #   substantial_question()- did they actually say something? The pleasantry and
+    #                           vocative vetoes sit ABOVE the hands, so "good morning,
+    #                           Jarvis" can never surface a tool.
+    #   the brain             - which tool, with which details, named by id in a tag.
+    # If the brain answers in prose instead, nothing is pending and the turn carries on
+    # to the ordinary lookup below, one model call the poorer and no harm done.
+    if (hands.hands_wanted(question) and substantial_question(question, prior)
+            and not address_only(question)):
+        messages = [{"role": "system", "content": SMALLTALK_PROMPT + hands.prompt_block()},
+                    {"role": "user", "content": question.strip()}]
+        said, hands_error = call_model(cfg, messages)
+        if not hands_error:
+            wanted, params, _prose = hands.tool_tag(said)
+            if wanted is not None:
+                # The prose is DISCARDED and the proposal is composed from the registry
+                # template: see hands.propose(). One voice, and it is not the model's.
+                return hands.propose(wanted, params, door="tag")
+            sys.stderr.write("  tool: %r looked like an instruction and was not one\n"
+                             % question.strip()[:60])
+
     # ---- THE TWO-STEP LOOKUP. Step one was the score above; this is step two, and it
     # happens BEFORE the brain is called, because what the brain is told depends
     # entirely on whether anything came back. Nothing here can raise: search() returns
@@ -3318,6 +3354,15 @@ def answer_question(question, session):
         wanted, _cleaned = brain_tag(answer)
         if wanted:
             return swap_brain(wanted, door="tag")
+        # HANDS ARE OFFERED FROM YOUR DESK, NEVER FROM A WEB PAGE. WEB_PROMPT is not
+        # taught the tool tag, so this is belt and braces rather than a branch that
+        # runs: if a tag ever appears in a synthesis of somebody else's page it is
+        # stripped and ignored, because a search result is not allowed to ask for hands.
+        stray, _p, cleaned = hands.tool_tag(answer)
+        if stray is not None:
+            sys.stderr.write("  tool: a tool tag came back from the WEB prompt; "
+                             "stripped and ignored\n")
+            answer = cleaned or WEB_SILENT_LINE
         with _lock:
             hist = _history.setdefault(session, [])
             hist.append({"role": "user", "content": question.strip()})
@@ -3353,14 +3398,23 @@ def answer_question(question, session):
     # with no mention of the attempt. That is the fallback THE LAW asks for, and the
     # notes branch below is already exactly it.
 
+    # THE VOCATIVE LAW, EXTENDED: a greeting never proposes a tool. The tag is only
+    # OFFERED to the brain for a message that survives the peel as substantial, so the
+    # prompt a salutation is answered with has no hands in it at all - and a tag cannot
+    # be honoured that was never taught. Appended here rather than written into the
+    # persona block so that the block stays exactly as it was, and so the sentences the
+    # brain is shown are generated from the same registry the executor reads.
+    offer_hands = substantial_question(question, prior) and not address_only(question)
+    block = hands.prompt_block() if offer_hands else ""
+
     if kind == "chat":
-        messages = ([{"role": "system", "content": SMALLTALK_PROMPT}] + history +
+        messages = ([{"role": "system", "content": SMALLTALK_PROMPT + block}] + history +
                     [{"role": "user", "content": question.strip()}])
     else:
         context = build_context(picked)
         user_msg = ("Question: %s\n\nNotes you may use, and nothing else:\n\n%s"
                     % (question.strip(), context))
-        messages = ([{"role": "system", "content": SYSTEM_PROMPT}] + history +
+        messages = ([{"role": "system", "content": SYSTEM_PROMPT + block}] + history +
                     [{"role": "user", "content": user_msg}])
 
     answer, error = call_model(cfg, messages)
@@ -3375,6 +3429,21 @@ def answer_question(question, session):
     wanted, _cleaned = brain_tag(answer)
     if wanted:
         return swap_brain(wanted, door="tag")
+
+    # THE SECOND CONTROL TAG, in the same discipline and for the same reason: an answer
+    # may ask for hands instead of replying. Nothing is written to the history, because a
+    # proposal is not a turn of conversation - it is a question put back to the employer,
+    # and what they say next is answered by the gate rather than by the brain.
+    asked, params, prose = hands.tool_tag(answer)
+    if asked is not None:
+        if offer_hands:
+            return hands.propose(asked, params, door="tag")
+        # It was never offered hands for this message and it asked anyway. The tag is
+        # not honoured and it is not read out either - a stray control tag spoken aloud
+        # is a bug the employer has to interpret.
+        sys.stderr.write("  tool: a tag arrived for a message the hands were not "
+                         "offered to; ignored\n")
+        answer = prose or hands.LINES["instead"]
 
     with _lock:
         hist = _history.setdefault(session, [])
@@ -3563,6 +3632,20 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 "ok": True, "kind": "nudge", "nodes": [], "answer": "",
                 "tuning": WATCH.tuning(), "watch": WATCH.state()})
 
+        if route == "/tools":
+            # THE REGISTRY, as the page is allowed to see it: ids, names, capability
+            # sentences, the parameter schema and the timeout. No script path, no
+            # trigger, and - since the registry has never held one - no key. The page
+            # renders the Yes/No pair from `pending`, which carries the exact validated
+            # parameters, because the human about to approve them has to be able to
+            # read them.
+            state = hands.state()
+            return self._send_json(200, {
+                "ok": True, "kind": "tools", "nodes": [], "answer": "",
+                "tools": hands.public_registry(),
+                "pending": state["pending"], "busy": state["busy"],
+                "ttlS": state["ttlS"], "error": state["registryError"]})
+
         if route == "/brains":
             # What the chip's menu is built from. The BUTTON must not be able to
             # offer a model the voice would be refused, so the menu is this list and
@@ -3643,6 +3726,51 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                                          or payload.get("error")))
         return status, payload
 
+    def _hands_gate(self, question):
+        """THE CONFIRMATION, above every other door in /chat.
+
+        Returns (status, payload) when the message was ABOUT a proposal - a yes, a no, or
+        a word arriving after one had already run out of time - and (None, prefix) when it
+        was not, where `prefix` is one sentence to put in front of whatever the answer
+        turns out to be. That is how a withdrawal is reported: the employer's new question
+        is answered, with a line in front saying what was let go. One utterance, not two.
+
+        It sits ABOVE the capture, swap and focus backstops for the same reason they sit
+        above the brain: a stale tab must not be able to decide what "yes" meant. And
+        every path out of here returns from /chat directly, so nothing in this function
+        writes _last_ask or reaches the follow-up rewriter - a confirmation is not a
+        question, and "who created it?" asked after one still inherits from the last real
+        question rather than from the word "yes".
+        """
+        lapse_status, lapsed = hands.lapse_if_due()
+        pending = hands.pending_public()
+        yes = hands.is_confirmation(question)
+        no = hands.is_refusal(question)
+
+        if lapsed is not None and (yes or no):
+            # They answered a question that had already expired. The truthful reply is
+            # the lapse, not "there is nothing pending" - which would be true and useless.
+            return lapse_status, lapsed
+        if pending and yes:
+            return hands.execute(door="voice", proposal_id=pending["id"])
+        if pending and no:
+            return hands.cancel(door="voice", proposal_id=pending["id"])
+        if pending:
+            # A NEW SUBSTANTIVE QUESTION IS A WITHDRAWAL. Silence is not consent and
+            # neither is a change of topic, so the proposal goes and the question is
+            # answered.
+            return None, hands.withdraw()
+        if yes or no:
+            # Nothing is pending, and this is also the second "yes" after a tool has
+            # already run: it is refused rather than obeyed, because a confirmation can
+            # only ever confirm the one thing it was given.
+            sys.stderr.write("  tool: a word of consent arrived with nothing pending\n")
+            return 409, {"ok": False, "kind": "tool", "nodes": [], "pending": None,
+                         "answer": hands.LINES["nothing"], "refused": "nothing-pending"}
+        if lapsed is not None:
+            return None, lapsed["answer"]
+        return None, ""
+
     def do_POST(self):
         route = self.path.split("?")[0].rstrip("/") or "/"
 
@@ -3657,6 +3785,12 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             if not question:
                 return self._send_json(400, {
                     "error": "Ask me something first.", "nodes": [], "kind": "chat"})
+            # THE GATE FIRST. While something is awaiting a word, what this message MEANS
+            # is decided here and nowhere else: see _hands_gate.
+            gate_status, gated = self._hands_gate(question)
+            if gate_status is not None:
+                return self._send_json(gate_status, gated)
+            prefix = str(gated or "")
             # Backstop. The viewer routes "remember that ..." to /remember itself,
             # but a stale tab must not be able to answer a capture instead of
             # performing it - the server is the real classifier either way.
@@ -3684,6 +3818,13 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             # leaves the last real question standing instead of erasing it.
             if payload.get("kind") != "swap":
                 remember_ask(question, payload.get("kind", ""))
+            # The withdrawal, or a lapse noticed on the way in, spoken in front of the
+            # answer rather than instead of it. One sentence, one utterance.
+            if prefix:
+                field = "answer" if payload.get("answer") else "error"
+                if payload.get(field):
+                    payload[field] = prefix + " " + str(payload[field])
+                    payload["handsLapsed"] = True
             return self._send_json(status, payload)
 
         if route == "/remember":
@@ -3900,6 +4041,80 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 payload.get("focus", {}).get("state", "?")))
             return self._send_json(status, payload)
 
+        if route == "/execute":
+            # THE ONE DOOR THAT RUNS ANYTHING, and it carries consent and nothing else.
+            # The tool, the script and the parameters all come from the pending slot the
+            # server composed and spoke aloud - so no body posted here, by any tab or any
+            # harness, can substitute a recipient between the asking and the doing. With
+            # nothing pending this is a refusal, which is check 16(a).
+            data = self._read_json() or {}
+            if not isinstance(data, dict):
+                data = {}
+            door = str(data.get("door") or "button")[:16].lower()
+            if door not in ("button", "voice", "curl"):
+                door = "button"
+            try:
+                status, payload = hands.execute(
+                    door=door, proposal_id=str(data.get("id") or "")[:40] or None)
+            except Exception as exc:                            # noqa: BLE001
+                status, payload = 500, {
+                    "ok": False, "kind": "tool", "nodes": [], "pending": None,
+                    "error": "The tool hit an unexpected error: %s" % exc,
+                    "answer": hands.LINES["failed"].format(reason=str(exc)[:160])}
+            return self._send_json(status, payload)
+
+        if route == "/tools":
+            # Everything about a proposal EXCEPT running it: propose, cancel, and the
+            # lapse sweep the asking tab calls when its own countdown reaches zero. The
+            # verbs are separate from /execute on purpose - there is exactly one route in
+            # this file that can start a subprocess, and this is not it.
+            data = self._read_json() or {}
+            if not isinstance(data, dict):
+                return self._send_json(400, {
+                    "ok": False, "kind": "tool", "nodes": [], "pending": None,
+                    "error": "Send a JSON body like {\"cmd\": \"cancel\"}.",
+                    "answer": hands.LINES["nothing"]})
+            cmd = str(data.get("cmd") or "").strip().lower()[:16]
+            ident = str(data.get("id") or "")[:40] or None
+            door = str(data.get("door") or "button")[:16].lower()
+            try:
+                if cmd == "propose":
+                    status, payload = hands.propose(
+                        data.get("tool"), data.get("params"), door=door)
+                elif cmd == "cancel":
+                    status, payload = hands.cancel(door=door, proposal_id=ident)
+                elif cmd == "withdraw":
+                    # A CHANGED SUBJECT, from a door that is not /chat: the page took a
+                    # sentence to an organ of its own - the screen, the eyes, a capture -
+                    # while something was pending. The law is the same wherever the
+                    # subject changes, so the proposal goes here too, and the line comes
+                    # back for the tab to show.
+                    line = hands.withdraw()
+                    status, payload = 200, {
+                        "ok": True, "kind": "tool", "nodes": [], "pending": None,
+                        "answer": line, "withdrew": bool(line)}
+                elif cmd in ("lapse", "sweep"):
+                    status, payload = hands.lapse_if_due()
+                    if payload is None:
+                        # Nothing had run out of time. Not an error, and not a line worth
+                        # speaking either - the tab simply asked.
+                        state = hands.state()
+                        status, payload = 200, {
+                            "ok": True, "kind": "tool", "nodes": [], "answer": "",
+                            "pending": state["pending"], "busy": state["busy"]}
+                else:
+                    state = hands.state()
+                    status, payload = 400, {
+                        "ok": False, "kind": "tool", "nodes": [],
+                        "error": "cmd must be propose, cancel, withdraw or lapse.",
+                        "answer": "", "pending": state["pending"]}
+            except Exception as exc:                            # noqa: BLE001
+                status, payload = 500, {
+                    "ok": False, "kind": "tool", "nodes": [], "pending": None,
+                    "error": "The hands hit an unexpected error: %s" % exc,
+                    "answer": hands.LINES["failed"].format(reason=str(exc)[:160])}
+            return self._send_json(status, payload)
+
         if route == "/reset":
             data = self._read_json() or {}
             session = str(data.get("session") or "default")[:120]
@@ -3910,7 +4125,13 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             # from a chat that, as far as the employer is concerned, never happened.
             # Outside the `with` above on purpose - _lock is not reentrant.
             forget_ask()
-            return self._send_json(200, {"ok": True, "forgotten": session})
+            # And a proposal in flight is part of the conversation too. The ↻ button
+            # clears it with everything else: a request left pending across a forget
+            # could be confirmed by a "yes" belonging to a conversation that, as far as
+            # the employer is concerned, never happened.
+            dropped = hands.clear_pending("the reset button")
+            return self._send_json(200, {"ok": True, "forgotten": session,
+                                         "proposalDropped": dropped})
 
         return self._send_json(404, {"error": "No such endpoint: %s" % route})
 

@@ -1,0 +1,103 @@
+{
+  "_comment": [
+    "THE REGISTRY, and it is the only source of truth about what this machine can do.",
+    "",
+    "A tool that is not in this file does not exist. The brain is shown the capability",
+    "sentences and nothing else; it asks for a tool by id with a control tag; and the id",
+    "it names is looked up here EXACTLY - no fuzzy match, no nearest name, no guessing at",
+    "a near neighbour. That is the same discipline as the model allowlist, for the same",
+    "reason: a machine that guesses which action you meant will one day guess wrong while",
+    "holding something sharp.",
+    "",
+    "No key, token or password ever appears here, and none is ever passed to a script. A",
+    "tool that needs a credential reads config.json itself, server-side, and the wire",
+    "between this machine and the browser never carries one.",
+    "",
+    "Each entry:",
+    "  id          the name the brain asks for and the ledger counts under. [a-z0-9_-]",
+    "  name        what a human calls it, shown above the Yes/No pair",
+    "  script      a bare filename inside tools/ - never a path, never a shell string",
+    "  capabilities the sentences the brain may match a request against. Write them the",
+    "              way your employer would say the thing, not the way a manual would.",
+    "  triggers    regular expressions that decide only ONE thing: whether a message is",
+    "              worth offering the brain a chance to ask for hands at all. They never",
+    "              choose a tool - the brain does that, and the id above is checked",
+    "              exactly. A trigger that is too greedy costs a model call; a trigger",
+    "              that is too narrow means the hands are never offered.",
+    "  params      name / type / required. string, text, integer, number, boolean.",
+    "              Anything not listed here is dropped before the script sees it.",
+    "  timeout_s   how long it may run before it is killed and reported as failed",
+    "  proposal    the sentence spoken before anything happens, with {param} blanks.",
+    "              This is where your voice lives: write it the way you would want to be",
+    "              asked. It is composed from THIS template and never from model prose,",
+    "              because a model that paraphrases an action can understate it.",
+    "",
+    "Adding a hand is a ten-line script and four lines of JSON. Nothing else."
+  ],
+  "version": 1,
+  "tools": [
+    {
+      "id": "add_calendar_event",
+      "name": "Write something into the calendar",
+      "script": "add_calendar_event.py",
+      "capabilities": [
+        "put an appointment, a reminder or a meeting in the employer's calendar",
+        "remind the employer to do something at a particular time",
+        "book or schedule something for a given day or hour"
+      ],
+      "triggers": [
+        "\\bremind\\s+me\\b",
+        "\\breminder\\b",
+        "\\b(?:my\\s+)?(?:calendar|diary|schedule)\\b",
+        "\\b(?:book|schedule|pencil)\\s+(?:me\\s+)?in\\b",
+        "\\bput\\b[^.]{0,40}\\b(?:calendar|diary)\\b",
+        "\\bappointment\\b"
+      ],
+      "params": [
+        { "name": "title", "type": "string", "required": true },
+        { "name": "when", "type": "string", "required": true },
+        { "name": "notes", "type": "text", "required": false }
+      ],
+      "timeout_s": 10,
+      "proposal": "That would be '{title}' at {when}, sir, written into your calendar. Shall I put it in?"
+    },
+    {
+      "id": "send_email",
+      "name": "Send an email",
+      "script": "send_email.py",
+      "capabilities": [
+        "send an email to somebody on the employer's behalf",
+        "write to a person or an address and say something to them"
+      ],
+      "triggers": [
+        "\\be-?mail\\b",
+        "\\bsend\\b[^.]{0,30}\\b(?:a\\s+)?(?:note|message|line)\\b",
+        "\\bwrite\\s+to\\b"
+      ],
+      "params": [
+        { "name": "to", "type": "string", "required": true },
+        { "name": "subject", "type": "string", "required": true },
+        { "name": "body", "type": "text", "required": true }
+      ],
+      "timeout_s": 30,
+      "proposal": "I have an email ready for {to}, sir, under the subject '{subject}'. Shall I send it?"
+    },
+    {
+      "id": "selftest",
+      "name": "Test the hands themselves",
+      "script": "selftest.py",
+      "capabilities": [
+        "prove that the tool machinery itself works, touching nothing at all"
+      ],
+      "triggers": [
+        "\\bself[-\\s]?test\\b",
+        "\\btest\\s+your\\s+(?:hands|tools)\\b"
+      ],
+      "params": [
+        { "name": "token", "type": "string", "required": true }
+      ],
+      "timeout_s": 10,
+      "proposal": "A self test, sir, carrying the token {token} and touching nothing. Shall I run it?"
+    }
+  ]
+}

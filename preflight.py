@@ -715,7 +715,8 @@ def check_config_unreachable():
         # Its own shape, not its values - the credential fields may legitimately be
         # empty here (with the real keys in ~/.aws), and a scan for empty strings
         # would pass while happily serving the file.
-        signatures = [raw.strip(), b"aws_secret_access_key", b"bedrock_model_id"]
+        signatures = [raw.strip(), b"aws_secret_access_key", b"bedrock_model_id",
+                      b"email_app_password"]
         for label, body in bodies:
             for sig in signatures:
                 if sig and sig in body:
@@ -726,7 +727,8 @@ def check_config_unreachable():
     cfg = state.get("cfg") or server.load_config()[0]
     secrets = []
     for key in ("openai_api_key", "aws_access_key_id", "aws_secret_access_key",
-                "aws_session_token", "openrouter_api_key", "search_api_key"):
+                "aws_session_token", "openrouter_api_key", "search_api_key",
+                "email_app_password"):
         value = str(cfg.get(key) or "").strip()
         if len(value) >= 12 and value.lower() not in server.PLACEHOLDER_KEYS:
             secrets.append((key, value.encode("utf-8")))
@@ -2459,6 +2461,381 @@ def check_web():
     return PASS, notes
 
 
+LEDGER_FILE = os.path.join(ROOT, "tools-ledger.json")
+LEDGER_ROW_KEYS = {"ok", "failed", "refused", "lapsed", "last"}
+SCAN_SKIP_DIRS = {".git", "__pycache__", "node_modules", ".venv", "venv", ".idea"}
+
+
+def _ledger_file():
+    """The tool ledger as it is on disk, or {} if it has never been written.
+
+    Read from the FILE and not from an endpoint, because the claim under test is about
+    what is on disk: an endpoint can only report what it chooses to, and this check
+    exists to look at the thing itself. An absent ledger is a legitimate state - a
+    machine that has never run a tool has nothing to account for.
+    """
+    try:
+        with open(LEDGER_FILE, "rb") as fh:
+            data = json.loads(fh.read().decode("utf-8", "replace"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _ledger_row(tool_id, data=None):
+    """The four counts for one tool, as integers, missing or corrupt reading as zero."""
+    data = _ledger_file() if data is None else data
+    rows = data.get("tools") if isinstance(data.get("tools"), dict) else {}
+    row = rows.get(tool_id) if isinstance(rows.get(tool_id), dict) else {}
+    counts = {}
+    for key in ("ok", "failed", "refused", "lapsed"):
+        try:
+            counts[key] = int(row.get(key) or 0)
+        except (TypeError, ValueError):
+            counts[key] = 0
+    return counts
+
+
+def _disk_hits(needle, cap_mb=8):
+    """Every file under the project root whose BYTES contain `needle`.
+
+    Bytes rather than text, and every file rather than a list of interesting ones: a
+    leak that only happened into a file nobody thought to name is still a leak. The
+    walk is cheap here (a few megabytes) and the honesty is worth more than the speed.
+    """
+    target = needle.encode("utf-8")
+    hits, unscanned = [], 0
+    for folder, dirs, files in os.walk(ROOT):
+        dirs[:] = [d for d in dirs if d not in SCAN_SKIP_DIRS]
+        for name in files:
+            path = os.path.join(folder, name)
+            try:
+                if os.path.getsize(path) > cap_mb * 1024 * 1024:
+                    unscanned += 1
+                    continue
+                with open(path, "rb") as fh:
+                    blob = fh.read()
+            except OSError:
+                unscanned += 1
+                continue
+            if target in blob:
+                hits.append(os.path.relpath(path, ROOT).replace("\\", "/"))
+    return sorted(hits), unscanned
+
+
+def _scrubbed(blob):
+    """A response with the ONE place a parameter is allowed to appear taken out.
+
+    `pending.params` travels to the page on purpose - the human about to approve an
+    action has to be able to read exactly what they are approving. Everything else,
+    and above all `answer`, is either spoken aloud or written down, so everything
+    else has to be clean. Removing the permitted field is what turns "the canary is
+    somewhere in the traffic" into a claim worth making.
+    """
+    text = blob.decode("utf-8", "replace")
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return text
+    if isinstance(data, dict) and isinstance(data.get("pending"), dict):
+        data = dict(data)
+        pending = {k: v for k, v in data["pending"].items() if k != "params"}
+        data["pending"] = pending
+    return json.dumps(data, ensure_ascii=False)
+
+
+def check_hands():
+    """16. Nothing runs unasked, nothing runs twice, and nothing it was given is kept.
+
+    Seven questions, in the order a doubt about this feature would occur to you:
+
+      (a) /execute with nothing pending        -> a named refusal, not a shrug;
+      (b) a proposal naming a tool that is not in the registry -> refused, and the slot
+          left EMPTY, because a near-miss must not leave something a later "yes" could
+          confirm. No fuzzy matching, no nearest name: the same discipline as the model
+          allowlist;
+      (c) a proposal missing a required parameter -> refused NAMING the field;
+      (d) the happy path, on selftest.py and nothing else: propose, confirm through the
+          spoken door, the script's own stdout comes back, and the ledger moves by
+          exactly one. selftest is hermetic on purpose - a harness must never be able
+          to put a line in the employer's calendar or an email in anyone's inbox;
+      (e) the same proposal confirmed twice -> the second is refused, and the ledger
+          proves it by not moving;
+      (f) THE CANARY. A made-up string, generated fresh this run so it cannot already
+          be in the source, is put in a parameter the proposal template never speaks.
+          It must then appear nowhere on disk - not in the ledger, not in a log - and
+          nowhere in any response except the one field the page renders for the human;
+      (g) a greeting -> no proposal and no search. The vocative law sits above the
+          hands: "good morning" can surface nothing.
+
+    Nothing here touches the calendar and nothing sends mail. (c) and (f) use
+    send_email, and both are refused before anything could run.
+    """
+    notes, warnings = [], []
+
+    # -- 0. the registry, as the page is served it: the only source of truth, and it
+    #       carries no script path, no trigger and - having never held one - no key.
+    status, _, body = http_call("GET", "/tools", timeout=20, label="GET /tools")
+    data = as_json(body) or {}
+    tools = data.get("tools")
+    if status != 200 or not isinstance(tools, list) or not tools:
+        return FAIL, ["GET /tools came back %s with %r - the registry is the only "
+                      "source of truth and the page cannot read it"
+                      % (status, first_line(body.decode("utf-8", "replace")))]
+    if data.get("error"):
+        return FAIL, ["the registry did not load cleanly: %s" % data["error"]]
+    allowed = {"id", "name", "capabilities", "params", "timeoutS"}
+    stray = sorted({k for t in tools if isinstance(t, dict) for k in t} - allowed)
+    if stray:
+        return FAIL, ["GET /tools serves keys outside the whitelist (%s) - the script "
+                      "path and the triggers must not leave the server"
+                      % ", ".join(stray)]
+    ids = [t.get("id") for t in tools]
+    if "selftest" not in ids or "send_email" not in ids:
+        return FAIL, ["the registry serves %s; this check needs selftest (hermetic) "
+                      "and send_email (refused, never sent)" % ids]
+    if data.get("ttlS") != 120:
+        return FAIL, ["CONFIRM_TTL_S is %r over the wire, and the specification says "
+                      "120" % data.get("ttlS")]
+    notes.append("registry: %d tool%s (%s), %d capability sentences, TTL %ds - no "
+                 "script path and no trigger on the wire"
+                 % (len(tools), "" if len(tools) == 1 else "s", ", ".join(ids),
+                    sum(len(t.get("capabilities") or []) for t in tools),
+                    data["ttlS"]))
+
+    # An earlier check, or a hand in another tab, may have left something pending.
+    post_json("/tools", {"cmd": "cancel", "door": "curl"}, timeout=20,
+              label="POST /tools (clear before check 16)")
+
+    # -- (a) the door that runs things, knocked on with nothing behind it.
+    status, _, body = post_json("/execute", {"door": "curl"}, timeout=30,
+                                label="POST /execute (nothing pending)")
+    data = as_json(body) or {}
+    if status != 409 or data.get("refused") != "nothing-pending" or data.get("ok"):
+        return FAIL, ["(a) /execute with nothing pending came back %s ok=%r refused=%r "
+                      "- the gate is the whole feature"
+                      % (status, data.get("ok"), data.get("refused"))]
+    if not str(data.get("answer") or "").strip():
+        return FAIL, ["(a) refused silently; a refusal the employer cannot hear is not "
+                      "a refusal"]
+    notes.append("(a) /execute with nothing pending: 409 refused=nothing-pending, and "
+                 "it says so aloud - %s" % first_line(data["answer"], 60))
+
+    # -- (b) an unknown id, with something valid ALREADY pending, so the answer to
+    #        "what happened to the slot?" is a fact rather than a coincidence.
+    token = "pfhands%d" % (int(time.time()) % 100000)
+    status, _, body = post_json("/tools", {"cmd": "propose", "tool": "selftest",
+                                           "params": {"token": token}, "door": "curl"},
+                                timeout=30, label="POST /tools (propose before unknown)")
+    if (as_json(body) or {}).get("pending") is None:
+        return FAIL, ["(b) could not get a valid proposal pending first: %s"
+                      % first_line(body.decode("utf-8", "replace"))]
+    status, _, body = post_json("/tools", {"cmd": "propose", "tool": "send_email_v2",
+                                           "params": {"to": "nobody@example.com"},
+                                           "door": "curl"},
+                                timeout=30, label="POST /tools (unknown tool id)")
+    data = as_json(body) or {}
+    if status not in (400, 404) or data.get("refused") != "unknown-tool":
+        return FAIL, ["(b) the id “send_email_v2” came back %s refused=%r - a tool that "
+                      "is not in the registry does not exist, and the nearest name is "
+                      "not an answer" % (status, data.get("refused"))]
+    if data.get("pending") is not None:
+        return FAIL, ["(b) a refusal left something pending, which is the one shape "
+                      "this must never have: a later “yes” would confirm it"]
+    _, _, body = http_call("GET", "/tools", timeout=20, label="GET /tools (after b)")
+    if (as_json(body) or {}).get("pending") is not None:
+        return FAIL, ["(b) the server still reports a pending proposal after a refusal"]
+    notes.append("(b) an unknown id is refused by name and empties the slot, taking "
+                 "the valid proposal that was sitting in it with it")
+
+    # -- (c) a required parameter left out. The refusal has to say WHICH.
+    status, _, body = post_json("/tools", {"cmd": "propose", "tool": "send_email",
+                                           "params": {"to": "nobody@example.com",
+                                                      "subject": "preflight"},
+                                           "door": "curl"},
+                                timeout=30, label="POST /tools (missing param)")
+    data = as_json(body) or {}
+    said = str(data.get("answer") or "")
+    if status != 400 or data.get("refused") != "missing" or data.get("field") != "body":
+        return FAIL, ["(c) send_email without a body came back %s refused=%r field=%r - "
+                      "a missing required parameter is a refusal naming the field"
+                      % (status, data.get("refused"), data.get("field"))]
+    if "body" not in said.lower() or data.get("pending") is not None:
+        return FAIL, ["(c) the spoken refusal was %r and pending=%r - it must name the "
+                      "field out loud and leave nothing pending"
+                      % (first_line(said, 70), data.get("pending"))]
+    notes.append("(c) a missing required field is refused by name: %s"
+                 % first_line(said, 70))
+
+    # -- (d) the happy path. Baseline taken here, after the refusals above, so the
+    #        delta belongs to this run and nothing else.
+    before = _ledger_row("selftest")
+    status, _, body = post_json("/tools", {"cmd": "propose", "tool": "selftest",
+                                           "params": {"token": token}, "door": "curl"},
+                                timeout=30, label="POST /tools (propose selftest)")
+    data = as_json(body) or {}
+    pending = data.get("pending") or {}
+    if status != 200 or not data.get("ok") or pending.get("tool") != "selftest":
+        return FAIL, ["(d) proposing selftest came back %s %r"
+                      % (status, first_line(body.decode("utf-8", "replace")))]
+    if pending.get("params") != {"token": token}:
+        return FAIL, ["(d) the pending proposal carries %r rather than the validated "
+                      "parameters - the page renders this, and a human is about to "
+                      "read it" % pending.get("params")]
+    if token not in str(pending.get("line") or ""):
+        return FAIL, ["(d) the spoken proposal %r does not contain the token the "
+                      "registry template says it should - the line must be composed "
+                      "from the template, never from model prose"
+                      % first_line(pending.get("line"), 70)]
+    proposal_id = pending.get("id")
+    notes.append("(d) proposal spoken in the registry's words: %s"
+                 % first_line(pending["line"], 76))
+
+    # The SPOKEN door, which is the one a harness is least able to fake: the same
+    # words a human says into an open microphone, posted to /chat.
+    status, _, body = post_json("/chat", {"question": "yes, go ahead",
+                                          "session": "preflight-hands"},
+                                timeout=90, label="POST /chat (spoken yes)")
+    data = as_json(body) or {}
+    spoken = str(data.get("answer") or "")
+    if status != 200 or not data.get("ok") or data.get("ran") != "selftest":
+        return FAIL, ["(d) “yes, go ahead” came back %s ok=%r ran=%r error=%r - the "
+                      "spoken door must run the pending proposal and nothing else"
+                      % (status, data.get("ok"), data.get("ran"), data.get("error"))]
+    if token not in spoken:
+        return FAIL, ["(d) the tool ran but the spoken line %r does not carry the token "
+                      "the script printed - the script's stdout is the only evidence "
+                      "there is" % first_line(spoken, 70)]
+    if data.get("pending") is not None:
+        return FAIL, ["(d) the slot still holds a proposal after it ran"]
+    after = _ledger_row("selftest")
+    moved = {k: after[k] - before[k] for k in after if after[k] != before[k]}
+    if moved != {"ok": 1}:
+        return FAIL, ["(d) the ledger moved %r for selftest; exactly one “ok” and "
+                      "nothing else was expected (before %r, after %r)"
+                      % (moved, before, after)]
+    notes.append("(d) confirmed by voice -> the script's own stdout came back and was "
+                 "spoken: %s" % first_line(spoken, 66))
+    notes.append("(d) ledger selftest ok %d -> %d, and no other count moved"
+                 % (before["ok"], after["ok"]))
+
+    # -- (e) the same word, twice. The second must not be a second run.
+    status, _, body = post_json("/execute", {"door": "curl", "id": proposal_id},
+                                timeout=30, label="POST /execute (same id twice)")
+    data = as_json(body) or {}
+    if data.get("ok") or data.get("ran") or status == 200:
+        return FAIL, ["(e) confirming the same proposal twice RAN IT AGAIN (%s ran=%r) "
+                      "- this is how one calendar entry becomes two"
+                      % (status, data.get("ran"))]
+    if data.get("refused") not in ("nothing-pending", "busy") and not data.get("lapsed"):
+        return FAIL, ["(e) the second confirmation came back %s %r without naming "
+                      "itself a refusal or a lapse"
+                      % (status, first_line(data.get("answer"), 60))]
+    again = _ledger_row("selftest")
+    if again != after:
+        return FAIL, ["(e) the ledger moved on the second confirmation (%r -> %r), so "
+                      "something happened that should not have" % (after, again)]
+    status, _, body = post_json("/chat", {"question": "yes", "session": "preflight-hands"},
+                                timeout=60, label="POST /chat (yes with nothing pending)")
+    data = as_json(body) or {}
+    if data.get("ran") or _ledger_row("selftest") != after:
+        return FAIL, ["(e) a second spoken “yes” ran something: ran=%r" % data.get("ran")]
+    notes.append("(e) the same proposal confirmed twice, at both doors: refused both "
+                 "times, and the ledger did not move")
+
+    # -- (f) THE CANARY. Generated from the clock so the literal cannot be in the
+    #        source, which is what makes the scan below mean anything. It goes in
+    #        send_email's body - a required field the proposal template deliberately
+    #        never speaks - and the proposal is then refused, so nothing is sent.
+    canary = "zqhandscanary%dqz" % int(time.time() * 1000)
+    seeded, unscanned = _disk_hits(canary)
+    if seeded:
+        return FAIL, ["(f) the canary %s was already on disk in %s before the test "
+                      "began, so the scan proves nothing" % (canary, seeded)]
+    status, _, body = post_json("/tools",
+                                {"cmd": "propose", "tool": "send_email",
+                                 "params": {"to": "nobody@example.com",
+                                            "subject": "preflight canary",
+                                            "body": "do not send this: " + canary},
+                                 "door": "curl"},
+                                timeout=30, label="POST /tools (canary proposal)")
+    data = as_json(body) or {}
+    pending = data.get("pending") or {}
+    if status != 200 or pending.get("tool") != "send_email":
+        return FAIL, ["(f) the canary proposal did not take: %s %r"
+                      % (status, first_line(body.decode("utf-8", "replace")))]
+    if canary in str(pending.get("line") or ""):
+        return FAIL, ["(f) THE CANARY WAS SPOKEN. The proposal template renders a "
+                      "parameter the employer never asked to hear read out in a room"]
+    if canary not in json.dumps(pending.get("params") or {}):
+        return FAIL, ["(f) the pending parameters do not carry what was proposed, so "
+                      "the human would be approving something they cannot see"]
+    status, _, body = post_json("/tools", {"cmd": "cancel", "door": "curl"}, timeout=30,
+                                label="POST /tools (refuse the canary)")
+    data = as_json(body) or {}
+    if not data.get("ok") or data.get("pending") is not None:
+        return FAIL, ["(f) the canary proposal would not cancel: %s"
+                      % first_line(body.decode("utf-8", "replace"))]
+
+    # Now look everywhere. On disk first: the ledger, the logs, the notes, the lot.
+    hits, unscanned = _disk_hits(canary)
+    if hits:
+        return FAIL, ["!! THE CANARY REACHED DISK: %s" % ", ".join(hits),
+                      "the ledger holds outcomes only - never parameters, never "
+                      "bodies, never recipients - and the trace says what happened "
+                      "rather than what it was given"]
+    # Then in the traffic: every response this run, with the one permitted field -
+    # pending.params, which the page must render - taken out first.
+    leaked = [label for label, blob in bodies if canary in _scrubbed(blob)]
+    if leaked:
+        return FAIL, ["!! THE CANARY APPEARED IN A RESPONSE OUTSIDE pending.params: %s"
+                      % ", ".join(sorted(set(leaked)))]
+    ledger = _ledger_file()
+    rows = ledger.get("tools") if isinstance(ledger.get("tools"), dict) else {}
+    bad = sorted({k for row in rows.values() if isinstance(row, dict) for k in row}
+                 - LEDGER_ROW_KEYS)
+    if bad:
+        return FAIL, ["the ledger on disk carries keys outside the whitelist (%s), so "
+                      "something wrote to it without going through _record()"
+                      % ", ".join(bad)]
+    refused_now = _ledger_row("send_email")
+    notes.append("(f) canary %s: put in send_email's body, refused, then hunted - "
+                 "absent from every file under the project root%s and from every one "
+                 "of the %d responses this run, save the parameters the page renders "
+                 "for the human to read"
+                 % (canary, " (%d too large to read)" % unscanned if unscanned else "",
+                    len(bodies)))
+    notes.append("ledger rows hold exactly the %d whitelisted keys (%s) for %d tool%s; "
+                 "send_email stands at ok %d / failed %d / refused %d / lapsed %d and "
+                 "has never been given an address to keep"
+                 % (len(LEDGER_ROW_KEYS), ", ".join(sorted(LEDGER_ROW_KEYS)), len(rows),
+                    "" if len(rows) == 1 else "s", refused_now["ok"],
+                    refused_now["failed"], refused_now["refused"],
+                    refused_now["lapsed"]))
+
+    # -- (g) and a greeting, which must surface nothing at all. The vocative law sits
+    #        above the hands: there is no instruction in "good morning".
+    status, _, body = post_json("/chat", {"question": "good morning, Jarvis",
+                                          "session": "preflight-hands"},
+                                timeout=120, label="POST /chat (greeting, hands)")
+    data = as_json(body) or {}
+    if data.get("kind") != "chat" or data.get("searched") or data.get("proposed"):
+        return FAIL, ["(g) “good morning, Jarvis” came back kind=%r searched=%r "
+                      "proposed=%r - a greeting proposes nothing and searches nothing"
+                      % (data.get("kind"), data.get("searched"), data.get("proposed"))]
+    _, _, body = http_call("GET", "/tools", timeout=20, label="GET /tools (after g)")
+    state_now = as_json(body) or {}
+    if state_now.get("pending") is not None or state_now.get("busy"):
+        return FAIL, ["(g) a greeting left pending=%r busy=%r"
+                      % (state_now.get("pending"), state_now.get("busy"))]
+    notes.append("(g) a greeting left zero proposals pending and fired zero searches: "
+                 "%s" % first_line(data.get("answer"), 66))
+
+    if warnings:
+        return WARN, notes + warnings
+    return PASS, notes
+
+
 CHECKS = [
     ("the server is up and serving the viewer", check_server),
     ("the graph data loads and has nodes", check_graph),
@@ -2475,6 +2852,7 @@ CHECKS = [
     ("the screen watch costs nothing until it thinks", check_watch),
     ("the instruments answer from the running server", check_instruments),
     ("the web lookup fetches, cites, and stays in its lane", check_web),
+    ("the hands ask first, run once, and keep nothing", check_hands),
 ]
 
 

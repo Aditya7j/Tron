@@ -20,6 +20,8 @@ server.out
 # GENERATED LOCAL STATE
 notes-index.json
 focus-ledger.json
+tools-ledger.json
+calendar.json
 
 # OS & IDE FILES
 .DS_Store

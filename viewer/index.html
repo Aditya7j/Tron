@@ -223,6 +223,36 @@
   #answer .src{margin-top:13px}
   #answer .src .lbl{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
     color:var(--muted);margin-bottom:8px}
+
+  /* ---------- THE MOMENT OF TRUST ----------
+     A proposal is the one thing on this screen that is about to CHANGE something, so it
+     does not look like an answer. Amber, its own border, and every validated parameter
+     rendered as a row: the human is being asked to approve these exact values, and a
+     value they cannot see is a value they cannot approve. The server composes the
+     sentence above it; this block is the evidence underneath it. */
+  #answer.tool{border-color:rgba(255,196,100,.45);
+    box-shadow:0 20px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,196,100,.14) inset}
+  #a-ask{display:none;margin-top:14px;border-top:1px solid rgba(255,196,100,.22);
+    padding-top:13px}
+  #a-ask.show{display:block}
+  #a-ask .lbl{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
+    color:#ffc86a;margin-bottom:9px}
+  #a-ask .rows{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;
+    font-size:12.5px;line-height:1.5;margin-bottom:13px}
+  #a-ask .rows b{color:var(--muted);font-weight:500;letter-spacing:.04em;
+    white-space:nowrap}
+  #a-ask .rows span{color:#f2f6ff;word-break:break-word;white-space:pre-wrap}
+  #a-ask .rows i{color:rgba(143,160,192,.7);font-style:normal}
+  #a-ask .pair{display:flex;align-items:center;gap:10px}
+  #a-ask button{border-radius:999px;cursor:pointer;font-family:inherit;font-size:13px;
+    padding:9px 22px;transition:.2s}
+  #ask-yes{background:rgba(255,196,100,.18);color:#ffdfae;
+    border:1px solid rgba(255,196,100,.45)}
+  #ask-yes:hover:not(:disabled){background:rgba(255,196,100,.32)}
+  #ask-no{background:transparent;color:var(--muted);border:1px solid var(--line)}
+  #ask-no:hover:not(:disabled){color:#fff;border-color:rgba(140,170,220,.4)}
+  #a-ask button:disabled{opacity:.45;cursor:default}
+  #a-ask .clock{font-size:11px;color:var(--muted);margin-left:auto}
   #bar{display:flex;align-items:center;gap:12px;background:var(--glass);
     border:1px solid var(--line);border-radius:999px;padding:6px 6px 6px 20px;
     backdrop-filter:blur(16px);box-shadow:0 18px 50px rgba(0,0,0,.6);transition:.25s}
@@ -665,6 +695,18 @@
     <div class="saw" id="a-saw">
       <img id="a-frame" alt="the frame that was sent" />
       <div class="fm" id="a-frame-meta"></div>
+    </div>
+    <!-- THE CONFIRMATION, rendered in the tab that asked. The parameters come from the
+         server's validated slot, so what is shown here is exactly what would be run -
+         not what was typed, and not what the model said it would do. -->
+    <div id="a-ask">
+      <div class="lbl" id="ask-lbl">Awaiting your word</div>
+      <div class="rows" id="ask-rows"></div>
+      <div class="pair">
+        <button id="ask-yes" type="button">Yes</button>
+        <button id="ask-no" type="button">No</button>
+        <span class="clock" id="ask-clock"></span>
+      </div>
     </div>
   </div>
   <div id="status"><i></i><span id="status-text">ready</span><span class="said" id="status-said"></span></div>
@@ -1536,6 +1578,10 @@ async function loadLib() {
        about where you ARE, which is not a claim about any note - so the graph does
        not move to illustrate it. */
     if (kind === 'focus') return 'hold';
+    /* A proposal, a refusal, a lapse or a script's own output. None of them is a claim
+       about a note, so the galaxy does not move to illustrate one - and a camera flight
+       under a pair of buttons would pull the eye away from the thing being approved. */
+    if (kind === 'tool') return 'hold';
     /* A web answer came from outside the galaxy entirely. Flying to a note would be
        the most dishonest thing this page could do: it would point at a star and say
        "there", about a fact that arrived over the wire thirty seconds ago. So the
@@ -1551,6 +1597,10 @@ async function loadLib() {
     /* Every answer starts by clearing the frame thumbnail. A picture left sitting
        beside the next answer would read as the evidence for it, which it is not. */
     hideProof();
+    /* And the Yes/No pair, for the same reason: a pair of buttons left sitting beside the
+       next answer would read as a question about THAT, which it is not. The UI only -
+       whether anything is still pending is the server's to say, not this line's. */
+    clearAskUI();
     $('a-q').textContent = question ? '“' + question + '”' : '';
     $('a-text').textContent = text;
     $('answer').classList.toggle('err', !!isError);
@@ -1571,6 +1621,143 @@ async function loadLib() {
     $('answer').classList.add('show');
     return used;
   }
+
+  /* ================================================================ hands ==
+     THE MOMENT OF TRUST, and it is the only thing on this page that can start
+     something outside the browser.
+
+     What this code is NOT allowed to do is the interesting half:
+
+       it never composes the sentence. The proposal line arrives from the server,
+         built from the registry template, because a page that paraphrased an action
+         could understate it just as easily as a model could.
+       it never composes the parameters either. What is rendered below the sentence is
+         the server's own validated slot, and it is what will actually run - so reading
+         it is worth something. /execute carries consent and nothing else: no value
+         shown here is sent back, so nothing can be edited between the asking and
+         the doing.
+       it never opens the microphone. A proposal in flight does not make the ear
+         listen; the Ear Law sits above the Hands, exactly as it sits above the eyes.
+
+     The spoken door is the words themselves - "yes", "go ahead", "no", "never mind" -
+     and they are judged by the SERVER, from ask() below, so a stale tab cannot decide
+     what a yes meant. */
+  let proposal = null;              // the pending proposal, as the server described it
+  let proposalTimer = null, proposalTicker = null;
+
+  function clearAskUI() {
+    $('a-ask').classList.remove('show');
+    $('answer').classList.remove('tool');
+    $('ask-rows').innerHTML = '';
+    $('ask-clock').textContent = '';
+  }
+
+  function hideProposal() {
+    clearTimeout(proposalTimer); proposalTimer = null;
+    clearInterval(proposalTicker); proposalTicker = null;
+    proposal = null;
+    clearAskUI();
+  }
+
+  /* Every validated parameter, on its own row, in the schema's order - so a field the
+     server dropped is visibly absent rather than quietly missing. textContent
+     throughout: a subject line is text, never markup. */
+  function showProposal(pending) {
+    clearTimeout(proposalTimer); clearInterval(proposalTicker);
+    proposal = pending;
+    const rows = $('ask-rows');
+    rows.innerHTML = '';
+    (pending.fields || []).forEach(function (f) {
+      const name = document.createElement('b');
+      name.textContent = f.name;
+      const val = document.createElement('span');
+      const has = Object.prototype.hasOwnProperty.call(pending.params || {}, f.name);
+      if (has) val.textContent = String(pending.params[f.name]);
+      else { val.innerHTML = ''; const i = document.createElement('i');
+             i.textContent = '(not given)'; val.appendChild(i); }
+      rows.appendChild(name); rows.appendChild(val);
+    });
+    $('ask-lbl').textContent = (pending.name || 'Awaiting your word') + ' · your word?';
+    $('ask-yes').disabled = false;
+    $('ask-no').disabled = false;
+    $('answer').classList.add('tool');
+    $('a-ask').classList.add('show');
+
+    /* The clock is the TTL, counted down where it can be seen, and the sweep at the end
+       of it is a real request: the server is the one that lets the proposal go, and it
+       says so once. A closed tab changes nothing - the slot still expires. */
+    let left = Math.max(1, pending.expiresInS || pending.ttlS || 120);
+    const paint = function () {
+      $('ask-clock').textContent = left > 0 ? left + 's to answer' : 'lapsed';
+    };
+    paint();
+    proposalTicker = setInterval(function () { left--; paint(); if (left <= 0) clearInterval(proposalTicker); }, 1000);
+    proposalTimer = setTimeout(function () { sweepProposal(); }, (left * 1000) + 600);
+  }
+
+  async function toolPost(path, body) {
+    const res = await fetch(path, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {})
+    });
+    let data = null;
+    try { data = await res.json(); } catch (e) { data = null; }
+    return data;
+  }
+
+  /* One way out for every outcome - done, refused, failed, lapsed - so the card and the
+     voice can never disagree about what happened. The script's stdout IS the answer. */
+  function settleProposal(data, question) {
+    hideProposal();
+    const line = (data && (data.answer || data.error)) ||
+      'The server said nothing about that, sir, so I cannot tell you whether it ran.';
+    renderAnswer(question, line, !!(data && (data.error || data.ok === false)), null);
+    if (!speak(spokenForm(line))) idleStatus();
+    if (data && data.pending) showProposal(data.pending);   // busy: it is still pending
+  }
+
+  async function confirmProposal(door) {
+    if (!proposal) return;
+    const asked = proposal, said = door === 'button' ? 'Yes' : 'yes';
+    $('ask-yes').disabled = true; $('ask-no').disabled = true;
+    $('ask-clock').textContent = 'running…';
+    clearTimeout(proposalTimer); clearInterval(proposalTicker);
+    setStatus('thinking', 'running ' + asked.tool);
+    const data = await toolPost('/execute', { id: asked.id, door: door || 'button' });
+    settleProposal(data, said);
+  }
+
+  async function refuseProposal(door) {
+    if (!proposal) return;
+    const asked = proposal;
+    const data = await toolPost('/tools',
+      { cmd: 'cancel', id: asked.id, door: door || 'button' });
+    settleProposal(data, door === 'button' ? 'No' : 'no');
+  }
+
+  /* The countdown reached zero. The server decides whether it really lapsed - two tabs
+     asking at once produce exactly one lapse - and speaks the line once. */
+  async function sweepProposal() {
+    if (!proposal) return;
+    const data = await toolPost('/tools', { cmd: 'lapse' });
+    if (data && data.lapsed) return settleProposal(data, '');
+    hideProposal();
+    if (data && data.pending) showProposal(data.pending);
+  }
+
+  /* A CHANGED SUBJECT IS A WITHDRAWAL, from the doors that are not /chat: the share, the
+     eyes, the watch, a capture, the timer. /chat withdraws server-side and speaks the
+     line in front of the answer; here the organ is about to speak, so the line goes to
+     the status strip instead of over the top of it. */
+  async function withdrawProposal() {
+    if (!proposal) return;
+    hideProposal();
+    const data = await toolPost('/tools', { cmd: 'withdraw' });
+    if (data && data.answer) setStatus('', data.answer);
+  }
+
+  $('ask-yes').onclick = function () { confirmProposal('button'); };
+  $('ask-no').onclick = function () { refuseProposal('button'); };
 
   let lastPlan = 'hold';
   function applyCamera(plan, used) {
@@ -4242,8 +4429,42 @@ async function loadLib() {
   $('watch-stop').onclick = function () { stopWatch('chip'); };
   setInterval(function () { if (watchOn) paintWatch(); }, 1000);
 
+  /* The spoken door, and it is deliberately narrow: the WHOLE message, or it is not an
+     answer to the question that was asked. "yes" is consent; "yes, and what is the
+     population of Tokyo" is a change of subject, which withdraws the proposal instead.
+     The server holds the same two patterns and has the last word on both - these exist
+     so a confirmation does not have to travel through the organ routing below. */
+  /* The same two patterns as hands.py YES_RE / NO_RE, in the same shape: a word of one
+     kind, possibly repeated with a comma or an "and" - because "yes, go ahead" is what a
+     microphone actually hears - and nothing else in the message. A message mixing the two
+     kinds matches neither and is a withdrawal, since an ambiguous answer is not consent.
+     The server decides regardless; these exist so the page does not show a Yes/No pair
+     for a fifth of a second after the word that settled it. */
+  const YES_WORDS = "yes|yes\\s+please|yep|yeah|yup|aye|ok|okay|okey\\s*dokey|sure|go\\s+ahead|go\\s+on|do\\s+it|send\\s+it|please\\s+do|do\\s+so|proceed|confirm(?:ed)?|affirmative|very\\s+well|if\\s+you\\s+would|that'?s\\s+right|correct|please";
+  const NO_WORDS = "no|no\\s+thanks|no\\s+thank\\s+you|nope|nah|negative|cancel|cancel\\s+(?:it|that)|stop|don'?t|do\\s+not|never\\s*mind|forget\\s+it|leave\\s+it|hold\\s+off|not\\s+now|not\\s+yet|scrap\\s+(?:it|that)|on\\s+second\\s+thought(?:s)?|thank\\s+you";
+  const wholeWord = w => new RegExp("^[\\s\"'(]*(?:" + w + ")(?:[\\s,]+(?:and\\s+|but\\s+)?(?:" + w + "))*[\\s.!,\"')]*$", "i");
+  const SAID_YES_RE = wholeWord(YES_WORDS);
+  const SAID_NO_RE = wholeWord(NO_WORDS);
+
   async function ask(question) {
     if (busy || !question.trim()) return;
+
+    /* THE GATE FIRST, above every organ below it. While something is awaiting a word,
+       that word decides what happens - and a sentence that is neither yes nor no is a
+       withdrawal, which is settled before the sentence is answered as an ordinary
+       question. */
+    if (proposal) {
+      if (SAID_YES_RE.test(question)) return confirmProposal('voice');
+      if (SAID_NO_RE.test(question)) return refuseProposal('voice');
+      /* Anything else: /chat withdraws it server-side and says so in front of the
+         answer. For the page's own organs - the share, the eyes, the watch, a capture -
+         nothing would reach /chat at all, so the withdrawal is sent explicitly. */
+      if (CAPTURE_RE.test(question) || isSwap(question) || isFocusPhrase(question) ||
+          LOOK_RE.test(question) || WATCH_OFF_RE.test(question) ||
+          WATCH_RE.test(question) || sharing()) await withdrawProposal();
+      else hideProposal();
+    }
+
     // Growing the brain is not asking it a question. The server checks this too,
     // so a stale tab cannot answer a capture instead of performing it.
     if (CAPTURE_RE.test(question)) return capture(question);
@@ -4311,10 +4532,14 @@ async function loadLib() {
 
     /* One reply path for answers and errors alike: show it, say it, then let the
        camera prove it. Speaking starts first so the flight happens mid-sentence. */
-    function respond(text, isError, ids, kind, sources, backend) {
+    function respond(text, isError, ids, kind, sources, backend, pending) {
       const used = renderAnswer(question, text, isError, ids, sources);
       const plan = decideCamera(kind, used, isError);
       if (!speak(spokenForm(text))) idleStatus();
+      /* THE PROPOSAL. The server has asked them something and is waiting; the pair of
+         buttons and the exact parameters go under the sentence it composed. Nothing has
+         happened yet, and nothing will until one of them is pressed. */
+      if (pending) showProposal(pending);
       /* THE VISUAL CUE. A note answer lights its star; a web answer has no star, so
          the whole sky breathes cyan once and the panel shows the addresses instead.
          The panel opens before applyCamera, which for kind 'web' is a no-op anyway -
@@ -4347,9 +4572,10 @@ async function loadLib() {
         respond('The server replied with something that was not JSON (HTTP ' +
           res.status + ').', true, null, 'chat');
       } else if (data.error) {
-        respond(data.error, true, data.nodes, kind, sources, backend);
+        respond(data.error, true, data.nodes, kind, sources, backend, data.pending);
       } else {
-        respond(data.answer || '(empty answer)', false, data.nodes, kind, sources, backend);
+        respond(data.answer || '(empty answer)', false, data.nodes, kind, sources,
+                backend, data.pending);
       }
     } catch (e) {
       respond('Could not reach the brain. Start it with "python server.py" and open ' +
@@ -4377,6 +4603,9 @@ async function loadLib() {
       });
     } catch (e) { /* nothing to forget if the server is not there */ }
     $('answer').classList.remove('show');
+    /* The ↻ button clears a pending proposal with everything else - the server drops it
+       too, inside /reset, so this is the UI catching up rather than the decision. */
+    hideProposal();
     stopListening();
     if (canSpeak) { try { speechSynthesis.cancel(); } catch (e2) { /* ignore */ } }
     idleStatus();
@@ -4574,6 +4803,10 @@ async function loadLib() {
     /* "Stop" means stop, including the answer window. Leaving it armed would make
        the next unrelated sentence, whenever it came, the session's intent. */
     fxAnswerClose();
+    /* And including a proposal. "stop", "cancel" and "never mind" are barked interrupts,
+       so they never reach ask() - which would make them the three refusals that did not
+       work. Here they refuse, properly, through the server. */
+    if (proposal) refuseProposal('voice');
     stopListening();
     setStatus('', '“' + label + '” · stopped');
   }
@@ -5531,6 +5764,32 @@ async function loadLib() {
       get lastBirth() { return lastBirth; },
       get pulsing() { return pulseId; },
       get pulseAmt() { return +pulseAmt.toFixed(3); }
+    },
+    /* THE HANDS, for a harness that wants to READ the moment of trust. Deliberately
+       read-mostly: there is no execute() here and no way to fake a proposal, because a
+       test that could would be testing itself. The two buttons are real DOM and a live
+       harness clicks them. */
+    hands: {
+      get pending() { return proposal; },
+      get shown() { return $('a-ask').classList.contains('show'); },
+      get label() { return $('ask-lbl').textContent; },
+      get clock() { return $('ask-clock').textContent; },
+      /* What the SCREEN says the parameters are, read out of the rendered rows rather
+         than out of the reply - which is the only way to prove that the human could
+         actually see what they were approving. */
+      get rows() {
+        const out = {}; const kids = $('ask-rows').children;
+        for (let i = 0; i + 1 < kids.length; i += 2) {
+          out[kids[i].textContent] = kids[i + 1].textContent;
+        }
+        return out;
+      },
+      get buttons() {
+        return { yes: $('ask-yes').textContent, no: $('ask-no').textContent,
+                 disabled: $('ask-yes').disabled };
+      },
+      saidYes: function (s) { return SAID_YES_RE.test(String(s)); },
+      saidNo: function (s) { return SAID_NO_RE.test(String(s)); }
     },
     brain: {
       isSwap: isSwap, send: swapBrain, refresh: refreshBrain,
