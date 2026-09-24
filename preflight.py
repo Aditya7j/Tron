@@ -264,6 +264,74 @@ def probe_frame():
     return jpeg, width, height
 
 
+# -----------------------------------------------------------------------------
+#  A REAL PDF, WRITTEN BY HAND, for the same reason probe_frame() writes a real JPEG.
+#
+#  Check 17 has to prove that the ingestion engine reads a PDF, so the bytes it is given
+#  must be a PDF that a PDF library agrees to open - offsets, xref table, trailer and all.
+#  A file called .pdf with prose in it would prove nothing except that the extractor is
+#  lenient. This is about 60 lines and it depends on nothing: no pypdf, no reportlab, and
+#  no fixture checked into the repository that could drift away from what the check
+#  asserts about it.
+#
+#  It also writes the OTHER kind of page, which is the harder half of the feature: pass an
+#  empty string and the page has a grey rectangle on it and no text operators at all. That
+#  is exactly what a scanned page looks like to an extractor - a page that exists, has
+#  size, and holds nothing to read - so the honest line about a scan can be tested without
+#  anybody having to photograph a piece of paper.
+# -----------------------------------------------------------------------------
+
+def _pdf_escape(text):
+    return (str(text).replace("\\", r"\\").replace("(", r"\(").replace(")", r"\)"))
+
+
+def probe_pdf(pages):
+    """PDF bytes, one page per item. A string is a text page; "" is an image-only page."""
+    pages = list(pages)
+    count = len(pages)
+    # 1 catalog, 2 pages tree, then a (page, contents) pair each, then the font last.
+    font_num = 3 + 2 * count
+    objects = {}
+
+    kids = " ".join("%d 0 R" % (3 + 2 * i) for i in range(count))
+    objects[1] = "<< /Type /Catalog /Pages 2 0 R >>"
+    objects[2] = "<< /Type /Pages /Kids [%s] /Count %d >>" % (kids, count)
+
+    for i, text in enumerate(pages):
+        page_num, content_num = 3 + 2 * i, 4 + 2 * i
+        if text:
+            stream = ("BT /F1 16 Tf 72 700 Td (%s) Tj ET" % _pdf_escape(text))
+            resources = "<< /Font << /F1 %d 0 R >> >>" % font_num
+        else:
+            # No text operators anywhere in this stream: a grey box and nothing to read.
+            stream = "0.85 0.85 0.85 rg 72 560 468 180 re f"
+            resources = "<< >>"
+        objects[page_num] = ("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+                             "/Resources %s /Contents %d 0 R >>"
+                             % (resources, content_num))
+        objects[content_num] = ("<< /Length %d >>\nstream\n%s\nendstream"
+                                % (len(stream.encode("latin-1")), stream))
+    objects[font_num] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+
+    out = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    offsets = {}
+    for num in sorted(objects):
+        offsets[num] = len(out)
+        out += ("%d 0 obj\n%s\nendobj\n" % (num, objects[num])).encode("latin-1")
+
+    # The cross-reference table. Every entry is exactly twenty bytes, which is not a
+    # style choice - a PDF reader seeks into this table by multiplying.
+    start = len(out)
+    size = font_num + 1
+    out += ("xref\n0 %d\n" % size).encode("latin-1")
+    out += b"0000000000 65535 f \n"
+    for num in range(1, size):
+        out += ("%010d 00000 n \n" % offsets[num]).encode("latin-1")
+    out += ("trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n"
+            % (size, start)).encode("latin-1")
+    return bytes(out)
+
+
 # =============================================================================
 #  THE CHECKS, in the order a failure is most useful to hear about
 # =============================================================================
@@ -1750,9 +1818,12 @@ def check_watch():
     Three things it deliberately does not do.
 
     It does not open a share, diff a thumbnail or start a clock: those are the page's,
-    and watch_live.mjs drives them in a real browser against the real monitor, where a
-    stillness clock means something. What is asserted about the page here is read out of
-    the file - the windows it applies and the one fetch it can reach the network with.
+    and test_watch.py drives them in-process, where a stillness clock can be wound by
+    hand. Nothing drives them against a REAL monitor any more - watch_live.mjs did, and
+    was retired when the watch chip moved into the floating desktop window - so that one
+    seam is covered by using the feature and not by this file. What is asserted about the
+    page here is read out of the file: the windows it applies, and the one fetch it can
+    reach the network with.
 
     It does not exercise the relief valve, for the same reason check_eyes does not: the
     valve is three minutes of the user's own silence and a preflight has no business
@@ -1975,7 +2046,7 @@ def check_watch():
                  "the bytes - and the valve belongs to the eyes, so one silence covers "
                  "every organ")
 
-    # -- 9. AND THE PAGE. Its half is driven by watch_live.mjs; what is read here is
+    # -- 9. AND THE PAGE. Its half is driven by test_watch.py; what is read here is
     # that it applies these windows and that its loop has one door to the network.
     page = _page_source()
     if page is None:
@@ -2836,6 +2907,149 @@ def check_hands():
     return PASS, notes
 
 
+def _rebuild_vectors(timeout=420):
+    """Run the real build, vectors and all, and hand back (ok, one line about it)."""
+    done = subprocess.run([sys.executable, os.path.join(ROOT, "build.py")],
+                          capture_output=True, text=True, timeout=timeout, cwd=ROOT)
+    tail = [ln.strip() for ln in (done.stdout or "").splitlines()
+            if "vectors" in ln or "chunk" in ln]
+    return done.returncode == 0, (tail[-1] if tail else "build.py said nothing about "
+                                                        "vectors")
+
+
+def check_documents():
+    """17. A PDF dropped into archive/ is read, cited by page, and answers a synonym."""
+    if not state["up"]:
+        return FAIL, ["skipped: the server is not reachable"]
+
+    before = (state.get("health") or {}).get("vectors") or {}
+    if not before.get("on"):
+        return WARN, ["semantic recall is switched off in config.json "
+                      "(vector_recall false), so there is nothing to test here"]
+    if not before.get("ready"):
+        # The honest outcome on a machine with no ChromaDB or no Ollama: the feature is
+        # absent, the keyword brain answered every check above, and that is a warn rather
+        # than a failure of this code. Same rule as the checks that need a search key.
+        return WARN, ["the vector store is not open: %s" % (before.get("why") or "no store"),
+                      "run \"python build.py\" with Ollama running to build it"]
+
+    # ---- the probe document. Page 1 says a thing in words the question will not use;
+    # page 2 is a scan, so the same file proves both halves of the citation contract.
+    rel = "archive/test_archive.pdf"
+    path = os.path.join(ROOT, "archive", "test_archive.pdf")
+    archive_existed = os.path.isdir(os.path.join(ROOT, "archive"))
+    if os.path.exists(path):
+        return FAIL, ["%s already exists; move it aside - this check writes and deletes "
+                      "that exact path" % rel]
+    os.makedirs(os.path.join(ROOT, "archive"), exist_ok=True)
+    with open(path, "wb") as fh:
+        fh.write(probe_pdf(["The vehicle is crimson, and has been since the day it "
+                            "was delivered.", ""]))
+    detail = ["wrote %s (%d bytes, page 1 text, page 2 a scan)"
+              % (rel, os.path.getsize(path))]
+
+    verdict, notes = PASS, []
+    try:
+        ok, line = _rebuild_vectors()
+        if not ok:
+            return FAIL, detail + ["build.py failed, so nothing was indexed: %s" % line]
+        detail.append(line)
+
+        # ---- THE SYNONYM. "car" is not in the document and "vehicle" is not in the
+        # question, so nothing a keyword index can do will answer this. If it comes back
+        # crimson, the meaning search found it.
+        status, _, body = post_json("/chat", {"question": "What colour is the car?",
+                                             "session": "preflight-documents"},
+                                    timeout=180)
+        data = as_json(body) or {}
+        answer = str(data.get("answer") or "")
+        cites = data.get("citations") if isinstance(data.get("citations"), list) else []
+        named = [c for c in cites if isinstance(c, dict)
+                 and str(c.get("file") or "").endswith("test_archive.pdf")]
+        if status != 200 or data.get("error"):
+            return FAIL, detail + ["POST /chat failed: %s"
+                                   % first_line(data.get("error") or body[:200])]
+        if data.get("kind") != "notes":
+            return FAIL, detail + ["“What colour is the car?” came back kind=%r "
+                                   "searched=%r - the notes door did not open on the "
+                                   "document: %s"
+                                   % (data.get("kind"), data.get("searched"),
+                                      first_line(answer, 70))]
+        if not named:
+            return FAIL, detail + ["it answered from the notes but cited %r, never the "
+                                   "file the answer is in"
+                                   % [c.get("label") for c in cites]]
+        if not any(w in answer.lower() for w in ("crimson", "red")):
+            return FAIL, detail + ["it cited %s and then did not say crimson or red: “%s”"
+                                   % (named[0].get("label"), first_line(answer, 88))]
+        if not named[0].get("page"):
+            # The file is right and the page is missing: a citation that cannot be turned
+            # to. Warn rather than fail - the retrieval worked.
+            notes.append("but the citation carries no page number")
+        detail.append("“What colour is the car?” -> %s · %s"
+                      % (named[0].get("label"), first_line(answer, 62)))
+        detail.append("cited %s at %.3f, with no web lookup"
+                      % (named[0].get("label"), float(named[0].get("score") or 0.0)))
+
+        # ---- THE SCAN, said once and never described. Page 2 has no text in it, and the
+        # reply is entitled to say so and forbidden to guess.
+        scans = data.get("scanNotes") if isinstance(data.get("scanNotes"), list) else []
+        if not any("page 2" in str(s) for s in scans):
+            notes.append("but page 2 is a scan and nothing in the reply said so "
+                         "(scanNotes=%r)" % scans)
+        else:
+            detail.append("and about page 2: “%s”" % first_line(scans[0], 74))
+
+        # ---- AND THE GATE STILL OPENS FOR EVERYTHING ELSE. A corpus that now answers
+        # more questions must not start answering all of them.
+        status, _, body = post_json(
+            "/chat", {"question": "What is the population of Reykjavik?",
+                      "session": "preflight-documents"}, timeout=180)
+        other = as_json(body) or {}
+        if status != 200:
+            notes.append("the unrelated question returned HTTP %s" % status)
+        elif not other.get("searched"):
+            verdict = FAIL
+            notes.append("“What is the population of Reykjavik?” came back kind=%r with "
+                         "no lookup - the web gate did not open: %s"
+                         % (other.get("kind"), first_line(other.get("answer"), 60)))
+        else:
+            detail.append("an unrelated question still opened the web gate (%s -> %s)"
+                          % (other.get("searched"), other.get("kind")))
+            if other.get("citations"):
+                verdict = FAIL
+                notes.append("but it also cited %r, which the web answer had no hand in"
+                             % [c.get("label") for c in other["citations"]])
+    finally:
+        # Put the archive back exactly as it was, and rebuild so the store agrees.
+        if KEEP_NOTE:
+            detail.append("--keep-note: %s left in place; run build.py to drop it" % rel)
+        else:
+            try:
+                os.remove(path)
+                if not archive_existed and not os.listdir(os.path.join(ROOT, "archive")):
+                    os.rmdir(os.path.join(ROOT, "archive"))
+                ok, _line = _rebuild_vectors()
+                after = ((as_json(http_call("GET", "/health", timeout=20)[2]) or {})
+                         .get("vectors") or {})
+                if not ok:
+                    notes.append("could not rebuild after removing %s; run build.py" % rel)
+                elif after.get("files") == before.get("files"):
+                    detail.append("probe document removed, store rebuilt, back to %s "
+                                  "file%s" % (before.get("files"),
+                                              "" if before.get("files") == 1 else "s"))
+                else:
+                    notes.append("after cleanup the store holds %s files, not the %s it "
+                                 "started with" % (after.get("files"), before.get("files")))
+            except Exception as exc:                           # noqa: BLE001
+                notes.append("could not clean up %s (%s) - delete it and re-run build.py"
+                             % (rel, exc))
+
+    if verdict == PASS and notes:
+        return WARN, detail + notes
+    return verdict, detail + notes
+
+
 CHECKS = [
     ("the server is up and serving the viewer", check_server),
     ("the graph data loads and has nodes", check_graph),
@@ -2853,6 +3067,7 @@ CHECKS = [
     ("the instruments answer from the running server", check_instruments),
     ("the web lookup fetches, cites, and stays in its lane", check_web),
     ("the hands ask first, run once, and keep nothing", check_hands),
+    ("a PDF in archive/ is read, cited by page, and answers", check_documents),
 ]
 
 

@@ -19,10 +19,10 @@
  *         DevTools port, so I shall watch the application only."
  *     -> and the session still runs
  *
- * THE LAW being tested is the second half, and it is the whole reason this file is
- * not just focus_live.mjs again: a session that silently watched the application
- * while you believed it was watching the site would pass every other test in this
- * repository. Silence about a missing lock is a wrong lock wearing a costume.
+ * THE LAW being tested is the second half, and it is the whole reason this file exists
+ * apart from focus_probe.mjs: a session that silently watched the application while you
+ * believed it was watching the site would pass every other test in this repository.
+ * Silence about a missing lock is a wrong lock wearing a costume.
  *
  * Nothing is mocked. It runs the real PowerShell script, kills and relaunches a real
  * Chrome twice, and reads what the PAGE actually spoke (speechSynthesis is wrapped,

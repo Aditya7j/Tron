@@ -19,6 +19,11 @@ server.out
 
 # GENERATED LOCAL STATE
 notes-index.json
+# THE VECTOR STORE. Derived data, every byte of it: a sqlite file, an HNSW index and a
+# manifest of hashes, all rebuildable from notes/ and archive/ with one command. It is
+# also large, binary and rewritten on every build, which is three separate reasons a
+# version control system should never see it. "python build.py" is the source.
+vector-store/
 focus-ledger.json
 tools-ledger.json
 calendar.json

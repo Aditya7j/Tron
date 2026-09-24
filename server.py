@@ -58,6 +58,25 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 # build.py's rules ever change.
 import build
 
+# SEMANTIC RECALL, and the ingestion engine behind it: .md .txt .pdf and .docx from
+# notes/ and archive/, chunked, embedded by a local model and kept in a ChromaDB. Its own
+# file for the same reasons as the three below - it owns a store handle, a lock and a
+# background thread - and this file reaches into it through exactly four functions:
+# ingest.recall(), ingest.citations(), ingest.store_state() and ingest.warm().
+#
+# IT IS AN UPGRADE TO RETRIEVAL, NOT A NEW PRECONDITION. recall() never raises: no store,
+# no Ollama, an empty collection and a corrupt sqlite file all come back as
+# available=False, and answer_question() then runs on the keyword index exactly as it did
+# before any of this existed. Imported in a try so that a machine without chromadb still
+# starts a working server, because a butler who will not come to work until his filing
+# system is installed is not a butler.
+try:
+    import ingest
+except Exception as _ingest_exc:                               # noqa: BLE001
+    ingest = None
+    sys.stderr.write("server.py: semantic recall is off - could not import ingest.py "
+                     "(%s: %s)\n" % (type(_ingest_exc).__name__, _ingest_exc))
+
 # The accountability timer. It lives in its own file because it owns a thread and a
 # platform reader, and because every knob it has belongs at the top of that file
 # rather than buried in this one. Nothing here reaches into it except through
@@ -769,6 +788,25 @@ DEFAULT_CONFIG = {
     # comes back for those who want it; nobody gets it by default. Published to the
     # browser by /health for the same reason voice_name is: the page owns the camera.
     "galaxy_spin": False,
+
+    # ---- SEMANTIC RECALL. The four knobs of the vector store, and not one of them is a
+    # credential: a model name, a loopback address, a float and a boolean. ingest.py reads
+    # this file itself, server-side, exactly as send_email.py does, and /health reports the
+    # threshold and the counts because the page is where "answered from your own files" is
+    # shown and a reader is entitled to know on what evidence.
+    #
+    # notes_threshold is THE DIAL: the cosine similarity at which the notes door opens on
+    # the strength of meaning alone. 0.60 here, and ingest.py's header lists the nine
+    # measurements it was set from. Raise it towards 0.70 if this starts answering from
+    # your files when you wanted the live web; drop it towards 0.55 if it keeps searching
+    # the web for things your own archive says in plain words.
+    #
+    # Set vector_recall false and everything falls back to the keyword index that has
+    # always been here - which is also what happens by itself if Ollama is not running.
+    "vector_recall": True,
+    "embed_model": "nomic-embed-text",
+    "ollama_url": "http://127.0.0.1:11434",
+    "notes_threshold": 0.60,
 }
 PLACEHOLDER_KEYS = {"", "put-your-key-here", "your-key-here", "sk-xxx", "changeme"}
 
@@ -2152,6 +2190,140 @@ def build_context(picked):
                       % (rank, note.get("label", "untitled"),
                          note.get("group", "unfiled"), text))
     return "\n\n".join(blocks)
+
+
+# ------------------------------------------------------- retrieval, by meaning
+#
+#  THE SECOND RETRIEVAL, and it stands BESIDE the keyword one rather than over it.
+#
+#  Two questions get two different answers, and both are worth having. score_notes()
+#  above asks "which notes use these words?", which is unbeatable when the employer
+#  types a word that is genuinely in the file - a name, a number, a canary token
+#  written thirty seconds ago and not yet embedded. recall() in ingest.py asks "which
+#  passages MEAN this?", which is the only one that can answer "what colour is the
+#  car?" out of a contract that says "the vehicle is crimson".
+#
+#  So the union is the design, not a compromise:
+#    - either retrieval may open the notes door;
+#    - the model is shown what each of them found, labelled;
+#    - the chips light for notes that actually contributed, from either side.
+#  A note captured by /remember is findable in the same second by the keyword half
+#  with no rebuild, and an archived PDF nobody has ever wikilinked is findable by the
+#  semantic half. Neither of those two facts is true of either index alone.
+
+SEM_CONTEXT_CHARS = 1200      # per chunk, sent to the model
+
+
+def semantic_recall(question, prior=""):
+    """ingest.recall(), wrapped so that this file never has to ask whether it exists.
+
+    Returns the same shape whether the module imported, the store is there, or Ollama is
+    stopped: the caller reads .get("opens") and .get("cited") and does not branch on
+    which kind of missing it is. One place to look when semantic recall is not
+    happening, and one line in the log saying why.
+    """
+    if ingest is None:
+        return {"available": False, "why": "ingest.py did not import", "opens": False,
+                "hits": [], "cited": [], "best": 0.0, "best3": 0.0, "scans": [],
+                "threshold": 0.0, "ms": 0}
+    try:
+        return ingest.recall(question, prior)
+    except Exception as exc:                                   # noqa: BLE001
+        # recall() promises not to raise. If it ever does, that is a bug in it and not a
+        # reason to fail a question, so it is logged as loudly as a bug deserves.
+        sys.stderr.write("  recall: ingest.recall() RAISED %s: %s - falling back to "
+                         "keywords\n" % (type(exc).__name__, exc))
+        return {"available": False, "why": "recall raised %s" % type(exc).__name__,
+                "opens": False, "hits": [], "cited": [], "best": 0.0, "best3": 0.0,
+                "scans": [], "threshold": 0.0, "ms": 0}
+
+
+def notes_by_file():
+    """{"notes/finance/pricing-strategy.md": 3} - the file-to-planet map, built fresh.
+
+    Cheap enough to build per question (thirty-odd string keys) and always right, which
+    a cached copy would not be: /remember adds a note mid-session and the next question
+    has to be able to light it.
+    """
+    out = {}
+    for i, note in enumerate(_index["notes"]):
+        rel = str(note.get("file") or "").replace("\\", "/")
+        if rel:
+            out.setdefault(rel, int(note.get("id", i)))
+    return out
+
+
+def semantic_nodes(cited):
+    """Which PLANETS a set of cited chunks corresponds to, in citation order.
+
+    A chunk from notes/product/cold-brew-recipe.md is a planet and lights one. A chunk
+    from archive/Q3_Contract.pdf is not in the galaxy at all, and gets no node - which
+    is why the citation chips exist. Returning nothing for it is the honest answer:
+    there is no star to fly to, and inventing one would put a dot in the sky for a file
+    the graph has never contained.
+    """
+    by_file = notes_by_file()
+    out = []
+    for hit in cited:
+        node = by_file.get(str(hit.get("file") or "").replace("\\", "/"))
+        if node is not None and node not in out:
+            out.append(node)
+    return out
+
+
+def build_semantic_context(cited):
+    """The retrieved PASSAGES, as the model sees them: file, page, text.
+
+    Labelled PASSAGE rather than NOTE, and numbered separately from build_context()'s
+    blocks, because the two are different kinds of evidence and the difference is worth
+    the model knowing: a NOTE block is a whole note, a PASSAGE block is the part of a
+    longer document that actually matched. The page number is in the block so that an
+    answer can say where in the file it read something - the one thing a citation to a
+    forty-page PDF has to be able to do.
+    """
+    blocks = []
+    for rank, hit in enumerate(cited, start=1):
+        text = (hit.get("text") or "").strip()
+        if len(text) > SEM_CONTEXT_CHARS:
+            text = text[:SEM_CONTEXT_CHARS].rsplit(" ", 1)[0] + "…"
+        where = ingest.cite_label(hit) if ingest else (hit.get("name") or "")
+        blocks.append("PASSAGE %d\nFrom: %s\nContent: %s" % (rank, where, text))
+    return "\n\n".join(blocks)
+
+
+def scan_lines(sem):
+    """The honest line about an image-only page, or nothing at all.
+
+    NEVER GENERATED, ALWAYS QUOTED. ingest.SCAN_LINE is a constant with a page number in
+    it, and it is appended to the answer by this file rather than described to the model
+    in a prompt. The difference is the whole point: a model told "page 4 is a scan you
+    cannot read" will, perhaps one time in thirty, write a sentence about what is
+    probably on it. A constant cannot.
+    """
+    out = []
+    for scan in (sem.get("scans") or [])[:2]:
+        line = str(scan.get("line") or "")
+        if line and line not in out:
+            out.append(line)
+    return out
+
+
+def vector_state(cfg):
+    """The /health block for the second index - and it never raises either.
+
+    /health is the endpoint the boot banner, the harnesses and the model chip all read,
+    so it may not be the thing that a missing package takes down. Absent chromadb, absent
+    Ollama, a store somebody deleted while the server was running: all of them come back
+    as `ready: false` plus one sentence, and the rest of the probe is unaffected.
+    """
+    if ingest is None:
+        return {"on": False, "ready": False, "why": "ingest.py could not be imported"}
+    try:
+        state = ingest.store_state()
+    except Exception as exc:                                       # noqa: BLE001
+        return {"on": bool(cfg.get("vector_recall", True)), "ready": False,
+                "why": "%s: %s" % (type(exc).__name__, exc)}
+    return state
 
 
 # Backend names search.py is allowed to have answered with. The name is reported to the
@@ -3634,16 +3806,72 @@ def answer_question(question, session):
     # says how loudly a note rang; this says whether it rang for the right question.
     confidence = note_confidence(question, picked, prior)
 
+    # ---- THE SECOND RETRIEVAL, BY MEANING, AND IT COSTS NOTHING TO SAY "OK THANKS".
+    #
+    # This is the one line in the upgrade that could have made the cheapest message in
+    # the conversation the most expensive: embedding a query is an HTTP call to a model,
+    # and "ok, got it" would have paid for one on its way to the backchannel's fixed
+    # reply. So the same three vetoes that guard the web gate guard this too, ABOVE it,
+    # and they are computed once here and reused all the way down - an acknowledgment, a
+    # bare greeting and anything that is not a question never reach the embedder at all.
+    ack = backchannel_only(question)
+    worth_embedding = (substantial_question(question, prior) and not ack
+                       and not address_only(question))
+    sem = (semantic_recall(question, prior) if worth_embedding
+           else {"available": False, "why": "nothing was asked", "opens": False,
+                 "hits": [], "cited": [], "best": 0.0, "best3": 0.0, "scans": [],
+                 "threshold": 0.0, "ms": 0})
+
     # ---- decide what kind of thing was said BEFORE deciding what to return.
     # "chat" carries no note indexes at all, which is what holds the galaxy still.
     kind = classify_question(question, best_score, prior, confidence)
+
+    # ---- THE SEMANTIC DOOR, and what it is NOT allowed to walk past.
+    #
+    # The keyword half has had its say above. If it declined - no shared words, or shared
+    # words that held none of the question - the meaning search gets its turn, and a
+    # passage at or above the dial opens the notes door on its own. That single branch is
+    # the whole of "read, understand and cite a PDF": nothing in archive/Q3_Contract.pdf
+    # shares a word with "what colour is the car", and it answers it anyway.
+    #
+    # THREE VETOES STAND ABOVE IT, exactly as they stand above the web gate, and for the
+    # same reason - they are about what KIND of thing was said, and no retrieval score is
+    # evidence about that:
+    #   the backchannel   "ok thanks" is a reply, not a question, and never got here;
+    #   the vocative peel "good morning, Jarvis" is an address, not a query;
+    #   THE THIRD DOOR    a task is not research. "Translate good evening into french"
+    #                     will find some passage in a thirty-note corpus that MEANS
+    #                     something adjacent to it, and answering a translation request
+    #                     out of the employer's staffing notes would be worse than
+    #                     useless. task_intent() keeps composition composed.
+    # The one thing the door may not do is close: a question the keyword half already
+    # claimed stays claimed, because it has evidence this one does not - a word the
+    # employer actually typed.
+    sem_opened = False
+    if (sem.get("opens") and kind != "notes" and worth_embedding
+            and not task_intent(question)):
+        kind = "notes"
+        sem_opened = True
+        sys.stderr.write("  recall: the notes door opened on MEANING alone - %.3f "
+                         "(threshold %.2f) from %s\n"
+                         % (sem.get("best3") or 0.0, sem.get("threshold") or 0.0,
+                            ", ".join(h.get("name", "?")
+                                      for h in (sem.get("cited") or [])[:3]) or "nothing"))
+    # AND THE GATE IS TOLD. note_confidence() measures word overlap and cannot see that a
+    # passage means the same thing in different words, so on its own it would still call
+    # this question "thin" and send it to the web with the answer already in hand. The two
+    # numbers are on the same scale by construction - both are "how much of this question
+    # does the collection hold", 0..1 - so the collection's best answer is the one that
+    # counts, whichever half of the retrieval found it.
+    if sem.get("opens"):
+        confidence = max(confidence, float(sem.get("best3") or 0.0))
     # ...and, separately, whether this one deserves a look at the live web. Two
     # decisions rather than one, because they answer different questions: the first is
     # "was this a question about the notes?", the second is "is the answer somewhere
     # the notes cannot reach?". A message can fail the first and pass the second, which
     # is precisely the case this whole feature exists for.
     reason = web_intent(question, confidence, prior,
-                        in_scope=(best_score >= RELEVANCE_FLOOR))
+                        in_scope=(best_score >= RELEVANCE_FLOOR or bool(sem.get("opens"))))
     # NOTHING LEFT, NOTHING SPENT, said out loud in the log. A salutation must never light
     # the LIVE WEB panel, and the way to show that is a line saying the search was declined
     # - not the absence of a line, which proves nothing about anything. If a "web lookup"
@@ -3657,7 +3885,30 @@ def answer_question(question, session):
         # lit, no camera fly, no panel opened. Whatever is said next was not said by
         # these notes.
         picked = []
+    elif sem_opened:
+        # THE SAME RULE, APPLIED TO THE OTHER HALF. The keyword scorer declined this
+        # question outright - classify_question() looked at its best score and called this
+        # anything but a notes question - so whatever it dragged up is noise that happens
+        # to share a stopword, and it is not evidence for an answer the vectors found. It
+        # would also be the wrong constellation: the top keyword note would light while the
+        # passage actually quoted came from a PDF that is not on the map.
+        picked = []
+
+    # ---- WHAT WAS ACTUALLY QUOTED. Only a notes answer cites, and only when the meaning
+    # search cleared the dial; anything else gets an empty list, which is what keeps a
+    # refusal, a task and a web answer free of chips.
+    cited = sem["cited"] if (kind == "notes" and sem.get("opens")) else []
+    cites = ingest.citations(cited) if (ingest is not None and cited) else []
+
+    # Notes and archive light different things, so the two are merged rather than chosen
+    # between: a keyword note keeps its planet, a semantic hit in notes/ earns the planet
+    # it came from, and a semantic hit in archive/ earns no node at all because there is
+    # no star for a filed contract. De-duplicated in order, first mention winning.
     node_ids = [int(_index["notes"][i].get("id", i)) for i, _ in picked]
+    for nid in semantic_nodes(cited):
+        if nid not in node_ids:
+            node_ids.append(nid)
+    node_ids = node_ids[:TOP_K]
 
     if cfg_error:
         return 400, {"error": cfg_error, "nodes": node_ids, "kind": kind}
@@ -3773,6 +4024,42 @@ def answer_question(question, session):
                          "the web was not asked\n")
         return 200, {"answer": PRIVATE_HELD_LINE, "nodes": [], "kind": "chat",
                      "privateHeld": True}
+
+    # ---- THE FILE THAT IS ALL PHOTOGRAPH AND NO TEXT, and the honest line it earns.
+    #
+    # This is the one case where a page number is the whole answer. The employer asked
+    # about a document BY NAME, the index holds that document, and every page of it came
+    # back empty because it is a photograph of paper - so there is nothing to retrieve, no
+    # passage cleared the dial, and the truthful reply is not a shrug about the notes and
+    # certainly not a search of the open web for somebody else's lease. It is one sentence
+    # saying the page is there and cannot be read.
+    #
+    # THE LINE IS QUOTED, NEVER GENERATED. ingest.SCAN_LINE is a constant with a %d in it;
+    # no model is asked to describe a page it cannot see, because a model asked to describe
+    # an unreadable scan will describe one anyway. That is the whole reason this branch
+    # exists above the brain rather than below it.
+    #
+    # name_match() is deliberately strict - every distinctive word of the filename must be
+    # in the question - so "the lease photographs" finds it and "what do we do about
+    # photographs" does not. It runs only when the meaning search came back empty, so a
+    # document with real text on page 1 answers from page 1 as normal and this never fires.
+    if ingest is not None and worth_embedding and not sem.get("opens"):
+        only = None
+        try:
+            only = ingest.name_match(question)
+        except Exception as exc:                                   # noqa: BLE001
+            sys.stderr.write("  recall: image-only lookup failed (%s: %s)\n"
+                             % (type(exc).__name__, exc))
+        if only and only.get("pages"):
+            page = int(only["pages"][0])
+            line = ingest.SCAN_LINE % page
+            sys.stderr.write("  no lookup: %s is image-only; said so, searched nothing\n"
+                             % only.get("name", "?"))
+            return 200, {"answer": line, "nodes": [], "kind": "chat", "scan": True,
+                         "citations": ingest.citations(
+                             [{"file": only["file"], "name": only["name"],
+                               "page": page, "kind": "pdf"}]),
+                         "scanNotes": [line]}
 
     # ---- THE TWO-STEP LOOKUP. Step one was the score above; this is step two, and it
     # happens BEFORE the brain is called, because what the brain is told depends
@@ -3893,15 +4180,30 @@ def answer_question(question, session):
         messages = ([{"role": "system", "content": SMALLTALK_PROMPT + block}] + history +
                     [{"role": "user", "content": question.strip()}])
     else:
+        # THE UNION, AND THE PASSAGES GO FIRST. Two retrievals ran; whatever either of
+        # them found is evidence, and the model is shown both under one heading rather
+        # than being told which index produced which block - it is answering a question,
+        # not auditing a search. The semantic passages lead because they are the narrower
+        # claim: a 500-token chunk that scored above the dial is a specific paragraph
+        # about the question, while a keyword note is a whole document that mentioned it.
+        #
+        # THE WORDING OF THE HEADING IS THE PART THAT MATTERS. "Notes" alone would be a
+        # small lie the moment a passage comes out of a PDF in archive/, and a model told
+        # its only source is notes, when handed a contract, tends to hedge about it. So
+        # the heading names both and the sentence that follows still says "and nothing
+        # else" - the one clause in this prompt that does the real work.
+        passages = build_semantic_context(cited)
         context = build_context(picked)
-        user_msg = ("Question: %s\n\nNotes you may use, and nothing else:\n\n%s"
-                    % (question.strip(), context))
+        both = "\n\n".join(b for b in (passages, context) if b)
+        user_msg = ("Question: %s\n\nNotes and documents you may use, and nothing else:"
+                    "\n\n%s" % (question.strip(), both))
         messages = ([{"role": "system", "content": SYSTEM_PROMPT + block}] + history +
                     [{"role": "user", "content": user_msg}])
 
     answer, error = call_model(cfg, messages)
     if error:
-        return 502, {"error": error, "nodes": node_ids, "kind": kind}
+        return 502, {"error": error, "nodes": node_ids, "kind": kind,
+                     "citations": cites}
 
     # THE CONTROL TAG. An answer may ask to change the brain instead of replying, and
     # if it does, the swap is performed by the one function every other door uses and
@@ -3935,7 +4237,20 @@ def answer_question(question, session):
         hist.append({"role": "assistant", "content": answer})
         del hist[:max(0, len(hist) - HISTORY_TURNS * 2)]
 
-    return 200, {"answer": answer, "nodes": node_ids, "kind": kind}
+    # THE CITATION TRAVELS BESIDE THE ANSWER, NOT INSIDE IT. `citations` is a list the
+    # panel renders as "Q3_Contract.pdf · page 4"; the prose is left exactly as the model
+    # wrote it. And `scanNotes` is a footnote, never an interruption: a question answered
+    # in full from page 1 of a contract does not need a sentence about page 4 wedged into
+    # the reply, but the employer is still entitled to know that page 4 exists and could
+    # not be read. The one case where the scan line IS the answer is handled far above,
+    # where there was nothing else to say.
+    payload = {"answer": answer, "nodes": node_ids, "kind": kind}
+    if cites:
+        payload["citations"] = cites
+        notes = scan_lines(sem)
+        if notes:
+            payload["scanNotes"] = notes
+    return 200, payload
 
 
 # ------------------------------------------------------------------- http layer
@@ -4219,6 +4534,15 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 # rests, which is the default and the answer for everybody who has not
                 # gone looking for the key.
                 "sky": {"spin": bool(cfg.get("galaxy_spin"))},
+                # THE SECOND INDEX, DESCRIBED THE SAME WAY THE FIRST ONE IS: how many
+                # documents and chunks are in the store, which model embedded them, what
+                # the dial is set to, and - if it is not working - one sentence saying
+                # why. Numbers, names and booleans, no passage text and no absolute path:
+                # "vector-store/" is a fact about this project, "C:\\Users\\..." is a fact
+                # about this machine, and the browser is told the first and never the
+                # second. `ready: false` is the honest state on a machine with no Ollama,
+                # and the keyword brain answers anyway.
+                "vectors": vector_state(cfg),
             })
         return SimpleHTTPRequestHandler.do_GET(self)
 
@@ -4729,6 +5053,11 @@ def print_models():
           "needed.\n")
 
 
+def _warm_log(line):
+    """One line from the warm thread, to stderr where every other diagnostic goes."""
+    sys.stderr.write("%s\n" % line)
+
+
 def main():
     if not os.path.isdir(VIEWER_DIR):
         sys.exit("server.py: no viewer/ directory next to this file.")
@@ -4757,6 +5086,21 @@ def main():
         "not configured yet - /chat will say so politely"))
     print("  ctrl-c to stop")
     print("")
+
+    # ---- OPEN THE VECTOR STORE NOW, ON A THREAD, SO NO QUESTION PAYS FOR IT.
+    # ChromaDB's first PersistentClient in a process costs about four seconds on this
+    # machine - sqlite opened, an HNSW index memory-mapped - and every open after it is a
+    # fraction of that. Left alone, that four seconds would land on whoever asked the
+    # first question of the session, which is the worst possible place to spend it and the
+    # hardest to explain. So it is spent here instead, after the socket is already bound
+    # and listening: the page loads, the galaxy paints, and by the time anybody has
+    # finished typing the store is warm. A daemon thread, so ctrl-c still exits at once,
+    # and errors are the thread's own business - warm() reports and returns rather than
+    # raising, and a failure only means the first question pays after all.
+    if ingest is not None:
+        threading.Thread(target=ingest.warm, kwargs={"log": _warm_log},
+                         name="vector-warm", daemon=True).start()
+
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

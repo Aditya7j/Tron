@@ -14,7 +14,6 @@ preflight.py        runs every live chain against the running server and prints 
 test_focus_privacy.py   proves no identity is ever STORED: named out loud, kept nowhere
 test_hands_privacy.py   proves nothing a tool is GIVEN is ever kept, spoken or written down
 test_email_wiring.py    proves the mailer sends, refuses and says why - and sends no mail doing it
-focus_live.mjs      the live loop: click FOCUS, settle, hear the callout, move the lock, hear the report
 focus_probe.mjs     the instruments: /focus/diag, the ledger's shape, the probe page, the debug overlay
 desk_proof.mjs      headed Chrome: the countdown card leaves the tab for a desktop window, and locks a work tab from out there
 layout_proof.mjs    headed Chrome: the governor keeps the card off the panel and the toast off its chips, and retires the card
@@ -1814,75 +1813,6 @@ closes at once. Only a session with a report arms the timer, and only once — a
 of the same report does not restart it. Starting a new session cancels it and revives the
 card, which the `retire` case asserts along with the held line and the eight-second arm.
 
-### The live loop
-
-```bash
-node focus_live.mjs      # needs the server running; Node 24, no npm install
-```
-
-The loop the feature had to survive, driven end to end and nothing in it mocked — and
-it is the *exact* click flow, in order:
-
-```
-click FOCUS in the Jarvis tab  →  hear "go to what you're working on"
-  →  answer "what are we focusing on?" out loud  →  switch to the work tab
-  →  hear "Locked on, sir."  →  switch away  →  hear the callout within three
-  seconds  →  switch back  →  move the lock from all three surfaces it can be
-  moved from  →  end the session  →  hear the report
-```
-
-It asserts that **nothing is locked at the click** (`deferred: true`, `locked: false`)
-and that the lock arrives afterwards, out loud, on the surface you settled on — which
-is the whole point of the deferred lock, and would be invisible to a test that only
-checked the end state. It launches a **headed** Chrome on the DevTools port (headed is not
-optional — the reader asks the window manager which window is in front, and a headless
-browser has no window to be in front), opens a work site and a distraction on
-genuinely different hosts with genuinely different titles, and switches between them
-with real CDP activations and real `Input.dispatchMouseEvent` clicks.
-
-`speechSynthesis.speak` is **wrapped, not stubbed**, so the line is recorded *and*
-still comes out of the speakers — you should hear this run. The measured latency is
-wall time from the activate call to a new line appearing in the page's own record of
-what was spoken: the browser's speaker, not the server's queue. Last run: **63 checks,
-0 failed** in 65 seconds, locked on **1,141 ms** after reaching the work tab and the
-callout spoken **1,218 ms** after the tab switch, with the viewer as a background tab
-throughout.
-
-Five of those checks are about [the name](#said-out-loud-written-down-nowhere), and they
-are the reason this file is worth its runtime: the distraction it opened is an unmapped
-host, so the callout had to name it **by bare domain** — the run asserts the spoken line
-contains `iana.org` and no subdomain, no path and no URL, that **exactly one** line names
-it, that no field outside `say` names it anywhere in the payload the browser holds, and
-then it polls the page's own state until the naming sentence is *gone* from it. Last run
-it was spoken at 1,218 ms and scrubbed **6,162 ms** later, proved against the browser
-rather than against the server's memory.
-
-The second half of the run is [moving the lock](#moving-the-lock-on-purpose) from all
-three surfaces, because each one has a different right answer: the spoken sentence from
-a work tab (which must lock it in one read *and* take the drift back off the count), the
-same sentence from the Jarvis tab (which must lock nothing and re-arm), and a real mouse
-press on the pill. For the press it opens a **second browser window** first — a tab can
-only be `visible` while home base is the thing in front if it belongs to another window,
-and that is the entire geometry of [the card trap](#the-card-trap). *Which* host got
-locked is then proved the only way that leaves the privacy intact: by behaviour. The
-window behind the card stops counting as a drift, and the site that was the target until
-the press starts counting as one.
-
-Every spoken-line check **polls** for the line rather than sleeping a fixed interval and
-sampling once. That is not fussiness: at a latency of ~1.2 s against a 3 s promise, a
-single sample after a fixed wait is a coin toss on which side of it the line lands, and
-it will not always come down the same way. It also asserts the drift is *still live* at
-the instant of return, so "welcome back" can never be spoken about a drift that quietly
-resolved itself while nobody was looking.
-
-What it does **not** assert is an absolute total in any bucket. Settling takes as long
-as it takes, and on a desktop with other windows on it a second or two legitimately
-lands in the home bucket because the Jarvis window really did come to the front for a
-moment. So the path-change check asserts that on-target time *grew* across the
-navigations with zero drifts, and logs all four buckets either side of it — a
-surprising total is usually the machine being busy, and it is easier to see that than
-to guess it.
-
 ## When it "isn't working"
 
 Every instrument below exists for one reason: so that the answer to *"why didn't it
@@ -2319,7 +2249,6 @@ closes.
 
 ```bash
 python test_watch.py     # 124 checks, 0 failed
-node watch_live.mjs      # 51 checks, 0 failed — needs the server; Node 24, no npm install
 ```
 
 `test_watch.py` is in-process and its first section is the one that matters: the loop is
@@ -2329,23 +2258,20 @@ organ, both to `/stuck`. The diff object has no `fetch`, `toBlob`, `createObject
 policy. It also parses the page's own default windows out of `index.html` and compares
 them to `server.WATCH.tuning()` exactly, so the two copies cannot drift past a test run.
 
-`watch_live.mjs` drives real Chrome against the **real monitor** with
-`--auto-select-desktop-capture-source=Entire screen`, and it runs `--headless=new` on
-purpose: a headed run would paint this galaxy's animated 3D scene onto the very screen
-being watched and reset the stillness clock forever. Last run:
+One honest gap, and it is a gap in the COVERAGE rather than in the feature: nothing now
+drives a real screen share against the real monitor. The stillness clock, the picker and
+the one-frame nudge are proved in-process by `test_watch.py` and over HTTP by check 13,
+both of which stub the capture — so a break in `getDisplayMedia` itself, or in the wiring
+between the browser's track and the organ, would have to be found by using the feature.
+The live harness that used to cover it was retired because it read `#watch-sent` out of
+the tab with `getElementById`, and `#watching` is one of the four `DESK_ORGANS` that move
+into the floating desktop window, so it threw on its own null the moment the face pinned
+off-page. Worth rebuilding against the adopted document if the watch is ever reworked.
 
-```
-  STILL:  60 s reached on the real monitor (attempt 2; the desk reset the clock 14 times)
-  NUDGE:  one frame, 61 KB of 800×500, 24 ms old, one model call, spoken as sent
-  COOLDOWN: the same request 1 s later — 429 cooldown, nothing said for 3 s, no second call
-  SAME SHARE: "what do you think of this?" answered from it, no second picker, still watching
-```
-
-One honest gap, reported rather than papered over: this Chrome will not auto-select a
-*tab* capture at all — three ways of asking it to, including a uniquely-titled tab and
-dropping the `monitor` hint, all came back `screen:0:0`. So the trap phase in the live
-harness sets the trap and says it could not be sprung here; the refusal itself is proved
-in `test_watch.py` and by check 13.
+A second thing that harness established and that is worth keeping written down: this
+Chrome will not auto-select a *tab* capture at all — three ways of asking it to, including
+a uniquely-titled tab and dropping the `monitor` hint, all came back `screen:0:0`. The
+refusal that matters is proved in `test_watch.py` and by check 13 regardless.
 
 `preflight.py` check 13 covers the money over HTTP. It tries four ways to make the
 assistant think — a moving screen, a PNG wearing a JPEG's content type, a frame that was

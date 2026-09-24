@@ -1,22 +1,42 @@
 #!/usr/bin/env python3
 """
-build.py - Knowledge Galaxy indexer.
+build.py - Knowledge Galaxy indexer, and the ingestion engine behind it.
 
-Scans every .md file under a notes directory and writes:
+TWO INDEXES, from one walk of the disk, and they answer different questions.
 
-  viewer/graph-data.js  ->  const GRAPH = {nodes: [...], links: [...]}
-  notes-index.json      ->  the same nodes plus full note text, for the brain
-                            (kept in the PROJECT ROOT, never inside viewer/)
+  THE GALAXY, from every .md under the notes directory:
+    viewer/graph-data.js  ->  const GRAPH = {nodes: [...], links: [...]}
+    notes-index.json      ->  the same nodes plus full note text, for the brain
+                              (kept in the PROJECT ROOT, never inside viewer/)
 
-Contract that the rest of the project depends on:
+  THE VECTORS, from every .md .txt .pdf and .docx under notes/ AND archive/:
+    vector-store/         ->  a persistent ChromaDB of ~500-token chunks, each with
+                              its text, its path, its page number and its embedding
+
+Contract that the rest of the project depends on, and that this file will not break:
   every node's `id` is a plain integer equal to its index in GRAPH.nodes,
   and notes-index.json lists the notes in exactly the same order.
 
-Python 3, standard library only.
+WHY THE GALAXY IS STILL MARKDOWN ONLY. A planet is a note somebody wrote and linked to
+other notes; a scanned contract in archive/ is neither. Adding one as a star would put
+an unlinked dot in the sky for every file anybody ever filed, and the shape of the
+galaxy is the shape of the thinking in notes/. So the graph is untouched by this - the
+archive is searchable, citable and readable, and it is not a constellation.
+
+The vector pass is incremental and hashed, so a rebuild of an unchanged corpus is a
+quarter of a second and does not wake the embedder at all. It is also OPTIONAL: if
+ChromaDB or Ollama is not there, the reason is printed and the galaxy is still built,
+because the keyword brain has always worked without either.
+
+Python 3. The galaxy half is standard library only; the vector half lives in ingest.py
+and needs chromadb, pypdf and a local Ollama.
 
 Usage:
     python build.py                 # auto-detects ./notes, else the project root
     python build.py path/to/notes
+    python build.py --no-vectors    # the galaxy only, no embedding
+    python build.py --vectors-only  # the vector store only, leave the galaxy alone
+    python build.py --force-vectors # re-embed every chunk, ignoring the hashes
 """
 
 import json
@@ -179,7 +199,13 @@ def find_markdown(root):
     return found
 
 
+FLAGS = ("--no-vectors", "--vectors-only", "--force-vectors")
+
+
 def pick_notes_root(project_root, argv):
+    # Positional arguments only: the flags are not directories, and a path argument is
+    # still the first thing after the program name for every caller that had one.
+    argv = [a for a in argv if a not in FLAGS]
     if len(argv) > 1:
         given = os.path.abspath(argv[1])
         if not os.path.isdir(given):
@@ -354,12 +380,50 @@ def write_outputs(project_root, notes_root, nodes, links, unresolved):
     return graph_path, index_path, degree, groups
 
 
+def build_vectors(project_root, force=False):
+    """THE INGESTION ENGINE, run as the second half of a build.
+
+    Kept behind its own try/except and its own import for one reason: the galaxy must
+    still build on a machine where chromadb was never installed and Ollama was never
+    started. Everything this can go wrong with - a missing package, a stopped model
+    server, a locked sqlite file - prints a sentence saying which, and the build that
+    has already written graph-data.js still exits zero. A semantic index is an upgrade
+    to retrieval, not a new precondition for having a galaxy at all.
+    """
+    try:
+        import ingest
+    except Exception as exc:                                   # noqa: BLE001
+        print("  vectors    : skipped - could not import ingest.py (%s)" % exc)
+        return None
+    try:
+        summary = ingest.reindex(force=force)
+    except ingest.EmbedDown as exc:
+        print("  vectors    : skipped - %s" % exc)
+        print("               the galaxy is built; retrieval falls back to keywords")
+        return None
+    except ingest.IngestError as exc:
+        print("  vectors    : skipped - %s" % exc)
+        return None
+    except Exception as exc:                                   # noqa: BLE001
+        print("  vectors    : skipped - unexpected %s: %s" % (type(exc).__name__, exc))
+        return None
+    ingest._print_summary(summary)
+    return summary
+
+
 def main():
     project_root = os.path.dirname(os.path.abspath(__file__))
     notes_root = pick_notes_root(project_root, sys.argv)
+    do_vectors = "--no-vectors" not in sys.argv
+    vectors_only = "--vectors-only" in sys.argv
+    force_vectors = "--force-vectors" in sys.argv
 
     print("Knowledge Galaxy indexer")
     print("  notes root : %s" % notes_root)
+
+    if vectors_only:
+        build_vectors(project_root, force=force_vectors)
+        return
 
     nodes = build_nodes(notes_root, project_root)
     if not nodes:
@@ -386,6 +450,13 @@ def main():
             len(unresolved), ", ".join("%s x%d" % (k, v) for k, v in top)))
     print("  wrote      : %s" % os.path.relpath(graph_path, project_root))
     print("  wrote      : %s" % os.path.relpath(index_path, project_root))
+
+    # ---- and now the other index, over the other formats, in the other two folders.
+    # Last, so that a vector pass that cannot run has already left a complete galaxy
+    # behind it, and /remember's in-process rebuild (which calls the functions above
+    # directly, not this main) is unaffected either way.
+    if do_vectors:
+        build_vectors(project_root, force=force_vectors)
 
 
 if __name__ == "__main__":

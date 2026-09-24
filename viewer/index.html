@@ -45,6 +45,15 @@
     /* The web's colour, and nothing else's. Kept in step with WEB_CYAN in the script
        below, which washes the galaxy with the same value. */
     --web:#22e0ff;
+    /* THE THIRD PROVENANCE, and it is deliberately NOT cyan. The eye has already been
+       taught one rule on this deck - cyan means somebody else's page - and a contract in
+       the employer's own archive is the opposite of that: it is theirs, it is on this
+       disk, and it was never fetched. So a cited document reads as a warm paper amber,
+       inside the "your own material" family with the planets, and distinguished from them
+       by shape rather than by hue: a planet's marker is a round dot, a document's is a
+       small square, because a file is not a star and must never be clicked expecting a
+       camera flight. */
+    --doc:#f0b866;
     /* THE SPRING, and the reason it is a variable. Overshoot is the whole character of
        this deck - a surface arrives, leans past its mark and settles - and a spring with
        a different number in six rules is six different surfaces. Capped at 250ms
@@ -332,6 +341,39 @@
     transform:translateY(-2px)}
   #answer.web{border-color:rgba(34,224,255,.4);
     box-shadow:0 20px 60px rgba(0,0,0,.55),0 0 0 1px rgba(34,224,255,.12) inset}
+
+  /* ---------- the third provenance: a document in your own archive ----------
+     A cited file gets the same chip shape as a note, in amber rather than cyan, with a
+     SQUARE marker and its page number in the mono face. Every one of those three is a
+     promise about what a click does: a round dot flies the camera to a planet, and this
+     cannot, because there is no planet for archive/Q3_Contract.pdf - so it opens the
+     panel instead and says which page the sentence came from.
+
+     Transform and opacity only, like everything else that moves on this deck. */
+  .dchip{border:1px solid rgba(240,184,102,.28);background:rgba(240,184,102,.07);
+    color:var(--ink);border-radius:999px;padding:5px 11px;font-size:11.5px;cursor:pointer;
+    text-align:left;max-width:100%;overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap;
+    transition:background .18s,border-color .18s,transform .12s ease-out}
+  .dchip:hover{background:rgba(240,184,102,.18);border-color:rgba(240,184,102,.6);
+    transform:translateY(-2px)}
+  .dchip i{width:6px;height:6px;border-radius:1.5px;background:var(--doc);
+    display:inline-block;margin-right:7px;box-shadow:0 0 7px var(--doc)}
+  .dchip b{font-weight:500;font-family:var(--mono);font-size:10.5px;color:var(--doc);
+    margin-left:6px;letter-spacing:.02em}
+  #panel.docs .kicker{color:var(--doc)}
+  .doclist{display:flex;flex-direction:column;gap:10px;margin-top:2px}
+  .doc-item{display:block;border:1px solid rgba(240,184,102,.2);
+    background:rgba(240,184,102,.05);border-radius:12px;padding:11px 13px}
+  .doc-item .t{display:block;font-size:13px;line-height:1.35;color:#fff}
+  .doc-item .u{display:block;margin-top:5px;font-size:11px;color:var(--doc);
+    font-family:var(--mono);letter-spacing:.01em;word-break:break-all}
+  /* THE HONEST LINE ABOUT A SCAN, and it is styled as a footnote rather than a warning.
+     Nothing has gone wrong: a page of photographed paper is a perfectly ordinary thing to
+     have filed. Amber, quiet, and never red. */
+  .scan-note{margin-top:14px;padding:10px 12px;border-radius:10px;
+    border:1px solid rgba(240,184,102,.22);background:rgba(240,184,102,.05);
+    font-size:11.5px;line-height:1.5;color:rgba(240,184,102,.92)}
 
   /* ---------- brain / ask bar ----------
      THE TOAST. Its column is the canvas's, never the window's: with the panel open it
@@ -976,7 +1018,7 @@
        and no longer moving while it does. The state is information; the motion is not. */
     #focusface .fring,#focusface .feye,#focusface .fbarm,#focusface .fscan{animation:none}
     #answer .a .ch,#answer .a.typed .ch{opacity:1;transition:none}
-    .chip:hover,a.src-item:hover,a.wchip:hover,#send:hover:not(:disabled),
+    .chip:hover,a.src-item:hover,a.wchip:hover,.dchip:hover,#send:hover:not(:disabled),
     #reset:hover,.organ:hover:not(:disabled),#ask-yes:hover:not(:disabled),
     #ask-no:hover:not(:disabled){transform:none}
   }
@@ -2140,6 +2182,7 @@ async function loadLib() {
     // panel's clothes would be claiming to have come from outside, which is the one
     // confusion this whole colour scheme exists to prevent.
     $('panel').classList.remove('web');
+    $('panel').classList.remove('docs');
     $('p-excerpt').className = '';
     $('p-neighbours').className = 'chips';
     $('p-nb-head').textContent = 'Connected';
@@ -2214,6 +2257,7 @@ async function loadLib() {
 
   function openSources(question, sources, backend) {
     const list = (sources || []).filter(function (s) { return safeUrl(s && s.url); });
+    $('panel').classList.remove('docs');
     $('panel').classList.add('web');
     $('panel').querySelector('.kicker').style.color = '';   // the .web rule owns it now
     $('p-group').textContent = 'live web';
@@ -2232,6 +2276,87 @@ async function loadLib() {
     box.className = 'srclist';
     box.innerHTML = '';
     list.forEach(function (s) { box.appendChild(sourceLink(s, false)); });
+    $('panel').classList.add('open');
+  }
+
+  /* ---- the same panel, the third world: your own filed documents ----
+     A PDF, a Word file or a text file under notes/ or archive/ that a passage was
+     actually quoted from. Everything here comes from the server's `citations` array and
+     nothing is composed on this page - the label "Q3_Contract.pdf · page 4" is built once
+     in ingest.cite_label() so the panel, the chip and any harness that checks the wording
+     are reading the same string.
+
+     WHAT IS DELIBERATELY NOT HERE, and each omission is a promise:
+       no link. There is no safe way to open a local file from a page served over http,
+         and a dead <a> that looks live is worse than a plain row of text. The path is
+         shown in full instead, because a path you can read is a path you can open
+         yourself in one keystroke from your own file manager.
+       no excerpt. The passage went to the model and the answer is above; reprinting 500
+         tokens of a contract in a side panel is not a citation, it is a wall.
+       no invented page. A .docx and a .md have no pages, so they are named alone. */
+  function docCite(c) {
+    return c && typeof c === 'object' && typeof c.file === 'string' && c.file ? c : null;
+  }
+
+  function docChip(c) {
+    const b = document.createElement('button');
+    b.className = 'dchip';
+    b.title = String(c.file || '');
+    b.innerHTML = '<i></i><span>' + esc(String(c.name || c.file)) + '</span>' +
+      (c.page ? '<b>p' + esc(String(c.page)) + '</b>' : '');
+    /* It opens the panel it belongs to. A note chip flies the camera; this cannot, and
+       pretending otherwise would be the one thing the square marker promised it would
+       not do. */
+    b.onclick = function () { openDocs(lastDocQuestion, lastDocCites, lastDocScans); };
+    return b;
+  }
+
+  let lastDocQuestion = '', lastDocCites = [], lastDocScans = [];
+
+  function openDocs(question, cites, scans) {
+    const list = (cites || []).map(docCite).filter(Boolean);
+    const notes = (scans || []).filter(function (s) { return typeof s === 'string' && s; });
+    $('panel').classList.remove('web');
+    $('panel').classList.add('docs');
+    $('panel').querySelector('.kicker').style.color = '';   // the .docs rule owns it now
+    $('p-group').textContent = 'your documents';
+    $('p-label').textContent = question || 'From your files';
+    const pages = list.filter(function (c) { return c.page; }).length;
+    $('p-meta').textContent = list.length + ' passage' + (list.length === 1 ? '' : 's') +
+      (pages ? ' · ' + pages + ' cited page' + (pages === 1 ? '' : 's') : '') +
+      ' · read from disk, never sent anywhere';
+    $('p-excerpt').className = 'src-note';
+    $('p-excerpt').textContent = list.length
+      ? 'Answered from these files in your own notes and archive.'
+      : 'Nothing was quoted from a file.';
+    $('p-nb-head').style.display = list.length ? '' : 'none';
+    $('p-nb-head').textContent = 'Cited';
+    const box = $('p-neighbours');
+    box.className = 'doclist';
+    box.innerHTML = '';
+    list.forEach(function (c) {
+      const row = document.createElement('div');
+      row.className = 'doc-item';
+      const t = document.createElement('span');
+      t.className = 't';
+      t.textContent = String(c.label || c.name || c.file);
+      const u = document.createElement('span');
+      u.className = 'u';
+      u.textContent = String(c.file);
+      row.appendChild(t);
+      row.appendChild(u);
+      box.appendChild(row);
+    });
+    /* AND THE HONEST LINE, once, at the bottom - the server's own constant, appended
+       here rather than written into the answer. A reply that was complete from page 1
+       does not need a sentence about page 4 wedged into its prose, and the employer is
+       still entitled to know page 4 is there and could not be read. */
+    notes.slice(0, 2).forEach(function (line) {
+      const p = document.createElement('div');
+      p.className = 'scan-note';
+      p.textContent = line;
+      box.appendChild(p);
+    });
     $('panel').classList.add('open');
   }
 
@@ -2378,7 +2503,7 @@ async function loadLib() {
     return used.length >= CLUSTER_MIN ? 'cluster' : 'fly';
   }
 
-  function renderAnswer(question, text, isError, ids, sources) {
+  function renderAnswer(question, text, isError, ids, sources, cites) {
     /* Every answer starts by clearing the frame thumbnail. A picture left sitting
        beside the next answer would read as the evidence for it, which it is not. */
     hideProof();
@@ -2401,11 +2526,23 @@ async function loadLib() {
        of web links. The label changes too - "Drawn from" is a claim about the
        collection and would be false here. */
     const web = (sources || []).filter(function (s) { return safeUrl(s && s.url); });
+    /* THE THIRD KIND OF CHIP, and it sits in the same row as the notes for a reason: a
+       planet and a filed PDF are both the employer's own material, so "Drawn from" is
+       true of both and one row says where the sentence came from. A file that IS a planet
+       is not named twice - the note chip already names it and flies the camera to it,
+       which is strictly more than the document chip can do. */
+    const nodeFiles = {};
+    used.forEach(function (n) { if (n && n.file) nodeFiles[n.file] = true; });
+    const docs = (cites || []).map(docCite).filter(Boolean)
+      .filter(function (c) { return !nodeFiles[c.file]; });
     src.querySelector('.lbl').textContent = web.length ? 'According to' : 'Drawn from';
-    src.style.display = (used.length || web.length) ? '' : 'none';
+    src.style.display = (used.length || web.length || docs.length) ? '' : 'none';
     $('answer').classList.toggle('web', !!web.length);
     if (web.length) web.forEach(function (s) { box.appendChild(sourceLink(s, true)); });
-    else used.forEach(function (n) { box.appendChild(chip(n)); });
+    else {
+      used.forEach(function (n) { box.appendChild(chip(n)); });
+      docs.forEach(function (c) { box.appendChild(docChip(c)); });
+    }
     $('answer').classList.add('show');
     /* AND RE-MEASURE, because an answer is the one thing that changes the TOAST's height
        and the no-overlap law is a statement about two heights. A long answer with a source
@@ -5531,8 +5668,8 @@ async function loadLib() {
 
     /* One reply path for answers and errors alike: show it, say it, then let the
        camera prove it. Speaking starts first so the flight happens mid-sentence. */
-    function respond(text, isError, ids, kind, sources, backend, pending) {
-      const used = renderAnswer(question, text, isError, ids, sources);
+    function respond(text, isError, ids, kind, sources, backend, pending, cites, scans) {
+      const used = renderAnswer(question, text, isError, ids, sources, cites);
       const plan = decideCamera(kind, used, isError);
       if (!speak(spokenForm(text))) idleStatus();
       /* THE PROPOSAL. The server has asked them something and is waiting; the pair of
@@ -5547,11 +5684,34 @@ async function loadLib() {
         pulseWeb();
         openSources(question, sources, backend);
       }
+      /* THE DOCUMENT PANEL, and the one condition on it is that it must never fight the
+         planet panel. Measured, not assumed: on a question that cited BOTH a note and a
+         PDF, this opened the document panel and applyCamera() below then flew to the note
+         and opened the note's panel over the top of it - one wasted paint and an end state
+         that depended on which line ran last.
+
+         So the rule is the honest one. If anything in the galaxy lit, the galaxy's own
+         panel wins: the camera is already on its way there, the note has an excerpt and
+         connected chips, and that is strictly more than this panel could say. The document
+         panel opens only when NOTHING lit - an answer wholly out of archive/, where there
+         is no star and no other surface on this deck can say where the sentence came from.
+
+         Either way the document keeps its chip in the card's footer, and the chip opens
+         this panel on demand. Nothing is hidden; the deck just stops arguing with itself. */
+      const docs = (cites || []).map(docCite).filter(Boolean);
+      lastDocQuestion = question;
+      lastDocCites = docs;
+      lastDocScans = (scans || []).filter(function (s) { return typeof s === 'string' && s; });
+      if (kind !== 'web' && docs.length && !used.length) {
+        openDocs(question, docs, lastDocScans);
+      }
       /* NO SOURCES ROW OVER PROSE THE ASSISTANT WROTE ITSELF. A composed answer cites
          nothing, so a LIVE WEB panel left open by the PREVIOUS turn would sit under a
          draft it had no hand in and read as its provenance. Closed here, and only when
          it is the web panel, so a note the employer opened themselves stays open. */
-      if (kind === 'compose' && $('panel').classList.contains('web')) clearSelection();
+      if (kind === 'compose' &&
+          ($('panel').classList.contains('web') ||
+           $('panel').classList.contains('docs'))) clearSelection();
       applyCamera(plan, used);
     }
 
@@ -5572,14 +5732,22 @@ async function loadLib() {
       // tag. safeUrl() then has the last word on every one of them.
       const sources = (data && Array.isArray(data.sources)) ? data.sources : null;
       const backend = (data && typeof data.backend === 'string') ? data.backend : '';
+      /* CITATIONS COME FROM THE SERVER OR NOT AT ALL, on exactly the rule `sources`
+         already follows above. This page never derives a file name from the answer text
+         and never guesses a page number: a citation read out of prose a model wrote is
+         not a citation, it is the model's recollection of one. docCite() then has the
+         last word on every entry, the way safeUrl() does for a link. */
+      const cites = (data && Array.isArray(data.citations)) ? data.citations : null;
+      const scans = (data && Array.isArray(data.scanNotes)) ? data.scanNotes : null;
       if (!data) {
         respond('The server replied with something that was not JSON (HTTP ' +
           res.status + ').', true, null, 'chat');
       } else if (data.error) {
-        respond(data.error, true, data.nodes, kind, sources, backend, data.pending);
+        respond(data.error, true, data.nodes, kind, sources, backend, data.pending,
+                cites, scans);
       } else {
         respond(data.answer || '(empty answer)', false, data.nodes, kind, sources,
-                backend, data.pending);
+                backend, data.pending, cites, scans);
       }
     } catch (e) {
       respond('Could not reach the brain. Start it with "python server.py" and open ' +
