@@ -49,8 +49,93 @@ const CDP = 'http://127.0.0.1:' + PORT;
 const WORK_URL = 'https://example.com/';
 const NET_TIMEOUT_MS = 10000;
 const WANT_W = 1280, WANT_H = 860;
-const DESK_W = 320, DESK_H = 210;      // what viewer/index.html asks requestWindow for
+const DESK_W = 320, DESK_H = 280;      // what viewer/index.html asks requestWindow for
 const LEDGER = join(dirname(fileURLToPath(import.meta.url)), 'focus-ledger.json');
+
+/* THE TIDY CARD, out in the floating window - which is the harder of its two homes and
+ * therefore the one worth measuring. Out there the card is 320px wide instead of 460,
+ * it is display:flex and position:static instead of fixed, and its padding comes from
+ * DESK_CSS rather than from the page's stylesheet. Three different numbers and one rule:
+ * every line rectangle of every text node lies inside the card's own padded box, read
+ * from the PiP window's own getComputedStyle so that a change to DESK_CSS moves the
+ * assertion with it instead of falsifying it.
+ *
+ * Line rectangles, not element rectangles: an element that wraps has one rectangle per
+ * line, and a bounding box averaged over two lines can sit inside the card while the
+ * first line hangs out of it. The tolerance is the trailing side-bearing of a last glyph
+ * plus the header row's 0.22em of letter-spacing after its final letter - ink-free space
+ * the engine still measures. A pixel of that is not text outside the card; ten would be.
+ */
+const TIDY_TOL = 1.5;
+const TIDY_PIP = `(function () {
+  var w = documentPictureInPicture.window;
+  if (!w) return null;
+  var d = w.document, card = d.getElementById('focuscard');
+  if (!card) return null;
+  var cs = w.getComputedStyle(card), cr = card.getBoundingClientRect();
+  var num = function (v) { return parseFloat(v) || 0; };
+  var r2 = function (v) { return Math.round(v * 100) / 100; };
+  var box = {
+    left:   cr.left   + num(cs.borderLeftWidth)   + num(cs.paddingLeft),
+    right:  cr.right  - num(cs.borderRightWidth)  - num(cs.paddingRight),
+    top:    cr.top    + num(cs.borderTopWidth)    + num(cs.paddingTop),
+    bottom: cr.bottom - num(cs.borderBottomWidth) - num(cs.paddingBottom)
+  };
+  var lines = [], worst = -1e9, placed = [];
+  var walk = d.createTreeWalker(card, w.NodeFilter.SHOW_TEXT, null);
+  for (var n; (n = walk.nextNode());) {
+    if (!n.nodeValue || !n.nodeValue.trim()) continue;
+    var host = n.parentElement;
+    if (!host) continue;
+    var hs = w.getComputedStyle(host);
+    if (hs.display === 'none' || hs.visibility === 'hidden' || +hs.opacity === 0) continue;
+    if (!host.getClientRects().length) continue;
+    var label = (host.id || host.tagName.toLowerCase()) +
+                ' "' + n.nodeValue.trim().slice(0, 24) + '"';
+    if (hs.position === 'absolute' || hs.position === 'fixed') placed.push(label);
+    var rg = d.createRange(); rg.selectNodeContents(n);
+    var rs = rg.getClientRects();
+    for (var i = 0; i < rs.length; i++) {
+      var r = rs[i];
+      if (r.width < 0.5 && r.height < 0.5) continue;
+      var over = Math.max(box.left - r.left, r.right - box.right,
+                          box.top - r.top, r.bottom - box.bottom);
+      if (over > worst) worst = over;
+      lines.push({ who: label, over: r2(over),
+                   rect: [r2(r.left), r2(r.top), r2(r.right), r2(r.bottom)] });
+    }
+  }
+  return {
+    box: { left: r2(box.left), right: r2(box.right),
+           top: r2(box.top), bottom: r2(box.bottom) },
+    card: [Math.round(cr.width), Math.round(cr.height)],
+    win: [w.innerWidth, w.innerHeight],
+    /* What the rows ADD UP TO against what they were given. The overflow is hidden out
+       here (html,body{overflow:hidden}), so a card whose rows want more than the window
+       has does not scroll and does not complain - it silently cuts the bottom off the
+       button row, which is exactly the failure this measurement exists to name.
+       Measured from the last child's own bottom edge and NOT from scrollHeight: Chrome
+       leaves the bottom padding out of scrollHeight once the content overflows, so
+       scrollHeight under-reports the shortfall by exactly the padding that is missing -
+       it read 170 into 167 for a button row hanging 16px out of the card.
+       Note the shape of the answer: the LOCK THIS TAB row carries margin-top:auto, so
+       whenever the rows fit they are pushed out to fill the glass exactly and need EQUALS
+       have. This number is therefore binary and not a margin to watch: equal is fitting,
+       greater is a control with its bottom cut off. */
+    need: (function () {
+      var low = cr.top, kids = card.children;
+      for (var j = 0; j < kids.length; j++) {
+        var kr = kids[j].getBoundingClientRect();
+        if (kr.height && kr.bottom > low) low = kr.bottom;
+      }
+      return r2(low - cr.top + num(cs.paddingBottom) + num(cs.borderBottomWidth));
+    })(),
+    have: r2(cr.height),
+    pad: [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft].join(' '),
+    count: lines.length, placed: placed, worst: r2(worst),
+    outside: lines.filter(function (l) { return l.over > ${TIDY_TOL}; })
+  };
+})()`;
 
 const CHROMES = [
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
@@ -383,6 +468,47 @@ async function main() {
   const size = await page.json('__galaxy.session.desk.size');
   ok(fits(size), 'the window is the size the card was written for: ' + size.join('x') +
      ' (asked ' + DESK_W + 'x' + DESK_H + ')', JSON.stringify({ granted, size }));
+  /* THE TIDY CARD, now that the window is the size the card was written for - measuring
+     it before the correction would be measuring a card that has 80% of the screen to
+     spread out in, which is not the box the text has to live inside.
+     And measured in the card's TALLEST dress, because the shortest one proves nothing:
+     an intent is dictated first, and one with no spaces in it, so the card is carrying
+     its clamped intent row and the status lines are carrying a word that cannot be
+     broken at a space. A containment check against "on target" and an empty intent would
+     be green on a card two rows shorter than the one you actually get. */
+  const HARD = 'rewriting https://internal.example.com/queues/invoice-importer/retries';
+  await page.evaluate('__galaxy.session.answer(' + JSON.stringify(HARD) + ')');
+  await sleep(1200);
+  const intent = await page.evaluate(
+    '(function(){var w=documentPictureInPicture.window;' +
+    'var e=w&&w.document.getElementById("focus-intent");' +
+    'return e?e.textContent:"";})()');
+  ok(intent.indexOf('internal.example.com') !== -1,
+     'the desktop card is carrying an unbreakable ' + HARD.length + '-character intent',
+     JSON.stringify(intent));
+  const tidy = await page.json(TIDY_PIP);
+  ok(!!tidy && tidy.count >= 5,
+     'there are ' + (tidy && tidy.count) + ' line boxes of text out there to measure',
+     JSON.stringify(tidy));
+  if (tidy) {
+    note('padded box ' + JSON.stringify(tidy.box) + ' · card ' + tidy.card.join('x') +
+         ' in a ' + tidy.win.join('x') + ' window · padding ' + tidy.pad +
+         ' · rows want ' + tidy.need + 'px of the ' + tidy.have + 'px they have');
+    ok(tidy.need <= tidy.have,
+       'the card\'s rows FIT the window they were given: ' + tidy.need + 'px into ' +
+       tidy.have + 'px',
+       JSON.stringify({ need: tidy.need, have: tidy.have, win: tidy.win }));
+    ok(tidy.outside.length === 0,
+       'THE TIDY CARD: all ' + tidy.count + ' of them lie inside the card\'s padded box ' +
+       'out in the floating window - worst overhang ' + tidy.worst + 'px',
+       JSON.stringify({ box: tidy.box, outside: tidy.outside }));
+    ok(tidy.placed.length === 0,
+       'and none of that text is absolutely positioned: the digits keep their own row',
+       JSON.stringify(tidy.placed));
+    ok(tidy.card[0] <= tidy.win[0],
+       'and the card did not grow wider than the window it is in: ' +
+       tidy.card[0] + 'px in ' + tidy.win[0] + 'px');
+  }
   /* The corner, as the window manager actually granted it. Chrome may refuse a
      placement outright - moveTo on a PiP window is silently ignored here, and its own
      default placement happens to be this same corner - so the claim is checked as "the

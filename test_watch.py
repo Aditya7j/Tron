@@ -523,21 +523,45 @@ for key, line in server.STUCK_LINES.items():
 
 head("a face on the desktop, so you always know")
 
-ok("documentPictureInPicture.requestWindow" in watch_js,
-   "the face asks for a Document Picture-in-Picture window")
-ok("disallowReturnToOpener: true" in watch_js,
+# THE FACE NO LONGER OWNS A WINDOW. It used to open its own Picture-in-Picture window,
+# and three organs each opening one was where that arrangement's bugs came from; there is
+# now ONE desktop card, DESK_ORGANS, shared by the face, the countdown, the watch chip and
+# the eyes line. So the six checks below deliberately read the whole page rather than the
+# watch slice: the window is still asked for, aimed and refused in exactly the ways this
+# suite has always insisted on - just not in this organ's own source any more. What each
+# one replaced is named in its claim, so a future reader is not left comparing this file
+# against a design that no longer exists.
+ok("documentPictureInPicture.requestWindow" in page_source,
+   "the face asks for a Document Picture-in-Picture window (the shared desk card's now)")
+ok("disallowReturnToOpener: true" in page_source,
    "with no button back into this tab: it is a card, not a window to work in")
-ok("win.moveTo(" in watch_js and "availWidth" in watch_js,
-   "and it is aimed at the top-right of the real desktop")
-ok("if (watchOn) stopWatch('face');" in watch_js,
-   "closing the face stops the watch - a watch with its face shut is the thing "
-   "this is for")
-ok("const FACE_MARKUP" in watch_js and watch_js.count("FACE_MARKUP") >= 3,
-   "one markup serves both homes", str(watch_js.count("FACE_MARKUP")))
-ok("facePinWanted = true;" in watch_js and "pointerdown" in watch_js,
-   "a pin refused for want of a gesture is retried on the next click")
+ok("win.moveTo(" in page_source and "availWidth" in page_source,
+   "and it is aimed at a corner of the real desktop rather than left where it lands")
+ok("'facecard'" in page_source and "DESK_ORGANS" in page_source and
+   "shell.appendChild(el)" in page_source,
+   "the face is one of the organs that MOVES into that card - adopted, not rebuilt, so "
+   "its handlers come along")
+ok(watch_js.count("FACE_MARKUP") == 2 and "const FACE_MARKUP" in watch_js,
+   "one markup serves both homes: written once, injected once, and carried between "
+   "documents by the move above", str(watch_js.count("FACE_MARKUP")))
+ok("deskWanted = canDesk && !deskShut && deskArmable();" in page_source and
+   "if (deskWanted && deskArmable() && !deskWin) deskOpen('click');" in page_source,
+   "a card refused for want of a gesture is retried on the next click, wherever you "
+   "click it")
 ok("nopin" in watch_js and "will not let my face off the" in watch_js,
    "and if it never lands, the page says so rather than pretending")
+# THE OTHER HALF OF THE SAME CHANGE, and the reason the old assertion had to go rather
+# than be re-pointed: closing the card must NOT stop the watch, because the card is four
+# organs' home and you may have shut it while a session is still running. It repaints and
+# remembers that you closed it; stopping stays where it always was - the chip, or saying so.
+pagehide = page_source.split("win.addEventListener('pagehide'", 1)
+pagehide_body = pagehide[1].split("});", 1)[0] if len(pagehide) == 2 else ""
+ok("deskShut = true;" in pagehide_body and "paintWatch();" in pagehide_body
+   and "stopWatch" not in pagehide_body,
+   "closing the shared card repaints the organs and does not stop any of them - it is "
+   "four organs' home, not this one's window", pagehide_body[:160])
+ok("$('watch-stop').onclick" in watch_js and "stopWatch('chip')" in watch_js,
+   "and the watch is stopped from the chip, which is a button that is always there")
 
 # The chip. It must not claim a frame count it has not sent.
 ok("'watching · ' + (watchNudges" in watch_js,
@@ -553,7 +577,11 @@ stop = watch_js.split("function stopWatch(reason)", 1)
 stop_body = stop[1].split("\n  /* THE TICK", 1)[0] if len(stop) == 2 else ""
 ok("clearInterval(watchTimer)" in stop_body,
    "stopping clears the five-second timer")
-ok("closeFace();" in stop_body, "and takes the face down with it")
+# And it no longer closes a window of its own: paintWatch() drops .show off the face row
+# and calls deskTend(), which closes the shared card only if the watch was the last organ
+# in it. A watch stopping must not take a countdown someone else is reading with it.
+ok("paintWatch();" in stop_body,
+   "and takes the face down with it, leaving the shared card to deskTend()")
 ok("reason === 'said' || reason === 'chip' || reason === 'face'" in stop_body,
    "a man changing his mind gets a pleasantry; a share that died gets the truth")
 ok("if (was && watchOn) stopWatch('ended');" in page_source,

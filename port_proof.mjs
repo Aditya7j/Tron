@@ -208,16 +208,26 @@ async function main() {
   const page = new Page(tabGalaxy.webSocketDebuggerUrl);
   await page.open();
   await page.send('Runtime.enable');
-  // Wrapped, not stubbed: the line is recorded AND still comes out of the speakers.
+  /* THE FUNNEL, NOT THE ENGINE. Wrapped, not stubbed: the line is recorded AND still
+     comes out of the speakers. speakLine() is the one function in that page that speaks,
+     and it is what is watched here - because on the local voice (piper) there is no
+     utterance to intercept at all, so a wrapper around speechSynthesis.speak would have
+     recorded nothing but the warm-up blank and every claim below would have failed for
+     want of an instrument rather than for want of a voice. */
+  const hasFunnel = '!!(window.__galaxy && __galaxy.speech && __galaxy.speech.speakLine)';
+  const funnelBy = Date.now() + 30000;
+  let funnel = false;
+  while (!(funnel = await page.evaluate(hasFunnel)) && Date.now() < funnelBy) {
+    await sleep(250);
+  }
+  ok(funnel === true, 'the viewer is up and exposes its speech funnel, speakLine()');
   await page.evaluate(`
     (function () {
       if (window.__spoken) return 'already';
       window.__spoken = [];
-      var real = speechSynthesis.speak.bind(speechSynthesis);
-      speechSynthesis.speak = function (u) {
-        window.__spoken.push(String(u.text || ''));
-        return real(u);
-      };
+      addEventListener('speakLine', function (ev) {
+        window.__spoken.push(String((ev.detail && ev.detail.text) || ''));
+      });
       return 'wrapped';
     })()`);
   const spokenCount = () => page.evaluate('window.__spoken.length');

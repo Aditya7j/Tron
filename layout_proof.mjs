@@ -11,7 +11,11 @@
  *
  *   open a note panel  ->  start a session BY VOICE (no gesture, so the card stays
  *   in the page)  ->  the card must sit LEFT of the panel edge and the note's title
- *   must be readable  ->  end the session and let it report  ->  the toast must stop
+ *   must be readable  ->  dictate an intent that cannot be broken, and every line box
+ *   of text in the card must lie inside the card's own padded box  ->  put a real
+ *   paragraph in the answer toast and shorten the viewport until the two surfaces want
+ *   the same pixels: they must not overlap, and the toast must give up WIDTH rather
+ *   than position  ->  end the session and let it report  ->  the toast must stop
  *   at the panel edge with every Connected chip legible  ->  wait eight seconds  ->
  *   the card retires and the panel is still whole  ->  press FOCUS  ->  the desktop
  *   card takes over, the in-page card vanishes, and the floating window is sized for
@@ -48,7 +52,14 @@ const CHROMES = [
   'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
   process.env.LOCALAPPDATA + '/Google/Chrome/Application/chrome.exe',
 ];
+const SHORT = 380;            // the squeezed height that makes the two surfaces collide
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/* Two rectangles do not overlap, in the form the browser's own coordinates take: touching
+   edges are not an overlap, which is why every comparison here is <= and not <. A missing
+   rectangle is a surface that is not on screen, and nothing on screen can be covered by
+   something that is not. */
+const disjoint = (a, b) => !a || !b ||
+  a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom;
 let checks = 0; const bad = [];
 const ok = (c, claim, detail) => {
   checks++; console.log((c ? '  ok   ' : '  FAIL ') + claim);
@@ -92,6 +103,72 @@ async function waitFor(page, expr, ms = 8000) {
   }
   return false;
 }
+
+/* THE TIDY CARD, measured rather than eyeballed.
+ *
+ * The bug this exists for was text leaving its box: a long status line running out
+ * past the rounded corner, a dictated intent - which can be a URL, and a URL has no
+ * spaces to break at - pushing the card's own edge off the screen. So the claim is
+ * not "it looks contained". The claim is arithmetic: for every TEXT NODE in the card,
+ * every one of its line rectangles lies inside the card's PADDED box - the card's
+ * border box inset by its own computed border and padding, read from the browser, so
+ * a change to --cardpad moves the assertion with it rather than falsifying it.
+ *
+ * Line rectangles and not element rectangles, because an element that wraps has one
+ * rectangle per line and it is the LONGEST line that escapes; a bounding box averaged
+ * over two lines can sit inside the card while the first line hangs out of it.
+ *
+ * The tolerance is a real half-pixel matter and not a fudge to make a failure pass:
+ * a Range rectangle is a line box, and a line box carries the trailing side-bearing of
+ * its last glyph plus - on the uppercase header row - 0.22em of letter-spacing after
+ * the final letter, which is ink-free space the layout engine still measures. One
+ * pixel of that is not text outside the card. Ten would be.
+ */
+const TIDY_TOL = 1.5;
+const TIDY = `(function () {
+  var card = document.getElementById('focuscard');
+  if (!card || getComputedStyle(card).display === 'none') return null;
+  var cs = getComputedStyle(card), cr = card.getBoundingClientRect();
+  var num = function (v) { return parseFloat(v) || 0; };
+  var box = {
+    left:   cr.left   + num(cs.borderLeftWidth)   + num(cs.paddingLeft),
+    right:  cr.right  - num(cs.borderRightWidth)  - num(cs.paddingRight),
+    top:    cr.top    + num(cs.borderTopWidth)    + num(cs.paddingTop),
+    bottom: cr.bottom - num(cs.borderBottomWidth) - num(cs.paddingBottom)
+  };
+  var r2 = function (v) { return Math.round(v * 100) / 100; };
+  var lines = [], worst = -1e9, placed = [];
+  var walk = document.createTreeWalker(card, NodeFilter.SHOW_TEXT, null);
+  for (var n; (n = walk.nextNode());) {
+    if (!n.nodeValue || !n.nodeValue.trim()) continue;
+    var host = n.parentElement;
+    if (!host) continue;
+    var hs = getComputedStyle(host);
+    if (hs.display === 'none' || hs.visibility === 'hidden' || +hs.opacity === 0) continue;
+    if (!host.getClientRects().length) continue;
+    var label = (host.id || host.tagName.toLowerCase()) + ' "' + n.nodeValue.trim().slice(0, 24) + '"';
+    if (hs.position === 'absolute' || hs.position === 'fixed') placed.push(label);
+    var rg = document.createRange(); rg.selectNodeContents(n);
+    var rs = rg.getClientRects();
+    for (var i = 0; i < rs.length; i++) {
+      var r = rs[i];
+      if (r.width < 0.5 && r.height < 0.5) continue;
+      var over = Math.max(box.left - r.left, r.right - box.right,
+                          box.top - r.top, r.bottom - box.bottom);
+      if (over > worst) worst = over;
+      lines.push({ who: label, over: r2(over),
+                   rect: [r2(r.left), r2(r.top), r2(r.right), r2(r.bottom)] });
+    }
+  }
+  return {
+    box: { left: r2(box.left), right: r2(box.right),
+           top: r2(box.top), bottom: r2(box.bottom) },
+    cardW: Math.round(cr.width), cardH: Math.round(cr.height),
+    pad: [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft].join(' '),
+    count: lines.length, placed: placed, worst: r2(worst),
+    outside: lines.filter(function (l) { return l.over > ${TIDY_TOL}; })
+  };
+})()`;
 
 const profiles = []; const procs = [];
 async function main() {
@@ -154,6 +231,117 @@ async function main() {
     ok(clear, 'and the note title is fully readable: "' + titleBox.text + '"',
        JSON.stringify({ title: titleBox, card: r1.focuscard }));
   } else { note('no panel title element matched; skipping the title rectangle'); }
+
+  /* ---- 2b. THE TIDY CARD: the text lives inside the box ---------------- */
+  /* Answered with the hardest thing a dictated intent can be: no spaces to break at,
+     longer than the card is wide. A containment check against "on target" would pass
+     on a card with no wrapping at all and prove nothing about the rule being tested. */
+  const HARD = 'rewriting https://internal.example.com/queues/invoice-importer/retries?since=yesterday';
+  await page.evaluate('__galaxy.session.answer(' + JSON.stringify(HARD) + ')');
+  await sleep(900);
+  const shown = await page.evaluate('document.getElementById("focus-intent").textContent');
+  ok(shown.indexOf('internal.example.com') !== -1,
+     'the card is carrying an unbreakable ' + HARD.length + '-character intent',
+     JSON.stringify(shown));
+  const tidy = await page.json(TIDY);
+  ok(!!tidy && tidy.count >= 5,
+     'and there are ' + (tidy && tidy.count) + ' line boxes of text in it to measure',
+     JSON.stringify(tidy));
+  if (tidy) {
+    note('padded box ' + JSON.stringify(tidy.box) + ' · card ' + tidy.cardW + 'x' +
+         tidy.cardH + ' · padding ' + tidy.pad);
+    ok(tidy.outside.length === 0,
+       'THE TIDY CARD: every one of the ' + tidy.count + ' line boxes lies inside the ' +
+       'padded box - worst overhang ' + tidy.worst + 'px',
+       JSON.stringify({ box: tidy.box, outside: tidy.outside }));
+    ok(tidy.placed.length === 0,
+       'and none of that text is absolutely positioned: the digits keep their own row',
+       JSON.stringify(tidy.placed));
+    ok(tidy.cardW <= r1.focuscard.w + 1,
+       'and the long word did not widen the card itself: ' + tidy.cardW + 'px');
+  }
+
+  /* ---- 2c. THE MEASURED CLEARANCE: the toast and the card, at once ----- */
+  /* A real paragraph through the real renderer: the toast's height is the other half of
+     this law, and a height is content. This happens BEFORE the session ends on purpose -
+     once it has reported, an eight-second retirement is running and every second spent
+     here would be a second stolen from the check that measures it. */
+  const TOASTY = 'Three things, sir: the invoice importer retry queue, the ledger ' +
+    'migration you paused on Tuesday, and a note to yourself about the billing webhook ' +
+    'that has been sitting unread since the fourteenth of the month.';
+  await page.evaluate('__galaxy.say("what did I leave unfinished?",' +
+    JSON.stringify(TOASTY) + ',false,null)');
+  await sleep(600);
+  /* Both readings are taken under a device-metrics override, and the WIDTH is the same
+     1280 in both of them. That is not tidiness: --window-size=1280,860 gives a viewport of
+     1266 (Chrome's own furniture takes the difference), and the toast is centred on the
+     canvas, so a run that measured the roomy case at 1266 and the crowded case at 1280
+     would see the toast's left edge move by 7px for a reason that has nothing to do with
+     the rule being tested - and "it gave up width, not position" would fail on arithmetic
+     about window borders. Fixed width, one variable: height. */
+  const metrics = (h) => page.send('Emulation.setDeviceMetricsOverride',
+                                   { width: W, height: h, deviceScaleFactor: 0, mobile: false });
+  await metrics(H);
+  await sleep(700);
+  await page.evaluate('__galaxy.layout.run()');
+  await sleep(500);
+  const wide = await page.json('__galaxy.layout.last');
+  const wideR = await page.json('__galaxy.layout.rects');
+  const wv = await page.json('({vw:innerWidth,vh:innerHeight})');
+  ok(wv.vw === W && wv.vh === H,
+     'measuring at exactly ' + W + 'x' + H + ', which is the viewport the law names',
+     JSON.stringify(wv));
+  ok(!!(wide.toastBox && wide.cardBox),
+     'the governor measured BOTH boxes rather than assuming they are far apart',
+     JSON.stringify({ toast: wide.toastBox, card: wide.cardBox }));
+  ok(wide.overlap === false && disjoint(wideR.brain, wideR.focuscard),
+     'THE LAW at ' + W + 'x' + H + ': the toast and the card do not overlap',
+     JSON.stringify({ governor: wide.toastBox, toast: wideR.brain, card: wideR.focuscard }));
+
+  /* And now the case the law is actually FOR. At 1280x860 these two sit at opposite ends
+     of the screen, so a green check up there proves only that the window is tall. The
+     viewport is shortened - still 1280 WIDE, which is the width the law is stated for -
+     until the card's rows and the toast's rows genuinely want the same pixels, and the
+     governor has to give something up. */
+  await metrics(SHORT);
+  await sleep(700);
+  await page.evaluate('__galaxy.layout.run()');
+  await sleep(500);
+  const tight = await page.json('__galaxy.layout.last');
+  const tightR = await page.json('__galaxy.layout.rects');
+  const tv = await page.json('({vw:innerWidth,vh:innerHeight})');
+  note('squeezed to ' + tv.vw + 'x' + tv.vh + ' · card ' + JSON.stringify(tight.cardBox) +
+       ' · toast ' + JSON.stringify(tight.toastBox));
+  ok(tv.vw >= 1280 && tv.vh < H,
+     'squeezed to ' + tv.vw + 'x' + tv.vh + ': still at or above the 1280px the law names',
+     JSON.stringify(tv));
+  ok(tight.clearedToast === true,
+     'crowded, the governor had to move to clear the card - the rule FIRED, so what ' +
+     'follows is not true by luck',
+     JSON.stringify({ toast: tight.toastBox, card: tight.cardBox }));
+  ok(tight.overlap === false && disjoint(tightR.brain, tightR.focuscard),
+     'and crowded they STILL do not overlap: toast ' + JSON.stringify(tightR.brain) +
+     ' clear of card ' + JSON.stringify(tightR.focuscard),
+     JSON.stringify({ governor: { toast: tight.toastBox, card: tight.cardBox } }));
+  ok(!!tightR.brain && !!wideR.brain && Math.abs(tightR.brain.left - wideR.brain.left) <= 1 &&
+     tightR.brain.w < wideR.brain.w,
+     'and it gave up WIDTH, not position: ' + (wideR.brain && wideR.brain.w) + 'px -> ' +
+     (tightR.brain && tightR.brain.w) + 'px, still starting at the same x',
+     JSON.stringify({ wide: wideR.brain, tight: tightR.brain }));
+  /* The card is the same card at both heights, and its text is still inside it: a rule
+     that held at 860px and quietly stopped holding at 380px would be no rule. */
+  const tidy2 = await page.json(TIDY);
+  ok(!!tidy2 && tidy2.outside.length === 0 && tidy2.count === tidy.count,
+     'and the card is still tidy in the squeezed window: ' + (tidy2 && tidy2.count) +
+     ' line boxes in, worst overhang ' + (tidy2 && tidy2.worst) + 'px',
+     JSON.stringify(tidy2 && { box: tidy2.box, outside: tidy2.outside }));
+  await page.send('Emulation.clearDeviceMetricsOverride');
+  await sleep(600);
+  await page.evaluate('__galaxy.layout.run()');
+  await sleep(400);
+  const back = await page.json('({vw:innerWidth,vh:innerHeight})');
+  ok(back.vh > SHORT, 'the window is its own size again: ' + back.vw + 'x' + back.vh,
+     JSON.stringify(back));
 
   /* ---- 3. the report, and the toast that must stop at the panel -------- */
   await page.evaluate('__galaxy.session.end()');

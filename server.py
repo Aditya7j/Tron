@@ -76,6 +76,14 @@ import search as websearch
 # no tool outside tools/registry.json exists, and nothing runs without a human word.
 import hands
 
+# THE LOCAL VOICE. Text in, WAV bytes out, through the piper binary as a subprocess -
+# no pip dependency and nothing leaving the machine. Its own file for the same reason
+# the three above have theirs: it owns a cache directory, a concurrency gate and the
+# two knobs that decide how the voice sounds. Like search.py it NEVER raises, so a
+# machine with no piper installed simply reports that it is not ready and the page
+# falls back to the browser's own engine.
+import say
+
 # =============================================================================
 #  THE PERSONA - everything the character is, lives in this one block.
 #
@@ -727,6 +735,40 @@ DEFAULT_CONFIG = {
     # the page is ever told.
     "search_api_key": "",
     "search_url": "",
+
+    # ---- WHICH VOICE SPEAKS. Blank means "let the page choose", and the page has a
+    # named allowlist for that (Guy, Andrew, Brian, Ryan, then the Desktop voices) so
+    # the choice is the same on every load instead of whatever scored highest today.
+    # Put a name here to overrule the list entirely - any substring of the name Windows
+    # reports is enough, so "Andrew" pins "Microsoft Andrew Online (Natural) - English
+    # (United States)". Run the page and hover the status line to see what it picked.
+    #
+    # This is the ONE value in this file that is deliberately published: /health sends
+    # it to the browser, because the browser is the only thing that can act on it. It
+    # is a preference, not a credential, and nothing else in here follows it out.
+    "voice_name": "",
+
+    # ---- WHICH ENGINE SPEAKS. "piper" synthesises on this machine through say.py and
+    # sends WAV bytes to the page; "web" hands the text to the browser's own voices and
+    # never touches the local binary. Piper is the default because it sounds the same on
+    # every machine and needs no network, and because the page falls back to the web
+    # path by itself - and says so - the moment /say reports the binary or the model is
+    # missing. Nothing breaks if piper was never installed.
+    #
+    # voice_model is a NAME, not a path: say.py looks for voices/<name>.onnx beside its
+    # .json and refuses anything with a separator in it. Recasting the voice is these
+    # two lines and a download, never a code change.
+    "voice_engine": "piper",
+    "voice_model": "en_US-ryan-high",
+
+    # ---- WHETHER THE SKY TURNS BY ITSELF. False, and deliberately so: a galaxy that
+    # rotates whether or not anyone asked it to is a camera moving under the reader's
+    # hands, and everything you were looking at slides out from under you while you
+    # read. The page's aliveness comes from the travelling dots, the breathing ring and
+    # the visage - none of which move the viewer's head. Set this true and a slow orbit
+    # comes back for those who want it; nobody gets it by default. Published to the
+    # browser by /health for the same reason voice_name is: the page owns the camera.
+    "galaxy_spin": False,
 }
 PLACEHOLDER_KEYS = {"", "put-your-key-here", "your-key-here", "sk-xxx", "changeme"}
 
@@ -2383,6 +2425,47 @@ def model_label(cfg):
                                     wanted.lower()), wanted)
 
 
+def voice_engine_of(cfg):
+    """"piper" or "web", from config.json, with every other spelling read charitably.
+
+    Only two answers exist because the page only has two paths, and an unrecognised
+    word must not silence the assistant: anything that is not plainly the browser's
+    engine means the local one, and the local one already degrades to the browser by
+    itself when this machine cannot run it.
+    """
+    name = str(cfg.get("voice_engine") or DEFAULT_CONFIG["voice_engine"]).strip().lower()
+    if name in ("web", "browser", "speechsynthesis", "system", "off", "none"):
+        return "web"
+    return "piper"
+
+
+def voice_state(cfg):
+    """What the page needs to know about the local voice before it speaks a word.
+
+    Booleans, a model NAME and two numbers - the same discipline as the "web" block
+    above, for the same reason. Asked on /health and again in the body of a 503 from
+    /say, so that "the local voice is unavailable" always arrives with its sentence.
+    """
+    engine = voice_engine_of(cfg)
+    state = say.ready(cfg.get("voice_model") or DEFAULT_CONFIG["voice_model"])
+    files, size = say.cache_size()
+    return {
+        "engine": engine,
+        "model": state["model"],
+        "installed": state["binary"],
+        "modelPresent": state["model_file"],
+        # The question the page actually asks: can I fetch audio from /say? Wanting the
+        # web engine is a "no" just as firmly as a missing binary is.
+        "ready": engine == "piper" and state["ready"],
+        "why": (state["why"] if engine == "piper"
+                else "config.json asks for the browser's voices"),
+        "lengthScale": state["lengthScale"],
+        "noiseScale": state["noiseScale"],
+        "cacheFiles": files,
+        "cacheBytes": size,
+    }
+
+
 def bedrock_path(model, action="converse"):
     # safe="-._~" is exactly what the AWS SDKs treat as unreserved, so the colon
     # in a model id becomes %3A here and in the string we sign. See aws_request().
@@ -3870,6 +3953,20 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_wav(self, data, source):
+        """WAV bytes, with the cache verdict in a header so a harness can read it.
+
+        no-store because the page caches nothing: say-cache/ on disk is the cache, and
+        a browser holding a second copy would make a recast voice take a reload to hear.
+        """
+        self.send_response(200)
+        self.send_header("Content-Type", "audio/wav")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Say-Source", source or "miss")
+        self.end_headers()
+        self.wfile.write(data)
+
     def _read_json(self, limit=64 * 1024):
         try:
             length = int(self.headers.get("Content-Length") or 0)
@@ -4104,6 +4201,24 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                     # of what was asked, the notes do not get to answer it.
                     "threshold": WEB_CONFIDENCE_THRESHOLD,
                 },
+                # THE VOICE PIN, and the only config VALUE this endpoint ever sends.
+                # It belongs here because the browser owns the speech engine: the server
+                # cannot pick a voice it has no list of. Blank means "your allowlist
+                # decides", which is the normal case.
+                "voice": str(cfg.get("voice_name") or "").strip(),
+                # AND HOW IT WILL BE SPOKEN, for the same reason: the page owns the
+                # funnel, so it has to know before the first word whether /say will
+                # answer with audio or with a 503. "engine" is what config.json asked
+                # for, "ready" is whether this machine can honour it, and "why" is the
+                # one sentence the page logs when it names its fallback. A model name
+                # and two knobs are preferences, not credentials.
+                "say": voice_state(cfg),
+                # AND WHETHER THE SKY TURNS. A preference about the camera, published
+                # for the same reason the voice pin is: the browser owns the camera and
+                # cannot be told by any other route. Absent or false means the galaxy
+                # rests, which is the default and the answer for everybody who has not
+                # gone looking for the key.
+                "sky": {"spin": bool(cfg.get("galaxy_spin"))},
             })
         return SimpleHTTPRequestHandler.do_GET(self)
 
@@ -4172,6 +4287,34 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         route = self.path.split("?")[0].rstrip("/") or "/"
+
+        # THE VOICE, one chunk at a time. First because it is the most frequent POST in
+        # a session by a wide margin and because it must never queue behind anything:
+        # the page is holding a sentence open waiting for these bytes.
+        #
+        # A 503 here is NOT an error to be surfaced as a failure - it is the page's cue
+        # to name the browser's own voices and keep reading. So the body carries the
+        # same state /health carries, and the reason is one sentence fit to be logged.
+        if route == "/say":
+            data = self._read_json()
+            if not isinstance(data, dict):
+                return self._send_json(400, {
+                    "ok": False, "error": "Send a JSON body like {\"text\": \"...\"}."})
+            text = str(data.get("text") or "")
+            cfg = load_config()[0]
+            state = voice_state(cfg)
+            if not state["ready"]:
+                return self._send_json(503, {
+                    "ok": False, "engine": state["engine"], "say": state,
+                    "error": "The local voice is unavailable: %s"
+                             % (state["why"] or "piper is not ready")})
+            wav, why, source = say.synthesise(text, state["model"])
+            if wav is None:
+                sys.stderr.write("say: refused - %s\n" % why)
+                return self._send_json(503, {
+                    "ok": False, "engine": "piper", "say": state,
+                    "error": "The local voice could not speak that: %s" % why})
+            return self._send_wav(wav, source)
 
         if route == "/chat":
             data = self._read_json()

@@ -57,7 +57,7 @@ const ROW_KEYS = ['at', 'plannedMinutes', 'activeMinutes', 'onTargetMinutes',
 const WANT_CASES = ['viewport', 'visible', 'timers', 'frames', 'clock', 'phrases',
                     'card-on', 'card-drift', 'card-defer', 'card-blind', 'card-phone',
                     'gate', 'luma', 'seq', 'no-names', 'web-cue', 'web-safe',
-                    'desk-move', 'desk-skin', 'merge', 'stack', 'lane', 'retire',
+                    'desk-move', 'desk-skin', 'merge', 'stack', 'lane', 'visage', 'retire',
                     'hermetic'];
 
 const CHROMES = [

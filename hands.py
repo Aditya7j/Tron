@@ -281,7 +281,13 @@ def prompt_block():
         "is genuinely missing, ask for that one thing in prose instead.\n"
         "  NOTHING HAPPENS WHEN YOU DO THIS. The server puts the request to them, in its "
         "own words, and waits for a yes. So never say that you have done it, never "
-        "mention the tag, and never promise to do it later.")
+        "mention the tag, and never promise to do it later.\n"
+        "  AND A REQUEST TO DRAFT IS STILL A REQUEST. \"draft an email to her saying I am "
+        "fine\", \"write to that address\", \"put something in my calendar for Tuesday\" "
+        "all name one of the tools above, and the tag is how they get their draft: the "
+        "server shows them every detail you filled in and sends nothing until they say "
+        "yes. Writing the letter out in prose instead leaves them holding words they "
+        "cannot send, which is the one outcome they did not ask for.")
     return "\n".join(lines)
 
 

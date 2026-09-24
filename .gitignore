@@ -23,6 +23,15 @@ focus-ledger.json
 tools-ledger.json
 calendar.json
 
+# PROOF ARTEFACTS (screenshots the harnesses write)
+deck-*.png
+
+# THE LOCAL VOICE. A piper model is ~116 MB of weights that belong to whoever
+# published them, and say-cache/ is generated audio - both are downloads and neither
+# is source. README says which model to fetch and where to put it.
+voices/
+say-cache/
+
 # OS & IDE FILES
 .DS_Store
 Thumbs.db

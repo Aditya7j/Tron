@@ -6,8 +6,9 @@
  * anything happens - and that the two answers available to them, the button and the
  * spoken word, do the same thing.
  *
- * So: headed Chrome, no mute, nothing stubbed. speechSynthesis.speak is WRAPPED, so
- * every line is recorded AND still comes out of the speakers. The buttons are pressed
+ * So: headed Chrome, no mute, nothing stubbed. The page's funnel - speakLine() - is
+ * WATCHED rather than the engine, so every line is recorded AND still comes out of the
+ * speakers, whether it is read locally by piper or by the browser. The buttons are pressed
  * with real mouse events at real coordinates, because a synthetic .click() would prove
  * that a handler works and not that a person could reach it. Every claim about a spoken
  * line is POLLED, never slept-and-sampled: a test that sleeps for two seconds and looks
@@ -153,18 +154,25 @@ async function main() {
   ok(await page.evaluate('__galaxy.speech.muted') === false,
      'this tab is NOT muted, so every line below is a line that was actually said');
 
-  /* Wrapped, not stubbed: recorded AND still spoken. */
-  await page.evaluate(`
+  /* THE FUNNEL, NOT THE ENGINE. Wrapped, not stubbed: recorded AND still spoken.
+     speakLine() is the one function in that page that speaks, and it is what is watched
+     here - because on the local voice there is no utterance to intercept at all. A wrapper
+     around speechSynthesis.speak would have recorded nothing on the piper path and every
+     claim below would have failed for want of an instrument, not for want of a voice.
+     The funnel announces every line it accepts, whichever engine then reads it, and that
+     announcement is the record - one entry per sentence, in the order the page said them. */
+  ok(await page.evaluate(`
     (function () {
       if (window.__spoken) return 'already';
+      if (!(window.__galaxy && __galaxy.speech && __galaxy.speech.speakLine)) return '';
       window.__spoken = [];
-      var real = speechSynthesis.speak.bind(speechSynthesis);
-      speechSynthesis.speak = function (u) {
-        window.__spoken.push(String(u.text || ''));
-        return real(u);
-      };
+      addEventListener('speakLine', function (ev) {
+        window.__spoken.push(String((ev.detail && ev.detail.text) || ''));
+      });
       return 'wrapped';
-    })()`);
+    })()`) !== '',
+     'the recorder below is wrapped around the page’s funnel, speakLine(), rather than ' +
+     'around speechSynthesis - so it hears the local voice too');
   /* And the page's own six-second record, which catches a line that speak() held back
      because the autoplay policy had not been released yet. Both are consulted: the
      question "was it said" must not be answered by the wrapper alone. */
