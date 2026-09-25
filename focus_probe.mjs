@@ -406,6 +406,67 @@ async function main() {
      'the battery was hermetic: not one request left the page while it ran',
      'fetches: ' + await page.evaluate('__galaxy.probe.fetches'));
 
+  /* ---- 3b. THE MIND, ONE STATE AT A TIME ------------------------------
+     The `visage` case above already measures the instrument and it already proves the five
+     signatures are distinct - but it reports that as ONE line, and a single boolean covering
+     five states is a line that goes red without saying which state broke. So the five are
+     walked again from out here and asserted BY NAME, which is what PART 7 asks for: an
+     `idle` that had quietly become an `at rest`, or a `locked` that had stopped differing
+     from `thinking`, is named in the failure rather than hidden inside `distinct=false`.
+     Cheap, because it is five poses and five reads of computed style on a page that is
+     already open, and it is the only place in this suite where a state's NAME appears. */
+  log('');
+  log('-- the Mind: five states, each one named');
+  const MIND_STATES = ['idle', 'listening', 'thinking', 'speaking', 'locked'];
+  const published = await page.json('__galaxy.face.states');
+  ok(Array.isArray(published) && published.length === 5 &&
+     MIND_STATES.every((s) => published.includes(s)),
+     'the visage publishes exactly the five states the spec names',
+     JSON.stringify(published));
+  /* Motion stilled first: the signature of a state is its POSE, and a signature read
+     halfway through a gimbal's rotation is a reading of the clock. */
+  const wasPose = await page.evaluate('__galaxy.face.state');
+  /* nomove stills the gimbals - a signature read halfway through a rotation is a reading of
+     the clock - and the card is put into its `live` skin because that is the skin the five
+     poses are written against. Both are put back at the end of the section. */
+  const wasCard = await page.evaluate(
+    '(function () { var c = document.getElementById("focuscard"), was = c.className;' +
+    ' document.documentElement.classList.add("nomove"); c.className = "live";' +
+    ' return was; })()');
+  const seenSig = new Map();
+  for (const s of MIND_STATES) {
+    const r = await page.json('(function () {' +
+      'var posed = __galaxy.face.pose(' + JSON.stringify(s) + ');' +
+      'var box = document.getElementById("focusface");' +
+      'var mini = document.getElementById("cmdmind");' +
+      'var lens = box.querySelector(".mlens"), iris = box.querySelector(".miris");' +
+      'var spoke = box.querySelector(".mspoke");' +
+      'return {posed: posed, state: __galaxy.face.state,' +
+      ' homes: __galaxy.face.homes, lit: __galaxy.face.lit,' +
+      ' card: box.className, twin: mini ? mini.className : "",' +
+      ' lens: getComputedStyle(lens).transform,' +
+      ' iris: getComputedStyle(iris).transform,' +
+      ' spoke: getComputedStyle(spoke).transform};})()');
+    const sig = r.lens + '|' + r.iris + '|' + r.spoke;
+    const clash = [...seenSig.entries()].find(([, v]) => v === sig);
+    seenSig.set(s, sig);
+    ok(r.posed === true && r.state === s && r.homes === 2 &&
+       r.card.split(/\s+/).includes(s) && r.twin.split(/\s+/).includes(s) && !clash,
+       'the Mind holds ' + s.toUpperCase() + ': both homes wear the pose and it looks ' +
+       'like nothing else on the list',
+       JSON.stringify({ state: r.state, homes: r.homes, card: r.card, twin: r.twin,
+                        clashesWith: clash ? clash[0] : null }));
+  }
+  ok(new Set(seenSig.values()).size === 5,
+     'and so all five are five, measured as aperture and waveform out of computed style ' +
+     'rather than taken on trust from the class name',
+     JSON.stringify([...seenSig.keys()]));
+  await page.evaluate('__galaxy.face.pose(' + JSON.stringify(wasPose) + ')');
+  await page.evaluate(
+    '(function () { document.getElementById("focuscard").className = ' +
+    JSON.stringify(wasCard) + ';' +
+    ' document.documentElement.classList.remove("nomove"); })()');
+
   /* ---- 4. THE OVERLAY -------------------------------------------------- */
   log('');
   log('-- the overlay: ?focusdebug=1 on the glass, reading the running server');

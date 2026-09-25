@@ -281,6 +281,22 @@ async function main() {
      about window borders. Fixed width, one variable: height. */
   const metrics = (h) => page.send('Emulation.setDeviceMetricsOverride',
                                    { width: W, height: h, deviceScaleFactor: 0, mobile: false });
+  /* THE ORGAN RAIL is the ask bar, and the ask bar is not one of the governed surfaces -
+     the governor never places it, so it has no entry in layout.rects and has to be read
+     off the element. Same shape as a rects entry so that disjoint() can take either. */
+  const railBox = () => page.json('(function(){var g=function(id){' +
+    'var e=document.getElementById(id);' +
+    'if(!e||!e.getClientRects().length||getComputedStyle(e).display==="none")return null;' +
+    'var r=e.getBoundingClientRect();' +
+    'return {top:Math.round(r.top),left:Math.round(r.left),right:Math.round(r.right),' +
+    ' bottom:Math.round(r.bottom),w:Math.round(r.width),h:Math.round(r.height)};};' +
+    /* The command panel is never display:none - it is a slid sheet, kept off the left edge
+       by a transform with opacity 0 and pointer-events off, because a panel that is built
+       and hidden animates and a panel that is created on Ctrl+K does not. So it is read as
+       what it is rather than expected to be absent. */
+    'var c=document.getElementById("cmd"), cs=c?getComputedStyle(c):null;' +
+    'return {bar:g("bar"), cmd:g("cmd"), sheet: c ? {open:c.classList.contains("open"),' +
+    ' opacity:+cs.opacity, pe:cs.pointerEvents} : null};})()');
   await metrics(H);
   await sleep(700);
   await page.evaluate('__galaxy.layout.run()');
@@ -288,6 +304,7 @@ async function main() {
   const wide = await page.json('__galaxy.layout.last');
   const wideR = await page.json('__galaxy.layout.rects');
   const wv = await page.json('({vw:innerWidth,vh:innerHeight})');
+  const wideBar = await railBox();
   ok(wv.vw === W && wv.vh === H,
      'measuring at exactly ' + W + 'x' + H + ', which is the viewport the law names',
      JSON.stringify(wv));
@@ -310,6 +327,7 @@ async function main() {
   const tight = await page.json('__galaxy.layout.last');
   const tightR = await page.json('__galaxy.layout.rects');
   const tv = await page.json('({vw:innerWidth,vh:innerHeight})');
+  const tightBar = await railBox();
   note('squeezed to ' + tv.vw + 'x' + tv.vh + ' · card ' + JSON.stringify(tight.cardBox) +
        ' · toast ' + JSON.stringify(tight.toastBox));
   ok(tv.vw >= 1280 && tv.vh < H,
@@ -335,6 +353,83 @@ async function main() {
      'and the card is still tidy in the squeezed window: ' + (tidy2 && tidy2.count) +
      ' line boxes in, worst overhang ' + (tidy2 && tidy2.worst) + 'px',
      JSON.stringify(tidy2 && { box: tidy2.box, outside: tidy2.outside }));
+  /* ---- 2d. THE RAILS NEVER OVERLAP THE CARD ---------------------------- */
+  /* PART 1 added two rails to a page whose card positions were decided before either of
+     them existed: a telemetry header across the top, and the organ rail along the ask bar
+     at the bottom. The card is FIXED. So the question is not whether the rails look right
+     on a tall window - it is whether the band each rail took was a band the card was ever
+     using, and the squeezed viewport is where that stops being a matter of opinion: at
+     380px the card's rows and the toast's rows already want the same pixels, and anything
+     that took height off the top or the bottom took it from this.
+     Rectangles compared to each other, never to a constant, so raising --rail-h moves
+     these checks instead of falsifying them. */
+  const railCase = (label, r, bar) => {
+    note(label + ': top rail ' + JSON.stringify(r.toprail) + ' · ask bar ' +
+         JSON.stringify(bar.bar) + ' · card ' + JSON.stringify(r.focuscard));
+    ok(!!r.toprail && !!bar.bar && !!r.focuscard,
+       label + ' - both rails and the card are on screen, which is what makes the rest of ' +
+       'this worth asserting', JSON.stringify({ rail: r.toprail, bar: bar.bar,
+                                                card: r.focuscard }));
+    ok(disjoint(r.toprail, r.focuscard),
+       label + ' - THE TELEMETRY RAIL DOES NOT OVERLAP THE CARD (rail ends ' +
+       (r.toprail && r.toprail.bottom) + 'px, card begins ' +
+       (r.focuscard && r.focuscard.top) + 'px)',
+       JSON.stringify({ rail: r.toprail, card: r.focuscard }));
+    /* WHICH AXIS DID THE SEPARATING, said out loud. On a tall window the bar is below the
+       card and the gap is vertical; squeezed to 380px the card's rows and the bar's row want
+       the same band and it is the COLUMN that keeps them apart - the bar narrows to the
+       toast's width on the left while the card holds the right. A message that only ever
+       quoted tops and bottoms would read as nonsense in the second case, and the second
+       case is the one worth proving. */
+    const axis = !bar.bar || !r.focuscard ? 'nothing to compare'
+      : bar.bar.bottom <= r.focuscard.top ? 'the bar sits ' +
+          (r.focuscard.top - bar.bar.bottom) + 'px above the card'
+      : bar.bar.top >= r.focuscard.bottom ? 'the bar sits ' +
+          (bar.bar.top - r.focuscard.bottom) + 'px below the card'
+      : bar.bar.right <= r.focuscard.left ? 'the bar ends at ' + bar.bar.right +
+          'px and the card begins at ' + r.focuscard.left + 'px, in the next column over'
+      : bar.bar.left >= r.focuscard.right ? 'the bar begins at ' + bar.bar.left +
+          'px, past the card\'s right edge at ' + r.focuscard.right + 'px'
+      : 'they share pixels';
+    ok(disjoint(bar.bar, r.focuscard),
+       label + ' - AND NEITHER DOES THE ORGAN RAIL: ' + axis,
+       JSON.stringify({ bar: bar.bar, card: r.focuscard }));
+    /* The other two surfaces that live in those bands, reported rather than asserted: the
+       constitution's claim is about the CARD, and the toast and the note panel are placed
+       by a governor whose rules are tested above on their own terms. Printed so that a rail
+       creeping into either one is visible here instead of being nobody's check. */
+    note(label + ': rail vs toast ' + (disjoint(r.toprail, r.brain) ? 'clear' : 'OVERLAP') +
+         ' · bar vs toast ' + (disjoint(bar.bar, r.brain) ? 'clear' : 'OVERLAP') +
+         ' · rail vs panel ' + (disjoint(r.toprail, r.panel) ? 'clear' : 'OVERLAP') +
+         ' · rail vs title ' + (disjoint(r.toprail, r.title) ? 'clear' : 'OVERLAP') +
+         ' — and "bar vs toast" reads OVERLAP because the organ rail is INSIDE the toast ' +
+         'column (#bar is a child of #brain, under the status row), so that pair is a ' +
+         'containment rather than a collision: ' + JSON.stringify(r.brain));
+    ok(!!bar.sheet && bar.sheet.open === false && bar.sheet.opacity === 0 &&
+       bar.sheet.pe === 'none' && !!bar.cmd && bar.cmd.right <= 1,
+       label + ' - and the unsummoned command panel is covering nothing: opacity 0, ' +
+       'pointer-events none, and its box held off the left edge at ' +
+       (bar.cmd && bar.cmd.right) + 'px',
+       JSON.stringify({ sheet: bar.sheet, box: bar.cmd }));
+  };
+  railCase('roomy at ' + W + 'x' + H, wideR, wideBar);
+  railCase('squeezed at ' + W + 'x' + SHORT, tightR, tightBar);
+  /* And the rails are not what gave way. The governor narrows the TOAST when the window
+     is short; if the squeeze had instead been paid for by the top rail losing its height
+     or the ask bar sliding off the bottom, every disjointness check above would pass on a
+     page with no rails left to overlap anything. */
+  ok(!!wideR.toprail && !!tightR.toprail && tightR.toprail.h === wideR.toprail.h &&
+     tightR.toprail.top === wideR.toprail.top,
+     'AND THE RAILS DID NOT PAY FOR THE SQUEEZE: the header is the same ' +
+     (wideR.toprail && wideR.toprail.h) + 'px band at both heights, in the same place - ' +
+     'the toast gave up width, the rail gave up nothing',
+     JSON.stringify({ wide: wideR.toprail, tight: tightR.toprail }));
+  ok(!!tightBar.bar && tightBar.bar.bottom <= tv.vh + 1 && tightBar.bar.top >= 0,
+     'and the organ rail is still wholly inside the ' + tv.vh + 'px viewport (' +
+     (tightBar.bar && tightBar.bar.top) + '-' + (tightBar.bar && tightBar.bar.bottom) +
+     'px) rather than pushed off the bottom of it',
+     JSON.stringify({ bar: tightBar.bar, vh: tv.vh }));
+
   await page.send('Emulation.clearDeviceMetricsOverride');
   await sleep(600);
   await page.evaluate('__galaxy.layout.run()');

@@ -780,6 +780,16 @@ DEFAULT_CONFIG = {
     "voice_engine": "piper",
     "voice_model": "en_US-ryan-high",
 
+    # ---- HOW LONG THE EAR STAYS OPEN IN A SILENT ROOM. One click opens a conversation
+    # rather than an utterance, and a conversation has to be able to END without anybody
+    # remembering to close it: 45 seconds with nothing said and the session closes itself
+    # with a line - "I'll let you work, sir." That number is a courtesy in both
+    # directions. Too short and a pause to think is read as a goodbye; too long and a
+    # microphone is open in an empty room, which is the one thing the transparency law
+    # exists to prevent. Published to the browser by /health, because the page owns the
+    # ear and this is a preference, not a credential.
+    "conversation_timeout_s": 45,
+
     # ---- WHETHER THE SKY TURNS BY ITSELF. False, and deliberately so: a galaxy that
     # rotates whether or not anyone asked it to is a camera moving under the reader's
     # hands, and everything you were looking at slides out from under you while you
@@ -1420,6 +1430,14 @@ TASK_RE = re.compile(r"""^(?:
     | plan | outline | draw \s+ up | sketch \s+ out | brainstorm
     | make \s+ me \s+ (?: a | an | some ) | put \s+ together
     | prepare | generate | invent | suggest \s+ (?: me \s+ )? (?: a | an | some )
+    # THE SPOKEN DIAL. "switch your voice to Alan" is an instruction about this machine,
+    # and the hands are offered it one branch above - but if the brain answers that turn
+    # in prose instead of a tag, the message must still not be carried to a search
+    # engine, which would come back with three strangers' opinions about voice acting.
+    # Every one of these five verbs is paired with the word "voice" on purpose: "change
+    # the subject" and "cast a wider net" are not requests to be recast.
+    | (?: switch | change | swap | cast | sound \s+ like | speak \s+ with )
+      \b [^.]{0,40} \b voice \b
     )\b""", re.IGNORECASE | re.VERBOSE)
 
 # THE PII SHIELD. An email address, a telephone number, a street address: these are the
@@ -2008,6 +2026,19 @@ def load_config(apply_override=True):
         merged["provider"] = "openrouter"
         merged["openrouter_model"] = brain
     return merged, None
+
+
+def _number(value, fallback):
+    """A number out of config.json, or the default. A typo is never an exception.
+
+    Every setting in that file was typed by a human, and "45 seconds" is a thing
+    somebody will one day write as "45s". The caller clamps; this only promises to hand
+    back something arithmetic will accept.
+    """
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return float(fallback)
 
 
 def tokenize(text):
@@ -2636,6 +2667,173 @@ def voice_state(cfg):
         "cacheFiles": files,
         "cacheBytes": size,
     }
+
+
+# ------------------------------------------------------------- THE CASTING CALL
+#
+# Three voices, one sentence, and the boss picks. Everything about this is deliberately
+# small, because the thing being chosen is permanent-ish and the ways to get it wrong are
+# all the same way: letting the page decide something the disk is the authority on.
+#
+#   THE THREE ARE A FIXED LIST, here and not in the viewer. A page that could name its
+#     own candidates could name any string, and /say's `model` parameter is gated on this
+#     tuple - so the audition door opens onto exactly three files and nothing else. (It
+#     would be safe anyway: say.model_path() basenames the name and looks only in
+#     voices/. This is the second lock, not the first.)
+#   WHAT IS INSTALLED IS A FACT, NOT A HOPE. Each candidate carries say.ready()'s own
+#     verdict, so a voice whose .onnx was never downloaded arrives at the panel labelled
+#     as absent rather than as a button that fails when pressed. On this machine that is
+#     two of the three, and the panel says so.
+#   THE LINE IS ONE CONSTANT. The same sentence for all three is the entire point of an
+#     audition; three different sentences would be three impressions, not a comparison.
+CASTING = (
+    ("en_US-ryan-high", "Ryan", "American, warm, unhurried - the incumbent"),
+    ("en_GB-alan-medium", "Alan", "English, clipped, a shade older"),
+    ("en_US-joe-medium", "Joe", "American, plainer, lower"),
+)
+CASTING_LINE = "The archive is online, and the hands are wired, sir."
+CASTING_MODELS = tuple(name for name, _label, _note in CASTING)
+
+
+def casting_state(cfg):
+    """The three candidates, what config.json currently wants, and whether piper is here.
+
+    `fallback` is the one field the panel is built around: when piper is not installed at
+    all there is nothing to audition, and the honest answer is not an empty list but a
+    named downgrade - the browser's own voices, which this page already falls back to on
+    its own. See the PIPER OFFLINE case in the viewer.
+    """
+    installed = bool(say.binary())
+    wanted = str(cfg.get("voice_model") or DEFAULT_CONFIG["voice_model"])
+    wanted = os.path.basename(wanted.strip())
+    out = []
+    for name, label, note in CASTING:
+        state = say.ready(name)
+        out.append({
+            "model": name,
+            "label": label,
+            "note": note,
+            "installed": bool(state["model_file"]),
+            "ready": bool(state["ready"]),
+            "why": state["why"],
+            "chosen": name == wanted,
+        })
+    return {
+        "engine": voice_engine_of(cfg),
+        "piper": installed,
+        "fallback": "" if installed else "web",
+        "line": CASTING_LINE,
+        "chosen": wanted,
+        "lengthScale": say.LENGTH_SCALE,
+        "noiseScale": say.NOISE_SCALE,
+        "candidates": out,
+    }
+
+
+def write_voice_model(name):
+    """Persist the casting decision to config.json. The ONE route that writes that file.
+
+    Rules, and each of them is a thing that has gone wrong in somebody's project:
+
+      THE NAME IS CHECKED FIRST, against CASTING and against the disk. A chosen voice
+        that is not installed would leave the next restart mute, and a restart that came
+        back silent because of a click here is the worst possible outcome of a panel
+        whose whole job is choosing a voice.
+      THE FILE IS READ RAW, not through load_config(). load_config() merges
+        DEFAULT_CONFIG in and applies the runtime brain override - writing THAT back
+        would bake a temporary swap into the file and copy every placeholder in the
+        defaults table into the employer's own config. Raw in, one key changed, raw out.
+      EVERY OTHER KEY SURVIVES BYTE FOR BYTE. There are credentials in this file. They
+        are read here as opaque values, written back unexamined, never logged, never
+        counted by anything but len(), and never returned.
+      THE REPLACE IS ATOMIC. A crash halfway through a rewrite of the file that holds
+        the AWS keys is not a state this project is going to have.
+
+    Returns (payload, error). The payload names the model and nothing else about the file.
+    """
+    wanted = os.path.basename(str(name or "").strip())
+    if wanted.endswith(".onnx"):
+        wanted = wanted[:-5]
+    if wanted not in CASTING_MODELS:
+        return None, ("%r is not one of the three cast voices" % wanted)
+    state = say.ready(wanted)
+    if not state["ready"]:
+        return None, ("that voice cannot speak on this machine: %s" % state["why"])
+
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as fh:
+            raw = json.load(fh)
+        if not isinstance(raw, dict):
+            raise ValueError("config.json must contain a JSON object")
+    except FileNotFoundError:
+        raw = dict(DEFAULT_CONFIG)
+    except Exception as exc:                                    # noqa: BLE001
+        return None, "config.json could not be read (%s)" % exc
+
+    before = str(raw.get("voice_model") or "")
+    raw["voice_model"] = wanted
+    # The engine comes with it. Choosing a piper voice while config.json asks for the
+    # browser's is a setting that would be silently ignored, and a panel that accepted a
+    # choice and then did not use it is a lie with a confirmation dialog.
+    raw["voice_engine"] = "piper"
+
+    tmp = CONFIG_PATH + ".casting.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(raw, fh, indent=2)
+            fh.write("\n")
+        os.replace(tmp, CONFIG_PATH)
+    except Exception as exc:                                    # noqa: BLE001
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        return None, "config.json could not be written (%s)" % exc
+
+    # Keys, not values, and that is the whole log line.
+    sys.stderr.write("  casting: voice_model %s -> %s (%d keys preserved)\n"
+                     % (before or "(unset)", wanted, len(raw)))
+    return {"ok": True, "model": wanted, "was": before,
+            "keys": len(raw), "ready": True}, None
+
+
+# ---- WHAT THE BRAIN IS NOT ALLOWED TO TELL YOU: the state of your own machine.
+#
+# The proposal card for a recast has to read "you are hearing Joe at the moment; that
+# would make it Alan" - a request and the thing it would replace, side by side, because
+# the whole value of the gate is that a human can read what is about to change. The
+# REQUEST comes from the brain. The CURRENT VALUE is a fact about a file on this disk,
+# and a model asked to fill it in would fill it in from memory, from the greeting it read
+# an hour ago, or from nothing at all - and be believed, on a card whose entire job is
+# being believed.
+#
+# So it is overwritten here, after the tag and before the proposal, from config.json
+# itself. Whatever the brain put in this field is discarded exactly like its prose.
+def tool_facts(tool_id, params_text):
+    """Parameters the SERVER knows, written over whatever arrived with the request."""
+    if str(tool_id or "").strip().lower() != "set_voice":
+        return params_text
+    raw = params_text
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw) if raw.strip() else {}
+        except ValueError:
+            return params_text          # let hands.propose() refuse it in its own words
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, dict):
+        return params_text
+    raw = dict(raw)
+    cfg = load_config()[0]
+    name = os.path.basename(str(cfg.get("voice_model")
+                                or DEFAULT_CONFIG["voice_model"]).strip())
+    # 'en_GB-alan-medium' -> 'Alan'. Derived, not looked up: there is no second table of
+    # voice nicknames in this file to drift out of step with the tool's own.
+    parts = [p for p in name.split("-") if p]
+    word = parts[1] if len(parts) > 1 else (parts[0] if parts else "")
+    word = "".join(c for c in word if c.isalnum())
+    raw["current"] = (word[:1].upper() + word[1:]) if word else (name or "no voice")
+    return raw
 
 
 def bedrock_path(model, action="converse"):
@@ -3966,7 +4164,8 @@ def answer_question(question, session):
             if wanted is not None:
                 # The prose is DISCARDED and the proposal is composed from the registry
                 # template: see hands.propose(). One voice, and it is not the model's.
-                return hands.propose(wanted, params, door="tag")
+                # tool_facts() overwrites the fields this machine is the authority on.
+                return hands.propose(wanted, tool_facts(wanted, params), door="tag")
             sys.stderr.write("  tool: %r looked like an instruction and was not one\n"
                              % question.strip()[:60])
 
@@ -4473,6 +4672,14 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 "pinned": sorted(spoken_aliases()),
                 "brain": state})
 
+        if route == "/voices":
+            # What the casting panel is built from, and for the same reason /brains
+            # exists: the three candidates are named on this side, so the page cannot
+            # audition a fourth and cannot offer a voice that is not on this disk.
+            cfg = load_config()[0]
+            return self._send_json(200, dict(casting_state(cfg), ok=True,
+                                             kind="voices", nodes=[], answer=""))
+
         if self.path.split("?")[0] == "/persona":
             # Wording only. The viewer supplies the note count from the graph data
             # and the salutation from the reader's own clock.
@@ -4534,6 +4741,14 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 # rests, which is the default and the answer for everybody who has not
                 # gone looking for the key.
                 "sky": {"spin": bool(cfg.get("galaxy_spin"))},
+                # AND HOW LONG THE EAR WAITS. The page runs the conversation - the voice
+                # detector, the re-arm, the closers - so it needs the one number that
+                # decides when a silent room means goodbye. Clamped here rather than
+                # trusted: a zero would close the session before the first word and a
+                # config typo must not be able to hold a microphone open all afternoon.
+                "ear": {"timeoutS": max(5, min(600, int(
+                    _number(cfg.get("conversation_timeout_s"),
+                            DEFAULT_CONFIG["conversation_timeout_s"]))))},
                 # THE SECOND INDEX, DESCRIBED THE SAME WAY THE FIRST ONE IS: how many
                 # documents and chunks are in the store, which model embedded them, what
                 # the dial is set to, and - if it is not working - one sentence saying
@@ -4627,12 +4842,31 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             text = str(data.get("text") or "")
             cfg = load_config()[0]
             state = voice_state(cfg)
-            if not state["ready"]:
+            # THE AUDITION PARAMETER, and it is the only reason this route takes a model
+            # at all. Gated on CASTING_MODELS, so the door opens onto the three files the
+            # casting panel names and nothing a page could invent - and gated on that
+            # model's own readiness rather than the configured one's, because auditioning
+            # Alan on a machine that has Ryan is exactly the case the panel exists to
+            # show. A voice heard here is not a voice chosen: choosing is POST /voice.
+            asked = os.path.basename(str(data.get("model") or "").strip())
+            if asked.endswith(".onnx"):
+                asked = asked[:-5]
+            if asked and asked not in CASTING_MODELS:
+                return self._send_json(400, {
+                    "ok": False, "engine": state["engine"], "say": state,
+                    "error": "%r is not one of the three cast voices." % asked})
+            model = asked or state["model"]
+            audition = say.ready(model) if asked else None
+            if asked and not audition["ready"]:
+                return self._send_json(503, {
+                    "ok": False, "engine": "piper", "say": state, "model": model,
+                    "error": "That voice is not on this machine: %s" % audition["why"]})
+            if not asked and not state["ready"]:
                 return self._send_json(503, {
                     "ok": False, "engine": state["engine"], "say": state,
                     "error": "The local voice is unavailable: %s"
                              % (state["why"] or "piper is not ready")})
-            wav, why, source = say.synthesise(text, state["model"])
+            wav, why, source = say.synthesise(text, model)
             if wav is None:
                 sys.stderr.write("say: refused - %s\n" % why)
                 return self._send_json(503, {
@@ -4854,6 +5088,30 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 sys.stderr.write("  eyes: %s -> spoke\n" % payload.get("cmd", "?"))
             return self._send_json(status, payload)
 
+        if route == "/voice":
+            # THE CASTING DECISION, and the only route in this project that writes
+            # config.json. {"model": "en_GB-alan-medium"} - one key, checked against the
+            # three and against the disk before a byte is written. Compare /model, which
+            # swaps the brain in memory only and says so: a brain swap is a mood, a voice
+            # is a decision, and the difference is whether it survives a restart.
+            data = self._read_json(4 * 1024)
+            if not isinstance(data, dict):
+                return self._send_json(400, {
+                    "ok": False, "kind": "voices", "nodes": [], "answer": "",
+                    "error": "Send a JSON body like "
+                             "{\"model\": \"en_US-ryan-high\"}."})
+            payload, error = write_voice_model(data.get("model"))
+            cfg = load_config()[0]
+            if error:
+                return self._send_json(400, dict(casting_state(cfg), ok=False,
+                                                 kind="voices", nodes=[], answer="",
+                                                 error=error))
+            # The new state, read back off the disk it was just written to, so the panel
+            # paints what config.json says rather than what it asked for.
+            return self._send_json(200, dict(casting_state(cfg), ok=True,
+                                             kind="voices", nodes=[], answer="",
+                                             wrote=payload))
+
         if route == "/model":
             # {"say": "switch to Astra"} - the spoken phrase IS the interface, so the
             # voice path and a curl both go through the same resolver and the same
@@ -4953,7 +5211,8 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             try:
                 if cmd == "propose":
                     status, payload = hands.propose(
-                        data.get("tool"), data.get("params"), door=door)
+                        data.get("tool"),
+                        tool_facts(data.get("tool"), data.get("params")), door=door)
                 elif cmd == "cancel":
                     status, payload = hands.cancel(door=door, proposal_id=ident)
                 elif cmd == "withdraw":

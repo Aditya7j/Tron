@@ -2537,6 +2537,38 @@ LEDGER_ROW_KEYS = {"ok", "failed", "refused", "lapsed", "last"}
 SCAN_SKIP_DIRS = {".git", "__pycache__", "node_modules", ".venv", "venv", ".idea"}
 
 
+def _voice_label(model):
+    """'en_GB-alan-medium' -> 'Alan'. Derived the same way the tool derives it.
+
+    Deliberately a copy of tools/set_voice.py's label() rather than an import: this
+    check exists to read the refusal a human would hear, and a check that borrows the
+    tool's own function to decide what the tool should have said can only ever agree
+    with it. Six lines of duplication buys an independent witness.
+    """
+    parts = [p for p in str(model or "").split("-") if p]
+    word = parts[1] if len(parts) > 1 else (parts[0] if parts else "")
+    word = "".join(c for c in word if c.isalnum())
+    return (word[:1].upper() + word[1:]) if word else str(model or "")
+
+
+def _installed_voices():
+    """The model ids this machine can actually speak in, from the disk, sorted.
+
+    Both halves required - piper wants the .onnx and its .onnx.json alongside - because
+    the question being asked is "what could be spoken", not "what was downloaded".
+    """
+    found = []
+    try:
+        names = sorted(os.listdir(os.path.join(ROOT, "voices")))
+    except OSError:
+        return []
+    for name in names:
+        if name.endswith(".onnx") and os.path.isfile(
+                os.path.join(ROOT, "voices", name + ".json")):
+            found.append(name[:-5])
+    return found
+
+
 def _ledger_file():
     """The tool ledger as it is on disk, or {} if it has never been written.
 
@@ -2618,7 +2650,7 @@ def _scrubbed(blob):
 def check_hands():
     """16. Nothing runs unasked, nothing runs twice, and nothing it was given is kept.
 
-    Seven questions, in the order a doubt about this feature would occur to you:
+    Eight questions, in the order a doubt about this feature would occur to you:
 
       (a) /execute with nothing pending        -> a named refusal, not a shrug;
       (b) a proposal naming a tool that is not in the registry -> refused, and the slot
@@ -2637,10 +2669,19 @@ def check_hands():
           It must then appear nowhere on disk - not in the ledger, not in a log - and
           nowhere in any response except the one field the page renders for the human;
       (g) a greeting -> no proposal and no search. The vocative law sits above the
-          hands: "good morning" can surface nothing.
+          hands: "good morning" can surface nothing;
+      (h) THE SPOKEN DIAL. set_voice is the one hand that writes a file this project
+          cares about, so it is gated the way send_email is: by being refused. A
+          proposal with no voice is refused naming the field; a name nobody has heard
+          of, confirmed through the spoken door, is refused BY THE HAND and the refusal
+          recites what IS installed; a real voice proposes with current beside requested
+          and is then cancelled. config.json is digested before and after, and not one
+          byte may move.
 
     Nothing here touches the calendar and nothing sends mail. (c) and (f) use
-    send_email, and both are refused before anything could run.
+    send_email, and both are refused before anything could run. (h) never writes: the
+    voice this machine speaks in at the end of this check is the voice it spoke in at
+    the start, proved by sha256 and not by inspection.
     """
     notes, warnings = [], []
 
@@ -2901,6 +2942,165 @@ def check_hands():
                       % (state_now.get("pending"), state_now.get("busy"))]
     notes.append("(g) a greeting left zero proposals pending and fired zero searches: "
                  "%s" % first_line(data.get("answer"), 66))
+
+    # -- (h) THE SPOKEN DIAL, in four questions, not one of which is allowed to change the
+    #        voice. The digest either side is the load-bearing part: "the voice did not
+    #        change" would be satisfied by a rewritten file that happened to keep one key,
+    #        and this file holds this machine's credentials. Not one byte may move.
+    if "set_voice" not in ids:
+        return FAIL, ["(h) the registry does not carry set_voice, so the spoken dial has "
+                      "no hand behind it: %s" % ", ".join(ids)]
+    config_path = os.path.join(ROOT, "config.json")
+    try:
+        with open(config_path, "rb") as fh:
+            cfg_before = fh.read()
+    except OSError as exc:
+        return FAIL, ["(h) config.json could not be read to take a baseline (%s)" % exc]
+    before_digest = hashlib.sha256(cfg_before).hexdigest()[:8]
+    # Read the same way the server reads it, fallback included, so "current" here and
+    # "current" on the card are the same fact and not two readings of one file.
+    voice_before = os.path.basename(str((as_json(cfg_before) or {}).get("voice_model")
+                                        or server.DEFAULT_CONFIG["voice_model"]).strip())
+
+    status, _, body = post_json("/tools", {"cmd": "propose", "tool": "set_voice",
+                                           "params": {}, "door": "curl"},
+                                timeout=30, label="POST /tools (set_voice, no voice)")
+    data = as_json(body) or {}
+    said = str(data.get("answer") or "")
+    if status != 400 or data.get("refused") != "missing" or data.get("field") != "voice":
+        return FAIL, ["(h) set_voice with no voice named came back %s refused=%r field=%r "
+                      "- a missing required parameter is a refusal naming the field"
+                      % (status, data.get("refused"), data.get("field"))]
+    if "voice" not in said.lower() or data.get("pending") is not None:
+        return FAIL, ["(h) the spoken refusal was %r and pending=%r - it must name the "
+                      "field out loud and leave nothing pending"
+                      % (first_line(said, 70), data.get("pending"))]
+    notes.append("(h) set_voice with no voice is refused by name: %s" % first_line(said, 66))
+
+    # A name that is not a nickname and does not look like a piper id, so the hand takes
+    # the "I will not guess at a near one" branch rather than the "missing from this
+    # machine" one. Both refuse; only this one has to recite the list.
+    nonsense = "brunel"
+    voice_before_row = _ledger_row("set_voice")
+    status, _, body = post_json("/tools", {"cmd": "propose", "tool": "set_voice",
+                                           "params": {"voice": nonsense}, "door": "curl"},
+                                timeout=30, label="POST /tools (set_voice, unknown name)")
+    data = as_json(body) or {}
+    if status != 200 or (data.get("pending") or {}).get("tool") != "set_voice":
+        return FAIL, ["(h) proposing set_voice with an unheard-of name did not even reach "
+                      "the gate: %s %r"
+                      % (status, first_line(body.decode("utf-8", "replace")))]
+    status, _, body = post_json("/chat", {"question": "yes, go ahead",
+                                          "session": "preflight-hands"},
+                                timeout=90, label="POST /chat (spoken yes, unknown voice)")
+    data = as_json(body) or {}
+    spoken = str(data.get("answer") or "")
+    # The proposal gate is ALLOWED to pass this through: a name is not a fact about the
+    # disk, and the registry validates a shape. What must not happen is the write. So the
+    # refusal wanted here is the HAND's own - a non-zero exit, carried back in the words
+    # the script printed - and not a 200 with an accepted voice.
+    if data.get("ok") or data.get("ran") or status == 200:
+        return FAIL, ["(h) a voice this machine does not have was ACCEPTED: %s ok=%r "
+                      "ran=%r - config.json would now name a voice that cannot speak, "
+                      "and the machine would come back mute at the next restart"
+                      % (status, data.get("ok"), data.get("ran"))]
+    if data.get("failed") != "exit-1" or data.get("tool") != "set_voice":
+        return FAIL, ["(h) the unknown voice came back %s failed=%r tool=%r - a hand that "
+                      "refuses must refuse by exiting non-zero, because exit 0 is the "
+                      "only thing that means it happened"
+                      % (status, data.get("failed"), data.get("tool"))]
+    if data.get("pending") is not None:
+        return FAIL, ["(h) the slot still holds the set_voice proposal after it was "
+                      "refused - a later “yes” could confirm it"]
+    low = spoken.lower()
+    if "no voice by that name" not in low or "sir" not in low:
+        return FAIL, ["(h) the refusal was %r - an unknown name must say so in words, and "
+                      "in this house's voice" % first_line(spoken, 80)]
+    if not any(_voice_label(v).lower() in low for v in _installed_voices()):
+        return FAIL, ["(h) the refusal %r does not recite what IS installed (%s), so the "
+                      "employer is told no and given nowhere to go"
+                      % (first_line(spoken, 70), ", ".join(_installed_voices()) or "none")]
+    voice_after_row = _ledger_row("set_voice")
+    moved = {k: voice_after_row[k] - voice_before_row[k]
+             for k in voice_after_row if voice_after_row[k] != voice_before_row[k]}
+    if moved != {"failed": 1}:
+        return FAIL, ["(h) the ledger moved %r for set_voice; a refused recast is exactly "
+                      "one “failed” and no “ok” (before %r, after %r)"
+                      % (moved, voice_before_row, voice_after_row)]
+    notes.append("(h) an unheard-of voice, confirmed out loud, is refused BY THE HAND and "
+                 "the refusal names the installed voices: %s" % first_line(spoken, 66))
+    notes.append("(h) and the ledger says so: set_voice failed %d -> %d, ok unmoved at %d"
+                 % (voice_before_row["failed"], voice_after_row["failed"],
+                    voice_after_row["ok"]))
+
+    # And a real one: proposed, READ BACK - current beside requested, which is the entire
+    # point of a card a human is asked to approve - and then cancelled. The voice chosen
+    # is deliberately not the one in force, so "current" and "requested" cannot be the
+    # same word and a card that simply echoed the request twice would be caught.
+    here_now = _installed_voices()
+    others = [v for v in here_now if v != voice_before]
+    want = others[0] if others else (here_now[0] if here_now else "")
+    if not want:
+        warnings.append("(h) no voice is installed under voices/, so the PROPOSAL half of "
+                        "the spoken dial could not be exercised on this machine; the two "
+                        "refusals above were, and nothing was written")
+    else:
+        status, _, body = post_json("/tools",
+                                   {"cmd": "propose", "tool": "set_voice",
+                                    "params": {"voice": want}, "door": "curl"},
+                                   timeout=30, label="POST /tools (set_voice, real voice)")
+        data = as_json(body) or {}
+        pending = data.get("pending") or {}
+        line = str(pending.get("line") or "")
+        params = pending.get("params") or {}
+        if status != 200 or pending.get("tool") != "set_voice":
+            return FAIL, ["(h) a real, installed voice would not even propose: %s %r"
+                          % (status, first_line(body.decode("utf-8", "replace")))]
+        if params.get("voice") != want:
+            return FAIL, ["(h) the pending parameters do not carry the voice that was "
+                          "asked for (%r, wanted %r) - the human approves what they can "
+                          "read, so what they read must be what runs"
+                          % (params.get("voice"), want)]
+        # THE CURRENT VALUE IS THE SERVER'S TO KNOW. It is overwritten from config.json
+        # after the tag and before the proposal precisely so that no model can fill it
+        # in from memory on a card whose whole job is being believed.
+        was_label = _voice_label(voice_before)
+        if params.get("current") != was_label:
+            return FAIL, ["(h) the card says the current voice is %r when config.json "
+                          "says %r - a proposal that misreports what it would replace "
+                          "is worse than no proposal"
+                          % (params.get("current"), was_label)]
+        if was_label not in line or want not in line:
+            return FAIL, ["(h) the proposal line %r does not put current (%s) beside "
+                          "requested (%s)" % (first_line(line, 80), was_label, want)]
+        if "{" in line or "voice" not in line.lower() or "?" not in line:
+            return FAIL, ["(h) the proposal %r is not a filled-in question about the "
+                          "voice - the line comes from the registry template, never "
+                          "from prose" % first_line(line, 80)]
+        notes.append("(h) and a real voice proposes in the registry's own words, current "
+                     "beside requested: %s" % first_line(line, 90))
+        status, _, body = post_json("/tools", {"cmd": "cancel", "door": "curl"}, timeout=30,
+                                    label="POST /tools (cancel set_voice)")
+        data = as_json(body) or {}
+        if not data.get("ok") or data.get("pending") is not None:
+            return FAIL, ["(h) the set_voice proposal would not cancel: %s"
+                          % first_line(body.decode("utf-8", "replace"))]
+        notes.append("(h) then CANCELLED, not confirmed: the slot is empty and %s is "
+                     "still the voice" % was_label)
+
+    try:
+        with open(config_path, "rb") as fh:
+            cfg_after = fh.read()
+    except OSError as exc:
+        return FAIL, ["(h) config.json could not be read again (%s)" % exc]
+    if cfg_after != cfg_before:
+        return FAIL, ["!! (h) CONFIG.JSON CHANGED DURING PREFLIGHT (sha256 %s -> %s). "
+                      "This file holds this machine's credentials and a harness has no "
+                      "business writing to it; the spoken dial is proved by its refusals."
+                      % (before_digest, hashlib.sha256(cfg_after).hexdigest()[:8])]
+    notes.append("(h) and config.json did not move: %d bytes, sha256 %s before and after, "
+                 "voice_model still %r - every gate above refused, so nothing was written"
+                 % (len(cfg_after), before_digest, voice_before))
 
     if warnings:
         return WARN, notes + warnings

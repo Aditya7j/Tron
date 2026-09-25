@@ -66,6 +66,15 @@ const LEDGER = join(dirname(fileURLToPath(import.meta.url)), 'focus-ledger.json'
  * plus the header row's 0.22em of letter-spacing after its final letter - ink-free space
  * the engine still measures. A pixel of that is not text outside the card; ten would be.
  */
+/* Two rectangles do not overlap, in the form the browser's own coordinates take: touching
+   edges are not an overlap, which is why the comparisons are <= and not <. A missing
+   rectangle is a surface that is not on screen, and nothing on screen can be covered by
+   something that is not there. Same rule, same words, as layout_proof.mjs. */
+const disjoint = (a, b) => !a || !b ||
+  a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom;
+/* The five organ buttons and the two rails, by the ids every harness in this repo clicks.
+   Named once so that the PiP check and the geometry check below cannot drift apart. */
+const RAIL_IDS = ['toprail', 'cmd', 'bar', 'screen', 'eye', 'focusbtn', 'mic', 'reset'];
 const TIDY_TOL = 1.5;
 const TIDY_PIP = `(function () {
   var w = documentPictureInPicture.window;
@@ -443,6 +452,34 @@ async function main() {
   ok(out.display === 'flex' && out.position === 'static',
      'the card fills the window rather than hiding under the 720px rule',
      JSON.stringify({ display: out.display, position: out.position }));
+
+  /* ---- 3b. THE RAILS STAY HOME ---------------------------------------- */
+  /* The deck gained two rails after this file was written: a telemetry header across the top
+     of the page, and the five ask-bar buttons that became the organ rail. Both are the
+     PAGE's furniture, and this card has just been adopted OUT of that page into a window
+     320px wide - so the question is whether any of it came along. A telemetry rail in a
+     window the size of a playing card would sit straight across the clock, and nothing in
+     deskAdopt() forbids that by construction: it is forbidden by WHICH elements get adopted,
+     which is exactly the sort of thing that changes by accident when somebody widens a
+     selector. So it is checked from inside the floating window, by id, and the same ids are
+     checked to be still at home in the tab - because "the rail is not in the PiP window"
+     would also be true of a rail that had been destroyed. */
+  const railsOut = await page.json(
+    '(function(){var w=documentPictureInPicture.window, d=w&&w.document;' +
+    'var ids=' + JSON.stringify(RAIL_IDS) + ';' +
+    'return {inPip: ids.filter(function(i){return !!(d&&d.getElementById(i));}),' +
+    ' inHost: ids.filter(function(i){return !!document.getElementById(i);}),' +
+    ' pipIds: d ? Array.prototype.map.call(d.body.querySelectorAll("[id]"),' +
+    '   function(e){return e.id;}) : []};})()');
+  note('the floating window holds: ' + JSON.stringify(railsOut.pipIds));
+  ok(railsOut.inPip.length === 0,
+     'NEITHER RAIL FOLLOWED THE CARD OUT: none of ' + RAIL_IDS.join(', ') + ' exists in ' +
+     'the floating window, so there is nothing out there that could cover the clock',
+     JSON.stringify(railsOut.inPip));
+  ok(railsOut.inHost.length === RAIL_IDS.length,
+     'and all ' + RAIL_IDS.length + ' of them are still at home in the tab - the card was ' +
+     'adopted away from the rails, not the rails destroyed',
+     JSON.stringify(railsOut.inHost));
   /* THE SIZE, and the one place this run is deliberately not strict on the first look.
      width/height are a hint the browser may ignore, and this Chrome does: it grants 80%
      of the screen however small a window is asked for. The viewer answers that with
@@ -633,9 +670,26 @@ async function main() {
   const f = (after && after.focus) || {};
   note('the server answered: locked=' + f.locked + ' tabWatched=' + f.tabWatched +
        ' deferred=' + f.deferred + (workOpen ? ' (with a work window open)' : ''));
-  if (workOpen && cap.browser) {
+  /* WHICH CLAIM IS EVEN AVAILABLE, decided from the tabs read above rather than from
+     cap.browser - because those are two different facts and only one of them is the lock's
+     business. cap.browser says a Chrome window is frontmost, and the floating card IS a
+     Chrome window, so raising the card over the work window satisfies cap.browser while
+     leaving Chrome reporting every http page as occluded. The lock needs a page it can
+     SEE; a hidden tab is correctly not a candidate for it. So if the work tab came back
+     visible, the lock must land - and if nothing was visible at the press, the documented
+     re-arm is the right answer and gets asserted as one, out loud, rather than a demand
+     the state cannot meet. */
+  const workSeen = seenBy.some((s) => /^example\.com visible/.test(s));
+  if (workOpen && cap.browser && workSeen) {
     ok(f.locked && f.tabWatched,
        'and the work tab is locked, from a press whose front window was ' + front,
+       JSON.stringify({ locked: f.locked, tabWatched: f.tabWatched, deferred: f.deferred }));
+  } else if (workOpen && cap.browser && !workSeen) {
+    note('the card in front left every tab occluded (' + seenBy.join(' | ') + '), so there ' +
+         'was no visible page for the lock to land on - and a tab you cannot see is not a ' +
+         'tab you are working in');
+    ok(f.deferred === true && f.locked === false,
+       'so the press re-armed the deferred lock instead of locking a window nobody can see',
        JSON.stringify({ locked: f.locked, tabWatched: f.tabWatched, deferred: f.deferred }));
   } else if (!cap.browser) {
     /* Not a failure of the card, and not dressed up as a pass either: no browser was
@@ -678,6 +732,49 @@ async function main() {
      JSON.stringify(waiting));
   ok(waiting.wanted, 'and the next click anywhere is armed to upgrade it',
      JSON.stringify(waiting));
+
+  /* ---- 7b. AND THE RAILS ARE NOT WHERE THE CARD SITS ------------------- */
+  /* The other half of 3b, and the half that is about pixels rather than about ids. This is
+     the one moment in the run where the card and both rails are in the SAME viewport: a
+     session is live, nobody has clicked, so the card is still in the page - and it is in a
+     FIXED position it was given before either rail existed. Once the card upgrades to the
+     desktop window the question stops being askable, which is why it is asked here rather
+     than after the window closes, where `focuscard` is display:none and every comparison
+     below would pass by being about nothing.
+
+     Rectangles compared to each other and not to any constant, so a change to LAYOUT or to
+     --rail-h moves this check instead of falsifying it. */
+  const lanes = await page.json('(function(){var r=__galaxy.layout.rects;' +
+    'var box=function(id){var e=document.getElementById(id);' +
+    ' if(!e||!e.getClientRects().length) return null; var b=e.getBoundingClientRect();' +
+    ' return {top:Math.round(b.top),left:Math.round(b.left),right:Math.round(b.right),' +
+    '  bottom:Math.round(b.bottom)};};' +
+    'var c=document.getElementById("cmd"), cs=c?getComputedStyle(c):null;' +
+    'return {toprail:r.toprail, card:r.focuscard, bar:box("bar"), cmd:box("cmd"),' +
+    ' sheet: c ? {open:c.classList.contains("open"), opacity:+cs.opacity,' +
+    '  pe:cs.pointerEvents} : null,' +
+    ' view:[innerWidth,innerHeight]};})()');
+  note('in the page together: card ' + JSON.stringify(lanes.card) + ' · top rail ' +
+       JSON.stringify(lanes.toprail) + ' · ask bar ' + JSON.stringify(lanes.bar));
+  ok(!!lanes.card && !!lanes.toprail,
+     'the card and the telemetry rail are both on screen, which is what makes the next ' +
+     'claim worth making', JSON.stringify(lanes));
+  ok(disjoint(lanes.toprail, lanes.card),
+     'THE TELEMETRY RAIL DOES NOT OVERLAP THE CARD: the rail ends at ' +
+     (lanes.toprail && lanes.toprail.bottom) + 'px and the card begins at ' +
+     (lanes.card && lanes.card.top) + 'px',
+     JSON.stringify({ rail: lanes.toprail, card: lanes.card }));
+  ok(disjoint(lanes.bar, lanes.card),
+     'and neither does the organ rail - the ask bar and the card share an edge at worst',
+     JSON.stringify({ bar: lanes.bar, card: lanes.card }));
+  /* The command panel is a slid sheet, not a built-on-demand one - so "not covering the
+     card" is about a transform and a pointer-events rule, which is what is read here. */
+  ok(!!lanes.sheet && lanes.sheet.open === false && lanes.sheet.opacity === 0 &&
+     lanes.sheet.pe === 'none' && !!lanes.cmd && lanes.cmd.right <= 1,
+     'and the unsummoned command panel cannot be covering the card: opacity 0, ' +
+     'pointer-events none, and its box held off the left edge at ' +
+     (lanes.cmd && lanes.cmd.right) + 'px',
+     JSON.stringify({ sheet: lanes.sheet, box: lanes.cmd }));
   /* A click on nothing in particular - the page's own title - and a whole press of it,
      down and up: the armed upgrade opens the window on the way down and the size
      correction rides the way back up, exactly as the FOCUS button does. */

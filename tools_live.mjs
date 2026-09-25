@@ -32,14 +32,32 @@
  *      -> the same again, through the door a microphone uses
  *   5. ask by voice, then change the subject
  *      -> the proposal is let go with a line, and the diary does not grow
+ *   6. THE SPOKEN DIAL: ask by voice to be recast in the voice ALREADY IN FORCE, and
+ *      confirm by voice
+ *      -> the card reads current beside requested, the hand runs, and the sentence that
+ *         comes back is the script's own - announced, by design, in the voice it names
+ *      -> config.json keeps its key count, its voice_model, and an identical digest of
+ *         every other key it holds
+ *
+ * That last round is deliberately a recast to the voice already speaking. The door has
+ * to be proved all the way through to the write - a gate that is only ever tested by
+ * refusing is a gate nobody has walked through - and the only recast that can be run
+ * against a real config.json without changing this machine is the one that asks for what
+ * it already says. The refusals (an unknown name, a voice that is not on this disk, a
+ * missing field) are HTTP-shaped and preflight check 16 clause (h) owns them.
  *
  * The diary is put back exactly as it was found at the end of the run, because a test
- * that leaves three appointments in your calendar is a test you stop running.
+ * that leaves three appointments in your calendar is a test you stop running. config.json
+ * is NOT backed up and NOT restored: this harness has no business writing to the file
+ * that holds this machine's credentials, so instead of undoing a change it proves there
+ * was nothing to undo. Values are never read into a claim - only the key count, and a
+ * truncated sha256 per key.
  *
  * Usage:  python server.py 2> server-trace.log   then   node tools_live.mjs
  */
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -48,6 +66,7 @@ const PORT = 9231;
 const CDP = 'http://127.0.0.1:' + PORT;
 const CALENDAR = 'calendar.json';
 const LEDGER = 'tools-ledger.json';
+const CONFIG = 'config.json';
 const CHROMES = [
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
   'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
@@ -104,6 +123,36 @@ const ledgerRow = (id) => {
     return { ok: row.ok | 0, failed: row.failed | 0, refused: row.refused | 0,
              lapsed: row.lapsed | 0 };
   } catch { return { ok: 0, failed: 0, refused: 0, lapsed: 0 }; }
+};
+
+/* config.json, described rather than read. Nothing in here returns a value: the key
+   count, the voice setting - which is the one thing the round below is about - and a
+   truncated sha256 per remaining key, which is enough to notice a change and not enough
+   to be a leak. A digest is how you watch a file you are not allowed to look at. */
+const digest = (s) => createHash('sha256').update(String(s)).digest('hex').slice(0, 8);
+const configFacts = () => {
+  let obj = {}, bytes = 0;
+  try {
+    const raw = readFileSync(CONFIG);
+    bytes = raw.length;
+    obj = JSON.parse(raw.toString('utf8')) || {};
+  } catch { return null; }
+  const keys = Object.keys(obj).sort();
+  const others = {};
+  for (const k of keys) {
+    if (k === 'voice_model' || k === 'voice_engine') continue;
+    others[k] = digest(JSON.stringify(obj[k]));
+  }
+  return { bytes, keys: keys.length, names: keys.join(','),
+           voice: String(obj.voice_model || ''), engine: String(obj.voice_engine || ''),
+           others: JSON.stringify(others), seal: digest(JSON.stringify(others)) };
+};
+/* 'en_GB-alan-medium' -> 'Alan'. Derived here, and not imported from the tool, so that
+   what this file expects to hear is an independent reading of the same name. */
+const voiceLabel = (model) => {
+  const parts = String(model || '').split('-').filter(Boolean);
+  const word = (parts[1] || parts[0] || '').replace(/[^a-z0-9]/gi, '');
+  return word ? word[0].toUpperCase() + word.slice(1) : String(model || '');
 };
 
 async function waitFor(page, expr, ms = 10000) {
@@ -211,9 +260,20 @@ async function main() {
     return box;
   };
   /* Typed, with the keyboard, into the box - not handed to ask(). The employer's hands
-     are the subject of this file. */
+     are the subject of this file.
+     AND THE BOX HAS TO BE SUMMONED FIRST. There is no standing field any more: "/" raises
+     the type-line, exactly as a person's left hand does it, and the insert follows into
+     whatever the page gave focus to. Pressing the key rather than calling typeLine.raise()
+     is the point - a proof that used the door would stop proving the keyboard works. */
   const type = async (text) => {
-    await page.evaluate('document.getElementById("q").focus()', true);
+    for (const t of ['keyDown', 'char', 'keyUp']) {
+      await page.send('Input.dispatchKeyEvent', { type: t, key: '/', code: 'Slash',
+        text: '/', unmodifiedText: '/', windowsVirtualKeyCode: 191,
+        nativeVirtualKeyCode: 191 });
+    }
+    await sleep(120);
+    const up = await page.json('({up: __galaxy.typeLine.up, focused: __galaxy.typeLine.focused})');
+    if (!up.up || !up.focused) throw new Error('the slash did not summon the type-line');
     await page.send('Input.insertText', { text });
     for (const type of ['keyDown', 'keyUp']) {
       await page.send('Input.dispatchKeyEvent', {
@@ -367,6 +427,81 @@ async function main() {
      'entries ' + diaryBeforeDrop + ' -> ' + diary().length);
   ok(await page.evaluate('__galaxy.hands.pending === null'),
      'and nothing is pending in the page either');
+
+  /* ---- 6. THE SPOKEN DIAL ------------------------------------------------- */
+  const before = configFacts();
+  ok(!!before, 'config.json is readable, so the claims below have a witness');
+  if (before) {
+    /* The voice in force, asked for by the name a person says. This is the whole trick
+       of the round: the recast that is safe to actually run is the one that asks for the
+       voice already speaking, so the door is walked through rather than merely rattled. */
+    const label = voiceLabel(before.voice);
+    note('6: config.json holds ' + before.keys + ' keys, voice_model ' +
+         JSON.stringify(before.voice) + ', other keys seal ' + before.seal);
+    const dialLedgerBefore = ledgerRow('set_voice');
+    const markDial = await mark();
+    await say('switch your voice to ' + label);
+    ok(await waitFor(page, '__galaxy.hands.shown === true', 90000),
+       'asking out loud to be recast raises the same Yes/No pair');
+    const dial = await pair();
+    note('   rows: ' + JSON.stringify(dial.rows));
+    ok(!!dial.pending && dial.pending.tool === 'set_voice',
+       'and it is the set_voice hand behind it, from the registry: ' +
+       JSON.stringify(dial.pending && dial.pending.tool));
+    /* CURRENT BESIDE REQUESTED. The requested voice came from the brain; the current one
+       did NOT - the server overwrites that field from config.json before the proposal is
+       composed, because a card whose whole job is being believed cannot carry a model's
+       recollection of what this machine sounds like. */
+    const dialRows = dial.rows || {};
+    ok(String(dialRows.current || '') === label,
+       'the card states the voice IN FORCE, read off the disk by the server: ' +
+       JSON.stringify(dialRows.current) + ' (config.json says ' + JSON.stringify(label) + ')');
+    ok(String(dialRows.voice || '').length > 0 &&
+       /voice/i.test(String(dial.pending.line)) && /\?$/.test(String(dial.pending.line).trim()),
+       'beside the voice requested, as a question: ' + JSON.stringify(dial.pending.line));
+    const dialProposal = await waitSaid(/shall i change the voice/i, 20000, markDial);
+    ok(!!dialProposal, 'and the recast is proposed OUT LOUD before anything is written',
+       JSON.stringify(dialProposal));
+
+    const markSaidYes = await mark();
+    await say('yes, go ahead');
+    /* "Speaking as X now, sir." is the script's own stdout and nothing else says it. By
+       the time these words are synthesised config.json already names the voice - /say
+       re-reads it per chunk - so the sentence is read in the voice it announces. */
+    const recast = await waitSaid(/speaking as .+ now, sir/i, 40000, markSaidYes);
+    ok(!!recast, 'confirming by voice runs the hand and speaks the script’s own line: ' +
+       JSON.stringify(recast));
+    ok(new RegExp('speaking as ' + label + ' now', 'i').test(String(recast || '')),
+       'and it names the voice it is being read in: ' + JSON.stringify(recast));
+    ok(await waitFor(page, '__galaxy.hands.shown === false', 8000),
+       'the pair goes, the word having been given');
+    const dialLedgerAfter = ledgerRow('set_voice');
+    ok(dialLedgerAfter.ok === dialLedgerBefore.ok + 1 &&
+       dialLedgerAfter.failed === dialLedgerBefore.failed,
+       'the ledger moved by exactly one ok for set_voice and nothing else',
+       JSON.stringify({ before: dialLedgerBefore, after: dialLedgerAfter }));
+
+    await sleep(600);
+    const after = configFacts();
+    ok(!!after && after.keys === before.keys && after.names === before.names,
+       'EVERY OTHER KEY SURVIVED: config.json still holds the same ' + before.keys +
+       ' keys, by name',
+       JSON.stringify({ before: before.keys, after: after && after.keys }));
+    ok(!!after && after.seal === before.seal,
+       'and their values are untouched - the digest of every key but the voice is ' +
+       'identical either side of the write (' + before.seal + ')',
+       JSON.stringify({ before: before.others, after: after && after.others }));
+    ok(!!after && after.voice === before.voice,
+       'the voice this machine speaks in is the voice it spoke in before the run: ' +
+       JSON.stringify(after && after.voice));
+    ok(!!after && after.engine === 'piper',
+       'and the engine came with it, so the announcement is not read in the wrong voice: ' +
+       JSON.stringify(after && after.engine));
+    const ledgerNow = existsSync(LEDGER) ? readFileSync(LEDGER, 'utf8') : '';
+    ok(!new RegExp(before.voice.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(ledgerNow),
+       'and the ledger kept no note of which voice was asked for',
+       ledgerNow.slice(0, 160));
+  }
 
   page.close();
 }

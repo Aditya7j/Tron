@@ -241,6 +241,12 @@ def build_nodes(notes_root, project_root):
             "excerpt": make_excerpt(prose),
             "chars": len(prose),
             "words": len(prose.split()),
+            # WHEN IT WAS LAST TOUCHED, as the filesystem has it. One integer of Unix
+            # time, and it travels to the viewer because the hover annotation names it:
+            # a world you are pointing at should be able to tell you how long it has
+            # been since anybody wrote in it. A whole number of seconds rather than a
+            # float, so a rebuild that changes nothing produces the same file.
+            "touched": int(os.path.getmtime(path)),
             "raw": raw,                            # stripped before graph-data.js
             "prose": prose,                        # stripped before graph-data.js
         })
@@ -337,6 +343,7 @@ def write_outputs(project_root, notes_root, nodes, links, unresolved):
             "excerpt": node["excerpt"],
             "words": node["words"],
             "degree": degree[node["id"]],
+            "touched": node["touched"],
         })
         index_notes.append({
             "id": node["id"],

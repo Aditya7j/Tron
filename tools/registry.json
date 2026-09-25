@@ -83,6 +83,29 @@
       "proposal": "I have an email ready for {to}, sir, under the subject '{subject}'. Shall I send it?"
     },
     {
+      "id": "set_voice",
+      "name": "Change the voice he speaks in",
+      "script": "set_voice.py",
+      "capabilities": [
+        "change the voice the assistant speaks in, to one of the voices installed on this machine",
+        "make yourself sound like somebody else - ryan, joe, alan, or the northern one",
+        "switch, swap or recast the spoken voice"
+      ],
+      "triggers": [
+        "\\b(?:switch|change|swap|cast|use|set|pick|choose|make)\\b[^.]{0,30}\\bvoice\\b",
+        "\\bvoice\\b[^.]{0,20}\\b(?:to|as|into|like)\\b",
+        "\\bsound\\s+like\\b",
+        "\\bspeak\\s+(?:with|like|in)\\b",
+        "\\b(?:in|with|as)\\s+(?:ryan|joe|alan|the\\s+northern)(?:'s)?\\b"
+      ],
+      "params": [
+        { "name": "voice", "type": "string", "required": true },
+        { "name": "current", "type": "string", "required": false }
+      ],
+      "timeout_s": 10,
+      "proposal": "You are hearing {current} at the moment, sir. That would make it {voice} from the next word on. Shall I change the voice?"
+    },
+    {
       "id": "selftest",
       "name": "Test the hands themselves",
       "script": "selftest.py",
