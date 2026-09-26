@@ -161,8 +161,16 @@ class Page {
     return r.result && r.result.result ? r.result.result.value : undefined;
   }
   async json(e) { return JSON.parse(await this.evaluate('JSON.stringify(' + e + ')') || 'null'); }
-  async shot(file) {
-    const r = await this.send('Page.captureScreenshot', { format: 'png' });
+  /* A FULL FRAME BY DEFAULT, and a CLOSE-UP when a rectangle is handed in. The clip is
+     captured at 2x so a 210px hologram is legible as a plate - the lookbook has to be able
+     to show that the brow and the lips are readable in the density, which a 210px crop of a
+     1400px screenshot cannot say either way. */
+  async shot(file, clip) {
+    const r = await this.send('Page.captureScreenshot', clip
+      ? { format: 'png', captureBeyondViewport: false,
+          clip: { x: clip.left, y: clip.top, width: clip.w, height: clip.h,
+                  scale: clip.scale || 2 } }
+      : { format: 'png' });
     const data = r.result && r.result.data;
     if (!data) throw new Error('no screenshot came back');
     writeFileSync(file, Buffer.from(data, 'base64'));
@@ -1125,10 +1133,18 @@ async function main() {
   const heldFrom = await page.json('({quat: __galaxy.camera.quat, pos: __galaxy.camera.pos,' +
     ' par: __galaxy.camera.parallax, target: __galaxy.camera.target,' +
     ' flights: __galaxy.camera.flights})');
+  /* THE SAME THIRTY SECONDS PAY FOR A SECOND LAW. The camera is one half of "the sky does
+     not wander"; the galaxy ROOT is the other, and a drifting root is invisible in the
+     camera numbers because it moves the whole world under a perfectly still head. Read
+     here and again below off the same hold rather than in a section of its own - a second
+     thirty-second idle window would double the harness's running time to assert the same
+     thing about the same quiet page. */
+  const stillFrom = await page.json('__galaxy.deck.still');
   await sleep(CALM_MS);
   const heldTo = await page.json('({quat: __galaxy.camera.quat, pos: __galaxy.camera.pos,' +
     ' par: __galaxy.camera.parallax, target: __galaxy.camera.target,' +
     ' flights: __galaxy.camera.flights})');
+  const stillTo = await page.json('__galaxy.deck.still');
   note('after ' + (CALM_MS / 1000) + 's: quat ' + JSON.stringify(heldTo.quat) + ' · ' +
        (heldTo.par.moves - heldFrom.par.moves) + ' moves, ' +
        (heldTo.par.holds - heldFrom.par.holds) + ' holds');
@@ -1157,10 +1173,431 @@ async function main() {
        : ' - and NOT from a click: the page flew itself, which is the violation'),
      JSON.stringify({ calm0: calm0.flights, from: heldFrom.flights, to: heldTo.flights,
                       log: flog }));
+  /* ---- 2b-2. THE STILL FRAME: THE GALAXY ROOT DOES NOT GO ANYWHERE -------
+     A LAW ABOUT THE OTHER HALF OF THE PICTURE. The camera being still is not the same
+     statement as the sky being still: translate the root group by a hand's width and every
+     camera number above is unchanged while the whole galaxy slides off the reserved side of
+     the screen. So the root's position and orientation are pinned for the life of the page,
+     and the page measures its own deviation before correcting it - dPos and dQuat are
+     running MAXIMA, not samples, which is why one read after thirty idle seconds is a
+     stronger claim than two reads thirty seconds apart.
+     AND THE SKY MUST NOT BE FROZEN TO PASS. A dead scene satisfies "the root did not move"
+     perfectly, so the same two reads are used the other way round: the worlds' own axial
+     rotations and micro-orbit positions must have MOVED across the hold. Still, not dead. */
+  note('still frame: ' + stillTo.kind + ' "' + stillTo.name + '" pinned at ' +
+       JSON.stringify(stillTo.at) + ' · dPos ' + stillTo.dPos + ' · dQuat ' + stillTo.dQuat +
+       ' · ' + stillTo.holds + ' holds, ' + stillTo.corrections + ' corrections');
+  ok(stillTo.found === true && stillTo.pinned === true && !stillTo.trouble,
+     'THE GALAXY ROOT IS IDENTIFIED AND PINNED: the ' + stillTo.kind + ' named "' +
+     stillTo.name + '" - if this cannot be found there is nothing holding the sky in place',
+     JSON.stringify(stillTo).slice(0, 400));
+  ok(stillTo.dPos === 0,
+     'AND OVER ' + (CALM_MS / 1000) + 's OF IDLE IT NEVER TRANSLATED: the largest position ' +
+     'deviation the page has ever measured on the root is ' + stillTo.dPos,
+     JSON.stringify({ dPos: stillTo.dPos, at: stillTo.at,
+                      before: stillFrom.dPos, after: stillTo.dPos }));
+  ok(stillTo.dQuat === 0,
+     'and it never turned either: largest quaternion deviation ' + stillTo.dQuat + ' - the ' +
+     'root holds ' + JSON.stringify(stillTo.quat) + ' for the life of the page',
+     JSON.stringify({ dQuat: stillTo.dQuat, quat: stillTo.quat,
+                      before: stillFrom.dQuat, after: stillTo.dQuat }));
+  ok(stillTo.corrections === 0,
+     'and the pin never had to FIGHT anyone for it: ' + stillTo.corrections +
+     ' corrections, so nothing in the page is writing to the root behind its back',
+     JSON.stringify({ corrections: stillTo.corrections, dPos: stillTo.dPos }));
+  ok(stillTo.holds - stillFrom.holds > 300,
+     'and the watch was AWAKE for the hold: the pin checked the root ' +
+     (stillTo.holds - stillFrom.holds) + ' times in those ' + (CALM_MS / 1000) +
+     's - a sleeping watch would report a deviation of zero too',
+     JSON.stringify({ holds: [stillFrom.holds, stillTo.holds] }));
+  /* The two halves of "still, not frozen", counted world by world across the same hold.
+     The bar is four fifths rather than all of them because a world whose drift period
+     happens to fold back on itself over exactly these thirty seconds would read as
+     stationary for an honest reason. */
+  const spinN = Math.min(stillFrom.spins.length, stillTo.spins.length);
+  const turning = stillFrom.spins.filter((v, i) => i < spinN && v !== stillTo.spins[i]).length;
+  const driftN = Math.min(stillFrom.drifts.length, stillTo.drifts.length);
+  const wandering = stillFrom.drifts.filter((v, i) => i < driftN &&
+    JSON.stringify(v) !== JSON.stringify(stillTo.drifts[i])).length;
+  const SELF_MIN = Math.max(3, Math.ceil(spinN * 0.8));
+  note('of ' + spinN + ' built worlds, ' + turning + ' turned on their own axes and ' +
+       wandering + ' moved along their micro-orbits while the root stood still');
+  ok(spinN >= 3 && turning >= SELF_MIN,
+     'THE SKY IS STILL, NOT FROZEN: ' + turning + ' of ' + spinN +
+     ' worlds turned on their own axes during the hold (at least ' + SELF_MIN + ' required)',
+     JSON.stringify({ worlds: spinN, turning: turning,
+                      from: stillFrom.spins.slice(0, 5), to: stillTo.spins.slice(0, 5) }));
+  ok(driftN >= 3 && wandering >= Math.max(3, Math.ceil(driftN * 0.8)),
+     'and ' + wandering + ' of ' + driftN + ' rode their micro-orbits: motion INSIDE the ' +
+     'frame is what the still frame is for',
+     JSON.stringify({ worlds: driftN, wandering: wandering,
+                      from: stillFrom.drifts.slice(0, 3), to: stillTo.drifts.slice(0, 3) }));
+
   /* The pointer goes back to the middle and the lean unwinds, so the pictures below are of
      the galaxy and not of the galaxy at 2.5 degrees. */
   await page.evaluate('__galaxy.camera.look(0, 0)');
   await sleep(1500);
+
+  /* ---- 2c. THE PRESENCE: A FACE MADE OF LIGHT, AND WHAT IT COSTS ---------
+     THE HOLOGRAM IS PART OF THE IDLE PAGE NOW, so it is measured the way the textures and
+     the nebula are: not "does it appear" but "does the deck still hold its floor with it on
+     the glass". Ten thousand points in one draw call is cheap; ten thousand points rebuilt
+     per frame is not, and the difference is invisible in a screenshot. So the counts that
+     make it cheap - one object, one material, and a geometry that is written on a mode
+     switch and never again - are asserted from the scene graph, and then the frame rate is
+     re-measured with FACE live.
+     Read at this point in the run rather than at boot on purpose: the audition is long over
+     by now, so `probation` is a verdict rather than a work in progress. */
+  const pr0 = await page.json('({on: __galaxy.presence.on, built: __galaxy.presence.built,' +
+    ' mode: __galaxy.presence.mode, want: __galaxy.presence.want,' +
+    ' why: __galaxy.presence.why, trouble: __galaxy.presence.trouble,' +
+    ' three: __galaxy.presence.three, objects: __galaxy.presence.objects,' +
+    ' materials: __galaxy.presence.materials, shader: __galaxy.presence.shader,' +
+    ' points: __galaxy.presence.points, capacity: __galaxy.presence.capacity,' +
+    ' probation: __galaxy.presence.probation, baseline: __galaxy.presence.baseline,' +
+    ' trial: __galaxy.presence.trial, degraded: __galaxy.presence.degraded,' +
+    ' said: __galaxy.presence.said, notes: __galaxy.presence.notes,' +
+    ' frames: __galaxy.presence.frames, fps: __galaxy.presence.fps,' +
+    ' switches: __galaxy.presence.switches, well: __galaxy.presence.well,' +
+    ' level: __galaxy.presence.level, from: __galaxy.presence.from,' +
+    ' analyser: __galaxy.presence.analyser, lid: __galaxy.presence.lid,' +
+    ' eye: __galaxy.presence.eye, truth: __galaxy.eyes.sight.truth})');
+  note('presence: ' + JSON.stringify(pr0));
+  ok(pr0.built === true && pr0.on === true && !pr0.trouble,
+     'THE PRESENCE IS BUILT AND RUNNING on three r' + pr0.three + ': a hologram docked in ' +
+     'the reserved well, mode "' + pr0.mode + '"', JSON.stringify(pr0).slice(0, 400));
+  ok(pr0.well.fits === true && pr0.well.lit === true && pr0.well.nofit === false,
+     'the Layout Governor gave it a well ' + pr0.well.side + 'px on a side at dpr ' +
+     pr0.well.dpr + ', and the canvas is lit rather than stood down',
+     JSON.stringify(pr0.well));
+  note('the audition: baseline ' + pr0.baseline + 'fps with the ring, trial ' + pr0.trial +
+       'fps with the face, verdict "' + pr0.probation + '"' +
+       (pr0.degraded ? ' - DEGRADED: ' + pr0.degraded : ''));
+  /* THE AUDITION EITHER KEPT THE FACE OR SAID WHY IT DID NOT, and both of those are correct
+     behaviour - so the assertion is on the pair, not on the outcome. What would be wrong is
+     a silent fall back to the ring: the spec says it degrades "and says so once in the
+     trace", and `said` plus the note is that sentence. */
+  ok(pr0.mode === 'face' || (pr0.degraded && pr0.said === true && pr0.notes.length > 0),
+     pr0.mode === 'face'
+       ? 'AND THE AUDITION KEPT THE FACE: ' + pr0.trial + 'fps with ' + pr0.points +
+         ' points on the glass, against a ' + pr0.baseline + 'fps ring'
+       : 'the face could not hold the floor on this GPU and it SAID SO ONCE: "' +
+         pr0.notes[0] + '" - degraded to ' + pr0.mode + ', which is the law working',
+     JSON.stringify({ mode: pr0.mode, probation: pr0.probation, baseline: pr0.baseline,
+                      trial: pr0.trial, degraded: pr0.degraded, notes: pr0.notes }));
+  /* FACE IS WHAT THE FLOOR IS MEASURED AGAINST, so if the audition stood it down it is put
+     back by hand - the same call the Command Panel's row makes, which is the only caller
+     allowed to clear a refusal. A harness that measured the ring here would be reporting a
+     frame rate for a feature nobody asked about. */
+  if (pr0.mode !== 'face') {
+    note('putting FACE back by hand for the measurement, exactly as the P row does…');
+    await page.evaluate('__galaxy.presence.set("face")');
+    await sleep(1200);
+  }
+  const face0 = await page.json('({mode: __galaxy.presence.mode,' +
+    ' points: __galaxy.presence.points, capacity: __galaxy.presence.capacity,' +
+    ' objects: __galaxy.presence.objects, materials: __galaxy.presence.materials,' +
+    ' shader: __galaxy.presence.shader, switches: __galaxy.presence.switches,' +
+    ' frames: __galaxy.presence.frames})');
+  ok(face0.mode === 'face',
+     'FACE MODE IS LIVE for the measurement below', JSON.stringify(face0));
+  ok(face0.points >= 8000 && face0.points <= 12000,
+     'and it is a face assembled from ' + face0.points + ' POINTS - inside the 8-12k band ' +
+     'the spec names, under a ' + face0.capacity + '-point buffer allocated once',
+     JSON.stringify(face0));
+  ok(face0.objects === 1 && face0.materials === 1 && face0.shader === true,
+     'ONE Points OBJECT, ONE SHADER MATERIAL, counted off the scene graph: ' +
+     face0.objects + ' object, ' + face0.materials + ' material, and it is a ShaderMaterial ' +
+     '- light rather than a textured mesh', JSON.stringify(face0));
+  /* AND NOW THE FLOOR, WITH THE FACE ON IT. Same recorder as section 2, same units, so the
+     two numbers are comparable: the cost of the hologram is the difference between them. */
+  await page.evaluate(`(function(){
+    window.__fps2 = { deltas: [], run: true };
+    var last = performance.now();
+    (function step(now){
+      if (!window.__fps2.run) return;
+      var d = now - last; last = now;
+      if (d > 0) window.__fps2.deltas.push(d);
+      requestAnimationFrame(step);
+    })(last);
+    return 'armed';
+  })()`);
+  note('recording ' + (IDLE_MS / 1000) + 's of the idle sky WITH THE FACE on the glass…');
+  await sleep(IDLE_MS);
+  await page.evaluate('window.__fps2.run = false');
+  const fd = (await page.json('window.__fps2.deltas')) || [];
+  const ftotal = fd.reduce((a, b) => a + b, 0);
+  const fmean = fd.length ? (fd.length / (ftotal / 1000)) : 0;
+  const fsorted = fd.slice().sort((a, b) => a - b);
+  const fp95 = fsorted[Math.floor(fsorted.length * 0.95)] || 0;
+  const face1 = await page.json('({mode: __galaxy.presence.mode,' +
+    ' frames: __galaxy.presence.frames, fps: __galaxy.presence.fps,' +
+    ' worst: __galaxy.presence.worst, switches: __galaxy.presence.switches,' +
+    ' points: __galaxy.presence.points, objects: __galaxy.presence.objects,' +
+    ' degraded: __galaxy.presence.degraded, level: __galaxy.presence.level,' +
+    ' from: __galaxy.presence.from})');
+  note('with FACE live: ' + fd.length + ' frames, mean ' + fmean.toFixed(1) + 'fps, p95 ' +
+       fp95.toFixed(1) + 'ms  ·  the presence rendered ' +
+       (face1.frames - face0.frames) + ' of them and calls it ' + face1.fps + 'fps' +
+       '  ·  idle sky without it read ' + mean.toFixed(1) + 'fps');
+  ok(fmean >= FPS_FLOOR,
+     'THE DECK HOLDS ' + fmean.toFixed(1) + 'fps WITH THE FACE LIVE, above the ' + FPS_FLOOR +
+     'fps floor - ' + face1.points + ' points, a live analyser tap and thirty textured ' +
+     'worlds, on ' + gpu,
+     'mean ' + fmean.toFixed(1) + 'fps with face vs ' + mean.toFixed(1) + 'fps without');
+  ok(fd.length > 100 && Math.abs((face1.frames - face0.frames) - fd.length) < fd.length * 0.35,
+     'and IT RIDES THE ORBIT LOOP rather than a second one: the presence drew ' +
+     (face1.frames - face0.frames) + ' frames while the page drew ' + fd.length +
+     ' - one tick, not two', JSON.stringify({ page: fd.length,
+       presence: face1.frames - face0.frames }));
+  ok(face1.switches === face0.switches && face1.objects === 1,
+     'NO PER-FRAME GEOMETRY REBUILDS: the attributes were written ' + face1.switches +
+     ' times for ' + face1.switches + ' mode switches and not once during ' + fd.length +
+     ' frames', JSON.stringify({ switches: [face0.switches, face1.switches] }));
+  ok(face1.mode === 'face' && !face1.degraded,
+     'and it was still the FACE at the end of the recording - the sustained guard found ' +
+     'nothing to complain about', JSON.stringify(face1));
+  /* THE MOUTH DOES NOT MOVE WHEN NOTHING IS SPEAKING. The ear was closed at the end of
+     section 2 and nothing has spoken since, so the level is the resting level and the
+     source names itself - a mouth rippling on a timer would read 'rest' with a level. */
+  ok(face1.from === 'rest' && face1.level < 0.08,
+     'AND THE MOUTH IS AT REST while nothing is speaking: level ' + face1.level +
+     ' from "' + face1.from + '" - it is driven by a signal, not by a clock',
+     JSON.stringify({ level: face1.level, from: face1.from }));
+  /* THE EYES LAW's negative half, in passing: the camera has never been opened in this run.
+     focus_probe.mjs asserts both halves off the one variable; this is the cheap cross-check
+     that the idle deck is not staring at him. */
+  ok(pr0.truth === false && pr0.lid === 0 && pr0.eye < 0.05,
+     'AND THE EYES ARE CLOSED: the camera is off, so the seal reads ' + pr0.truth +
+     ', the lid is ' + pr0.lid + ' and the geometry has eased to ' + pr0.eye +
+     ' - the metaphor does not lie on an idle page',
+     JSON.stringify({ truth: pr0.truth, lid: pr0.lid, eye: pr0.eye }));
+
+  /* THE PLATES. One full frame with the face docked, then a close-up of each of the three
+     modes at 2x - the lookbook has to be able to put them side by side. */
+  const wellRect = await page.json('__galaxy.layout.rects.presence');
+  await page.shot('deck-presence.png');
+  note('wrote deck-presence.png (the whole deck, with the face docked in its well)');
+  const MODE_PLATES = [['face', 'deck-presence-face.png'], ['ring', 'deck-presence-ring.png'],
+                       ['cube', 'deck-presence-cube.png']];
+  let modeFails = 0, writeFails = 0;
+  const modeSeen = [];
+  let wasMode = face1.mode, sw = face1.switches;
+  for (const [m, file] of MODE_PLATES) {
+    await page.evaluate('__galaxy.presence.set("' + m + '")');
+    await sleep(1400);
+    const s = await page.json('({mode: __galaxy.presence.mode,' +
+      ' points: __galaxy.presence.points, objects: __galaxy.presence.objects,' +
+      ' materials: __galaxy.presence.materials, switches: __galaxy.presence.switches,' +
+      ' fps: __galaxy.presence.fps})');
+    modeSeen.push(m + ' ' + s.points + 'pts');
+    if (s.mode !== m || s.objects !== 1 || s.materials !== 1 || s.points < 1000) modeFails++;
+    /* ONE ATTRIBUTE WRITE PER ACTUAL CHANGE, and NONE for asking for the mode it is already
+       wearing - the first plate below is FACE, which is what the measurement above left on
+       the glass, so a switch counter that climbed here would be refilling ten thousand
+       points to arrive where it already was. */
+    const want = sw + (m === wasMode ? 0 : 1);
+    if (s.switches !== want) {
+      writeFails++;
+      note('   switch accounting: asked for ' + m + ' from ' + wasMode + ', wanted ' + want +
+           ' writes, got ' + s.switches);
+    }
+    sw = s.switches; wasMode = s.mode;
+    if (wellRect) await page.shot(file, wellRect);
+  }
+  note('the three modes: ' + modeSeen.join('  ·  ') +
+       (wellRect ? ' - plates at 2x from the well at ' + JSON.stringify(wellRect) : ''));
+  ok(modeFails === 0,
+     'ALL THREE MODES SWITCH FROM THE COMMAND PANEL’S OWN CALL and every one of them is ' +
+     'the same single Points object refilled: ' + modeSeen.join(', '),
+     JSON.stringify({ fails: modeFails, seen: modeSeen }));
+  ok(writeFails === 0 && sw === face1.switches + 2,
+     'and each one cost EXACTLY ONE attribute write - ' + sw + ' for the life of the page - ' +
+     'while asking for the mode already on the glass cost nothing at all',
+     JSON.stringify({ from: face1.switches, to: sw, offBy: writeFails }));
+  ok(modeSeen.indexOf('ring 5092pts') >= 0 && modeSeen.indexOf('cube 8748pts') >= 0,
+     'AND THE OTHER TWO MODES ARE UNTOUCHED BY THE HEAD: the ring is still 3x1200 arc + ' +
+     '36x22 spokes + 700 core = 5092 points and the cube still 9x9x9x12 = 8748, both ' +
+     'counted off the page after the face was rebuilt around them',
+     JSON.stringify(modeSeen));
+  await page.evaluate('__galaxy.presence.set("face")');
+  await sleep(1200);
+  ok((await page.evaluate('__galaxy.presence.mode')) === 'face',
+     'and the deck is left wearing its FACE for the pictures below');
+
+  /* ---- 2c. THE HEAD IS A VOLUME ----
+   * WHY THIS SECTION EXISTS AT ALL. The face that stood here before was a RELIEF: a flat
+   * sheet cut to a head's outline with eight Gaussians embossed on it. It photographed
+   * well from straight on and it was a mask, and the tell was that every claim anybody
+   * could make about it was a claim about its SILHOUETTE. So the criteria below are all
+   * about DEPTH, and each one is a number that a mask cannot reach however prettily it is
+   * drawn. The same measurements taken against the old geometry, for the record:
+   *
+   *     z-range / width      0.146   where 0.55 is asked        (a factor of 3.8 short)
+   *     nose above plane     0.069   where 0.18 is asked        (a factor of 2.6 short)
+   *
+   * MEASURED OFF THE BUFFER, THROUGH THE GEOMETRY'S OWN REGIONS. presence.shape() walks
+   * the drawn range of the position array and groups it by the anatomy tag each point was
+   * written with. That matters more than it looks: if this harness drew its own box around
+   * "where the nose ought to be" it would be measuring my guess, and a nose that moved
+   * would go on passing. The regions are the ones the modelling believes in, so a criterion
+   * about "the nose cluster" is about the nose.
+   *
+   * NATURAL UNITS. The head is built chin -1 to crown +1 and worn at HEAD_S; every
+   * criterion is a ratio, so the wearing cannot flatter or spoil any of them. */
+  const head = await page.json('__galaxy.presence.shape()');
+  ok(!!head && head.points > 0,
+     'THE SHAPE DOOR ANSWERS with the geometry it actually drew, in the units it holds it in',
+     JSON.stringify(head && { points: head.points, scale: head.scale,
+                               width: head.width, height: head.height,
+                               zRange: head.zRange }));
+  if (head) {
+    const C = head.CELL, R = head.ROLE;
+    const cell = (k) => head.cell['c' + C[k]] || null;
+    const role = (k) => head.role['r' + R[k]] || null;
+    const nose = cell('NOSE'), cheek = cell('CHEEK'), chin = cell('CHIN');
+    const back = cell('BACK'), socket = cell('SOCKET'), neck = cell('NECK');
+    const lidL = role('LID_L'), lidR = role('LID_R');
+    const irisL = role('IRIS_L'), irisR = role('IRIS_R');
+    const jaw = role('JAW');
+    note('regions: ' + Object.keys(C).map((k) => {
+      const c = cell(k);
+      return k.toLowerCase() + ' ' + (c ? c.n : 0);
+    }).join(' · '));
+    note('moving parts: ' + Object.keys(R).map((k) => {
+      const r = role(k);
+      return k.toLowerCase() + ' ' + (r ? r.n : 0);
+    }).join(' · '));
+
+    /* CRITERION 1. The cloud has to be as deep as a head is deep. A sheet scores its
+       emboss height; nothing else gets near 0.55 without having a back to it. */
+    const zRatio = head.zRange / head.width;
+    ok(zRatio >= 0.55,
+       'CRITERION 1 - IT IS AS DEEP AS IT IS WIDE: the point cloud spans ' +
+       head.zRange.toFixed(3) + ' in Z against ' + head.width.toFixed(3) + ' of head ' +
+       'width, a ratio of ' + zRatio.toFixed(3) + ' where 0.55 is the floor. The relief ' +
+       'this replaces scored 0.146 and no amount of taller Gaussians would have moved it',
+       JSON.stringify({ zRange: head.zRange, width: head.width,
+                        ratio: +zRatio.toFixed(4), floor: 0.55 }));
+
+    /* CRITERION 2. A nose is a thing that sticks out. THE FACE PLANE is the cheekbone
+       band - named in the geometry, not here - because the cheeks are what a nose sticks
+       out FROM; measuring it against the head's centre or against zero would let a deeper
+       skull pass for a better nose. */
+    const noseOut = nose && cheek ? (nose.z - cheek.z) / head.width : 0;
+    ok(!!nose && !!cheek && noseOut >= 0.18,
+       'CRITERION 2 - THE NOSE STANDS OFF THE FACE: the ' + (nose ? nose.n : 0) +
+       '-point nose wedge averages Z ' + (nose ? nose.z.toFixed(3) : '?') +
+       ' against the cheekbone plane at ' + (cheek ? cheek.z.toFixed(3) : '?') + ', ' +
+       (noseOut * head.width).toFixed(3) + ' clear = ' + noseOut.toFixed(3) +
+       ' of head width where 0.18 is asked',
+       JSON.stringify({ nose: nose && nose.z, plane: cheek && cheek.z,
+                        ratio: +noseOut.toFixed(4), floor: 0.18 }));
+
+    /* CRITERION 3, as a number rather than as a look at a picture. At yaw 90 the screen's
+       horizontal axis IS local Z, so "the nose and chin come off the plane in silhouette"
+       is the statement that in profile the frontmost thing at the nose's height is the
+       nose, and the frontmost thing at the chin's height is the chin and not the throat.
+       The plate is written below as well, because the boss's eye is the final judge - but
+       an eye should not have to be the first one. */
+    const noseLeads = !!(nose && cheek && socket) &&
+                      nose.zmax > cheek.zmax && nose.zmax > socket.zmax;
+    const chinLeads = !!(chin && neck) && chin.zmax > neck.zmax;
+    ok(noseLeads && chinLeads,
+       'CRITERION 3 - THE PROFILE HAS A PROFILE: at the nose\'s height the frontmost ' +
+       'points in the cloud are the nose\'s (' + (nose ? nose.zmax.toFixed(3) : '?') +
+       ' against ' + (cheek ? cheek.zmax.toFixed(3) : '?') + ' for the cheek and ' +
+       (socket ? socket.zmax.toFixed(3) : '?') + ' for the socket), and the chin stands ' +
+       'clear of the throat behind it (' + (chin ? chin.zmax.toFixed(3) : '?') + ' against ' +
+       (neck ? neck.zmax.toFixed(3) : '?') + ')',
+       JSON.stringify({ nose: nose && nose.zmax, cheek: cheek && cheek.zmax,
+                        socket: socket && socket.zmax, chin: chin && chin.zmax,
+                        neck: neck && neck.zmax }));
+
+    /* CRITERION 4. The lids are stored SHUT, which is the state that has to be legible,
+       so this reads the buffer as it stands: a lid patch in front of the iris it covers.
+       If the two were ever level the closed eye would be a lid fighting an eye for the
+       same pixels, which with additive blending is a brighter eye - the opposite of shut. */
+    const lidGapL = lidL && irisL ? lidL.z - irisL.z : 0;
+    const lidGapR = lidR && irisR ? lidR.z - irisR.z : 0;
+    ok(lidGapL > 0.02 && lidGapR > 0.02,
+       'CRITERION 4 - THE LIDS ARE IN FRONT OF THE EYES: stored shut, the left lid sits ' +
+       lidGapL.toFixed(3) + ' and the right ' + lidGapR.toFixed(3) + ' nearer the viewer ' +
+       'than the iris cluster each one covers, so a closed eye is a lit lid over a dark ' +
+       'eye rather than two surfaces at the same depth',
+       JSON.stringify({ left: +lidGapL.toFixed(4), right: +lidGapR.toFixed(4),
+                        lidL: lidL && lidL.z, irisL: irisL && irisL.z }));
+
+    /* AND THE THINGS A VOLUME HAS THAT THE CRITERIA DO NOT NAME, each one a way the head
+       could pass all four and still be wrong: a socket that is a bump, a skull with no
+       back, a mandible with no points in it, a head as wide as it is tall. */
+    /* AGAINST THE BROW, and the first version of this line got it wrong in a way worth
+       leaving written down: it compared the socket's Z to the cheekbone's and called a
+       correct socket a failure. The cheekbone sits further round the side of the head, so
+       its surface is LESS forward for reasons that have nothing to do with the socket -
+       comparing the two measures where they are, not how deep the hollow is. The brow is
+       directly above the socket at nearly the same azimuth, which is what makes it the
+       reference: a brow in front of a socket is a ridge over a hollow. */
+    const brow = cell('BROW');
+    ok(!!socket && !!brow && brow.z - socket.z > 0.02,
+       'the eye sockets are HOLLOWS and not bumps: the socket floor lies ' +
+       (socket && brow ? (brow.z - socket.z).toFixed(3) : '?') + ' behind the brow ridge ' +
+       'immediately above it (' + (socket ? socket.z.toFixed(3) : '?') + ' against ' +
+       (brow ? brow.z.toFixed(3) : '?') + ') - which is what makes the brow read as a ridge ' +
+       'and gives the iris somewhere to sit',
+       JSON.stringify({ socket: socket && socket.z, brow: brow && brow.z }));
+    ok(!!back && back.zmin < -0.45 && back.n > 800,
+       'THERE IS A BACK OF THE HEAD: ' + (back ? back.n : 0) + ' points averaging Z ' +
+       (back ? back.z.toFixed(3) : '?') + ', which is the half of the shell the relief ' +
+       'never had and the reason the silhouette survives being turned',
+       JSON.stringify({ n: back && back.n, z: back && back.z }));
+    ok(!!jaw && jaw.n > 600,
+       'and the MANDIBLE IS A REAL PIECE of it: ' + (jaw ? jaw.n : 0) + ' points carrying ' +
+       'role JAW, cut out of the shell rather than strapped on, which is what the hinge ' +
+       'below has to swing', JSON.stringify({ n: jaw && jaw.n, y: jaw && jaw.y }));
+    ok(head.height > head.width * 1.35,
+       'a head TALLER THAN IT IS WIDE, neck included: ' + head.height.toFixed(3) +
+       ' by ' + head.width.toFixed(3),
+       JSON.stringify({ h: head.height, w: head.width }));
+    ok(head.points <= 14000,
+       'all of it inside the mandate\'s ceiling: ' + head.points + ' points, cap 14000',
+       JSON.stringify({ points: head.points }));
+  }
+
+  /* ---- THE FOUR PLATES, at the four yaws the mandate names ----
+     PINNED, NOT CAUGHT. presence.yaw() holds the angle and stops the idle pitch, because
+     four plates taken at four unknown attitudes compare nothing, and a plate taken
+     mid-wobble is a plate of the wobble. The yaw is handed back at the end. */
+  const YAWS = [-30, 0, 30, 90];
+  let yawFails = 0;
+  const yawSeen = [];
+  for (const deg of YAWS) {
+    const held = await page.json('__galaxy.presence.yaw(' + deg + ')');
+    await sleep(420);
+    const u = await page.json('__galaxy.presence.uniforms');
+    const want = (deg * Math.PI) / 180;
+    if (held !== deg || !u || u.yawHold !== 1 || Math.abs(u.yaw - want) > 0.0005) {
+      yawFails++;
+      note('   yaw ' + deg + ' did not take: ' + JSON.stringify({ held, u }));
+    }
+    yawSeen.push(deg + '° (' + (u ? u.yaw.toFixed(4) : '?') + ' rad)');
+    if (wellRect) {
+      await page.shot('deck-head-yaw' + (deg < 0 ? 'm' : '') + Math.abs(deg) + '.png',
+                      wellRect);
+    }
+  }
+  ok(yawFails === 0,
+     'AND THE HEAD HOLDS STILL TO BE PHOTOGRAPHED at every angle asked for: ' +
+     yawSeen.join('  ·  ') + ' - the uniform read back off the material each time, so the ' +
+     'plates are of the attitudes they are named for',
+     JSON.stringify({ fails: yawFails, seen: yawSeen }));
+  note('wrote deck-head-yawm30 / yaw0 / yaw30 / yaw90 .png at 2x from the well');
+  const freed = await page.json('__galaxy.presence.yaw(null)');
+  const uFree = await page.json('__galaxy.presence.uniforms');
+  ok(freed === null && uFree && uFree.yawHold === 0,
+     'and the pin comes out afterwards - the head is left with its own motion, not frozen ' +
+     'at 90 degrees for whatever runs next',
+     JSON.stringify({ freed, yawHold: uFree && uFree.yawHold }));
 
   /* ---- 3. THE PICTURE OF THE GALAXY -------------------------------------- */
   await page.shot('deck-galaxy.png');
@@ -1543,10 +1980,17 @@ async function main() {
   const rows = sheet.rows || {};
   note('orders: ' + Object.keys(rows).map((k) => k + ' "' + (rows[k] || {}).label + '" · ' +
     (rows[k] || {}).line).join(' | '));
+  /* SIX ORDERS NOW, AND IN THIS ORDER. The presence was the sixth act added to this sheet -
+     the only way to change the hologram's mode by hand - and it sits after `links` because
+     the sheet reads outward from the session: what you are doing, where, what you can see,
+     what is looking back, what it knows, how it sounds. The list is asserted whole rather
+     than by length so that an order appearing, disappearing or MOVING is a failure with a
+     name in it. */
   ok(JSON.stringify(sheet.ids) ===
-     JSON.stringify(['focus', 'lock', 'links', 'archive', 'cast']) && sheet.count === 5,
-     'FIVE DIEGETIC ORDERS, and they are the five the constitution lists: start focus, ' +
-     'lock the tab, simplify the links, open the archive, cast the voice',
+     JSON.stringify(['focus', 'lock', 'links', 'presence', 'archive', 'cast']) &&
+     sheet.count === 6,
+     'SIX DIEGETIC ORDERS, and they are the six the constitution lists: start focus, ' +
+     'lock the tab, simplify the links, change the presence, open the archive, cast the voice',
      JSON.stringify({ ids: sheet.ids, rendered: sheet.count }));
   const dumb = sheet.ids.filter((id) => !rows[id] || !rows[id].label || !rows[id].line ||
                                         !rows[id].shown);
@@ -1697,23 +2141,36 @@ async function main() {
      ' moves after the pointer went to the corner', JSON.stringify(par0));
   await ctrlK();
   const summoned = await waitFor(page, '__galaxy.cmd.open === true', 3000);
+  /* THE BASELINE FOR "NOTHING WAS ASKED" IS TAKEN AFTER THE SHEET IS OPEN, and the reason is
+     a boundary this assertion used to lose a run to. `holds` counts frames on which the
+     parallax was asked and declined, and Ctrl-K is not instantaneous: between par0 being
+     read and cmd.open going true the loop draws a frame or two in which the sheet is not yet
+     open, the pointer is still at the far corner, and the camera legitimately declines it.
+     Those holds belong to the UNSUSPENDED page and counting them against the suspension was
+     measuring the keystroke's latency, not the behaviour.
+     `moves` is still read against par0, because that one has no boundary to lose: a camera
+     that eased even one frame's worth toward the corner after the sheet was summoned is the
+     drift this whole section exists to forbid, whichever side of the open it happened on. */
+  const parS = await beat();
   /* The pointer keeps arriving while the sheet is open - the OPPOSITE corner, so there is a
      real difference for the camera to refuse rather than a still mouse to coast on. */
   await page.evaluate('__galaxy.camera.look(-1, -1)');
   await sleep(1400);
   const par1 = await beat();
   note('parallax under the sheet: suspended ' + par1.suspended + ' · moves ' +
-       par0.moves + ' -> ' + par1.moves + ' · holds +' + (par1.holds - par0.holds) +
-       ' · spins +' + (par1.spins - par0.spins));
+       par0.moves + ' -> ' + par1.moves + ' · holds +' + (par1.holds - parS.holds) +
+       ' (+' + (parS.holds - par0.holds) + ' across the keystroke itself) · spins +' +
+       (par1.spins - par0.spins));
   ok(summoned && par1.suspended === true,
      'THE PARALLAX SUSPENDS WHILE THE SHEET IS OPEN - the flag is written on every frame, ' +
      'so a panel summoned by a key is honoured on the next frame and not on the next mouse ' +
      'move', JSON.stringify({ open: summoned, par: par1 }));
-  ok(par1.moves === par0.moves && par1.holds === par0.holds,
+  ok(par1.moves === par0.moves && par1.holds === parS.holds,
      'and the camera is FROZEN rather than eased: the pointer was taken to the opposite ' +
-     'corner and neither counter moved, because WANTED is dragged up to NOW instead of ' +
-     'being followed', JSON.stringify({ moves: [par0.moves, par1.moves],
-                                        holds: [par0.holds, par1.holds] }));
+     'corner and for 1.4s of open sheet neither counter moved - not one ease and not one ' +
+     'poll, because WANTED is dragged up to NOW instead of being followed',
+     JSON.stringify({ moves: [par0.moves, par1.moves],
+                      holds: [par0.holds, parS.holds, par1.holds] }));
   ok(par1.spins - par0.spins > 30,
      'and it is a DECISION and not a dead page: the sky itself turned ' +
      (par1.spins - par0.spins) + ' more frames while the camera declined to move',

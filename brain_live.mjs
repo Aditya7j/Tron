@@ -368,6 +368,28 @@ async function main() {
   ok(await page.evaluate('__galaxy.brain.chip') === home.label,
      'and the chip agrees, because it only ever moves on the server\'s word');
 
+  /* ---- 6. AND THE SEAL LET THE SECOND SENTENCE THROUGH ------------------
+     THE FAILURE MODE THIS NAMES, and this file is where it was found. A thought that has
+     gone to the brain seals the phrase buffer, so that a final result Chrome was already
+     holding cannot arrive behind the flush and ask the same question twice. The seal was
+     released in exactly one place - r.onstart, the browser's own word for "the microphone
+     is open" - which is correct in a session where the recogniser comes back and a
+     PERMANENT MUTE in one where it does not. Three failed restarts and Part E's own
+     watchdog is such a session; so is every headless tab, including this one, which has no
+     recogniser at all and feeds the page directly.
+     The two sentences above are the proof end to end: section 5 was answered, so the seal
+     set by section 1's flush had gone. This reads the reason off the page rather than
+     inferring it, because "he answered twice" and "the seal expired" are the same
+     observation only while the expiry exists. A future edit that deletes the clock and
+     keeps r.onstart turns section 5 silent again and turns this line red with the cause
+     written on it. */
+  const seal = await page.json('({expired: __galaxy.ear.sealExpired, ' +
+    'ms: __galaxy.ear.SEAL_MS, sealed: __galaxy.ear.sealed})');
+  ok(seal.expired >= 1 && seal.ms > 0 && seal.ms < 1300,
+     'THE SEAL EXPIRED RATHER THAN OUTLIVING THE SILENCE: it timed out ' + seal.expired +
+     ' time(s) at ' + seal.ms + 'ms, which is how a tab with no recogniser to restart ' +
+     'ever hears a second sentence', JSON.stringify(seal));
+
   page.close();
 }
 

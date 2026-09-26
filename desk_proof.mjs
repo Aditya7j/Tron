@@ -132,12 +132,34 @@ const TIDY_PIP = `(function () {
        have. This number is therefore binary and not a margin to watch: equal is fitting,
        greater is a control with its bottom cut off. */
     need: (function () {
+      /* ROWS ONLY, and the test is the layout mode rather than a list of class names: an
+         out-of-flow child cannot push a button off the bottom edge because it takes no
+         height in the column at all. The AGI frame is exactly that - .aframe is inset:0,
+         pointer-events:none, aria-hidden - so counting it made the row-sum read the whole card
+         plus its bottom padding for ever, which is a 13px shortfall that no amount of
+         window would ever have closed. Asked of the cardboard, not of the paint. */
       var low = cr.top, kids = card.children;
       for (var j = 0; j < kids.length; j++) {
+        var ks = w.getComputedStyle(kids[j]);
+        if (ks.position === 'absolute' || ks.position === 'fixed') continue;
         var kr = kids[j].getBoundingClientRect();
         if (kr.height && kr.bottom > low) low = kr.bottom;
       }
       return r2(low - cr.top + num(cs.paddingBottom) + num(cs.borderBottomWidth));
+    })(),
+    /* AND THE ROWS THEMSELVES, one line each, so a shortfall names the row that caused it
+       instead of leaving a number to be guessed at. Margins included: a row that does not
+       fit because of the air above it is still a row that does not fit. */
+    rows: (function () {
+      var out = [], kids = card.children;
+      for (var j = 0; j < kids.length; j++) {
+        var k = kids[j], kr = k.getBoundingClientRect(), ks = w.getComputedStyle(k);
+        if (ks.display === 'none') continue;
+        out.push(((k.id || k.className || k.tagName).toString().slice(0, 14) || '?') +
+                 ' ' + r2(kr.height) + (ks.marginTop !== '0px' ? '+' + ks.marginTop : '') +
+                 (ks.marginBottom !== '0px' ? '/' + ks.marginBottom : ''));
+      }
+      return out;
     })(),
     have: r2(cr.height),
     pad: [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft].join(' '),
@@ -443,7 +465,7 @@ async function main() {
   ok(out.hasCard && !out.inPage,
      'ONE CARD, TWO HOMES, NEVER BOTH: it is in the window and gone from the page',
      JSON.stringify(out));
-  ok(out.opener === false && out.title === 'Jarvis · focus',
+  ok(out.opener === false && out.title === 'Galaxy · focus',
      'the window is its own document with its own title, not the viewer tab',
      JSON.stringify({ title: out.title, opener: out.opener }));
   ok(/^\d+:\d\d$/.test(out.clock || '') && /\blive\b/.test(out.cls || ''),
@@ -531,6 +553,7 @@ async function main() {
     note('padded box ' + JSON.stringify(tidy.box) + ' · card ' + tidy.card.join('x') +
          ' in a ' + tidy.win.join('x') + ' window · padding ' + tidy.pad +
          ' · rows want ' + tidy.need + 'px of the ' + tidy.have + 'px they have');
+    note('the rows, in order: ' + tidy.rows.join(' | '));
     ok(tidy.need <= tidy.have,
        'the card\'s rows FIT the window they were given: ' + tidy.need + 'px into ' +
        tidy.have + 'px',
@@ -561,6 +584,111 @@ async function main() {
      'the server agrees a session is running (' +
      (live.focus && live.focus.state) + ')');
 
+  /* ---- 3c. THE CARD'S NEW FRAME, IN A 320px WINDOW -------------------- */
+  /* THE CARD STOPPED LOOKING LIKE A NOTIFICATION, and everything it gained has to survive
+     being adopted into a window the size of a playing card - or be TAKEN OFF on the way out,
+     deliberately and by name. Both halves matter here:
+       what comes along  - the clipped corners, the corner brackets, and the miniature
+                           presence in the header, which is the thing that makes this a
+                           desk card for an agent rather than a countdown;
+       what is left home - the four edge traces and the scanline, whose keyframes translate
+                           by the PAGE card's 460x340 and would sweep straight off a 320px
+                           one, and the telemetry columns, which is room the clock needs.
+     The second half is enforced by DESK_CSS rather than by which elements get adopted, so
+     it is read as COMPUTED STYLE out in the real window - the only place that stylesheet is
+     actually in force. 3b has already proved the rails did not follow; this is the same
+     question asked about the card's own decoration. */
+  /* AND THE HOLOGRAM IS WAITED FOR FIRST. It boots last on the page on purpose - after the
+     worlds, the flow, the bloom's audition and its own - which is a good deal later than
+     this harness gets here. Asking about the miniature before there is anything to mirror
+     measures the boot order and calls it a broken mirror. */
+  let mirrorUp = false;
+  for (let i = 0; i < 120 && !mirrorUp; i++) {
+    mirrorUp = (await page.evaluate('!!(window.__galaxy && __galaxy.presence.built' +
+      ' && __galaxy.presence.mirrors > 0)')) === true;
+    if (!mirrorUp) await sleep(250);
+  }
+  ok(mirrorUp, 'THE HOLOGRAM IS BUILT AND ALREADY MIRRORING, so the questions below are ' +
+     'about a miniature with something to copy: ' +
+     JSON.stringify(await page.json('({built: __galaxy.presence.built,' +
+       ' mode: __galaxy.presence.mode, mirrors: __galaxy.presence.mirrors,' +
+       ' well: __galaxy.presence.well})')));
+  const frameOut = await page.json(
+    '(function(){var w=documentPictureInPicture.window, d=w&&w.document;' +
+    'if(!d) return null;' +
+    'var c=d.getElementById("focuscard");' +
+    'if(!c) return {card:false};' +
+    'var cs=w.getComputedStyle(c);' +
+    'var one=function(sel){var e=c.querySelector(sel);' +
+    ' return e ? w.getComputedStyle(e).display : "absent";};' +
+    'var mini=d.getElementById("focus-mini");' +
+    'var mr=mini?mini.getBoundingClientRect():null;' +
+    'return {card:true, clip:cs.clipPath,' +
+    ' cuts:c.querySelectorAll(".aframe .acut").length,' +
+    ' brackets:c.querySelectorAll(".aframe .abr").length,' +
+    ' trace:one(".atrace"), scan:one(".ascan"), tel:one(".atel"),' +
+    ' mini: mr ? {w:Math.round(mr.width), h:Math.round(mr.height), tag:mini.tagName,' +
+    '   inHeader: !!(mini.parentElement && /\\bfh\\b/.test(mini.parentElement.className)),' +
+    '   ink: (function(){try{var g=mini.getContext("2d");' +
+    '     var px=g.getImageData(0,0,mini.width,mini.height).data;' +
+    '     var lit=0; for(var i=3;i<px.length;i+=4) if(px[i]>8) lit++;' +
+    '     return lit;}catch(e){return -1;}})()} : null,' +
+    ' clockW: (function(){var e=d.getElementById("focus-clock");' +
+    '   return e?Math.round(e.getBoundingClientRect().width):0;})(),' +
+    ' mirrors: __galaxy.presence.mirrors, mode: __galaxy.presence.mode};})()');
+  note('the card out there: ' + JSON.stringify(frameOut));
+  ok(!!frameOut && frameOut.card === true && frameOut.clip && frameOut.clip !== 'none',
+     'THE CLIPPED CORNERS CAME ALONG: the desktop card is cut, not rounded - clip-path is ' +
+     'in force out in the floating window',
+     JSON.stringify(frameOut && frameOut.clip));
+  ok(!!frameOut && frameOut.cuts === 4 && frameOut.brackets === 4,
+     'and so did the four diagonal strokes and the four corner brackets',
+     JSON.stringify({ cuts: frameOut && frameOut.cuts,
+                      brackets: frameOut && frameOut.brackets }));
+  ok(!!frameOut && frameOut.trace === 'none' && frameOut.scan === 'none' &&
+     frameOut.tel === 'none',
+     'AND THE THINGS THAT WOULD NOT FIT WERE TAKEN OFF ON THE WAY OUT: the traces and the ' +
+     'scanline are display:none out here - their keyframes translate by the page card’s ' +
+     'width and would sweep off this one - and so are the telemetry columns, which is room ' +
+     'the clock needs',
+     JSON.stringify({ trace: frameOut && frameOut.trace, scan: frameOut && frameOut.scan,
+                      tel: frameOut && frameOut.tel }));
+  ok(!!frameOut && !!frameOut.mini && frameOut.mini.tag === 'CANVAS' &&
+     frameOut.mini.inHeader === true && frameOut.mini.w >= 20 && frameOut.mini.w <= 30,
+     'THE MINIATURE PRESENCE IS ON THE DESK CARD: a ' + (frameOut.mini && frameOut.mini.w) +
+     'px canvas in the header row, 26px of the 320 this window has',
+     JSON.stringify(frameOut && frameOut.mini));
+  /* AND IT IS A PICTURE OF THE HOLOGRAM rather than an empty canvas. Counted as lit pixels -
+     and then WIPED and counted again, because a canvas keeps its bitmap when its element is
+     adopted into another document, so ink alone could be a picture painted before the card
+     ever left the page. Cleared from out here, and if the well is still drawing into it the
+     ink comes back within a frame or two; if the mirror only ever worked in the tab, it
+     stays black and says so. */
+  ok(!!frameOut && !!frameOut.mini && frameOut.mini.ink > 40,
+     'and it is a PICTURE of it: ' + (frameOut.mini && frameOut.mini.ink) + ' lit pixels ' +
+     'in the canvas out there (' + (frameOut && frameOut.mode) + ' mode, ' +
+     (frameOut && frameOut.mirrors) + ' mirrors so far)',
+     JSON.stringify(frameOut && frameOut.mini));
+  await page.evaluate(
+    '(function(){var d=documentPictureInPicture.window.document;' +
+    'var m=d.getElementById("focus-mini"); if(!m) return false;' +
+    'var g=m.getContext("2d"); g.clearRect(0,0,m.width,m.height); return true;})()');
+  await sleep(1200);
+  const repainted = await page.json(
+    '(function(){var d=documentPictureInPicture.window.document;' +
+    'var m=d.getElementById("focus-mini");' +
+    'var ink=-1; if(m){try{var g=m.getContext("2d");' +
+    ' var px=g.getImageData(0,0,m.width,m.height).data; ink=0;' +
+    ' for(var i=3;i<px.length;i+=4) if(px[i]>8) ink++;}catch(e){ink=-2;}}' +
+    'return {ink:ink, mirrors:__galaxy.presence.mirrors,' +
+    ' frames:__galaxy.presence.frames};})()');
+  ok(repainted.ink > 40 && repainted.mirrors > (frameOut ? frameOut.mirrors : 0),
+     'AND THE MIRROR IS LIVE ACROSS THE DOCUMENT BOUNDARY: wiped by hand, and ' +
+     repainted.ink + ' pixels came back within a second - ' +
+     (repainted.mirrors - (frameOut ? frameOut.mirrors : 0)) + ' more frames of the well ' +
+     'drawn into a canvas in another document, off the one canvas and no second renderer',
+     JSON.stringify({ before: frameOut && frameOut.mirrors, after: repainted }));
+
   /* ---- 4. THE TINT, in the real window -------------------------------- */
   /* The drift tone applied by hand for one frame, and the computed background read back
      out of the DESKTOP window. That the server's drifting state is what adds this class
@@ -589,7 +717,7 @@ async function main() {
   log('-- the pill: LOCK THIS TAB, pressed inside the desktop window');
   /* THE FRONT WINDOW IS THE CARD. Not a detail of the harness - it is the trap itself.
      Pressing the pill puts the PiP window in front, so a server reading "the frontmost
-     window" sees a window titled `Jarvis · focus` on about:blank, which matches no tab
+     window" sees a window titled `Galaxy · focus` on about:blank, which matches no tab
      at all. So the card is brought to the front on purpose here, and what is then
      demanded is that the lock lands on the WORK tab anyway, by way of the browser's own
      account of which of its tabs is showing. A run with the work window in front would
@@ -614,7 +742,7 @@ async function main() {
     return true;
   };
   if (workOpen) { await raise((t) => t.url.includes('example.com')); await sleep(600); }
-  if (await raise((t) => t.title === 'Jarvis · focus')) front = 'the card, over the work window';
+  if (await raise((t) => t.title === 'Galaxy · focus')) front = 'the card, over the work window';
   else if (workOpen) front = 'the work window (the card is not a debuggable target here)';
   note('brought to the front: ' + front);
   /* capability() is cached for three seconds, and the answer that matters is the one

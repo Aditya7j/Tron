@@ -83,8 +83,13 @@ TOOL_TAG_RE = re.compile(r"\[\[\s*tool\s*:\s*([^\]\n|]{1,60}?)\s*"
 # comma or an "and" - and NOTHING else may appear. A message that mixes the two kinds,
 # "yes, cancel that", matches neither and is therefore a withdrawal: an ambiguous answer
 # is not consent.
+# "haan" is Hindi for yes and it is how the boss actually answers half the time, usually
+# doubled or with the English word after it - "haan yes", "haan haan do it". It is here and
+# not in a separate list because a yes is a yes in whatever language it arrives in, and a
+# second list would be a second thing for the gate to forget to read.
 _YES_WORDS = r"""
       yes | yes\s+please | yep | yeah | yup | aye | ok | okay | okey\s*dokey
+    | haan | haan\s*ji | han | theek\s+hai | kar\s+do | bilkul
     | sure | go\s+ahead | go\s+on | do\s+it | send\s+it | please\s+do | do\s+so
     | proceed | confirm(?:ed)? | affirmative | very\s+well | if\s+you\s+would
     | that'?s\s+right | correct | please

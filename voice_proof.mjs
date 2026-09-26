@@ -61,7 +61,7 @@
  * Usage:  python server.py 2> server-trace.log   then   node voice_proof.mjs
  */
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -195,6 +195,19 @@ class Page {
     return r.result && r.result.result ? r.result.result.value : undefined;
   }
   async json(e) { return JSON.parse(await this.evaluate('JSON.stringify(' + e + ')') || 'null'); }
+  /* A PLATE, clipped and doubled when a rectangle is handed in. This harness owes the
+     lookbook the one picture no other harness can take: the face with its mouth open on a
+     real voice, which needs a real read to be happening while the shutter goes. */
+  async shot(file, clip) {
+    const r = await this.send('Page.captureScreenshot', clip
+      ? { format: 'png', clip: { x: clip.left, y: clip.top, width: clip.w, height: clip.h,
+                                 scale: clip.scale || 2 } }
+      : { format: 'png' });
+    const data = r.result && r.result.data;
+    if (!data) throw new Error('no screenshot came back');
+    writeFileSync(file, Buffer.from(data, 'base64'));
+    return file;
+  }
   close() { try { this.ws.close(); } catch { } }
 }
 const cdp = async (p) => { const r = await fetch(CDP + p); const t = await r.text();
@@ -393,6 +406,7 @@ async function readOut(page, text, timeout, opts = {}) {
       var mic = window.__vp.watchOrgan ? (__galaxy.organs.state.mic || {}) : null;
       window.__vp.samples.push({ at: Date.now(), lit: lit, draining: v.draining,
         queue: v.queue, now: v.now, engine: v.engine, ka: v.keepAlive, done: done,
+        buf: v.buffered, ahead: v.ahead,
         built: a.built, ducked: a.ducked, gain: a.gain, bus: a.speechBus, down: v.down,
         st: a.state,
         micOrgan: mic ? mic.organ : '', micTone: mic ? mic.tone : '',
@@ -803,6 +817,27 @@ async function main() {
   ok(Math.abs(r.pageGap - gap.worst) <= 1,
      'and the page\u2019s own arithmetic agrees (' + r.pageGap + 'ms vs ' + gap.worst +
      'ms), so the number in the instrument can be trusted next time');
+  /* AND THE DEPTH, NOT ONLY THE EFFECT. The ceiling above can be met by a warm say-cache on
+     a lucky run - which is exactly how a one-chunk lookahead passed this file for weeks and
+     then produced 2287ms of silence the first time a cold 170-character chunk followed a
+     42-character one. So the lookahead is asserted as a DEPTH as well, and the depth read is
+     voice.ahead - chunks in flight IN FRONT OF the chunk being played - rather than
+     voice.buffered, which is cleared once per run and therefore climbs to the chunk count on
+     any lookahead at all, one-deep included. THE FAILURE MODE: a future edit that reverts to
+     "fetch the next one" would still pass the gap ceiling on a warm cache and would still
+     report 8 buffered chunks at the end; only a live depth of 2 or more says the arithmetic
+     in speakPiper is covering a long cold chunk with the SUM of its predecessors. */
+  const aheadMax = (r.samples || []).reduce((m, s) => Math.max(m, s.ahead || 0), 0);
+  const look = await page.json('({ms: __galaxy.voice.AHEAD_MS, cap: __galaxy.voice.AHEAD_CAP})');
+  note('lookahead: ' + look.ms + 'ms of audio, at most ' + look.cap + ' chunks \u00b7 deepest ' +
+       'measured in front of the ear: ' + aheadMax + ' chunks (buffered ' +
+       r.samples.reduce((m, s) => Math.max(m, s.buf || 0), 0) + ' by the end)');
+  ok(aheadMax >= 2 && look.ms >= 4500,
+     'THE LOOKAHEAD IS SECONDS OF AUDIO AND NOT ONE CHUNK: it holds ' + look.ms +
+     'ms of estimated speech in front of the ear (cap ' + look.cap + ' chunks) and was ' +
+     'measured ' + aheadMax + ' chunks deep mid-read, so a long cold sentence is covered by ' +
+     'every sentence before it and not only by the last one',
+     JSON.stringify({ aheadMax: aheadMax, look: look }));
   ok(r.wall > 60000,
      'and it really was a long answer, not a fast failure: ' + (r.wall / 1000).toFixed(1) +
      's of speech', (r.wall / 1000).toFixed(1) + 's');
@@ -1061,6 +1096,192 @@ async function main() {
   ok(micAfter.organ === 'off' && micAfter.beating === false,
      'AND IT STOPS: the dot is still and the organ is off the moment he has finished, ' +
      'rather than pulsing at an empty queue', JSON.stringify(micAfter));
+
+  /* ---- 5c. THE MOUTH, ON THE VOICE THAT WAS JUST MEASURED ----------------
+     THE FACE HAS TO MOVE ON THE SIGNAL, not on a timer. That distinction is the whole
+     check: a mouth that ripples on `performance.now()` while the butler speaks looks
+     identical in a video and is a lie, because it would go on rippling through a barge-in
+     and through a failed chunk. So two things are read rather than one - the LEVEL, and
+     the name of the SIGNAL it came from, which the page publishes as `presence.from`.
+     On the piper path that name must be `analyser`: real samples, tapped off speechBus
+     after the gain node, which is also why a barge-in shuts the mouth for nothing. On the
+     browser path the engine hands this page no graph to read and the honest answer is
+     `cadence` - and the page says `cadence` rather than pretending. Either is a pass; a
+     level with `rest` beside it is not.
+     This is also where the lookbook's speaking plate is taken, because it is the only
+     moment in the suite where a real voice is coming out of a real read. */
+  note('the mouth: one short line, sampled from inside the page at 60ms…');
+  const mouthPres = await page.json('({built: __galaxy.presence.built,' +
+    ' mode: __galaxy.presence.mode, analyser: __galaxy.presence.analyser,' +
+    ' degraded: __galaxy.presence.degraded})');
+  if (mouthPres.built) { await page.evaluate('__galaxy.presence.set("face")'); }
+  await sleep(1000);
+  const mouthWell = await page.json('__galaxy.layout.rects.presence');
+  /* WAITED BACK TO REST, not assumed to be there: the section above this one had him
+     talking, and a mouth that is still closing is not a mouth that failed to close. What is
+     asserted is that it DOES come to rest and stays there while nothing speaks - the wait
+     has a ceiling, and a mouth still moving at the end of it fails the same assertion. */
+  const MOUTH_REST = '__galaxy.presence.from === "rest" && __galaxy.presence.level < 0.05';
+  await waitFor(page, MOUTH_REST, 8000);
+  const rest0 = await page.json('({level: __galaxy.presence.level,' +
+    ' from: __galaxy.presence.from, mode: __galaxy.presence.mode,' +
+    ' pose: __galaxy.face.state, queue: __galaxy.voice.queue,' +
+    ' draining: !!__galaxy.voice.draining})');
+  note('   at rest before the line: ' + JSON.stringify(rest0));
+  /* AND THE REST IS SILENCE RATHER THAN A STOPPED CLOCK, which is a real distinction and a
+     trap this harness has already fallen into once: presFrame() returns early for a well the
+     governor stood down, and a level that is not being written keeps whatever it was last
+     told - so a stale 0.4 reads exactly like a moving mouth, and a stale 0 would read
+     exactly like this line passing. The loop is therefore counted across a second of the
+     rest it is asserting. */
+  const spin0 = await page.json('({frames: __galaxy.presence.frames,' +
+    ' fps: __galaxy.presence.fps, vis: document.visibilityState,' +
+    ' well: __galaxy.presence.well})');
+  await sleep(1000);
+  const spin1 = await page.json('({frames: __galaxy.presence.frames,' +
+    ' level: __galaxy.presence.level, from: __galaxy.presence.from})');
+  note('   the loop: ' + JSON.stringify(spin0) + ' -> ' + JSON.stringify(spin1));
+  ok(spin1.frames - spin0.frames > 20 && spin1.level < 0.05 && spin1.from === 'rest',
+     'AND THAT REST IS SILENCE, NOT A STOPPED CLOCK: ' + (spin1.frames - spin0.frames) +
+     ' frames were drawn during the second before he spoke and the mouth stayed at ' +
+     spin1.level + ' through all of them - a frozen level would read the same as a shut one',
+     JSON.stringify({ drew: spin1.frames - spin0.frames, well: spin0.well, after: spin1 }));
+  ok(mouthPres.built === true && rest0.mode === 'face',
+     'THE FACE IS ON THE GLASS for this section: ' +
+     (await page.evaluate('__galaxy.presence.points')) + ' points in FACE mode' +
+     (mouthPres.degraded ? ' (put back by hand after "' + mouthPres.degraded + '")' : ''),
+     JSON.stringify(mouthPres));
+  ok(rest0.from === 'rest' && rest0.level < 0.08,
+     'AND ITS MOUTH IS SHUT BEFORE A WORD IS SPOKEN: level ' + rest0.level + ' from "' +
+     rest0.from + '"', JSON.stringify(rest0));
+  if (mouthWell) {
+    await page.shot('voice-face-idle.png', mouthWell);
+    note('wrote voice-face-idle.png (FACE mode, nothing speaking, lips at rest)');
+  }
+  /* Sampled INSIDE the page, like the indicator above and for the same reason: the peak of
+     a mouth is milliseconds wide and a round trip over a WebSocket is not. */
+  await page.evaluate(`(function(){
+    window.__mouth = { n: 0, max: 0, from: {}, above: 0, peakAt: 0, samples: [],
+                       jmax: 0, pairs: [] };
+    window.__mouth.timer = setInterval(function () {
+      var p = __galaxy.presence, l = p.level;
+      var m = window.__mouth;
+      m.n++;
+      m.from[p.from] = (m.from[p.from] || 0) + 1;
+      if (l > 0.12) m.above++;
+      if (l > m.max) { m.max = l; m.peakAt = Date.now(); }
+      if (m.samples.length < 140) m.samples.push([+l.toFixed(3), p.from]);
+      /* PART G CRITERION 5. The jaw is read back off the MATERIAL, not off the
+         bookkeeping: presence.uniforms asks the ShaderMaterial what it was actually
+         told this frame. A pres.jaw that moved while uJaw stayed at zero is a shut
+         mouth on the glass, and reading the JS field would call that a pass. */
+      var u = p.uniforms;
+      if (u && u.jaw > m.jmax) m.jmax = u.jaw;
+      if (m.pairs.length < 400) m.pairs.push([l, u ? u.jaw : -1]);
+    }, 60);
+    return 'armed';
+  })()`);
+  /* void, so the evaluate does not sit on the read's own promise - the plate has to be taken
+     WHILE it is speaking, not after. */
+  await page.evaluate('void __galaxy.speech.speakLine(' +
+    JSON.stringify('The mouth moves on the signal, sir, and not on a clock.') + ')');
+  await sleep(1400);
+  const midMouth = await page.json('({level: __galaxy.presence.level,' +
+    ' from: __galaxy.presence.from, lit: document.getElementById("status").className})');
+  if (mouthWell) {
+    await page.shot('voice-face-speaking.png', mouthWell);
+    note('wrote voice-face-speaking.png (mid-sentence: level ' + midMouth.level +
+         ' from "' + midMouth.from + '")');
+  }
+  await waitFor(page, '__galaxy.voice.queue === 0 && !__galaxy.voice.draining', 40000);
+  await page.evaluate('clearInterval(window.__mouth.timer)');
+  const mouth = await page.json('window.__mouth');
+  const fromNames = Object.keys(mouth.from).filter((k) => k !== 'rest');
+  note('mouth: ' + mouth.n + ' samples · peak ' + mouth.max + ' · ' + mouth.above +
+       ' over 0.12 · sources ' + JSON.stringify(mouth.from));
+  ok(mouth.max > 0.15 && mouth.above >= 3,
+     'THE MOUTH MOVED WHILE HE SPOKE: it peaked at ' + mouth.max + ' and stood above 0.12 ' +
+     'on ' + mouth.above + ' of ' + mouth.n + ' samples',
+     JSON.stringify({ max: mouth.max, above: mouth.above,
+                      head: mouth.samples.slice(0, 12) }));
+  ok(fromNames.length > 0 &&
+     fromNames.every((n) => n === (r.engine === 'piper' ? 'analyser' : 'cadence')),
+     'AND IT MOVED ON THE ' + (r.engine === 'piper'
+       ? 'REAL SAMPLES: every moving frame named "analyser" - an AnalyserNode tapped off ' +
+         'speechBus, which is why a barge-in shuts this mouth for free'
+       : 'HONEST FALLBACK: the browser engine hands this page no graph, so the source ' +
+         'names itself "cadence" rather than pretending to be an analyser'),
+     JSON.stringify({ engine: r.engine, sources: mouth.from }));
+  if (r.engine === 'piper') {
+    ok((await page.evaluate('__galaxy.presence.analyser')) === true,
+       'and the tap is a real node on the bus rather than a flag: presence.analyser is up');
+  }
+  /* ---- PART G, CRITERION 5: THE HINGE IS DRIVEN BY THE SIGNAL ---------------
+     The other four head criteria are measured in deck_proof, off a still buffer. This one
+     cannot be: it asks whether the JAW ANGLE the GPU is given tracks the real mouth signal,
+     and voice_proof is the only harness where a real engine puts real samples on the speech
+     bus - it has already proved, thirty lines up, that every moving frame named "analyser".
+     FAILURE MODES THIS CATCHES, each of which would leave the four still-buffer criteria
+     passing and the head talking wrongly:
+       - uJaw never written: variance zero, r is 0 by the guard below, FAIL.
+       - uJaw written from a clock or an idle oscillator rather than the level: the level's
+         peaks and the clock's are uncorrelated, r collapses, FAIL.
+       - uJaw written but clamped or saturated: r can survive, so the AMPLITUDE is asserted
+         separately against level x JAW_MAX.
+       - the level read from the page rather than the material: ruled out by construction -
+         the paired sample takes level from presence.level and jaw from presence.uniforms,
+         which is a readback of the ShaderMaterial itself. */
+  const pairs = (mouth.pairs || []).filter((p) => p[1] >= 0);
+  const jawCorr = (function () {
+    const n = pairs.length;
+    if (n < 20) return { n, r: 0, why: 'too few paired samples' };
+    const mx = pairs.reduce((s, p) => s + p[0], 0) / n;
+    const my = pairs.reduce((s, p) => s + p[1], 0) / n;
+    let sxy = 0, sxx = 0, syy = 0;
+    for (const p of pairs) {
+      const dx = p[0] - mx, dy = p[1] - my;
+      sxy += dx * dy; sxx += dx * dx; syy += dy * dy;
+    }
+    /* a stuck uniform has zero variance; Pearson is undefined there, and "undefined" must
+       read as NO CORRELATION rather than as a division that quietly returns NaN and
+       compares false-but-unexplained. */
+    if (sxx <= 1e-12 || syy <= 1e-12) {
+      return { n, r: 0, why: syy <= 1e-12 ? 'uJaw never varied - the hinge is stuck' :
+                                            'the level never varied' };
+    }
+    return { n, r: +(sxy / Math.sqrt(sxx * syy)).toFixed(4), why: '' };
+  })();
+  const jawWant = mouth.max * 0.20;      // PRES.JAW_MAX radians at full level
+  note('jaw: peak uJaw ' + (mouth.jmax || 0).toFixed(4) + ' rad (' +
+       ((mouth.jmax || 0) * 57.2958).toFixed(1) + ' deg) · expected ' + jawWant.toFixed(4) +
+       ' · r = ' + jawCorr.r + ' over ' + jawCorr.n + ' paired samples');
+  ok(jawCorr.r > 0.5,
+     'THE JAW HINGES ON THE VOICE AND NOT ON A CLOCK: the angle read back off the ' +
+     'ShaderMaterial correlates with the ' + (r.engine === 'piper' ? 'analyser' : 'cadence') +
+     ' level at r = ' + jawCorr.r + ' across ' + jawCorr.n + ' frames of a real sentence ' +
+     '(> 0.50 asked)' + (jawCorr.why ? ' - ' + jawCorr.why : ''),
+     JSON.stringify({ r: jawCorr.r, n: jawCorr.n, why: jawCorr.why,
+                      head: pairs.slice(0, 8).map((p) => [+p[0].toFixed(3), +p[1].toFixed(4)]) }));
+  ok(mouth.jmax > 0.02 && Math.abs(mouth.jmax - jawWant) < 0.012,
+     'AND IT OPENED BY THE RIGHT AMOUNT: peak ' + (mouth.jmax * 57.2958).toFixed(1) +
+     ' degrees of hinge against ' + (jawWant * 57.2958).toFixed(1) + ' expected from a ' +
+     'level of ' + mouth.max + ' - a hinge that saturated or that was scaled by something ' +
+     'else would still correlate, and would still be the wrong mouth',
+     JSON.stringify({ jmax: mouth.jmax, level: mouth.max, want: jawWant }));
+  /* AND STILL AGAIN AFTERWARDS. Waited for rather than slept at, because an empty QUEUE is
+     not a silent BUS: the last chunk has been handed to the audio engine and is still
+     playing out of it, and a mouth that shut while its own sentence was still audible would
+     be the precise failure this section exists to rule out. The ceiling is what makes it an
+     assertion - eight seconds of a moving mouth over a silent bus fails here. */
+  const restBy = Date.now();
+  await waitFor(page, MOUTH_REST, 8000);
+  const rest1 = await page.json('({level: __galaxy.presence.level,' +
+    ' from: __galaxy.presence.from})');
+  ok(rest1.from === 'rest' && rest1.level < 0.08,
+     'AND IT WENT STILL AGAIN when the voice stopped: level ' + rest1.level + ' from "' +
+     rest1.from + '" - the signal ended and the lips closed with it, ' +
+     (Date.now() - restBy) + 'ms after the queue emptied',
+     JSON.stringify(rest1));
 
   /* ---- 6. ONE FORCED FAILURE, AND THE QUEUE STILL FINISHES ---------------- */
   if (r.engine === 'piper') {

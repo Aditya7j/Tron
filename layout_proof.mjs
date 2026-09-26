@@ -38,7 +38,7 @@
  * Usage:  node layout_proof.mjs        (server.py must be running on 4700)
  */
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -89,6 +89,18 @@ class Page {
     return r.result && r.result.result ? r.result.result.value : undefined;
   }
   async json(e) { return JSON.parse(await this.evaluate('JSON.stringify(' + e + ')') || 'null'); }
+  /* A PLATE, clipped to a rectangle and doubled. This harness is the one that has a LIVE
+     in-page session card in front of it, so the close-up of it is this harness's to take. */
+  async shot(file, clip) {
+    const r = await this.send('Page.captureScreenshot', clip
+      ? { format: 'png', clip: { x: clip.left, y: clip.top, width: clip.w, height: clip.h,
+                                 scale: clip.scale || 2 } }
+      : { format: 'png' });
+    const data = r.result && r.result.data;
+    if (!data) throw new Error('no screenshot came back');
+    writeFileSync(file, Buffer.from(data, 'base64'));
+    return file;
+  }
   close() { try { this.ws.close(); } catch { } }
 }
 const cdp = async (p) => { const r = await fetch(CDP + p); const t = await r.text();
@@ -238,7 +250,14 @@ async function main() {
      on a card with no wrapping at all and prove nothing about the rule being tested. */
   const HARD = 'rewriting https://internal.example.com/queues/invoice-importer/retries?since=yesterday';
   await page.evaluate('__galaxy.session.answer(' + JSON.stringify(HARD) + ')');
-  await sleep(900);
+  /* WAITED FOR RATHER THAN SLEPT AT: the intent goes to the server and comes back on the
+     session push, so a fixed 900ms is a bet on this machine's load rather than a
+     measurement. The claim is unchanged - the card is carrying the whole URL - only the
+     patience is. */
+  await waitFor(page,
+    'document.getElementById("focus-intent").textContent.indexOf("internal.example.com") >= 0',
+    8000);
+  await sleep(250);                        // one paint after the text lands, for the boxes
   const shown = await page.evaluate('document.getElementById("focus-intent").textContent');
   ok(shown.indexOf('internal.example.com') !== -1,
      'the card is carrying an unbreakable ' + HARD.length + '-character intent',
@@ -259,6 +278,118 @@ async function main() {
        JSON.stringify(tidy.placed));
     ok(tidy.cardW <= r1.focuscard.w + 1,
        'and the long word did not widen the card itself: ' + tidy.cardW + 'px');
+  }
+
+  /* ---- 2b-2. THE AGI CARD: it stopped looking like a notification ------
+     THE CARD IS THE ONE SURFACE ON THIS DECK THAT LOOKED ORDINARY, and PART 4 is about
+     that and nothing else: clipped diagonal corners instead of a rounded rect, corner
+     brackets, four traces carrying one light round the border, a slow scanline, the
+     micro-telemetry columns flanking the timer, and the miniature presence in the header.
+     It is decoration, which is exactly why it is checked here rather than admired in a
+     screenshot: decoration is what breaks the two laws this file exists to keep. So three
+     things are asserted about it - that every piece is there, that not one of them can take
+     a press or widen the card (2b above has already proved the text still lives inside its
+     box WITH all of this on), and that every animation it brought with it moves transform
+     or opacity and nothing else. A scanline that animated `top` would look identical and
+     cost the deck its frame rate.
+     This is also where the lookbook's close-up of the card is taken, because this is the
+     only harness with a LIVE session card in the page in front of it. */
+  const agi = await page.json('(function(){' +
+    'var c = document.getElementById("focuscard");' +
+    'var f = c.querySelector(".aframe");' +
+    'var cs = getComputedStyle(c), fs = f ? getComputedStyle(f) : null;' +
+    'var sp = ["sp-drift","sp-clean","sp-streak"].map(function(id){' +
+    '  var e = document.getElementById(id);' +
+    '  return {id:id, pts:e ? (e.getAttribute("points")||"") : null,' +
+    '          box:e && e.ownerSVGElement ? e.ownerSVGElement.getAttribute("viewBox") : ""};});' +
+    'var tv = ["tv-drift","tv-clean","tv-streak"].map(function(id){' +
+    '  var e = document.getElementById(id); return e ? e.textContent : null;});' +
+    'var mini = document.getElementById("focus-mini");' +
+    'var mr = mini ? mini.getBoundingClientRect() : null;' +
+    'var hdr = mini && mini.parentElement ? mini.parentElement.className : "";' +
+    /* Every keyframe this card brought with it, read out of the live cascade rather than
+       out of the source - a rule added next year fails here and not on his frame rate. */
+    'var frames = 0, bad = [];' +
+    'Array.prototype.forEach.call(document.styleSheets, function(sheet){' +
+    '  var rules = null; try { rules = sheet.cssRules; } catch (e) { return; }' +
+    '  Array.prototype.forEach.call(rules || [], function(rule){' +
+    '    if (rule.type !== CSSRule.KEYFRAMES_RULE) return;' +
+    '    if (!/^(atrace|ascan)/.test(rule.name)) return;' +
+    '    frames++;' +
+    '    Array.prototype.forEach.call(rule.cssRules || [], function(fr){' +
+    '      for (var i = 0; i < fr.style.length; i++) {' +
+    '        var prop = fr.style[i];' +
+    '        if (prop !== "transform" && prop !== "opacity") bad.push(rule.name+":"+prop);' +
+    '      }});});});' +
+    'return {cuts: c.querySelectorAll(".aframe .acut").length,' +
+    ' brackets: c.querySelectorAll(".aframe .abr").length,' +
+    ' traces: c.querySelectorAll(".aframe .atrace").length,' +
+    ' scans: c.querySelectorAll(".aframe .ascan").length,' +
+    ' cells: c.querySelectorAll(".aclock .acell").length,' +
+    ' cols: c.querySelectorAll(".aclock .atel").length,' +
+    ' clip: cs.clipPath, radius: cs.borderRadius,' +
+    ' framePE: fs ? fs.pointerEvents : "", frameZ: fs ? fs.zIndex : "",' +
+    ' hidden: f ? f.getAttribute("aria-hidden") : "",' +
+    ' sp: sp, tv: tv, mini: mr ? {w: Math.round(mr.width), h: Math.round(mr.height),' +
+    '   tag: mini.tagName, hdr: hdr} : null,' +
+    ' frames: frames, bad: bad,' +
+    ' fx: (function(){var s = __galaxy.session.state || {};' +
+    '   return {drifts: s.drifts, clean: s.cleanPct, streak: s.streak};})(),' +
+    ' mirrors: __galaxy.presence.mirrors, presMode: __galaxy.presence.mode,' +
+    ' well: __galaxy.presence.well};})()');
+  note('the AGI card: ' + JSON.stringify(agi));
+  ok(agi.cuts === 4 && agi.brackets === 4 && agi.traces === 4 && agi.scans === 1,
+     'THE FRAME IS ALL THERE: four diagonal cuts, four corner brackets, four edge traces ' +
+     'and one scanline', JSON.stringify(agi));
+  ok(agi.clip && agi.clip !== 'none',
+     'AND THE CORNERS ARE CLIPPED rather than rounded: clip-path is "' +
+     String(agi.clip).slice(0, 80) + '" - a polygon, not a radius', JSON.stringify(agi.clip));
+  ok(agi.framePE === 'none' && agi.frameZ === '-1' && agi.hidden === 'true',
+     'and none of it can be pressed or read aloud: the frame is pointer-events none, on ' +
+     'z-index ' + agi.frameZ + ' under every character on the card, and aria-hidden',
+     JSON.stringify({ pe: agi.framePE, z: agi.frameZ, hidden: agi.hidden }));
+  ok(agi.cols === 2 && agi.cells === 3,
+     'THE TIMER IS FLANKED: two micro-telemetry columns, three cells - drift rate, clean ' +
+     'percentage and streak', JSON.stringify({ cols: agi.cols, cells: agi.cells }));
+  ok(agi.tv.every((t) => t !== null && t !== '--' && t !== ''),
+     'and all three carry a LIVE value rather than a placeholder: ' +
+     JSON.stringify(agi.tv), JSON.stringify(agi.tv));
+  /* The same clamp fxSparks applies, applied again out here from the card's own state, so
+     this is an equality between two computations of one number rather than a copy. */
+  const wantClean = Math.max(0, Math.min(100, Number(agi.fx.clean) || 0)) + '%';
+  const wantStreak = String(Math.max(0, Number(agi.fx.streak) || 0));
+  ok(agi.tv[1] === wantClean && agi.tv[2] === wantStreak,
+     'and the digits are the SAME NUMBERS the card is running on: clean ' + agi.tv[1] +
+     ' and streak ' + agi.tv[2] + ' straight off fx, not off a second source',
+     JSON.stringify({ shown: agi.tv, fx: agi.fx, want: [wantClean, wantStreak] }));
+  ok(agi.sp.every((s) => s.pts && s.pts.length > 0 && s.box === '0 0 96 11'),
+     'and each of them is drawn as a tiny mono SPARKLINE: three polylines with points in ' +
+     'them, all on the same 96x11 viewBox',
+     JSON.stringify(agi.sp));
+  ok(!!agi.mini && agi.mini.tag === 'CANVAS' && agi.mini.w >= 24 && agi.mini.w <= 40 &&
+     agi.mini.hdr.indexOf('fh') >= 0,
+     'THE MINIATURE PRESENCE IS IN THE HEADER: a ' + (agi.mini && agi.mini.w) + 'px canvas ' +
+     'in the card header row - the same hologram, drawn from the same canvas, not a second ' +
+     'instrument', JSON.stringify(agi.mini));
+  /* AND IT IS BEING PAINTED, not merely present - but only when there is a well to paint
+     FROM. A window too narrow for the presence stands the hologram down by design, and a
+     miniature of a hologram that is not being drawn is correctly blank; asserting mirrors
+     climbed in that case would be asserting the governor had failed to do its job. */
+  ok(agi.well.fits ? agi.mirrors > 0 : agi.mirrors === 0,
+     agi.well.fits
+       ? 'and it is being PAINTED rather than merely present: ' + agi.mirrors +
+         ' frames of the well have been mirrored into it (' + agi.presMode + ' mode)'
+       : 'and with no room for a well in this window the miniature is correctly blank: ' +
+         'the governor stood the hologram down (' + agi.well.why + ')',
+     JSON.stringify({ mirrors: agi.mirrors, mode: agi.presMode, well: agi.well }));
+  ok(agi.frames >= 5 && agi.bad.length === 0,
+     'AND EVERY ANIMATION IT BROUGHT IS CHEAP: ' + agi.frames + ' keyframe rules for the ' +
+     'traces and the scanline, and not one of them touches anything but transform or opacity',
+     JSON.stringify(agi.bad));
+  const cardAt = await page.json('__galaxy.layout.rects.focuscard');
+  if (cardAt) {
+    await page.shot('layout-agi-card.png', cardAt);
+    note('wrote layout-agi-card.png (the session card close-up at 2x, live and running)');
   }
 
   /* ---- 2c. THE MEASURED CLEARANCE: the toast and the card, at once ----- */
@@ -430,6 +561,89 @@ async function main() {
      'px) rather than pushed off the bottom of it',
      JSON.stringify({ bar: tightBar.bar, vh: tv.vh }));
 
+  /* ---- 2e. THE PRESENCE WELL, at three widths -------------------------- */
+  /* THE HOLOGRAM IS THE ONE SURFACE ON THIS PAGE THAT CANNOT MOVE OUT OF THE WAY. The
+     card can shrink, the toast can give up width, the chips can stack - the presence is a
+     square of reserved glass with a face in it, and the governor's promise is that no
+     panel, toast or card is ever laid over it. That promise is arithmetic, not a test: the
+     well is placed BELOW both top lanes and either above or beside the toast, measured
+     against canvasW so the panel is a wall. This is where the arithmetic gets checked
+     against the browser.
+     THREE WIDTHS AND NOT ONE, because the three cases are genuinely different: at 1280
+     with the panel open there is no square left that clears the floor at all, which is a legitimate
+     stand-down and not a failure; at 1920 there is room for the full 300 and the well must
+     take it. The claim that must hold at every width is the same one - whatever is on the
+     glass does not touch it - and a width where it stood down proves it by having nothing
+     there to touch.
+     The conditions are the crowded ones on purpose: this runs with a note panel open, a
+     live session card in the top-right lane and a real paragraph in the toast, which is
+     every governed surface at once. */
+  const WELL_AT = [1280, 1600, 1920];
+  let wellFitAny = false;
+  for (const w of WELL_AT) {
+    await page.send('Emulation.setDeviceMetricsOverride',
+                    { width: w, height: H, deviceScaleFactor: 0, mobile: false });
+    await sleep(650);
+    await page.evaluate('__galaxy.layout.run()');
+    await sleep(450);
+    const r = await page.json('__galaxy.layout.rects');
+    const last = await page.json('__galaxy.layout.last');
+    const pres = await page.json('__galaxy.presence.well');
+    const vv = await page.json('({vw:innerWidth,vh:innerHeight})');
+    const box = last.wellBox;
+    note('at ' + vv.vw + 'x' + vv.vh + ' the well is ' + JSON.stringify(box) +
+         ' · canvas ' + last.canvasW + ' · renderer ' + JSON.stringify(pres));
+    ok(!!box, 'at ' + w + ': the governor placed the well at all - it has an opinion ' +
+       'about the hologram rather than leaving it where the stylesheet put it',
+       JSON.stringify(last.wellBox));
+    if (box && box.fits) {
+      wellFitAny = true;
+      /* THE LAW. Four surfaces, each of which could cover it and none of which may. */
+      ok(!!r.presence, 'at ' + w + ': and the well is actually on the glass, ' +
+         (r.presence && r.presence.w) + 'px square', JSON.stringify(r.presence));
+      ok(disjoint(r.presence, r.brain),
+         'at ' + w + ': THE LAW - the toast does not touch the well (' +
+         JSON.stringify(r.brain) + ' clear of ' + JSON.stringify(r.presence) + ') · ' +
+         box.why, JSON.stringify({ why: box.why, toast: r.brain, well: r.presence }));
+      ok(disjoint(r.presence, r.focuscard),
+         'at ' + w + ': the session card does not touch the well',
+         JSON.stringify({ card: r.focuscard, well: r.presence }));
+      ok(disjoint(r.presence, r.panel),
+         'at ' + w + ': the note panel does not touch the well',
+         JSON.stringify({ panel: r.panel, well: r.presence }));
+      ok(disjoint(r.presence, r.toprail) && disjoint(r.presence, r.legend),
+         'at ' + w + ': nor the telemetry rail, nor the legend',
+         JSON.stringify({ rail: r.toprail, legend: r.legend, well: r.presence }));
+      /* RIGHT-OF-CENTRE, as specified, and measured against the CANVAS rather than the
+         viewport: with the panel open the canvas is the part of the glass the galaxy
+         still has, and "right of centre" is a claim about the room the eye is in. */
+      ok(r.presence.left + r.presence.w / 2 > last.canvasW / 2,
+         'at ' + w + ': and it is right-of-centre, as specified - midpoint ' +
+         Math.round(r.presence.left + r.presence.w / 2) + ' of a ' + last.canvasW +
+         'px canvas',
+         JSON.stringify({ well: r.presence, canvasW: last.canvasW }));
+      /* AND THE RENDERER FOLLOWED. The governor writes a CSS box; the WebGLRenderer has
+         to be told the same number or the hologram is drawn at the wrong scale inside a
+         correctly placed square, which is the failure that looks like a layout bug and
+         is not one. */
+      ok(pres.fits === true && Math.abs(pres.side - r.presence.w) <= 1,
+         'at ' + w + ': and the renderer took the same ' + pres.side +
+         'px the governor assigned, at dpr ' + pres.dpr,
+         JSON.stringify({ renderer: pres, rect: r.presence }));
+    } else {
+      ok(r.presence === null && !!(box && box.why),
+         'at ' + w + ': no square above the floor was left, so the well STOOD DOWN with ' +
+         'a reason (' +
+         (box && box.why) + ') rather than cropping the face',
+         JSON.stringify({ box: box, rect: r.presence }));
+    }
+  }
+  ok(wellFitAny,
+     'and the well fitted at at least one of ' + WELL_AT.join('/') +
+     ' - the checks above are about a hologram that was on the glass, not about a page ' +
+     'that never had one',
+     JSON.stringify(WELL_AT));
+
   await page.send('Emulation.clearDeviceMetricsOverride');
   await sleep(600);
   await page.evaluate('__galaxy.layout.run()');
@@ -511,7 +725,7 @@ async function main() {
   ok(out.out === true && out.inPage === false,
      'ONE CARD, TWO HOMES: the desktop card took over and the in-page card vanished',
      JSON.stringify(out));
-  ok(out.title === 'Jarvis · focus', 'the floating window is its own window, by title',
+  ok(out.title === 'Galaxy · focus', 'the floating window is its own window, by title',
      JSON.stringify(out.title));
   ok((out.organs || []).indexOf('focuscard') >= 0,
      'and the countdown is actually RENDERED in it, not an empty window',

@@ -32,7 +32,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -57,8 +57,8 @@ const ROW_KEYS = ['at', 'plannedMinutes', 'activeMinutes', 'onTargetMinutes',
 const WANT_CASES = ['viewport', 'visible', 'timers', 'frames', 'clock', 'phrases',
                     'card-on', 'card-drift', 'card-defer', 'card-blind', 'card-phone',
                     'gate', 'luma', 'seq', 'no-names', 'web-cue', 'web-safe',
-                    'desk-move', 'desk-skin', 'merge', 'stack', 'lane', 'visage', 'retire',
-                    'hermetic'];
+                    'desk-move', 'desk-skin', 'merge', 'stack', 'lane', 'visage', 'eyeslaw',
+                    'retire', 'hermetic'];
 
 const CHROMES = [
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
@@ -147,6 +147,20 @@ class Page {
     return JSON.parse(await this.evaluate('JSON.stringify(' + expression + ')') || 'null');
   }
 
+  /* A PLATE, and a CLOSE-UP when a rectangle is handed in - at 2x, because the two
+     pictures this harness owes the lookbook are a 210px hologram with its eyes shut and
+     the same one with them open, and a crop of a 1440px frame cannot show an eyelid. */
+  async shot(file, clip) {
+    const r = await this.send('Page.captureScreenshot', clip
+      ? { format: 'png', clip: { x: clip.left, y: clip.top, width: clip.w, height: clip.h,
+                                 scale: clip.scale || 2 } }
+      : { format: 'png' });
+    const data = r.result && r.result.data;
+    if (!data) throw new Error('no screenshot came back');
+    writeFileSync(file, Buffer.from(data, 'base64'));
+    return file;
+  }
+
   close() { try { this.ws.close(); } catch { /* already gone */ } }
 }
 
@@ -156,6 +170,14 @@ async function launch(exe, profile, url) {
     '--remote-debugging-port=' + PORT,
     '--user-data-dir=' + profile,
     '--no-first-run', '--no-default-browser-check',
+    /* A CAMERA THAT EXISTS AND A PROMPT NOBODY HAS TO CLICK. Section 3c asserts the Eyes
+       Law both ways round, and the closed half of it is worthless without the open half:
+       "the face does not look when the camera is off" is only a law if opening the camera
+       is what makes it look. The stream is Chrome's own test pattern - no frame of it is
+       kept, and nothing in this run uploads one. */
+    '--use-fake-device-for-media-stream',
+    '--use-fake-ui-for-media-stream',
+    '--autoplay-policy=no-user-gesture-required',
     /* The window this run insists on. Overridden again over CDP below, because a
        window size is a request and device metrics are a guarantee. */
     '--window-size=' + WANT_W + ',' + WANT_H,
@@ -259,7 +281,7 @@ async function main() {
      leak ? leak[0] : '');
   log('front: ' + (diag.appReadable ? 'readable' : 'UNREADABLE') + ' · ' +
       (diag.frontIsBrowser ? 'browser' : 'native app') + ' · tab ' + diag.tabRead +
-      ' · jarvis tab ' + (diag.frontIsHome ? 'yes' : 'no') + ' · cdp ' +
+      ' · galaxy tab ' + (diag.frontIsHome ? 'yes' : 'no') + ' · cdp ' +
       (diag.cdpAlive ? 'alive' : 'none'));
   log('lock:  session ' + (diag.sessionOn ? 'on' : 'off') + ' · ' + diag.state +
       ' · locked ' + diag.locked + ' · lanes app=' + diag.appLane + ' tab=' +
@@ -498,6 +520,154 @@ async function main() {
      overlayLeak ? overlayLeak[0] : '');
   log('');
   for (const line of text.split('\n').filter(Boolean)) log('  | ' + line);
+
+  /* ---- 5. THE EYES LAW, BOTH WAYS ROUND -------------------------------
+     THE METAPHOR NEVER LIES, and there is exactly one way to prove that: open a camera and
+     watch the face open its eyes, then close the camera and watch them shut. The `eyeslaw`
+     case in the battery asserts the STRUCTURE - one variable, one three-row table, the seal
+     and the lid agreeing at one instant - and it can only ever assert it in the closed
+     state, because the battery is hermetic and a hermetic battery has no camera. This
+     section is the other half, and it is the half that could catch a real bug: a code path
+     that opens the camera and paints the seal without waking the eyes, or - far worse - one
+     that closes the camera and leaves them open, which is a face watching a room it cannot
+     see.
+     IT RUNS HERE, AFTER THE OVERLAY, AND FOR ONE REASON: the eyelids are pixels, and the
+     hermetic page has none. The presence is built inside the same `else` that keeps the
+     probe page off the network, so there the lid is a number nobody draws. The debug page
+     section 4 just navigated to is a REAL page - worlds, deck, hologram - so this is where
+     the law can be photographed as well as read.
+     The camera is Chrome's fake device. No frame of it is read here and nothing in this
+     section uploads one; what is being tested is the lid, not the landmarker. */
+  log('');
+  log('-- the Eyes Law: the camera decides, and one variable carries it');
+  /* THE HOLOGRAM BOOTS LAST ON PURPOSE - after the worlds, the flow, the bloom's audition
+     and its own - so on a freshly navigated page it is simply not there yet. Waited for by
+     name rather than slept at, and the wait is allowed to fail: a machine that cannot build
+     it still has a seal and a table to be truthful about, and the assertions below say
+     which half they are reading. */
+  let presUp = false;
+  for (let i = 0; i < 160 && !presUp; i++) {
+    presUp = (await page.evaluate('!!(window.__galaxy && __galaxy.presence' +
+      ' && __galaxy.presence.built)')) === true;
+    if (!presUp) await sleep(250);
+  }
+  log('   the hologram ' + (presUp ? 'is built and running' : 'never built: ' +
+      (await page.evaluate('__galaxy.presence.trouble || __galaxy.presence.why || "?"'))));
+  ok(presUp, 'THE HOLOGRAM IS ON THE GLASS on the real page, so the eyelids below are ' +
+     'geometry and not just a number - every assertion after this one reads pixels that ' +
+     'exist');
+  const lidTable = await page.json('__galaxy.eyes.LID');
+  ok(lidTable && Object.keys(lidTable).length === 3 && lidTable.shut === 0 &&
+     lidTable.sampling === 0.5 && lidTable.watching === 1,
+     'THE TABLE HAS THREE ROWS: shut 0, sampling a HALF, watching 1 - the half-lid is a ' +
+     'state of its own because "open but not yet seeing" is a real thing the camera does',
+     JSON.stringify(lidTable));
+  /* FACE by hand, so the plates below are of eyelids rather than of a ring. This is the
+     Command Panel's own call and it is allowed to clear a refusal; if the audition stood
+     the face down in this headless renderer, the `degraded` line says so in the log. */
+  const presWas = await page.json('({built: __galaxy.presence.built,' +
+    ' mode: __galaxy.presence.mode, degraded: __galaxy.presence.degraded,' +
+    ' points: __galaxy.presence.points, well: __galaxy.presence.well})');
+  if (presWas.built) { await page.evaluate('__galaxy.presence.set("face")'); }
+  await sleep(1000);
+  const wellAt = await page.json('__galaxy.layout.rects.presence');
+  log('   the presence: ' + JSON.stringify(presWas) +
+      (wellAt ? '  ·  well at ' + JSON.stringify(wellAt) : '  ·  no well on the glass'));
+
+  /* THE CLOSED HALF. The camera has never been opened in this run, so this is the standby
+     the spec describes - and it is asserted by name, not by whatever happened to be true. */
+  const eyes0 = await page.json('({s: __galaxy.eyes.sight, mode: __galaxy.presence.mode,' +
+    ' lid: __galaxy.presence.lid, eye: __galaxy.presence.eye})');
+  ok(eyes0.s.state === 'shut' && eyes0.s.live === false && eyes0.s.truth === false &&
+     eyes0.s.lid === 0 && eyes0.s.seal.button === false && eyes0.s.seal.chip === false,
+     'CAMERA OFF: the variable says "shut", eyesLive() agrees, and both EYES LIVE surfaces ' +
+     'are dark', JSON.stringify(eyes0.s));
+  ok(eyes0.lid === 0 && eyes0.eye < 0.05 && eyes0.lid === lidTable[eyes0.s.state],
+     'AND THE FACE IS NOT LOOKING: the hologram was told lid ' + eyes0.lid +
+     ' and its geometry has eased to ' + eyes0.eye + ' - closed-eye geometry, from the ' +
+     'same variable and the same table', JSON.stringify(eyes0));
+  if (wellAt) {
+    await page.shot('focus-eyes-shut.png', wellAt);
+    log('   wrote focus-eyes-shut.png (' + eyes0.mode + ' mode, camera off, eyes closed)');
+  }
+
+  /* THE OPEN HALF. start() is the organ's own door - the same one the #eye button calls. */
+  const camUp = await page.evaluate('__galaxy.eyes.start()');
+  await sleep(2600);                       // past the 420ms wake blink and the lid's ease
+  const eyes1 = await page.json('({s: __galaxy.eyes.sight, reader: __galaxy.eyes.reader,' +
+    ' lid: __galaxy.presence.lid, eye: __galaxy.presence.eye,' +
+    ' dim: document.getElementById("eye-dim").textContent})');
+  log('   camera up: ' + JSON.stringify(eyes1));
+  ok(camUp === true && eyes1.s.live === true && eyes1.s.truth === true &&
+     eyes1.s.state !== 'shut',
+     'CAMERA ON: the fake device opened and the variable moved to "' + eyes1.s.state +
+     '" - ' + (eyes1.s.state === 'watching'
+       ? 'a baseline was measured, so the eyes are fully open'
+       : 'the landmarkers are still waking, so the eyes are HALF open, which is the ' +
+         'third state earning its keep'),
+     JSON.stringify(eyes1.s));
+  ok(eyes1.s.seal.button === true && eyes1.s.seal.chip === true,
+     'and the EYES LIVE seal lit in the same breath - one variable, two surfaces, ' +
+     'asserted together rather than one at a time', JSON.stringify(eyes1.s.seal));
+  ok(eyes1.lid === lidTable[eyes1.s.state] && eyes1.lid >= 0.5,
+     'THE EYES ARE OPEN: lid ' + eyes1.lid + ' for state "' + eyes1.s.state +
+     '", straight off the same table the seal is read through', JSON.stringify(eyes1));
+  ok(eyes1.eye >= eyes1.lid * 0.6,
+     'and THE GEOMETRY FOLLOWED rather than merely being asked to: the eased eye stands ' +
+     'at ' + eyes1.eye + ' against a target of ' + eyes1.lid,
+     JSON.stringify({ eye: eyes1.eye, lid: eyes1.lid }));
+  ok(eyes1.s.opens === eyes0.s.opens + 1 && eyes1.s.blinks === eyes0.s.blinks + 1 &&
+     eyes1.s.changes > eyes0.s.changes,
+     'AND IT BLINKED ON WAKING: ' + eyes1.s.opens + ' open, ' + eyes1.s.blinks +
+     ' blink - a face that blinked idly would be pretending; this one blinks on a transition',
+     JSON.stringify({ before: { opens: eyes0.s.opens, blinks: eyes0.s.blinks },
+                      after: { opens: eyes1.s.opens, blinks: eyes1.s.blinks } }));
+  if (wellAt) {
+    await page.shot('focus-eyes-open.png', wellAt);
+    log('   wrote focus-eyes-open.png (camera on, state "' + eyes1.s.state + '", lid ' +
+        eyes1.lid + ')');
+  }
+
+  /* AND CLOSED THE INSTANT THE CAMERA RELEASES. Read with no sleep at all first: the
+     variable and the seal must already have moved when stop() returns, because "the instant"
+     is the word in the spec and a 200ms lag is a face still looking at a dark room. */
+  await page.evaluate('__galaxy.eyes.stop()');
+  const atOnce = await page.json('({s: __galaxy.eyes.sight, lid: __galaxy.presence.lid})');
+  ok(atOnce.s.state === 'shut' && atOnce.s.live === false && atOnce.s.truth === false &&
+     atOnce.s.lid === 0 && atOnce.s.seal.button === false && atOnce.s.seal.chip === false,
+     'THE INSTANT THE CAMERA RELEASES, with no waiting at all: state "shut", eyesLive() ' +
+     'agreeing, the table\'s lid back to 0 and both seal surfaces dark - one call moved ' +
+     'all four', JSON.stringify(atOnce.s));
+  /* AND THE HOLOGRAM ON THE VERY NEXT FRAME. The lid the shader is given is written by the
+     frame loop, so at the instant above it is still whatever the last painted frame was
+     told - which is not a lag in the law, it is the difference between a variable and a
+     picture of it. ONE frame is the whole allowance, and it is measured rather than slept
+     through: two rAFs and the target must already be 0, with only the ease left to travel. */
+  /* evaluate() rather than json(), because json() wraps the expression in JSON.stringify -
+     which would stringify the PROMISE and hand back an empty object. returnByValue awaits it
+     and brings the resolved object across as it is. */
+  const nextFrame = await page.evaluate(
+    'new Promise(function (go) { requestAnimationFrame(function () {' +
+    ' requestAnimationFrame(function () { go({lid: __galaxy.presence.lid,' +
+    ' eye: __galaxy.presence.eye, state: __galaxy.eyes.sight.state}); }); }); })');
+  ok(nextFrame.lid === 0 && nextFrame.state === 'shut',
+     'and THE FACE WAS TOLD WITHIN ONE FRAME: the lid the shader is handed read ' +
+     atOnce.lid + ' at the instant of the call and ' + nextFrame.lid + ' one frame later, ' +
+     'with the eased geometry at ' + nextFrame.eye + ' and still travelling',
+     JSON.stringify({ atCall: atOnce.lid, nextFrame: nextFrame }));
+  await sleep(1400);
+  const eyes2 = await page.json('({s: __galaxy.eyes.sight, lid: __galaxy.presence.lid,' +
+    ' eye: __galaxy.presence.eye, mode: __galaxy.presence.mode})');
+  ok(eyes2.eye < 0.12 && eyes2.lid === 0,
+     'and the eyelids CLOSED rather than snapped: the geometry eased back to ' + eyes2.eye +
+     ' over the blink', JSON.stringify(eyes2));
+  ok(eyes2.s.closes === eyes0.s.closes + 1 && eyes2.s.blinks === eyes0.s.blinks + 2,
+     'with a SLOW BLINK ON CLOSING too: ' + eyes2.s.closes + ' close, ' + eyes2.s.blinks +
+     ' blinks for one open and one close and nothing in between',
+     JSON.stringify(eyes2.s));
+  ok(await page.evaluate('__galaxy.eyes.on') === false &&
+     await page.evaluate('__galaxy.eyes.indicator') === false,
+     'and NOTHING IS LEFT WATCHING: the track is released and the violet chip is out');
 }
 
 function teardown() {

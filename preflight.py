@@ -21,14 +21,17 @@ index rebuilt, so running this does not slowly fill your notes with test data.
 Exit status is the number of failed checks, so a shell or CI can branch on it.
 """
 
+import ast
 import base64
 import hashlib
 import http.client
+import inspect
 import json
 import os
 import re
 import subprocess
 import sys
+import textwrap
 import time
 import urllib.error
 import urllib.parse
@@ -3250,6 +3253,503 @@ def check_documents():
     return verdict, detail + notes
 
 
+def check_routing():
+    """18. The routing chain: the four classes answer for nothing, and cannot be searched.
+
+    WHAT GOES WRONG HERE IS SILENT AND EXPENSIVE. Every sentence in this check used to work
+    and then, one refactor later, did not: "can you listen to me" went to the notes and came
+    back with a paragraph about an invoice importer; "yes yes do it galaxy" withdrew the
+    offer it was accepting and then searched for the words "yes yes do it". Nothing crashed
+    either time. The machine answered, in complete sentences, having spent a retrieval and an
+    embedding on a question about itself - so the only cheap early warning is a check that
+    watches the CLASS and the COST rather than whether an answer came back.
+
+    routing_proof.mjs is the deep instrument: sixty-five assertions, typed and spoken, on a
+    real microphone. It takes minutes and it needs a headed browser. This is the chain either
+    side of it, in seconds, and every part of it live:
+
+      (a) the RUNNING server puts the classes above retrieval - route named, lookups nought,
+          nodes empty - because a build from before the funnel was reordered answers these
+          perfectly well and slowly, and looks exactly like a working server;
+      (b) the whole pool of consent words, every one the mandate lists, read by the server's
+          own confirmation_in() rather than by a copy of the list;
+      (c) the whole pool of class 2 and class 3 sentences, read by protected_answer(), each
+          landing in the class it belongs to with a line to say;
+      (d) TWO INDEPENDENT DOORS SHUT, not one: the class matches AND substantial_question()
+          refuses the same sentence, so even if a class were removed tomorrow the web gate
+          would still not open on a sentence spoken TO him rather than about the world;
+      (e) and no retrieval reachable from the class path at all, read from the source - the
+          one claim here that a passing answer cannot fake;
+      (f) and Part B's fork, both ways: an amendment keeps the offer, a change of subject
+          releases it. Pure functions, so it costs three calls and no browser - and it is
+          the only step here where getting it wrong loses a hand the boss asked for.
+    """
+    if not state["up"]:
+        return FAIL, ["skipped: the server is not reachable"]
+
+    notes, warnings = [], []
+
+    # -- (a) THE RUNNING PROCESS. Each of these is answered from a fixed string or from the
+    # manifest, so none of them costs a brain call and the whole step is a few hundred
+    # milliseconds. What is being asked is not "can he answer" but "did he answer for free".
+    live = [
+        ("can you listen to me", "meta", "the ear"),
+        ("who are you", "identity", "who he is"),
+        ("what's my name", "identity", "whose assistant he is"),
+        ("what can you do", "identity", "the manifest"),
+    ]
+    for question, want_route, about in live:
+        status, _, data = post_json("/chat", {"question": question,
+                                             "session": "preflight-routing"},
+                                    timeout=60, label="chat %s" % question)
+        got = as_json(data) or {}
+        if status != 200:
+            return FAIL, ["POST /chat %r answered %d, so the routing chain cannot be "
+                          "measured" % (question, status)]
+        if got.get("route") != want_route:
+            return FAIL, ["%r is a question about %s and the running server routed it to "
+                          "%r, not %r. On this path that means retrieval: the notes were "
+                          "asked what his name is." % (question, about,
+                                                       got.get("route"), want_route)]
+        if got.get("lookups") not in (0, None) or got.get("nodes"):
+            return FAIL, ["%r reached class %r but spent %r lookups and lit %d nodes - the "
+                          "class answered and something searched anyway"
+                          % (question, want_route, got.get("lookups"),
+                             len(got.get("nodes") or ()))]
+        if not str(got.get("answer") or "").strip():
+            return FAIL, ["%r was classed %r and answered with nothing at all"
+                          % (question, want_route)]
+    notes.append("the running server answers %d class-2 and class-3 sentences by name, "
+                 "each at nought lookups and nought nodes" % len(live))
+
+    # -- and CLASS 1 with nothing pending, which is the refusal that must not be searched.
+    status, _, data = post_json("/chat", {"question": "yes yes do it galaxy",
+                                         "session": "preflight-routing"},
+                                timeout=60, label="chat bare confirmation")
+    got = as_json(data) or {}
+    if status != 409:
+        return FAIL, ["a bare confirmation with nothing pending answered %d, not 409: "
+                      "consent with nothing to consent to is being treated as a question"
+                      % status]
+    if got.get("lookups") not in (0, None) or got.get("nodes"):
+        return FAIL, ["the refusal for a released confirmation cost %r lookups and %d "
+                      "nodes - the words \"yes yes do it\" were put to the notes"
+                      % (got.get("lookups"), len(got.get("nodes") or ()))]
+    if "pending" not in str(got.get("answer") or "").lower():
+        warnings.append("the bare-confirmation refusal does not use the word \"pending\": "
+                        "%r" % first_line(got.get("answer"), 60))
+    notes.append("a confirmation with nothing pending is refused by name at nought cost")
+
+    # -- (b) THE WHOLE POOL, through the server's own reader. The failure this catches is a
+    # pool edited in half: an affirmative added to the docstring and not to the pattern, or a
+    # negative that stops being heard. A yes that is not heard as a yes is not a missed
+    # feature - it is a hand that does not run when the boss says run it, or worse, a "no"
+    # that goes to the notes while the offer stands.
+    yeses = ("yes", "yeah", "yep", "yes yes", "ok do it", "do it", "go ahead", "proceed",
+             "confirmed", "sure", "please do", "haan yes", "Galaxy, yes please",
+             "yes yes do it galaxy", "okay, go ahead.")
+    noes = ("no", "no no", "nope", "cancel", "cancel that", "stop", "don't", "leave it",
+            "not now", "no thanks galaxy", "No.")
+    misheard = [w for w in yeses if server.confirmation_in(w) != "yes"]
+    if misheard:
+        return FAIL, ["the server does not hear these as consent: %r. Every one is a word "
+                      "the boss uses to say yes; each one that is not heard is a hand that "
+                      "will not run when he tells it to." % misheard]
+    misheard = [w for w in noes if server.confirmation_in(w) != "no"]
+    if misheard:
+        return FAIL, ["the server does not hear these as a refusal: %r. A \"no\" that is "
+                      "not heard is worse than a \"yes\" that is not: the offer stands and "
+                      "the refusal gets searched." % misheard]
+    # AND THE POOL IS NOT A SIEVE. A pattern widened until everything is a yes would pass
+    # both lists above and break the whole of Part B.
+    leaks = [w for w in ("what address is it going to", "make it tomorrow instead",
+                         "why would you do that", "what is react",
+                         "yes, and what is the population of tokyo",
+                         "no idea what react is") if server.confirmation_in(w) != ""]
+    if leaks:
+        return FAIL, ["these are conversation, not consent, and the server hears a word of "
+                      "consent in them: %r. A sieve here executes hands the boss was still "
+                      "asking questions about." % leaks]
+    notes.append("all %d consent words and %d refusals are heard, and %d sentences that "
+                 "merely contain one are not"
+                 % (len(yeses), len(noes), len(leaks) or 6))
+
+    # -- (c) and (d). Both doors, on the mandate's own sentences. The class must match, and
+    # the WEB GATE must independently refuse the same sentence: substantial_question() is
+    # what stands between "are you listening" and a search engine, and it has to say no for
+    # its own reasons, not because a class happened to catch the sentence first.
+    classed = {
+        "meta": ("can you listen to me", "are you there", "do you hear me",
+                 "hey galaxy are you there", "listen to me", "pay attention",
+                 "talk to me", "are you listening"),
+        "identity": ("who are you", "what are you", "who am i", "what's my name",
+                     "do you know me", "whose assistant are you", "what can you do",
+                     "what are your capabilities", "help me"),
+    }
+    for want, sentences in sorted(classed.items()):
+        for sentence in sentences:
+            name, payload = server.protected_answer(sentence)
+            if name != want:
+                return FAIL, ["%r is one of the boss's own sentences and the class reader "
+                              "makes it %r, not %r - which sends it down the funnel to the "
+                              "notes and the web" % (sentence, name, want)]
+            if not str((payload or {}).get("answer") or "").strip():
+                return FAIL, ["%r is classed %r with an empty answer" % (sentence, want)]
+            if (payload or {}).get("lookups") != 0 or (payload or {}).get("nodes"):
+                return FAIL, ["the %r payload for %r does not declare itself free: %r"
+                              % (want, sentence, payload)]
+    notes.append("all %d class-2 and class-3 sentences from the mandate land in their own "
+                 "class, each with a line to say and nought declared cost"
+                 % sum(len(v) for v in classed.values()))
+
+    # -- (d) THE SECOND DOOR, and it is a different door than the one above. The mandate's
+    # clause is precise and it took a wrong version of this step to notice: "second-person
+    # address to the assistant NOT IN CLASS 2 OR 3 never opens it". The classes catch the
+    # sentences somebody thought to list; this clause catches the ones nobody did, which is
+    # why it is the one worth a check. The first draft here demanded that the web gate also
+    # refuse every listed class sentence - and it failed honestly, on "what's my name", which
+    # IS a real question, just not one about the world. Testing a class sentence against this
+    # clause tests nothing anyway: class 3 answered it two branches earlier.
+    # NOT IN THIS LIST, and the reason is the distinction the whole clause turns on: "talk
+    # me through it" reaches the web on a thin corpus, and that is RIGHT. It is an imperative
+    # about a subject - the antecedent - not a question about him, and "talk me through
+    # React" should absolutely open the door. Being addressed to him is not the same as being
+    # about him, and a check that confused the two would demand the web gate be welded shut.
+    unlisted = ("could you water the ferns on the landing for me",
+                "can you give me a hand with this",
+                "would you mind having a look at that for me",
+                "can you sort that out for me",
+                "are you any good at this sort of thing",
+                "do you think you could handle that")
+    for sentence in unlisted:
+        if server.protected_answer(sentence)[0] is not None:
+            warnings.append("%r was meant to be OUTSIDE the classes and one of them now "
+                            "catches it, so it no longer tests the web gate" % sentence)
+            continue
+        if not server.spoken_to_him(sentence):
+            return FAIL, ["%r is addressed to him in the second person and is in no "
+                          "protected class, and spoken_to_him() does not recognise it. On "
+                          "a thin corpus that sentence goes to a search engine: the boss "
+                          "asks his assistant for a hand and a web page answers." % sentence]
+        if server.web_intent(sentence, 0.0, "", True):
+            return FAIL, ["%r opens the web gate (%r) though it is spoken TO him rather "
+                          "than about the world - the clause that is supposed to narrow "
+                          "\"thin\" is not narrowing it"
+                          % (sentence, server.web_intent(sentence, 0.0, "", True))]
+    notes.append("%d sentences addressed to him that no class lists are recognised as "
+                 "spoken to him, and the web gate refuses every one at nought confidence - "
+                 "the clause that catches what nobody thought to list" % len(unlisted))
+    # AND THE GATE STILL OPENS WHEN IT SHOULD. A clause narrowed until nothing searches
+    # would pass everything above and quietly cost the boss the live web.
+    for sentence in ("what is the population of tokyo", "what is react"):
+        if not server.web_intent(sentence, 0.0, "", True):
+            return FAIL, ["%r is a question about the world at nought confidence and the "
+                          "web gate stays shut: the narrowing clauses have been widened "
+                          "until the live web is unreachable" % sentence]
+    notes.append("and a real question about the world still opens it, so the narrowing is "
+                 "narrowing rather than closing")
+    if set(classed) - set(server.PROTECTED_CLASSES):
+        return FAIL, ["protected_answer() returns classes that PROTECTED_CLASSES does not "
+                      "list: %r" % sorted(set(classed) - set(server.PROTECTED_CLASSES))]
+
+    # -- (e) NO RETRIEVAL REACHABLE FROM THE CLASS PATH, read from the source rather than
+    # inferred from a cheap answer. "lookups: 0" is a number the same function writes about
+    # itself; this is the only claim in the check that a working-looking answer cannot fake.
+    # PARSED, NOT GREPPED. The first version of this step searched the text for a call and
+    # failed on protected_answer's own DOCSTRING, which mentions answer_question() in the
+    # course of explaining that class 4 is somebody else's business. Explaining the rule must
+    # never break the test, so the calls are taken from the syntax tree and the prose is
+    # invisible to it - the same reason name_sweep.py exists.
+    forbidden = ("search_notes", "ensure_index", "web_lookup", "web_fetch", "embed",
+                 "store_query", "answer_question", "call_model")
+    try:
+        source = textwrap.dedent(inspect.getsource(server.protected_answer))
+        tree = ast.parse(source)
+    except (OSError, TypeError, SyntaxError) as exc:
+        warnings.append("cannot parse protected_answer's source (%s), so step (e) is "
+                        "unproved" % exc)
+    else:
+        called = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                fn = node.func
+                called.add(getattr(fn, "id", None) or getattr(fn, "attr", None) or "")
+        reached = sorted(called & set(forbidden))
+        if reached:
+            return FAIL, ["protected_answer() calls %r. The four classes are supposed to "
+                          "cost nothing by construction, not by luck, and a retrieval on "
+                          "this path is paid on every \"are you there\"" % reached]
+        notes.append("protected_answer() reaches no retrieval of any kind: proved from its "
+                     "source, not from its own report of its cost")
+
+    # -- (f) PART B'S OWN FORK, which is the one door in the chain that decides whether an
+    # offer LIVES. about_the_proposal() sends a message either to the brain with the offer in
+    # front of it, or over the withdrawal, and both mistakes are silent: hold a change of
+    # subject and the offer is neither done nor released and the new question is answered as
+    # a remark about a reminder; release an amendment and the correction composes a second
+    # proposal from scratch while the first one disappears.
+    #
+    # FAILURE MODE THIS CATCHES, and it was live until today: the amend door tested for the
+    # bare verb "say" anywhere in the sentence, so "what do my notes say about coffee" asked
+    # over a standing calendar proposal was read as an amendment to it. tools_live found it
+    # end to end - it took a real browser, a real hand and ninety seconds. Here it is three
+    # function calls, because the whole fork is pure and needs neither.
+    fork = {
+        # AMENDMENTS. Each is a correction to something already on the card.
+        True: ("say it warmer", "just say sorry at the end", "make it tomorrow",
+               "send it to bob instead", "add a line about the invoice",
+               "actually, seven rather than six",
+               # AND POINTED QUESTIONS, which are the other half of "about the offer".
+               "what address is it going to", "why that time", "is that going to bob?"),
+        # CHANGES OF SUBJECT. Every one is a genuine new request, and each contains a word
+        # the amend door has reached for at some point in its life.
+        False: ("what do my notes say about coffee", "what does the weather report say",
+                "what do the notes say about the invoice importer", "what is react",
+                "what is the population of tokyo"),
+    }
+    pending = {"id": "preflight", "tool": "add_calendar_event", "params": {},
+               "fields": [], "line": "Write something into the calendar - your word?"}
+    for want, sentences in fork.items():
+        for sentence in sentences:
+            if server.about_the_proposal(sentence, pending) is not want:
+                return FAIL, [
+                    "%r is %s and Part B's fork says the opposite. %s"
+                    % (sentence,
+                       "about the offer" if want else "a change of subject",
+                       "An amendment read as a new request drops the offer he was "
+                       "correcting." if want else
+                       "A change of subject read as an amendment leaves the offer "
+                       "standing, never speaks the withdrawal, and answers his question "
+                       "as a remark about the offer.")]
+    notes.append("Part B's fork holds %d amendments and pointed questions over the offer and "
+                 "lets %d changes of subject withdraw it - the two mistakes that are silent "
+                 "either way" % (len(fork[True]), len(fork[False])))
+    # AND NOTHING IS ABOUT AN OFFER THAT IS NOT THERE: with no slot, the fork must be false
+    # for every sentence, or a withdrawal line gets spoken over an ordinary question.
+    held = [s for group in fork.values() for s in group
+            if server.about_the_proposal(s, None)]
+    if held:
+        return FAIL, ["with nothing pending, Part B's fork still calls these talk about an "
+                      "offer: %r" % held]
+
+    if warnings:
+        return WARN, notes + warnings
+    return PASS, notes
+
+
+def check_lock():
+    """19. The lock chain: the card can say why, and the two gates ask in one voice.
+
+    THE TEETH THEMSELVES ARE NOT PROVED HERE, and the reason is in the feature: a drift
+    off the locked TAB is only visible to a watcher attached to a real browser on a real
+    debugging port, and proving it means relaunching Chrome. lock_proof.mjs does exactly
+    that, on the launcher's own profile, and it closes the boss's browser to do it -
+    which is not something preflight may do to a machine somebody is working on. So this
+    check takes the chain either side of the teeth, all of it live or off the files that
+    are actually loaded:
+
+      (a) the RUNNING server publishes the two keys the card needs;
+      (b) every reason the session can give has English to be said in - both ways round,
+          because the silent half is the dangerous one;
+      (c) the card has somewhere to put it, and the pill knows to hide it;
+      (d) the two hands are gated, parameterless, and ask in the session's own words;
+      (e) each hand's script really does the thing its sentence promises;
+      (f) a summon with nothing locked refuses in a sentence rather than moving a window;
+      (g) the locked-tab callouts name no site, ever.
+    """
+    if not state["up"]:
+        return FAIL, ["skipped: the server is not reachable"]
+
+    notes, warnings = [], []
+
+    # -- (a) the running process, not the file on disk. Every claim below about the card
+    # is worthless if the server answering 4700 is a copy from before the card had a line
+    # to put a tab title on - and that failure looks exactly like a working session.
+    live = _focus_now()
+    for key in ("lockedTab", "tabLockWhy"):
+        if key not in live:
+            return FAIL, ["GET /focus does not send %r: the server answering %d is "
+                          "running a build from before the tab lock could explain "
+                          "itself. Restart server.py." % (key, server.PORT)]
+        if key not in focus.PUBLIC_KEYS:
+            return FAIL, ["%r reaches the browser but is not in focus.PUBLIC_KEYS, so "
+                          "nothing polices what it carries" % key]
+    if live.get("state") in ("arming", "running", "paused"):
+        warnings.append("a focus session is running, so steps (a) and (f) read ITS state "
+                        "rather than a clean one; the rest is unaffected")
+    else:
+        if live.get("lockedTab") != "":
+            return FAIL, ["no session is running and GET /focus still names a locked "
+                          "tab (%r) - a title that outlived its watcher"
+                          % live.get("lockedTab")]
+        notes.append("GET /focus carries lockedTab and tabLockWhy, both empty with no "
+                     "session running")
+    if live.get("tabLockWhy") not in focus.TAB_LOCK_WHY:
+        return FAIL, ["tabLockWhy is %r, which is not one of the %d words the card knows"
+                      % (live.get("tabLockWhy"), len(focus.TAB_LOCK_WHY))]
+
+    # -- (b) THE SILENT DEGRADATION CHECK, which is what this whole Part was written
+    # against. focus.py sends one word; the viewer turns it into English. Add a word on
+    # the Python side and forget the other half and the card renders nothing at all: the
+    # tab lock is off, the boss is told nothing, and every test still passes.
+    try:
+        with open(os.path.join(ROOT, "viewer", "index.html"), encoding="utf-8") as fh:
+            viewer = fh.read()
+    except OSError as exc:
+        return FAIL, ["cannot read viewer/index.html: %s" % exc]
+    block = re.search(r"const FX_LOCK_WHY\s*=\s*\{(.*?)\};", viewer, re.S)
+    if not block:
+        return FAIL, ["viewer/index.html has no FX_LOCK_WHY, so tabLockWhy arrives at "
+                      "the card and is thrown away"]
+    rendered = set(re.findall(r"(\w+)\s*:", block.group(1)))
+    reasons = set(focus.TAB_LOCK_WHY) - {""}
+    unsaid = sorted(reasons - rendered)
+    orphan = sorted(rendered - reasons)
+    if unsaid:
+        return FAIL, ["the session can set tabLockWhy=%s and the card has no English "
+                      "for it, so it would say nothing: tab-lock silently off, which is "
+                      "the one outcome this feature exists to remove" % unsaid]
+    if orphan:
+        warnings.append("the card renders %s, which focus.TAB_LOCK_WHY cannot produce - "
+                        "dead prose" % orphan)
+    if "" in rendered:
+        warnings.append("FX_LOCK_WHY has an entry for the empty reason; \"\" means "
+                        "there is nothing to explain and must render as nothing")
+    notes.append("all %d reasons the session can give have English on the card: %s"
+                 % (len(reasons), ", ".join(sorted(reasons))))
+
+    # -- (c) somewhere to put it. A line the pill does not hide is a line that pushes the
+    # 2-row PiP card out of shape; a line with no class rule never appears at all.
+    for needle, why in (
+            ('<div id="focus-locked">', "the card has no element for the locked tab"),
+            ("#focus-locked.on,#focus-locked.off{display:block}",
+             "the locked line has no rule that shows it, so it stays display:none"),
+            ("#focuscard.pill #focus-locked",
+             "the pill does not hide the locked line, so the two-row PiP card grows a "
+             "third row"),
+            ("'#focus-locked{", "the desk stylesheet says nothing about the locked line")):
+        if needle not in viewer:
+            return FAIL, ["%s (looked for %r)" % (why, needle)]
+    notes.append("the card has #focus-locked, an .on/.off rule that shows it, a pill rule "
+                 "that hides it and a desk rule that sizes it")
+
+    # -- (d) the two hands. params [] is not tidiness: a summon with a target parameter is
+    # a summon that can be pointed somewhere the boss never locked, and the proposal being
+    # the session's own sentence is what stops the card asking one thing while the hand
+    # does another.
+    try:
+        with open(os.path.join(ROOT, "tools", "registry.json"), encoding="utf-8") as fh:
+            entries = (json.load(fh) or {}).get("tools") or []
+    except (OSError, ValueError) as exc:
+        return FAIL, ["cannot read tools/registry.json: %s" % exc]
+    by_id = {str(e.get("id")): e for e in entries if isinstance(e, dict)}
+    for hand_id, line_key in (("relaunch_chrome", "ask_relaunch"),
+                              ("summon_tab", "ask_summon")):
+        entry = by_id.get(hand_id)
+        if not entry:
+            return FAIL, ["tools/registry.json holds no %r, so the session's gated offer "
+                          "has nothing to offer" % hand_id]
+        if entry.get("params"):
+            return FAIL, ["%s takes parameters %r - the locked tab lives in the session "
+                          "and must never travel over the wire to get back to it"
+                          % (hand_id, [p.get("name") for p in entry["params"]])]
+        want = focus.LINES[line_key]
+        if str(entry.get("proposal") or "") != want:
+            return FAIL, ["%s proposes %r and the session says %r - the card would ask "
+                          "one question and the hand would answer another"
+                          % (hand_id, first_line(entry.get("proposal"), 60),
+                             first_line(want, 60))]
+        script = os.path.join(ROOT, "tools", str(entry.get("script") or ""))
+        if not os.path.exists(script):
+            return FAIL, ["%s points at tools/%s, which does not exist"
+                          % (hand_id, entry.get("script"))]
+    notes.append("relaunch_chrome and summon_tab are both gated, take no parameters, and "
+                 "propose in the session's own words")
+
+    # -- (e) and each script does what its sentence promises. Read, not run: running the
+    # first one closes the browser you are reading this in.
+    promises = (("relaunch_chrome.py", ("launch-chrome.ps1", "--remote-debugging-port"),
+                 "the hand that offers to open the debugging port"),
+                ("summon_tab.py", ('"cmd": "summon"', "127.0.0.1"),
+                 "the hand that offers to bring you back"))
+    for name, needles, what in promises:
+        try:
+            with open(os.path.join(ROOT, "tools", name), encoding="utf-8") as fh:
+                text = fh.read()
+        except OSError as exc:
+            return FAIL, ["cannot read tools/%s: %s" % (name, exc)]
+        missing = [n for n in needles if n not in text]
+        if missing:
+            return FAIL, ["%s does not mention %s, so its own proposal is a promise it "
+                          "may not keep" % (what, missing)]
+    notes.append("relaunch_chrome.py goes through launch-chrome.ps1 with the debugging "
+                 "port; summon_tab.py asks the session on 127.0.0.1 and nothing else")
+
+    # -- (f) THE REFUSAL, live. A hand that reports success off an HTTP status would pass
+    # every check above and move somebody's window on the strength of nothing.
+    status, _, body = post_json("/focus", {"cmd": "summon", "source": "preflight"},
+                               timeout=20, label="POST /focus summon")
+    said = as_json(body) or {}
+    if status != 200:
+        return FAIL, notes + ["POST /focus {cmd:summon} returned HTTP %s" % status]
+    if live.get("state") in ("arming", "running", "paused") and live.get("lockedTab"):
+        # Somebody's real session has a real lock; it may well have brought them back,
+        # which is correct behaviour and not something to assert a refusal against.
+        warnings.append("a live session holds a lock, so the summon was answered for "
+                        "real (%s) rather than refused" % said.get("summoned"))
+    elif said.get("summoned") is not False:
+        return FAIL, notes + ["a summon with nothing locked came back summoned=%r: it "
+                              "did something, or it claims it did"
+                              % said.get("summoned")]
+    elif str(said.get("answer") or "").strip() != focus.LINES["summon_none"]:
+        return FAIL, notes + ["a summon with nothing locked refused in the wrong words: "
+                              "%r" % first_line(said.get("answer"), 70)]
+    else:
+        notes.append("a summon with nothing locked refuses in a sentence: “%s”"
+                     % focus.LINES["summon_none"])
+
+    # -- (g) the nameless pool. The drift callout for a LOCKED TAB is the one callout said
+    # while the boss is looking at a site he did not mean to be on, and it must not read
+    # that site out: the named pools are for the application-level lock, where he chose
+    # the name himself.
+    tiers = sorted(focus.CALLOUTS_LOCKED)
+    for tier in tiers:
+        pool = focus.CALLOUTS_LOCKED[tier]
+        if len(pool) < 2:
+            return FAIL, notes + ["the tier %s locked-tab pool holds %d line(s), so the "
+                                  "same sentence comes back every drift" % (tier, len(pool))]
+        for text in pool:
+            blanks = set(re.findall(r"\{(\w+)\}", text))
+            if blanks - {"drifts", "seconds", "minutes"}:
+                return FAIL, notes + ["a locked-tab callout carries %s: %r - that pool is "
+                                      "said about a site the boss did not choose and may "
+                                      "name nothing" % (sorted(blanks), text)]
+            if text in focus.NAMED_LINES:
+                return FAIL, notes + ["a locked-tab callout is also in NAMED_LINES, so "
+                                      "the scrubber will treat it as naming a place: %r"
+                                      % text]
+            if text not in focus.LINE_REGISTRY:
+                return FAIL, notes + ["a locked-tab callout is outside LINE_REGISTRY, so "
+                                      "nothing audits it: %r" % text]
+    notes.append("the %d locked-tab tiers hold %d nameless lines between them, all inside "
+                 "LINE_REGISTRY"
+                 % (len(tiers), sum(len(focus.CALLOUTS_LOCKED[t]) for t in tiers)))
+
+    proof = os.path.join(ROOT, "lock_proof.mjs")
+    notes.append("the teeth themselves - drift inside %.1fs, one callout, the resume, the "
+                 "summon - are proved by lock_proof.mjs%s, which relaunches Chrome and so "
+                 "is never run from preflight"
+                 % (focus.LOCK_GRACE_MS / 1000.0 + 1.1,
+                    "" if os.path.exists(proof) else " (MISSING)"))
+    if not os.path.exists(proof):
+        warnings.append("lock_proof.mjs is missing, so nothing in this repository proves "
+                        "the watcher notices anything")
+
+    if warnings:
+        return WARN, notes + warnings
+    return PASS, notes
+
+
 CHECKS = [
     ("the server is up and serving the viewer", check_server),
     ("the graph data loads and has nodes", check_graph),
@@ -3268,6 +3768,8 @@ CHECKS = [
     ("the web lookup fetches, cites, and stays in its lane", check_web),
     ("the hands ask first, run once, and keep nothing", check_hands),
     ("a PDF in archive/ is read, cited by page, and answers", check_documents),
+    ("the four classes answer for nothing and cannot be searched", check_routing),
+    ("the tab lock explains itself and asks in one voice", check_lock),
 ]
 
 

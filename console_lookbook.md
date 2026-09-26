@@ -6,15 +6,15 @@ it is typed from the specification. Where a claim is a *measurement* the harness
 named, so anything in this document can be re-run rather than believed.
 
 Machine: Windows 11, Chrome on the real GPU, `python server.py` on 127.0.0.1:4700 serving
-only `viewer/`. Run logs for this date, in the project root: `_pre.out` (preflight),
-`_conv.out`, `_deck.out`, `_voice.out`, `_layout.out`, `_desk.out`, `_tools.out`,
-`_focus.out`. Each is the stdout of the harness of the same name, and every harness can be
-re-run by name.
+only `viewer/`. Run logs for this date, in the project root: `_pre.out` and `_pf.out`
+(preflight, before and after the presence), `_conv.out`, `_deck.out`, `_voice.out`,
+`_layout.out`, `_desk.out`, `_tools.out`, `_focus.out`. Each is the stdout of the harness of
+the same name, and every harness can be re-run by name — **solo**, for the reason §16 gives.
 
 Sections 1–9 were written first; **sections 10–16 were added the same day**, after the worlds,
-the Mind, the deep field, the spoken dial and the Open Ear landed. Where those parts falsified
-a sentence in 1–9 the sentence was **rewritten from a new measurement** rather than left
-standing, and the rewrite says what it replaced.
+the Mind, the deep field, the spoken dial and the Open Ear landed, and **§17 after the face**.
+Where a later part falsified a sentence in an earlier one the sentence was **rewritten from a
+new measurement** rather than left standing, and the rewrite says what it replaced.
 
 ---
 
@@ -599,17 +599,18 @@ the bar, gone 4 s after his voice ends — and a cancelled answer's caption goes
 
 ## 16 · The summary lines
 
-Every harness in the matrix, run **solo on a quiet machine**, on 25 September 2026:
+Every harness in the matrix, run **solo on a quiet machine**, on 25 September 2026, with the
+presence docked and FACE mode live:
 
 ```
 preflight.py            14 pass, 0 fail, 3 warn
-conversation_proof.mjs  VERIFY 67/67 PASS
-deck_proof.mjs          VERIFY 173/173 PASS      (idle 59.2 fps with textures, nebula, ear open)
-voice_proof.mjs         VERIFY 123/123 PASS
-layout_proof.mjs        VERIFY 43/43 PASS
-desk_proof.mjs          37 checks, 0 failed
+conversation_proof.mjs  VERIFY 69/69 PASS        (the face docked through all of it, 60 fps)
+deck_proof.mjs          VERIFY 195/195 PASS      (60.1 fps with FACE live; root dPos 0 · dQuat 0)
+voice_proof.mjs         VERIFY 130/130 PASS      (mouth peak 0.8642, every moving frame analyser)
+layout_proof.mjs        VERIFY 72/72 PASS        (the well never touches toast, card or panel)
+desk_proof.mjs          44 checks, 0 failed      (the miniature mirrors across the PiP boundary)
 tools_live.mjs          VERIFY 50/50 PASS
-focus_probe.mjs         63 checks, 0 failed  ·  PROBE 25/25 PASS
+focus_probe.mjs         78 checks, 0 failed  ·  PROBE 26/26 PASS   (the Eyes Law, both ways)
 ```
 
 Zero failures. The three preflight warns are the documented environmental ones (§8): warns 10
@@ -627,9 +628,1462 @@ FIFO's cumulative counters, so the session-wide equality broke permanently. A ha
 hard-coded sleep where a wait belongs can manufacture the exact defect the next assertion
 detects; the fix was in the harness — wait for the queue to run dry — and not in the assertion.
 
-**What §§10–16 do not claim.** The plates were captured headless on this GPU, so they are what
+**What §§10–17 do not claim.** The plates were captured headless on this GPU, so they are what
 the renderer draws and not what a projector would. No claim is made here about how the voices
 *sound* — only that the recast landed, was announced in the voice it named, and was put back.
 The Open Ear's recognition is Chrome's, which is why the seal says `browser`: nothing in §14
 claims local recognition, and the page cannot say the word. One explicit click per session
 remains the privacy contract, by design.
+
+## 17 · The face, the eyes, the still frame and the AGI card
+
+### 17.1 · The presence, docked
+
+There is a **reserved presence well** right-of-centre, and the hologram in it belongs to the
+Layout Governor rather than to the stylesheet. The governor assigns a square, tells the renderer
+the number rather than asking it to measure a box mid-transition, and publishes both the square
+and its reason. Three widths, read off `layout_proof.mjs`:
+
+```
+1280x860   {"fits":false,"why":"no room: 12px of 168","side":12}     the well stands down
+1600x860   {"fits":true,"why":"beside the toast","side":172}         canvas 1180 · midpoint 1068
+1920x860   {"fits":true,"why":"beside the toast","side":259}         canvas 1500 · midpoint 1272
+```
+
+At both widths where it fits, the toast, the session card, the note panel, the telemetry rail and
+the legend are each measured against it and none of them touches it — and the renderer took the
+same 172 px and 259 px the governor assigned, at `dpr 1.5`, so the canvas is never a frame behind
+its own width. **`fits:false` is the governor working, not failing:** a canvas with no `PRES_MIN`
+square left in it after the card, the chips and the toast have been served has nowhere to put a
+hologram, and four faint brackets around a cropped face would be worse than none.
+
+`PRES_MIN` is **168** and not 176, and that number came from a measurement this pass. A 1600 px
+window leaves the well 172 px once the toast has taken its column; standing the machine's face
+down over four pixels is the governor being fussy rather than protective. 168 still has teeth —
+1280 leaves 12 px and is refused.
+
+Plate: `deck-presence.png`, the whole deck with the face docked in its well.
+
+### 17.2 · Three modes, one Points object
+
+```
+face 10400 pts      ring 5092 pts      cube 8748 pts
+objects 1 · materials 1 · shader true · capacity 10400 · three r183
+```
+
+Side by side at 2x from the well itself: `deck-presence-face.png`, `deck-presence-ring.png`,
+`deck-presence-cube.png`. All three switch from the **Command Panel's own call**, and the counts
+are measurements off the scene graph rather than claims — a second object added by a later edit
+would read as a `2` here, and a `MeshStandardMaterial` that happened to draw something
+face-shaped would pass every count and fail `shader`.
+
+The expensive part is what is *not* there. `deck_proof` recorded 300 frames with FACE live and
+then asked the buffer how many times it had been rewritten:
+
+```
+NO PER-FRAME GEOMETRY REBUILDS: the attributes were written 2 times for 2 mode switches
+and not once during 300 frames
+and each one cost EXACTLY ONE attribute write - 4 for the life of the page - while asking
+for the mode already on the glass cost nothing at all
+```
+
+### 17.3 · The audition, and the two numbers in it
+
+FACE auditions exactly as the bloom does: a baseline, a 3 s trial, a floor of 55 fps and 90 % of
+baseline to keep.
+
+```
+the audition: baseline 40.8fps with the ring, trial 60.3fps with the face, verdict "kept"
+THE DECK HOLDS 60.1fps WITH THE FACE LIVE, above the 55fps floor - 10400 points, a live
+analyser tap and thirty textured worlds, on ANGLE (Intel(R) Arc(TM) 140V GPU, D3D11)
+and IT RIDES THE ORBIT LOOP rather than a second one: the presence drew 300 frames while
+the page drew 300 - one tick, not two
+```
+
+**The trial is the higher number, and that is not a paradox.** The ring's baseline is sampled
+while the worlds are still being built at boot, so 40.8 fps is the cost of thirty textures
+arriving, not the cost of a ring. The audition is deliberately left that way: it measures *this
+machine at this moment*, which is the only question worth asking before putting ten thousand
+points on the glass, and a baseline taken later would flatter the face.
+
+It degrades for real, too. `voice_proof` — a run that also holds a synthesiser, an analyser and a
+live microphone — was told `audition: 53.9fps with the face against 51.6fps with the ring (floor
+55, keep 90% of baseline)`, the ring stood in, and the trace said so once. That harness then asked
+for the face **by hand**, which is the one caller allowed to clear a degrade: you asked for it
+after being told it would not hold, which is a decision and not a mistake.
+
+### 17.4 · The mouth, in the same signal as the voice
+
+`voice_proof.mjs`, sampling from inside the page every 60 ms through one real sentence:
+
+```
+at rest before the line: {"level":0.0095,"from":"rest","mode":"face","pose":"idle"}
+the loop: 561 frames -> 622 frames in a second, level 0 through all of them
+mouth: 63 samples · peak 0.8642 · 44 over 0.12 · sources {"analyser":61,"rest":2}
+```
+
+Plates: `voice-face-idle.png` (FACE mode, nothing speaking, the lips at rest) and
+`voice-face-speaking.png` (mid-sentence, `level 0.2583` from `analyser`).
+
+Two of those lines are there because of a defect in an earlier draft of the harness. **A frozen
+level reads exactly like a shut mouth** — `presFrame()` early-returns while the well is standing
+down, which freezes the published `level` at whatever it last painted — so "the mouth is shut
+before a word is spoken" is asserted *with a frame count beside it*: 61 frames were drawn during
+that second, and the mouth stayed at 0 through all of them. The mouth also moves only on real
+samples: every moving frame named `analyser`, an `AnalyserNode` tapped off `speechBus`, which is
+why a barge-in shuts this mouth for free rather than by a second piece of code remembering to.
+
+### 17.5 · The Eyes Law — the same variable, twice
+
+`focus_probe.mjs` drives Chrome's fake camera on the **real** page, and every assertion below is
+made against a hologram that is on the glass (`THE HOLOGRAM IS ON THE GLASS on the real page, so
+the eyelids below are geometry and not just a number`).
+
+```
+THE TABLE HAS THREE ROWS: shut 0, sampling a HALF, watching 1
+CAMERA OFF: the variable says "shut", eyesLive() agrees, both EYES LIVE surfaces dark
+AND THE FACE IS NOT LOOKING: the hologram was told lid 0 and its geometry eased to 0
+CAMERA ON: the variable moved to "sampling" - the landmarkers are still waking, so the
+   eyes are HALF open, which is the third state earning its keep
+and the EYES LIVE seal lit in the same breath - one variable, two surfaces, asserted together
+AND IT BLINKED ON WAKING: 1 open, 1 blink
+THE INSTANT THE CAMERA RELEASES: state "shut", eyesLive() agreeing, the table's lid back
+   to 0 and both seal surfaces dark - one call moved all four
+and THE FACE WAS TOLD WITHIN ONE FRAME: the lid the shader is handed read 0 at the instant
+   of the call and 0 one frame later, with the eased geometry at 0.2261 and still travelling
+with a SLOW BLINK ON CLOSING too: 1 close, 2 blinks for one open and one close
+```
+
+Plates, side by side: `focus-eyes-shut.png` (camera off) and `focus-eyes-open.png` (camera on).
+
+The distinction in the last three lines is the whole law. `sightSet()` is the only writer and it
+moves the variable, the seal and the pure lid **synchronously**; the *geometry* eases over a blink
+in the frame loop, one frame later. So the release is asserted twice — instantly on the variable,
+and within one frame on the number the shader is handed. What is never true is a face that looks
+while the camera is off: `conversation_proof` runs a whole session with a live microphone and no
+camera, and the last thing it checks is that the eyes were **shut** through all of it — the Eyes
+Law does not care that the ear is live.
+
+### 17.6 · The still frame
+
+The galaxy root does not travel. `deck_proof` holds the pointer still for 30 s and then reads the
+watch that has been checking the root all along:
+
+```
+holding the pointer still for 30s - hands off the mouse
+THIRTY SECONDS OF STILLNESS: the camera quaternion is unchanged to four decimals
+still frame: world ancestor "Group" pinned at [0,0,0] · dPos 0 · dQuat 0 · 2791 holds, 0 corrections
+AND OVER 30s OF IDLE IT NEVER TRANSLATED: the largest position deviation ever measured is 0
+and it never turned either: largest quaternion deviation 0 - the root holds [0,0,0,1]
+and the pin never had to FIGHT anyone for it: 0 corrections, so nothing in the page is
+   writing to the root behind its back
+and the watch was AWAKE for the hold: the pin checked the root 1800 times in those 30s -
+   a sleeping watch would report a deviation of zero too
+of 30 built worlds, 30 turned on their own axes and 30 moved along their micro-orbits
+THE SKY IS STILL, NOT FROZEN: 30 of 30 worlds turned on their own axes (at least 24 required)
+and 30 of 30 rode their micro-orbits: motion INSIDE the frame is what the still frame is for
+```
+
+Three of those assertions exist to stop the other four being cheap: **0 corrections** says nothing
+else in the page is fighting the pin, **1800 checks** says the watch was awake, and **30 of 30
+worlds turning** says the sky is alive. A frozen page would satisfy `dPos 0` perfectly.
+
+### 17.7 · The AGI card
+
+The focus card has shed its rounded-rect normalcy. Read off the live page rather than a
+stylesheet:
+
+```
+cuts 4 · brackets 4 · traces 4 · scans 1 · cells 3 · cols 2 · radius 0px
+clip-path polygon(15px 0, 100%-15px 0, 100% 15px, 100% 100%-15px, 100%-15px 100%,
+                  15px 100%, 0 100%-15px, 0 15px)
+framePE "none" · frameZ "-1" · aria-hidden "true"
+sparklines sp-drift / sp-clean / sp-streak, each a 96x11 box · tv ["0.0","100%","2"]
+mini {"w":30,"h":30,"tag":"CANVAS","hdr":"fh"} · 5 keyframe rules, none off transform/opacity
+```
+
+Close-up: `layout-agi-card.png`, at 2x and running.
+
+Three of those numbers are laws rather than decoration. The frame is `pointer-events: none`, at
+`z-index: -1` **under every character on the card**, and `aria-hidden` — so none of it can be
+pressed or read aloud, and the text-inside-box law is untouched: 21 line boxes inside the padded
+box, worst overhang 0 px, and the unbreakable 86-character intent did not widen the card past
+460 px. The micro-telemetry digits are the **same numbers the card is running on** — `clean 100%`
+and `streak 2` straight off `fx`, not off a second source. And all five animations are cheap.
+
+The miniature in the header is the same hologram, not a second instrument. On the desk, inside the
+PiP document:
+
+```
+THE MINIATURE PRESENCE IS ON THE DESK CARD: a 26px canvas in the header row, 26px of the 320
+and it is a PICTURE of it: 369 lit pixels in the canvas out there (ring mode)
+AND THE MIRROR IS LIVE ACROSS THE DOCUMENT BOUNDARY: wiped by hand, and 336 pixels came back
+   within a second - 19 more frames of the well drawn into a canvas in another document, off
+   the one canvas and no second renderer
+the card's rows FIT the window they were given: 239.33px into 239.33px
+the rows, in order: aframe 239.33 | fh 20 | aclock 40 | fbar 3+9px/8px | focus-stats 31 |
+   frow flock 28+34.6667px | frow 28+10px
+```
+
+When there is no room for a well, the miniature is **correctly blank** and says why: `the governor
+stood the hologram down (no room: 5px of 168)`. A miniature that kept drawing a face the main
+window had stood down would be the metaphor lying in small print.
+
+That row breakdown is in the log for a reason. `desk_proof` first read `253px into 240px` and the
+obvious conclusion — the card has outgrown the PiP window — was wrong: `.aframe` is `inset: 0` and
+out of flow, so a row-sum that counted it was measuring the whole card plus its own bottom
+padding, and no window size could ever close the gap. The harness now sums the **rows**, skips
+absolutely-positioned children, and prints them, so the next row added to this card is a number
+someone can read rather than a shortfall to chase.
+
+### 17.8 · The conversation, in front of it
+
+`conversation_proof.mjs` — one click, three turns, a barge-in and a courtesy closer — now ends by
+turning round and looking at the hologram:
+
+```
+the governor at the end of it: {"vw":1578,"vh":846,"panelOpen":true,"canvasW":1158,
+  "toast":{"width":760,"left":199},"well":{"fits":true,"why":"above the toast","side":220}}
+the audition: kept - 60.3fps with the face against 60.3fps with the ring
+AND THE PRESENCE WAS DOCKED THROUGH ALL OF IT: a 220px well above the toast, 2396 frames at
+  60fps in "face" mode (the audition said kept), and the conversation happened in front of it
+with its eyes SHUT, because this room has a microphone open and no camera
+```
+
+That harness was given a **1600 x 1000 window** for this pass, and the reason is worth recording
+because it is the governor being right. At 1280 x 880, with a long answer open, the band above the
+toast is shallower than the 168 px floor and the strip beside it came to **one pixel** — so the
+well stood down, exactly as §17.1 says it should. The spec asks for this conversation to happen in
+front of the presence; the honest way to get that is to give the room a window big enough to hold
+a face, not to assert around a governor that is telling the truth. The mode is reported and not
+demanded, too: whichever mode the audition chose is the one asserted, and the probation verdict is
+printed beside it so the line is never a shrug.
+
+### 17.9 · What §17 does not claim
+
+The plates are what this renderer draws on this GPU, headless, at 2x from the well — not what a
+projector would. The face is **light and never a mesh**: `shader true`, one material, and the brow,
+cheekbones and lips are readable in the *density* of 10,400 points, which is a thing to be looked
+at in `deck-presence-face.png` rather than asserted by a counter. No claim is made that FACE mode
+will hold 55 fps on any other machine — that is precisely why it auditions, degrades to RING and
+says so once. And the Eyes Law is a claim about this page's own camera state: it says the face does
+not look while the Eyes organ is off, which is a statement about the metaphor, not a statement
+about anyone else's camera.
+
+## 18 · Galaxy — the protected classes, the watchdog, the lock and the head
+
+This section is written in the order the work was done, and it opens with research rather than with
+results, because the mandate asks for the real mechanics of each Part before a line of that Part is
+written. Every paragraph below is something that was **measured on this machine**, and several of
+them contradict what I believed when the round started. Where a finding cost me a wrong edit, the
+wrong edit is named too: a lookbook that only records the things that worked is a brochure.
+
+### 18.0 · Research — the microphone, the echo canceller and the barge-in reference (Part C)
+
+Chrome's echo canceller cancels audio *Chrome itself rendered*, and it does it well enough to be the
+central fact of this Part. With the page's ear open, a fixture sentence played from inside the page
+read **0.0256** on the page's own analyser against a **0.0269** silence floor — indistinguishable
+from silence — while the identical wave played by an external `powershell` process read **0.1723**.
+The render reference is what makes the difference: Chrome knows what it sent to the speakers and
+subtracts it, and an external process is not in that reference. Two consequences follow, one for the
+product and one for the harness. For the product: a naive barge-in gate that simply watches input
+level would still be half-defensible, because the AEC already removes most of Galaxy's own voice —
+but "most" is not "all", and the residue that survives cancellation rises with speaker volume, so a
+fixed threshold is a volume-dependent bug waiting to be reported as "he interrupts himself". Hence
+the mandate's ratio: input measured against the **live output RMS tapped off the speech bus**, 1.6×
+sustained 250 ms, and nothing at all in the first 800 ms of an answer — a gate immune to both the
+absolute volume and the transient at the start of a phrase. For the harness: a spoken fixture can
+never play its own audio through the page, which is why `tools/mouth.mjs` spawns a player process.
+It is also the honest simulation — a person in the chair is not in the AEC's render reference
+either. Worth recording as a negative result: `echoCancellation: true, noiseSuppression: true,
+autoGainControl: true` — exactly what Part C requires the ear to open with, and exactly the
+processing one would expect to eat a far-field synthetic voice — transcribes as reliably as raw
+capture. The noise suppressor was the prime suspect for a week and was innocent.
+
+### 18.1 · Research — recognition restart semantics, and a finding that was not one (Part E)
+
+Part E asks for recognition errors to auto-restart with backoff, which presumes one knows what the
+errors are. The mechanic that matters most here is not in the specification of the API at all. **The
+cloud speech service throttles silently and raises no error**: past some number of sessions it fires
+`audiostart`, `soundstart` and `speechstart` into a room the analyser reads at 0.4, returns no
+result, and reports no fault. The proof is one spike run unchanged three times inside forty
+minutes — **6 of 6, then 1 of 6, then 1 of 6**. A watchdog built against that behaviour would be
+built against a wall: there is no error event to count, no `error.error` to back off from, and the
+seal would read `LISTENING` while the ear was functionally dead. That is the strongest argument for
+the change this round made to the page — it now prefers **on-device recognition**
+(`SpeechRecognition.available` / `install`, shipped in Chrome 138; this machine runs 153), which has
+no quota behind it, punctuates and capitalises its results, and keeps the boss's words in the room,
+which is the page's whole claim about itself. One trap on the way in, and it is a one-word bug with
+a silent symptom: `available()` and `install()` are statics on **`SpeechRecognition`** and are *not*
+on the `webkitSpeechRecognition` alias, so reading the alias first made the page report "this build
+has no `SpeechRecognition.available()`" on a Chrome that has it, and go on posting the boss's speech
+to the throttled service. The standard name is now read first and that order is load-bearing.
+
+The cost of learning this is the part worth keeping. Under that throttle I measured, carefully and
+repeatedly, that *a reused recogniser instance goes permanently deaf*: freshly constructed instances
+heard, restarted ones fired every event and returned nothing, at 400 ms after the stop and at three
+seconds alike. I believed it, wrote it into the spoken harness's header as finding 7, and **edited
+`startListening()` to retire and rebuild the recogniser on every arm**. It was an artefact: the
+quota was draining across the run, and the "fresh" instances were simply the ones that happened to
+be early. Re-run on-device, reuse scores `fresh=true reuse=true reuse-far=true fresh-again=true`.
+The edit is reverted, the comment at that site now records why reuse stays, and the rule is written
+where the next person will meet it: **a platform finding taken during a throttle is not a finding.**
+Everything else in that spike series was eliminated the same way, and the negatives are worth as
+much as the positive — it is not the turn number, not the phrase, not the phrase length, not the
+language, not stale or quiet cached waves (measured 0.167–0.214 RMS, all fine), and not transcript
+capitalisation (`/chat` returns the same `kind` and the same node count for `who are you` and
+`Who are you`).
+
+One adjacent mechanic, established while proving the above and load-bearing for every spoken fixture
+in Part H: **`listening === true` is not a promise that anything will be heard.** A session one tick
+from its own no-speech timeout reports itself as listening, and speaking into it returns neither a
+transcript nor an error — a silent false negative indistinguishable from a routing bug, which is
+exactly the kind of test the mandate forbids. The fixtures therefore wait for `listening &&
+analyser`, record *which* arm they are about to speak into, settle 1800 ms, and re-check that the
+arm counter has not moved underneath them; the measured distances behind those numbers are ~150 ms
+from `.start()` to `audiostart` and ~2 s to the first `soundstart` the engine will honour. Chrome
+will also only transcribe for a page that has rendered audio itself at least once, so the room is
+warmed with a half-second tone through a real user gesture before the ear is ever opened. And there
+is exactly one recogniser per page: a second `start()` aborts the first.
+
+### 18.2 · Two defects the spoken fixtures found before a line of Part A was written
+
+The rule that every fixture must also run out loud earned itself on its first successful run, which
+found two real bugs the typed pass cannot see.
+
+The first is a routing defect, and it is the exact defect Part A exists to remove: spoken aloud into
+the real microphone, **"can you listen to me" was answered from the web** — "According to current
+web sources…" — rather than from live state. Whether the ear is open is not a question about the
+world, and it must never cost a lookup.
+
+The second is a bookkeeping defect the typed path hides. **One spoken utterance increments
+`__galaxy.ear.turns` by two.** Measured at the wire with a `window.fetch` wrapper, exactly one
+`/chat` leaves the page per utterance — so this is not a double question and not a double cost — but
+`turns` is the number the Open Ear's own contract is stated in, and "one click, three questions"
+reading `6` in the trace makes a true claim look like a false one. `flushThought()` has three
+callers and two of them fire for a single phrase: `armFinishTimer`, `earSpeechEnd`'s end-of-speech
+flush, and `r.onend`'s salvage flush, with both increments landing between 2.05 s and 2.56 s around
+`.stop()` / `FINAL` / `end`. It is fixed where turn semantics belong rather than patched at the
+counter.
+
+### 18.3 · The watchdog, built and bitten (Part E)
+
+**What was added.** Three things, all in `viewer/index.html`, and none of them visible until
+something goes wrong — which is the point.
+
+1. **The ear admits a fault.** `earFaultPaint(errors, why)` raises a fault after
+   `EAR_FAULT_AFTER = 3` consecutive hard recogniser errors. The seal then reads
+   `ear fault · retrying` (stored lowercase; `#seal` is `text-transform:uppercase`, so he sees
+   **EAR FAULT · RETRYING**) with `data-state="fault"` and its own amber. The existing
+   backoff — `EAR_REARM_MS * 2^hardErrors`, capped at `EAR_BACKOFF_MAX_MS` — was already
+   correct and is untouched; what was missing was the admission. The fault clears itself in
+   three places, all of them recoveries rather than clicks: a result arrives, a `no-speech`
+   comes back (the recogniser ran a whole session and reported a quiet room — a *working*
+   ear), or the session is closed.
+2. **A heartbeat.** `setInterval(heartBeat, HEARTBEAT_MS)` at 500 ms, started above the probe
+   fork so it is never conditional, published on `__galaxy.pulse`. `setInterval` and not
+   `requestAnimationFrame`, and the reason is the whole value of the instrument: rAF is
+   throttled to nothing when the window is occluded, so a missed rAF means *the window is
+   behind another window* and nothing more. A late `setInterval` means the main thread could
+   not get to it.
+3. **A blocker, named in words.** Two or more missed periods count a stall; while the page is
+   *idle* the stall is also written into the trace with a sentence saying who was holding the
+   thread — read from counters other parts of the page were already keeping (the deck's frame
+   count, the ear's analyser frames, the speech FIFO), so it costs nothing and cannot drift.
+
+**The identifier that could not be called PULSE_MS.** The page already had
+`const PULSE_MS = 1600` — the birth pulse of a newly captured note — and `__galaxy.capture`
+publishes it, so a harness reads it. The heartbeat's constants are therefore `HEARTBEAT_MS`
+and `HEARTBEAT_NOTE_MAX` while the public surface stays `__galaxy.pulse`, which is what the
+mandate names. Chrome reported the collision honestly (`Identifier 'PULSE_MS' has already been
+declared`) and the whole page died at parse — a reminder that in a single-scope page of fifteen
+thousand lines, a new top-level `const` is a global.
+
+**A rate, not a presence.** The first version of the blocker line asked only whether the
+deck's frame counter had moved, and across a measured 1.6-second block of the main thread it
+reported *"the deck kept drawing (31 frames), so whatever blocked this timer was not the
+renderer"*. True as arithmetic and false as a bug report: 31 frames in 2.08 s is fifteen a
+second, and the renderer was starved right along with the timer. It now compares what was
+drawn against what the elapsed time was owed, and a third or less means the render loop was
+inside the stall. **A stall named with the wrong culprit sends somebody to the wrong file.**
+
+#### The fixture, and how a service is made to fail honestly
+
+`conversation_proof.mjs` gained four sections (93 checks, all passing). The recognition service
+cannot be unplugged on demand — pulling the interface down takes the server with it, and
+Chrome's speech endpoint is not a URL this page requests — so the fixture replaces
+`SpeechRecognition.prototype.start`: an *armed* attempt reports `network` through the page's
+own `onerror` and then its own `onend`, which is the exact shape Chrome produces when it cannot
+reach the service. Everything downstream — `hardErrors`, the doubling backoff, the seal, the
+note — is the real code reached through the real event. The other half matters more: **"recovers
+without a click" cannot be observed from a failure alone**, so when the fixture plugs the
+service back in it gives the answer a working recogniser in a quiet room gives — `no-speech` —
+and the page is left to do what it does with it.
+
+The backoff is measured off the page's own timer, not polled from Node. The first attempt at
+that assertion sampled `ear.rearmIn` from outside every 250 ms and **missed the 800 ms step
+entirely** (it recorded 400 → 1600 → 3200 and failed); a CDP round trip plus a sleep is not a
+clock. The injector now stamps `Date.now()` in the page each time it fires, and the intervals
+between the stamps are the intervals the page chose.
+
+```
+  ·· 3b · the heartbeat across three turns
+  note the conversation lasted 52s of heartbeat time; camera=true reading
+       {"present":true,"headDown":false,"slouched":false} face=face at 60fps
+       ear=true (3553 analyser frames)
+  ok   NO STALL ACROSS THE THREE-TURN CONVERSATION with the eyes, the ear and the face all
+       live: 104 beats, 0 stalls and 0 missed beats inside the window
+  ok   and the beats account for the time: 104 of the 104 the wall clock owed
+  ok   and this was measured with the room ACTUALLY OCCUPIED - camera live and reading a
+       body, 3553 analyser frames, the presence drawing "face" at 60fps, and the ear still
+       open on that one click
+
+  ·· 3c · the ear fault and the recovery
+  ok   THREE FAILURES IN A ROW AND THE SEAL SAYS SO: hardErrors=3, fault on
+  ok   and the word is the admission the spec asks for - the bar reads EAR FAULT · RETRYING
+       in its own amber state, not READY
+  ok   and the SESSION IS STILL OPEN while it retries
+  ok   THE RETRIES BACK OFF rather than hammering: the page waited 830ms then 1633ms between
+       attempts and is now standing off 3200ms - 400 doubled, three times
+  ok   AND IT RECOVERS WITH NO CLICK: the service answered once and the fault cleared itself,
+       hardErrors back to 0
+  ok   STILL ONE CLICK after a fault and a recovery: 1
+  ok   and it was ONE episode rather than three - the fault is a state, not a per-error flash
+  ok   and the trace names it in words: "pulse: the ear has failed 3 times in a row (network)
+       · the seal reads EAR FAULT and the retry stands at 3200ms"
+
+  ·· 8 · the watchdog, proved by stalling the page on purpose
+  ok   A 1.6s BLOCK IS SEEN, and counted as one stall of 2 missed beats
+  ok   IT IS NAMED IN THE TRACE while idle, in words, once: "pulse: MISSED 2 BEATS while idle
+       (1745ms between beats, beat 151) · the blocker: the deck was starved with it (11 frames
+       where 104 were due, 6fps) - a long task on the main thread · the speech queue is
+       mid-flight (7/8 played)"
+  ok   and the blocker NAMES THE MAIN THREAD rather than shrugging or blaming the renderer
+  ok   and the heartbeat is still beating after the stall it reported
+```
+
+Section 8 comes last on purpose: it blocks the main thread for 1.6 seconds with the ear shut
+and nothing being asked, because **a "no stall" result is worth exactly as much as the detector
+behind it, and a detector nobody has ever seen fire is a comment.**
+
+#### Two findings the watchdog produced the first time it ran
+
+Both were found by the instrument, not by reading the code, and neither is fixed by Part E.
+
+**1. Opening the camera can freeze the page for four seconds.** `eyes.on` goes true when the
+*stream* is live; the landmark reader is built after that, and building it compiles the
+MediaPipe vision bundle (`tasks-vision@0.10.14`, GPU delegate). The watchdog measured a
+**4207 ms** gap at that moment and named it correctly — *"the deck was starved with it (5
+frames where 252 were due, 1fps) — a long task on the main thread"*. It is a one-time cost at
+the instant the camera opens and it is not what "no stall across three turns" is a claim about,
+so the fixture waits it out before taking its baseline and reports it as a note. **The fix is a
+worker**, which is a change to the eyes pipeline and not to this Part. Note also that the
+cold-start stall is *counted* but not *named in the trace*: naming happens only while the page
+is idle, and a camera opening inside an open ear is not idle.
+
+**2. The audition can be poisoned by a transient, and it costs him the face.** The presence
+mounts when the layout governor has a well for it — which is after the first answer — so the
+audition and the camera's model compile land in the same few seconds no matter which is started
+first. Twice, the audition measured **8–9 fps for the face against 59 for the ring** and stood
+the face down for the whole session; once, with the compile finished first, it measured **60 fps
+and kept it**. The guard is behaving exactly as written; what it timed on those two runs was a
+four-second freeze belonging to a different organ. The audition guard is out of scope for this
+round by instruction, so this is recorded rather than changed — **but it bears directly on Part
+G**: a fourteen-thousand-point volumetric head will be auditioned in the same room, in the same
+few seconds, against the same ring.
+
+### 18.4 · Research — what CDP will and will not tell you about which tab you are on (Part F)
+
+Part F asks for "real teeth via CDP", and the teeth turn on one question: **how does a process
+outside the browser learn which tab you are looking at?** There is no event for it. `Target`
+domain events fire on creation, destruction, navigation and title changes; none of them fire when
+you press Ctrl+Tab. `Target.getTargets` reports a target's type, url, title and whether a debugger
+is attached to it, and nothing about whether you can see it. So the answer has to be asked of the
+pages themselves, and the property that answers is `document.visibilityState` — which is what
+`focus.py` already rests on, and which I measured rather than trusted (`_partF.mjs`, a headed
+Chrome on port 9271, two tabs in one window plus a second window):
+
+| what was in front | the locked tab's `visibilityState` + `hasFocus()` |
+| --- | --- |
+| a *different tab* in the same window | `hidden`, no focus → bits **0** |
+| the locked tab, its window frontmost | `visible`, focused → bits **3** |
+| the locked tab, but **another window** in front | `visible`, **not** focused → bits **1** |
+
+That middle row is the whole design. **Bit 1 is a pure statement about tabs** — it is set for the
+active tab of *every* window, even with the entire browser in the background — and bit 2 is a
+statement about windows. So the two organs divide cleanly and neither is asked a question it
+cannot answer: **the operating system says which application is in front** (`GetForegroundWindow`,
+which `TargetReader` already reads), **and the browser says which of its tabs is the live one**.
+Reading tab-ness off bit 2 would have been the easy mistake: it reports a drift every time the
+boss clicks on VS Code, which is a drift the app read already catches and would then double-count.
+
+Three measurements decided the rest. **Latency:** after `/json/activate`, the outgoing tab reported
+`hidden` and the incoming tab `visible` **13 ms** later — the flip is immediate, so the 1.5 s the
+mandate allows is spent entirely on the poll interval and the grace, not on the browser. **Cost:**
+one `Runtime.evaluate` of the expression costs **0–1 ms** on a warm socket and **1–2 ms** opening
+and closing a fresh one each time, which is what `focus.py` does; at a 300 ms cadence that is under
+1% of one core, so there was no case for holding a socket open. **Activation:** `/json/activate/<id>`
+(i.e. `Target.activateTarget`) raised the *window* as well as re-ordering the tabs — the locked tab
+went from bits 1 to bits 3 and the other window dropped from 3 to 1 — so the summon needs nothing
+more, and `Page.bringToFront` is redundant on Windows. Finally, `attached` in `Target.getTargets`
+was `true` for exactly as long as a socket was open and `false` within a second of closing it,
+which is what lets "no CDP session left attached" be asserted rather than asserted-ish. Note what
+that also means: because the watcher opens and closes a socket per question, *nothing is ever left
+attached by construction*, and the leak actually worth testing for is a **watcher that keeps
+polling a tab after the session ended** — a thread reading the boss's tabs on his behalf and
+nobody's instruction. That is the failure mode `lock_proof` asserts against, not the attachment.
+
+**And then the relaunch, where the research overturned the plan.** Part F specifies the no-port
+path as a gated hand wrapping `launch-chrome.ps1`, "session restored", and I had assumed the
+restoring would be a flag. It is not. `launch-chrome.ps1` opens with `taskkill /IM chrome.exe /F`,
+and on this machine at the moment I ran it that would have killed **nineteen processes of the
+boss's ordinary browsing** — his real windows, in the default profile, which the relaunch does not
+even reopen. So I measured the flag that was supposed to repair that: after `Stop-Process -Force`,
+a relaunch with `--restore-last-session` came back with **a new tab and nothing else**
+(`_partF2.mjs`). A force kill is a crash; Chrome writes `Last Session` on a clean exit, and after
+an unclean one it has a bubble to offer instead of a session. The promise was not keepable the way
+it was written.
+
+Two further measurements made it keepable, and both changed the code. First: with the default-profile
+browser running, a second Chrome on its **own** `--user-data-dir` opened the DevTools port in
+**332 ms and the nineteen processes were still there afterwards** (`_partF3.mjs`). The launcher's
+kill is justified by a real hazard — a browser already running *on the same profile* swallows the
+launch and exits — but that hazard is per-profile, and the launcher always uses a profile of its
+own. So in the ordinary case the hand must **destroy nothing**, and "session restored" is kept for
+free by never taking it away. Second, for the one case that does need the profile cleared — a
+portless Chrome already running on the devtools profile — a **polite** close keeps the promise
+where a kill does not: `CloseMainWindow()` (WM_CLOSE, which is what the X button sends) emptied the
+profile in under 250 ms, and the relaunch with `--restore-last-session` came back with **both tabs
+plus the viewer** (`_partF4.mjs`). That is now what the launcher does: close only the processes on
+its own profile, politely, force only a straggler, and never speak to any other Chrome on the
+machine.
+
+### 18.5 · The lock, on a real port-launched Chrome (Part F)
+
+`lock_proof.mjs`, **70 checks, 0 failed**, against a Chrome launched by the hand itself on its own
+profile. The episode the mandate asks for, lifted out of the run with the harness's own clock on it:
+
+```
+   59.05s  ok   THE LOCK COMPLETED ITSELF on the tab he went to, with no second press:
+                lockedTab="Example Domain"
+   59.05s  ok   one press of the pill in this whole session: presses=1
+   59.05s  ok   and the title on the card is at most 24 characters: 14
+   59.06s  ok   the instrument shows one live watcher: watchers=1, watchState=on
+
+   60.28s  ok   and the session is clean: drifts=0
+   61.20s  ok   LEAVING THE LOCKED TAB IS NOTICED in 926 ms (budget 1500 ms)
+   61.21s  ok   the locked tab really is behind: bits=0 (bit 1 clear is the whole signal)
+   61.21s  ok   ONE callout for the episode, from the locked-tab pool:
+                "The tab you asked me to hold you to is still open, sir. This is not it."
+   61.61s  ok   returning to it resumes on target in 382 ms
+   61.61s  ok   and says so ONCE: "Back. Thank you, sir."
+   61.61s  ok   the drift is not refunded by coming back: drifts=1
+   63.26s  ok   a second drift is noticed in 1606 ms
+   63.67s  ok   called out again: "You have left the locked tab, sir - drift 2."
+   63.67s  ok   and THEN it offers to fix it: "Shall I bring you back?"
+   63.68s  ok   and again with no parameters: the locked tab lives in the session, not on the wire
+   63.68s  YES - running tools/summon_tab.py
+   63.91s  ok   and its stdout is the session's own sentence:
+                "Here you are, sir - back where you said you would be."
+   63.92s  ok   THE LOCKED TAB AND ITS WINDOW ARE IN FRONT AGAIN: bits=3
+   63.93s  ok   and the record keeps BOTH drifts: drifts=2
+
+   63.95s  ok   the session ends
+   63.96s  ok   NOTHING IS LEFT WATCHING: watchers=0
+   65.47s  ok   and the polling has stopped dead: watchPolls 19 -> 0 -> 0 over a second and a half
+   65.48s  ok   and no debugger is still attached to the two work tabs
+   65.49s  ok   a summon after the end refuses rather than moving a window:
+                "There is no locked tab to bring you back to, sir."
+```
+
+Three things in there are assertions I would not have thought to write before the research in 18.4.
+**`bits=0` rather than a title comparison**, because bit 1 is the only signal that means "another tab
+of this window is in front" and a title check would have passed on a tab that was merely renamed.
+**The drift is not refunded by coming back**, because a counter that heals itself turns the
+sparkline into a record of how often he accepted help rather than how often he drifted. And
+**`watchPolls` sampled three times across 1.5 s after the unlock**, because `watchers=0` is a
+statement about a list and the failure worth fearing is a loop that is no longer in the list and is
+still reading his tabs — which is the leak the per-question socket design makes impossible to see
+any other way.
+
+The no-port path runs in the same file and ends in a sentence rather than in a silence: `I cannot
+lock a tab, sir - Chrome has no debugging port open.` → the gated ask `I need Chrome relaunched with
+the debugging port to lock a tab, sir. Shall I?` → and on a refusal, `Tab-level locking is off,
+then, sir: no debugging port, and you would rather I did not restart the browser. I shall watch the
+application only.` No silent degradation anywhere on that path.
+
+### 18.6 · Research — sampling a head out of points, and making depth read (Part G)
+
+The face this Part replaces was a **relief**: a flat sheet cut to a head's outline with eight
+Gaussians embossed on it. Before touching a fifteen-thousand-line page I rebuilt both the old field
+and the proposed shell in Node (`_headmath.mjs`) and measured them against the mandate's own two
+numeric criteria, because "it looks like a mask" is an opinion and the round needed an arithmetic.
+
+|  | z-range ÷ width | nose above the face plane |
+| --- | --- | --- |
+| the old relief | **0.146** (0.55 asked) | **0.069** (0.18 asked) |
+| the new shell, in Node | 1.13 | 0.22 |
+| the new shell, live on the GPU | **1.132** | **0.219** |
+
+A factor of 3.8 and a factor of 2.6 short: **no amount of taller Gaussians would have reached
+either**, because both numbers are bounded by the emboss height of a sheet and the sheet has no back
+to it. That is the whole case for a closed surface, and it is worth having as a number rather than
+as a judgement — the emboss could be doubled and it would still fail.
+
+**The shell is a surface of revolution by table, and it is deliberately asymmetric front-to-back.**
+For a height *y* the ring has a half-width from the outline table, a forward half-depth from
+`PRES_FRONT` and a rearward half-depth from `PRES_BACK` which is *larger* — 0.64 against 0.50 at its
+deepest — and the deepest point of the back is not at the middle of the head but above it, at *y* =
++0.30, which is where an occiput actually is. An ellipsoid symmetric about the coronal plane is the
+thing that reads as a balloon with a face drawn on it. The facial relief is then added to the
+**front** half only, faded by how frontal the point is, so the brow, the recessed sockets, the
+cheekbones, the lip mound and the chin displace a real surface instead of embossing a plane.
+
+**A nose cannot be a term in a field.** It is built as its own cluster: a wedge from the bridge at
+*y* = +0.16 down to a tip at −0.20 that overhangs the shell by `0.30 × (1 − f)^0.55 + 0.035` and
+narrows toward the bridge, with a triangular cross-section (`u = rnd() + rnd() − 1`) so the flanks
+fall away instead of ending. Two things follow that a Gaussian bump could not give: the nose has an
+identity the harness can *measure* — criterion 2 is a statement about the 900 points tagged NOSE,
+not about a box I drew where I thought a nose should be — and at yaw 90 it stands clear of the
+silhouette, which is the only view in which a nose is a nose.
+
+**Where the points go is a density field, and it is the part that does the drawing.** The shell is
+filled by rejection sampling against a weight built out of the same Gaussians as the relief:
+silhouette rim, brow, cheekbone, jawline, socket rim. Measured acceptance **0.282 — 3.54 draws per
+accepted point** — which is the budget answer that mattered, because a field whose acceptance
+collapsed would thin the face out silently rather than fail. Two findings came out of this and both
+are in the code with their reason written beside them.
+
+The first is the one the plates forced. The first yaw-90 plate came back **a uniform speckled blob
+with a nose stuck on it**, and the reason is that the density field had a silhouette term measured
+against the *coronal* great circle only: at yaw 0 that circle is the drawn edge of the head, and at
+yaw 90 it is spread flat across the view and reads as even noise, while the edge you are actually
+looking at — the sagittal midline — had nothing gathering on it at all. One term fixed it
+(`w += 0.40 × G(|x|, 0.048)`): **a head needs a drawn edge from each direction it is ever seen
+from**, and there are two.
+
+The second is about additive blending, which is the deck's law and therefore a constraint on
+density rather than on colour. The eyelids are surface patches over an ellipse of area 0.028; at 280
+points each that is ~2.5× the shell's local density, and additively blended **a closed lid
+photographed as a lamp** — brighter than the open eye it was covering, which is the precise opposite
+of shut. Dropping to 200 points and the alpha ceiling from 0.92 to 0.74 fixed it. The general rule
+worth keeping: with additive blending, **point count is luminance**, so any feature drawn by
+gathering points has a brightness budget as well as a shape.
+
+**The depth cue is read off local Z after the rotation and not off view space.** Size and alpha
+attenuate with `near = clamp((p.z + 0.62) / 1.45)` — computed in the head's own coordinates, after
+the yaw and pitch and before the camera — so the modelling owes nothing to `CAM_Z`, and moving the
+camera later cannot silently change how the head reads. Attenuation is `a *= 0.26 + 0.74 × near`
+and `size *= 0.70 + 0.48 × near`: the back of the skull is a quarter as bright and two-thirds the
+size of the nose tip, which is what lets 12 000 undifferentiated points read as a solid.
+
+**Two measurement mistakes, both the same mistake.** Criterion 2 failed on the first live probe at
+**0.148** with a correct nose, because the width it divided by was **1.954** — the *shoulder* span.
+Every ratio the mandate states is against head width, so the shoulder hint was inflating the
+denominator; measured over head-only points (1.288) the same geometry scores 0.225. Then my own
+socket-hollow assertion called a correct socket a failure by comparing the socket's mean Z (0.407)
+to the *cheekbone's* (0.386) — the cheekbone sits further round the side of the head, so its surface
+is less forward for reasons that have nothing to do with the socket. Against the **brow**, directly
+above it at nearly the same azimuth, the hollow is 0.051. Both failures were one error: **measure
+through the geometry's own regions, and pick the anatomically meaningful reference** — a ratio is
+only as good as what it divides by, and a difference only as good as what it is a difference from.
+Both wrong versions are written into `deck_proof.mjs` beside the right ones.
+
+### 18.7 · The head, measured and photographed (Part G)
+
+`deck_proof.mjs` section **2c**, off the live buffer on this machine's Intel Arc 140V, with the face
+in the well at 60 fps:
+
+```
+  note regions: skull 4274 · nose 900 · cheek 263 · chin 1009 · brow 406 · socket 426 ·
+                back 2202 · neck 1100 · lip 600 · iris 420 · lid 400
+  note moving parts: skull 5654 · lip_up 300 · lip_low 300 · iris_l 210 · iris_r 210 ·
+                lid_l 200 · lid_r 200 · jaw 3826 · neck 1100
+
+  ok   CRITERION 1 - IT IS AS DEEP AS IT IS WIDE: the point cloud spans 1.457 in Z against
+       1.288 of head width, a ratio of 1.132 where 0.55 is the floor. The relief this
+       replaces scored 0.146 and no amount of taller Gaussians would have moved it
+  ok   CRITERION 2 - THE NOSE STANDS OFF THE FACE: the 900-point nose wedge averages Z 0.674
+       against the cheekbone plane at 0.392, 0.282 clear = 0.219 of head width where 0.18
+       is asked
+  ok   CRITERION 3 - THE PROFILE HAS A PROFILE: at the nose's height the frontmost points in
+       the cloud are the nose's (0.821 against 0.452 for the cheek and 0.490 for the socket),
+       and the chin stands clear of the throat behind it (0.407 against 0.173)
+  ok   CRITERION 4 - THE LIDS ARE IN FRONT OF THE EYES: stored shut, the left lid sits 0.074
+       and the right 0.071 nearer the viewer than the iris cluster each one covers, so a
+       closed eye is a lit lid over a dark eye rather than two surfaces at the same depth
+  ok   the eye sockets are HOLLOWS and not bumps: the socket floor lies 0.051 behind the brow
+       ridge immediately above it (0.408 against 0.459)
+  ok   THERE IS A BACK OF THE HEAD: 2202 points averaging Z -0.183
+  ok   and the MANDIBLE IS A REAL PIECE of it: 3826 points carrying role JAW, cut out of the
+       shell rather than strapped on, which is what the hinge below has to swing
+  ok   a head TALLER THAN IT IS WIDE, neck included: 2.000 by 1.288
+  ok   all of it inside the mandate's ceiling: 12000 points, cap 14000
+  ok   AND THE HEAD HOLDS STILL TO BE PHOTOGRAPHED at every angle asked for:
+       -30° (-0.5236 rad) · 0° (0.0000 rad) · 30° (0.5236 rad) · 90° (1.5708 rad)
+  ok   and the pin comes out afterwards
+```
+
+**The plates.** `deck-head-yawm30.png`, `deck-head-yaw0.png`, `deck-head-yaw30.png`,
+`deck-head-yaw90.png` — 2× from the presence well, taken with the attitude *pinned* by
+`presence.yaw(deg)` and the uniform read back off the material each time, because four plates at four
+unknown attitudes compare nothing and a plate taken mid-wobble is a plate of the wobble. The lids are
+shut in all four and that is not a setting: `sight.state` starts `'shut'`, `SIGHT_LID.shut = 0`, and
+with no camera on a headless page `uEye` is 0 — so **the plates are the lids-closed case the fourth
+criterion measures**, taken in the state the page is actually in rather than with an override that
+would have had to reach into the Eyes Law.
+
+Read beside the holo-gesture reference board, what the plates now show: at **yaw 0** a brow line and
+two cheekbone arcs carrying as density, the nose wedge standing in front of the face with its flanks
+falling away, two lip arcs with the parting gap between them, lid patches reading as closed eyes over
+dark sockets, and the neck fading out at the base. At **±30** the nose swings across the far cheek and
+the far socket goes behind the cheekbone — which is the view a mask cannot survive, and the reason
+those two angles are in the mandate. At **90** there is a drawn profile: forehead, brow, the nose in
+clear air, the lip mark, the chin ahead of the throat, and the occiput bulging behind. The earlier
+round of this plate was a speckled blob with a nose stuck on it; the midline seam in 18.6 is the
+difference, and it was the plate that demanded it, not a criterion.
+
+**Motion that proves volume** is in the shader rather than in the buffer: idle yaw ±5° and pitch ±2°
+on slow sine, blinks by moving the lid geometry over the sockets, and a nod fired by a **rise** in
+level rather than by a level — `lvl − prev > 0.16` with a 700 ms refractory gap, so he nods on
+sentence stress instead of nodding continuously through a long answer. The jaw is the fifth criterion
+and it is proved where real speech exists; see 18.10.
+
+### 18.8 · The funnel, in the boss's own sentences — typed and spoken (Parts A and B)
+
+`routing_proof.mjs` carries the boss's real sentences verbatim and runs each one twice: typed
+straight at `/chat` for determinism, and **spoken out of the speakers into the real microphone**
+through the Open Ear with on-device recognition. Each row asserts the `kind`, the route class, and
+the **lookup count**, read off the server's own trace rather than inferred from the answer.
+
+| the sentence | typed | spoken — what recognition posted | route |
+| --- | --- | --- | --- |
+| can you listen to me | `200 chat/meta/0` | "Can you listen to me" | chat/meta/**0** |
+| can you listen to me *(ear shut)* | `200 chat/meta/0` | — | chat/meta/**0** |
+| hey galaxy are you there | `200 chat/meta/0` | "Hey Galaxy are you there" | chat/meta/**0** |
+| yes yes do it galaxy *(offer standing)* | `200 tool/-/–` | "Yes yes do it Galaxy" | tool, confirmation taken |
+| yes yes do it galaxy *(nothing pending)* | `409 tool/confirmation/0` | "Yes yes do it Galaxy" | tool/confirmation/**0** |
+| ok do it | `200 tool/-/–` | "Okay do it" | tool, confirmation taken |
+| no no cancel that | `200 tool/-/–` | "No no cancel that" | tool, cancellation taken |
+| switch your voice to joe | `200 tool/-/1` | "Switch your voice to Joe" | tool/-/1 |
+| who are you | `200 chat/identity/0` | "Who are you" | chat/identity/**0** |
+| who am i | `200 chat/identity/0` | "Who am I" | chat/identity/**0** |
+| what's my name | `200 chat/identity/0` | "What's my name" | chat/identity/**0** |
+| galaxy what can you do | `200 chat/identity/0` | "Galaxy what can you do" | chat/identity/**0** |
+| tell me about the invoice importer | `200 notes/-/1` | "Tell me about the invoice importer" | notes/-/1 |
+| what is react | `200 notes/-/1` | — | notes/-/1 *(see below)* |
+| what is the web gate | `200 web/-/2` | "What is the web gate" | web/-/2 |
+
+**Typed 37/37 · spoken 29/29 · the two together 65/65.** Every protected-class row asserts
+`lookups=0`, which is the assertion that does the work: a class that answered correctly *after* a
+retrieval would read identically in the answer and would be the bug Part A exists to remove.
+
+What he actually said, out loud, on the spoken column:
+
+```
+  ·· spoken "can you listen to me"
+   spoken aloud: "can you listen to me" (1.754s, into arm 1)
+       posted     : "Can you listen to me"
+       he answered: "I am here, Addi - the ear is shut just now, so I have this one message.
+                     Open it and the room is yours."
+       the wire   : ["200 kind=chat route=meta lookups=0 q=\"Can you listen to me\""]
+
+  ·· spoken "yes yes do it galaxy" · with NOTHING pending
+       posted     : "Yes yes do it Galaxy"
+       he answered: "Nothing is pending, Addi - tell me what to do and I shall propose it."
+       the wire   : ["409 kind=tool route=confirmation lookups=0 q=\"Yes yes do it Galaxy\""]
+
+  ·· spoken "who am i"
+       he answered: "You are Sir Aditya Singh, sir - Addi, when we are talking like this."
+       the wire   : ["200 kind=chat route=identity lookups=0 q=\"Who am I\""]
+
+  ok   AND ALL OF IT ON ONE CLICK: 13 spoken turns, 14 arms of the recogniser, 1 session
+```
+
+Two things in that column are worth naming because they only show up out loud. **Recognition
+rewrites the sentence and the funnel has to survive it**: "ok do it" came back as *"Okay do it"* and
+was still taken as a confirmation, which is precisely why the affirmative list is matched after
+peeling rather than compared as a string. And **the whole spoken column is one click** — thirteen
+utterances, fourteen arms of the recogniser, one session, no re-press — which is the Open Ear's
+contract asserted rather than restated.
+
+One row is an honest miss and it is not a routing failure: **"what is react" answers from the notes**,
+because on this corpus a note about a React rewrite scores 0.614 against the 0.60 threshold and the
+retrieval is doing exactly what it is specified to do. The Web Gate is not reached because notes
+answered first, which is the funnel's stated order. It is listed as open in Part J rather than
+papered over by lowering a threshold the mandate forbids touching.
+
+### 18.9 · His name, and a capability he can name the day it is fitted (Part D)
+
+`persona_proof.mjs` — **19/19**, and run three times because a proof about a brain's *register* that
+passes once has proved nothing about the second time he is asked. The persona block lives in
+`config.json`, which means **the boss owns his own name**: the fixture compares every answer against
+the names the *server* publishes rather than against names typed into the harness, so a fixture
+cannot agree with a typo.
+
+```
+  note /persona: "{salutation}, Addi. Galaxy here - {notes} indexed, all present and accounted for."
+  note the line the page opened with:
+       "Good afternoon, Addi. Galaxy here - 30 notes indexed, all present and accounted for."
+  ok   AND SO DOES THE CHROME AROUND IT: the window title "Knowledge Galaxy", the heading and
+       every visible word on the page are free of the old name - the rename reached the
+       furniture, not only the answers
+  ok   AND THE FLOATING CARD IS TITLED AFTER HIM: the PiP document is titled "Galaxy · focus"
+```
+
+The section that earns the Part is the one with **no protected class behind it**. Asked something
+unscripted — route `undefined`, class `null`, straight through retrieval and the brain like any other
+question — he answered *"I would say I keep a gentleman's notes in order, then change the subject
+before 'traceability' gets loose…"*: in character, no "as an AI", and **not claiming any of the four
+families of thing this machine has no hand for** — no car booked, no call placed, nothing bought, no
+music played. That is the manifest reaching a free-form answer, which is what Part D asks for and
+what a persona in front of only the hard classes would not give. Asked for a hand he has not got:
+*"Still no, sir — no taxi-hailing hand among mine, and I shan't mime one at the kerb."*
+
+The register rule holds in both directions and it is asserted as **one form of address per sentence**,
+because deference sprayed on every line becomes a tic: an identity answer names both (*"You are Sir
+Aditya Singh, sir - Addi, when we are talking like this."*), a warm line uses Addi only (*"I am here,
+Addi - the ear is shut just now…"*), and a **consent gate keeps sir** (*"A self test, sir, carrying the
+token persona-proof and touching nothing. Shall I run it?"*) — asking permission being the formal
+moment the rule reserves it for.
+
+On the old name, the distinction is between his ears and his mouth. *"jarvis who are you"* peels to an
+address, reaches identity **at zero cost**, and comes back *"I am Galaxy, the personal assistant of
+Sir Aditya Singh - Addi, to those he serves."* — **the rename took his name back without making him
+deaf.** A source sweep across five server modules finds the old word surviving in exactly two live
+string constants, and both are *recognition*: the assistant-name list the vocative peel matches
+against, and the force-trigger alternation. The word is not banned, because *Build Your Own Jarvis* is
+the title of one of his own PDFs and he is entitled to read it out.
+
+**`capabilities_proof.mjs` — 16/16, and it is the one fixture in this round that edits real
+configuration.** It fits a canary hand into `tools/registry.json` that exists on no machine
+(`water_the_ferns`), restarts the server, asks, then removes it and restarts again. The arc of **one
+unchanged sentence** across three registry states is the whole proof:
+
+```
+  before   "could you water the ferns on the landing for me"
+           -> no proposal · "That is a hand I have not been given, sir - the ferns must wilt
+              without me."
+  fitted   the same sentence, unchanged
+           -> PROPOSED water_the_ferns · "The ferns on the landing, sir - a full can each.
+              Shall I?"
+  removed  the same sentence, a third time
+           -> no proposal · "That is a hand I have not been given, sir - my reach ends at the
+              edge of this machine, and the ferns know it."
+```
+
+Nothing was retrained and no prose of mine was edited: **a line of JSON was added and he could name
+it.** He counted it himself at start-up (`Galaxy knows 7 hands: … water_the_ferns`), offered it to the
+boss by its human name — *"Water the ferns on the landing"*, a sentence no source in this repository
+contains — and still **put it through the consent gate**, which is the one property of the Hands
+pipeline that must not be reachable around. The direction that matters more is the third row: a
+manifest which kept the sentence after the code went would have him promising the boss something
+there is nothing left to run.
+
+Two assertions in that file exist because of this machine rather than because of the spec. **Each
+restart is proved to be a genuinely new process** (`pid 46880 → 48488, up 0s`), because on Windows a
+second `server.py` exits 1 while the old process keeps answering port 4700 — every claim after a
+restart that was not asserted would be a lie about a stale server. And the registry is restored
+**byte-for-byte from memory in a `finally`** (7097 bytes, canary gone): a fixture that edits real
+configuration owes that assertion more than it owes any of its others.
+
+### 18.10 · The full read, the barge-in reference, and the silent nudge (Part C)
+
+The mic opens with `echoCancellation: true, noiseSuppression: true`, and the barge-in gate is a
+**ratio against the live output RMS tapped off the speech bus** — 1.6× sustained 250 ms, and deaf for
+the first 800 ms of any answer. Every attempt is logged with the input beside the reference it was
+measured against, taken or not, which is what makes the two halves distinguishable. The log from
+`conversation_proof.mjs`, both cases, self-voice first:
+
+```
+  {"at":…604343, "input":0.09, "output":0.072, "reference":"calibrated", "ratio":1.25,
+   "sustainedMs":0,   "intoAnswerMs":811,  "engine":"piper", "taken":false,
+   "why":"not 1.6x the output reference · 0.090 against 0.072 (1.25x)"}
+
+  {"at":…604748, "input":0.09, "output":0.072, "reference":"calibrated", "ratio":1.25,
+   "sustainedMs":0,   "intoAnswerMs":1216, "engine":"piper", "taken":false,
+   "why":"not 1.6x the output reference · 0.090 against 0.072 (1.25x)"}
+
+  {"at":…605211, "input":0.28, "output":0.072, "reference":"calibrated", "ratio":3.89,
+   "sustainedMs":269, "intoAnswerMs":1679, "engine":"piper", "taken":true,
+   "why":"over the gate for 269ms, 1679ms into the answer · 0.280 against 0.072 (3.89x)"}
+
+  ok   HE DOES NOT INTERRUPT HIMSELF: half a second of the answer's own leak, past the deaf
+       window and well over the voice floor, and he is still reading - bus still at 1,
+       0 barge-ins
+  ok   still one click - a barge-in is not a button either
+```
+
+The middle entry is the one that matters. **0.09 is well over any voice floor** and it is 500 ms
+*past* the deaf window, so every absolute test would have fired there — and it is his own voice
+leaking back through a canceller that removed most but not all of it, exactly as 18.0 measured. The
+ratio rejects it at 1.25× and accepts a real interruption at 3.89× sustained 269 ms. The unit case is
+asserted separately: input equal to output → no barge-in; 2× → barge-in.
+
+**The nudges.** `nudge_proof.mjs` — **21/21** — and the rule is that a posture or watch nudge is
+caption-only during speech or an open ear, and spoken only when idle with the ear shut. Four nudges
+were made: one spoken, three held, **and the gate names the reason for each**:
+
+```
+  idle, ear shut          {"spoke":true,  "why":""}                              -> SPOKEN
+  the butler is reading   {"spoke":false, "why":"the butler is reading"}         -> caption
+  the ear open, silent    {"spoke":false, "why":"the ear is open and the room is his"}
+  an answer in flight     {"spoke":false, "why":"an answer is in flight"}        -> caption
+```
+
+Three of those four are only assertions because of what the fixture ruled out around them. The
+spoken one is preceded by an unlocking click on empty canvas, *because without a live AudioContext
+every "caption only" below it would pass for the wrong reason.* The open-ear case is taken **in a
+silent room with the queue empty**, so it cannot be the speech rule wearing the ear's clothes — the
+reason an open ear silences him is that the recogniser is armed between turns and a nudge spoken into
+it is transcribed as his. And the fourth is the one a naive implementation gets wrong: **the gap
+between the question and the reply is not a gap** — the speakers were silent, the ear was shut, every
+audio test said go ahead, and the gate still said *"an answer is in flight"*, one second before the
+answer arrived.
+
+The held caption is deferred rather than dropped, and it takes its turn when the queue runs dry —
+asserted, because a subtitle stolen from the words currently coming out of the speakers is the
+failure that would make the caption rail untrustworthy. Both unasked sentences reach `nudgeSpeak()`
+and **neither has a `speakLine()` anywhere near its call site**, so the gate cannot be walked around
+by accident tomorrow.
+
+### 18.11 · The silence a warm cache had been hiding (Part H, and a real defect)
+
+`voice_proof.mjs` failed on the first full re-run of this round — **131/132**, on the one assertion
+whose subject is what the boss would actually notice:
+
+```
+  FAIL NO SILENCE OVER 2s BETWEEN CHUNKS: worst was 2287ms (before chunk 4)
+```
+
+It would have been an easy failure to re-run away, and re-running it *would* have made it pass. It
+is worth writing down why that would have been the wrong move, because the reason is not "tests
+should be deterministic" — it is that the harness had caught a product defect that had been in the
+page for as long as the piper path has existed, and a second run would have hidden it behind its own
+first run's cache.
+
+**The diagnosis, before the fix.** Two files of 422,956 bytes each had been written into `say-cache/`
+*during* the failing run, so the run had taken a cache miss on chunk 4. `say.py::_key()` is a sha256
+of model, length scale, noise scale and text, so the key was not drifting; what drifts is the
+**cache's ~100 MB oldest-first prune**, which had evicted those entries since the previous run.
+The cache is 97 MB at rest, so eviction is not an accident of this round — it is the steady state.
+Then I measured the two paths directly rather than reasoning about them:
+
+| `/say` for a novel 170-character sentence | wall |
+| --- | --- |
+| cold, model loaded, cache miss | **4337 ms** |
+| the same text, immediately again | **104 ms** |
+
+Cold synthesis costs about **0.45× the real time of the audio it renders**. Now the arithmetic. The
+FIFO prefetched exactly **one** chunk ahead, so the cover available for chunk *k* is the playing time
+of chunk *k−1*, and the queue is safe only while `0.45 × dur(k) < dur(k−1)` — that is, only while no
+chunk is more than about twice its predecessor. The failing pair: chunk 3 played for **2.067 s**,
+chunk 4 was 170 characters and **9.59 s** long. `4337 − 2067 = 2270 ms` of exposed silence, against
+the 2287 ms the harness measured. The numbers close.
+
+**The fix went into the product, not the ceiling.** `GAP_MAX_MS = 2000` is the spec's statement about
+what the boss will tolerate mid-sentence; raising it would have been editing the requirement to match
+the behaviour. Instead the lookahead is now measured **in seconds of audio rather than in chunks** —
+`SPEAK_AHEAD_MS = 7000`, `SPEAK_AHEAD_CAP = 3` — so a long cold chunk is covered by the **sum** of the
+chunks in front of it rather than by only the last one. The cap is there because the original
+one-chunk comment was not wrong about its own concern: `/say` is effectively serial, and an unbounded
+lookahead would put the synthesiser to work on the end of an answer while the beginning is still
+being read. This chunk is still requested *first*; the lookahead follows within the same tick.
+
+**And then the assertion was made unable to pass for the wrong reason.** A gap ceiling can be met by
+a warm cache on a lucky run, so the page now publishes the lookahead's depth and the fixture asserts
+it: `__galaxy.voice.AHEAD_MS`, `AHEAD_CAP`, and a live `ahead` — chunks in flight *in front of* the
+chunk being played. `buffered` exists too and is deliberately **not** what is asserted: the buffer map
+is cleared once per run and never per chunk, so its size only climbs, and it read **13 by the end of
+a 13-chunk answer** — which a one-deep lookahead would also have reported. Only the live depth tells
+the two apart.
+
+The verification run was taken with **`say-cache/` deleted entirely**, which is the harshest case this
+page can be given: every chunk of the greeting and all thirteen chunks of the long read synthesised
+from cold.
+
+```
+  note chunks: 13 queued · 13 spoken · 0 skipped · 0 errored · worst gap 2ms (before chunk 2) · 0 stalls
+  ok   NO SILENCE OVER 2s BETWEEN CHUNKS: worst was 2ms, measured in Node from the page’s own timestamps
+  ok   and the page’s own arithmetic agrees (2ms vs 2ms), so the number in the instrument can be trusted next time
+  note lookahead: 7000ms of audio, at most 3 chunks · deepest measured in front of the ear: 2 chunks (buffered 13 by the end)
+  ok   THE LOOKAHEAD IS SECONDS OF AUDIO AND NOT ONE CHUNK: it holds 7000ms of estimated speech in
+       front of the ear (cap 3 chunks) and was measured 2 chunks deep mid-read
+  ok   IT READ THE WHOLE ANSWER: speakDone went up after 99.2s
+```
+
+**2 ms**, from 2287 ms, on a colder cache than the run that failed. Ninety-nine seconds of speech
+with no join a listener could hear.
+
+### 18.12 · The seal that could outlive its silence (Part E, found by the regression matrix)
+
+Part E's spoken fixtures caught "one utterance, two turns" — Chrome delivering a final result it
+was already holding while the recogniser was being torn down, which refilled the phrase buffer
+*behind* the flush and sent the same sentence to the brain twice, 394 ms apart. The repair was a
+seal: a thought that has gone to the brain closes the buffer, and words arriving before the
+microphone opens again are the tail of a sentence already answered. It was cleared in exactly one
+place — `r.onstart`, the browser's own word for "the microphone is open" — and the comment written
+beside it claimed that this meant the seal could never outlive the silence it belongs to.
+
+It could. `r.onstart` being the **only** release means that any session in which the recogniser does
+not start again keeps the seal forever, and a sealed ear is the worst kind of broken: the ring is
+lit, the organ rail says the ear is open, `ear.sealed` climbs, and he never answers again. **Part E's
+own fault path is exactly such a session** — three failed restarts and the watchdog stops trying —
+which is to say the seal had a failure mode that the Part it was written for creates.
+
+`brain_live.mjs` found it, and found it the way a regression matrix is supposed to: **30 checks, 1
+failed**, on the one step that speaks a second sentence.
+
+```
+   38.50s  FAIL the run itself: the page said nothing at all after "go back to your normal brain"
+```
+
+The sentence was never dropped by the server, which is what made it worth chasing rather than
+re-running: asked over HTTP the same words answer correctly — `{"kind": "model", "restored": true,
+"answer": "I am OPUS 5 already, sir."}`. A scratch probe injected two utterances into a headless tab
+with no recogniser between them and showed the second one being swallowed with only `ear.sealed`
+moving.
+
+So the seal now **expires**, and the number is taken off the measurement rather than off a round
+figure: the tail it exists to swallow was seen at 394 ms, so `EAR_SEAL_MS = 900` is a margin of
+better than two over the only number anybody has. `r.onstart` is still the normal release and the
+only one a live session ever uses; the clock is for the session whose recogniser does not come back,
+and in that session every extra millisecond is a word of his that the page throws away.
+
+**1500 ms was tried first and was wrong**, which is worth recording because it looked safe:
+`brain_live`'s second spoken sentence arrives **1.3 s** after the first one's flush — a perfectly
+ordinary gap between two turns — and a seal still shut at 1.3 s ate it. The harness failed again,
+identically, and the second failure is what fixed the constant. `__galaxy.ear.sealExpired` and
+`SEAL_MS` are published beside `sealed` so that "he stopped answering" and "he heard nothing" are
+never again the same reading from outside the page.
+
+```
+  brain_live.mjs   before: 30 checks, 1 failed
+                   after:  32 checks, 0 failed
+```
+
+The count goes up by two because the two assertions behind the failure had never run.
+
+### 18.13 · The amend door that swallowed a change of subject (Part B, and a real defect)
+
+Part B gave a standing offer three fates. A yes or a no answers it; a remark **about** it keeps it
+alive and goes to the brain with the offer in front; anything else is a genuine new request, which
+releases the slot with one sentence in front of the answer — *"You have changed the subject, sir, so
+I have let that request go."* Silence is not consent and neither is a change of topic.
+
+`tools_live.mjs` disagreed, twice, on the one section that walks away from an offer:
+
+```
+   ok   one more proposal, to walk away from
+   FAIL changing the subject lets the proposal go, and says so: null
+   ok   silence is not consent: the diary did not grow
+   FAIL and nothing is pending in the page either
+```
+
+Read together those two lines describe something worse than either alone. The proposal was **not
+run** — the diary is the witness — and it was **not released** either. No withdrawal was spoken. The
+page was handed the same pending slot back in the reply and drew the card again. And the boss's
+actual question was answered as a remark about a reminder.
+
+The cause was one alternative in one regular expression. `_AMEND_RE` is the first door in
+`about_the_proposal()`, above every other, because "send it to Bob instead" reads to the tool matcher
+as a brand-new email and treating it as one would drop the offer being corrected. Among its
+alternatives, to catch "say it warmer" and "just say sorry at the end", was `\bsay\s+` — the bare
+verb, anywhere in the sentence. The fixture's change of subject is:
+
+```
+what do my notes say about coffee
+```
+
+`say about` matched. A question about coffee became an amendment to a calendar reminder.
+
+The repair makes the verb **imperative**, which is the only form an amendment takes: at the head of
+what he said once the vocative is off it, or pointing at the offer with its object —
+`(?:^|,\s*|\band\s+|\balso\s+|\bjust\s+|\bplease\s+|\bcan\s+you\s+)say\b` or
+`\bsay\s+(?:it|that|this)\b`. Nine amendments and pointed questions still hold the offer; five
+changes of subject, each carrying a word the door has reached for at some point, now release it.
+
+```
+  tools_live.mjs   before: VERIFY 48/50 FAIL
+                   after:  VERIFY 50/50 PASS
+```
+
+and the line the harness had been waiting sixty seconds for, in full:
+
+> "You have changed the subject, sir, so I have let that request go. Coffee, sir, is rather the
+> running theme — the notes are a café's in their entirety. In brief: six lots of green in store led
+> by Ethiopia Guji at 6 bags, drip at $3."
+
+One utterance. The withdrawal and the answer, in that order.
+
+**Two things were added so this cannot come back quietly.** The fixture now carries a comment saying
+why *that* sentence and not a tidier one — "what is react" would pass this section for ever without
+touching the amend door, so the verb stays in. And `preflight.py` check 18 gained step **(f)**: Part
+B's fork, both ways, on nine sentences that must keep the offer and five that must release it, plus
+the same fourteen against an empty slot. It is three function calls and no browser, because the fork
+is pure — `tools_live` needed a real Chrome, a real hand and ninety seconds to find this.
+
+The one sentence in that probe that surprised me is worth writing down rather than fixing: **"who
+said that react was simple" is held as talk about the offer**, and not by the amend door — "said" is
+not "say" — but by the third door, the deictic. It is a question and it contains *that*, which is
+exactly what door 3 tests for. The rule is doing what it says; the sentence is just unlucky in its
+pronoun. Narrowing the deictic to catch it would cost "is that going to bob?", which is the case the
+door exists for.
+
+### 18.14 · The archive that claimed the world (Part H, measured, reported, not tuned)
+
+Eleven assertions across two standing harnesses failed this round for **one** reason, and it is not
+in any code this round wrote. `salutation_proof` was 26/34 and `followup_proof` 44/47, and every
+failure traces to the semantic archive answering questions it cannot answer.
+
+`archive/samples/Build-Your-Own-Jarvis-GPT-6-Astra-Prompt-Pack.pdf` is 372 KB dated 15 September and
+contributes **22 of the vector store's 55 chunks** — two fifths of the collection, all of it about
+building an assistant, which makes it the nearest thing in the store to any question about software,
+AI, or an assistant of any kind. The server's own trace, from three questions asked over HTTP:
+
+```
+  recall: the notes door opened on MEANING alone - 0.613 (threshold 0.60) from Build-Your-Own-Jarvis-GPT-6-Astra-Prompt-Pack.pdf, ...
+  recall: the notes door opened on MEANING alone - 0.652 (threshold 0.60) from Build-Your-Own-Jarvis-GPT-6-Astra-Prompt-Pack.pdf, ...
+  recall: the notes door opened on MEANING alone - 0.621 (threshold 0.60) from Build-Your-Own-Jarvis-GPT-6-Astra-Prompt-Pack.pdf, ..., customer-feedback-log.md
+```
+
+0.613 is *"ok, what is closures in javascript"*. 0.652 is *"who is JARVIS in the movies?"*. 0.621 is
+*"who is zqtask@example.invalid"*. Three questions with nothing in common except that the store held
+no answer to any of them, all landing between 0.61 and 0.66 against a document that mentions none of
+them. What he **says** is honest in every case — "JavaScript closures are not something the notes
+touch on, sir", "A question for the cinema, sir, and my shelves hold only your own papers" — because
+the notes branch reports what it found. What is lost is where the answer should have come from: the
+door having opened, `confidence` is lifted to the same number, and a lifted confidence is not "thin",
+so **the live web never opens on a question about the world**.
+
+**Two of those eleven were repaired and nine are reported.** The difference is what the mandate
+protects.
+
+**Repaired — the PII shield's reach (three assertions in `followup_proof`).** Asked *"who is
+zqtask@example.invalid"* with a previous question still in the session, the door opened at 0.621,
+`kind` became `notes`, and the shield — gated on `kind != "notes"` for the good reason that a note
+genuinely naming the correspondent should answer — was stepped over. Nothing leaked: the notes branch
+asks no search engine, no lookup was spent on the address, and what he said was true. What was lost
+was the **refusal, said out loud**, and the shield's own law is that a refusal the employer cannot
+see is indistinguishable from a failure. Standalone the same sentence is held correctly; it takes a
+prior in the session to make it "substantial" enough to reach the embedder at all, which is why this
+only ever failed inside a fixture that asks something first.
+
+The fix is a fourth veto on the semantic door, beside the backchannel, the vocative and the Third
+Door: `semantic_holds_identifier()`. A question carrying a private identifier may be claimed by the
+meaning search **only if the passages it found actually contain that identifier**. The test is
+containment rather than a higher dial, because that is the one kind of evidence an identifier admits
+— prose can mean the same thing in different words, an email address cannot — so the 0.60 threshold
+is left exactly where it is. And it cannot cost a real notes answer: the door is only consulted when
+the keyword half has already declined, so a note that shares the address with the question claimed it
+two branches earlier and never arrives here.
+
+```
+  who is zqtask@example.invalid   before: kind=notes, cites 4, privateHeld absent
+                                  after:  kind=chat,  cites 0, privateHeld true
+                                          "Private identifiers never leave this machine, sir -
+                                           I shall not ask the web about them."
+  and a genuine notes question is untouched:
+  what do my notes say about coffee  kind=notes, 6 nodes, 5 citations
+```
+
+**Reported — the two world questions (eight assertions in `salutation_proof`).** *"ok, what is
+closures in javascript"* and *"who is JARVIS in the movies?"* should reach the live web and do not.
+Every repair available is one the mandate forbids or one no engineer should take:
+
+- move the 0.60 threshold, or change how recall scores — **DO-NOT-ALTER**, in those words, and
+  rightly: the dial is correct for the prose it was set on;
+- delete the prompt pack from `archive/samples/` and rebuild the store — it is **the boss's own
+  document**, put there on 15 September, and making a harness green by deleting his file is not a
+  repair;
+- change the fixture's two probe questions — that hides a live behavioural regression he would meet
+  the first time he asked his assistant about a film.
+
+So it stands, named, with its numbers. The one-line change that would resolve it, on his word: a
+world-question class that outranks a semantic match the way `REALWORLD_RE` already outranks a keyword
+one. `REALWORLD_RE` is deliberately narrow — weather, scores, prices, "current" anything — and
+neither of these two sentences is in it, by design, because every phrase in it is one somebody would
+have to go and look up. Widening it to cover "what is X" is a decision about the web gate, and the
+web gate is his.
+
+### 18.15 · Two ways a green harness lies, both found this round
+
+Neither of these is a defect in the product, and both cost real time, so they are written here rather
+than remembered.
+
+**A stale debugging browser makes the wrong tab the subject.** `eyes_live.mjs` came back **56 checks,
+31 failed**, starting with `FAIL the EYE button opened a real camera` and an empty `trouble=`. The
+organ was fine. `eyes_live` launches its own Chrome on port **9222** with
+`--use-fake-device-for-media-stream`, and `port_proof.mjs` — which relaunches Chrome through
+`launch-chrome.ps1` and deliberately leaves it open — uses the same port. Attaching to the leftover
+browser gets a viewer tab that looks right in every way except that it has no camera and no
+permission answer, so `getUserMedia` never settles and the organ reports no trouble because nothing
+went wrong. Run alone on a clean machine: **56 checks, 0 failed**, no code changed. `port_proof` runs
+last, alone, and eight seconds between harnesses on the same port is not enough.
+
+**A frozen log makes every delta assertion vacuous.** Ten harnesses read `server-trace.log` for what
+the server *did* — `lookups()` counts `web lookup` lines, `logSays()` tests for a trace — and they
+take **differences** across a run. Restarting the server with its stderr going anywhere else leaves
+that file on disk and stale, so `lookups()` returns the same number before and after and every "zero
+lookups" assertion passes for the wrong reason. `followup_proof` caught it honestly, because it is
+the one that asserts a count *going up*:
+
+```
+  FAIL EXACTLY TWO lookups across those four turns - the two that were questions
+       before=46 after=46
+```
+
+Two questions had been asked and one of them had searched the web for "who created svelte". The
+counter had not moved because the file had not been written since 14:18. It also explains a passing
+assertion that had no right to pass: `logSays(/a private identifier was in the message/)` was true
+during the very run in which the shield did **not** fire, because the line was in the log from an
+earlier run. The server's stderr belongs in `server-trace.log`, appended, and every log-reading
+harness in this round was re-run against a server that writes there.
+
+### 18.16 · The watch that undid the backoff (Part E, and the third real defect of the round)
+
+`conversation_proof` section 3c came back **102/103**, and the one red line was the backoff itself:
+
+```
+  FAIL THE RETRIES BACK OFF rather than hammering: the page waited 425ms then 1628ms between
+       attempts and is now standing off 3200ms - 400 doubled, three times
+         {"at":[1790413672195,1790413672620,1790413674248],"gaps":[425,1628],"rearmIn":3200}
+  ok   AND IT RECOVERS WITH NO CLICK: the service answered once and the fault cleared itself
+```
+
+Everything else about the fault was right: three failures, `hardErrors=3`, the seal amber and
+reading EAR FAULT · RETRYING, the session still open, and the recovery with nobody touching
+anything. The specified intervals are 800 then 1600 — four hundred doubled once, then twice.
+The second was 1628. The first was **425**, which is four hundred doubled *no* times.
+
+**The shape of the number was the whole diagnosis.** 425 is not a slow 800 or a jittery
+anything; it is `EAR_REARM_MS` exactly, the ordinary courtesy delay after his voice ends. So
+the question was never "why is the backoff late" but "who re-armed this ear without knowing
+there was a fault standing" — and the answer is in `earWatchUp()`:
+
+```js
+    ear.watch = setInterval(function () {
+      if (!ear.open) return earWatchDown();
+      if (listening || busy || speakDraining || speakQueue.length) return;
+      earWatchDown();
+      earRearm('nothing came back to be spoken');     // <- no ms: the default four hundred
+    }, EAR_WATCH_MS);
+```
+
+The watch is the half-second interval that exists for answers which never speak — a muted
+tab, a machine with no voice, an organ that renders a line and returns. It is put up by every
+turn hold, and it comes down the moment it re-arms once. During the fault the page is not
+listening and not busy, so the watch's four questions all said "the turn is over", it re-armed
+with no argument, and `earRearm` wrote `ear.rearmIn = 400` straight over the 800 the error path
+had chosen one tick earlier. Then it took itself down, which is exactly why only the **first**
+interval was short and the second was a correct 1600: one firing, one skipped doubling.
+
+**And one line down it is worse.** The re-arm timer's own callback ends with
+
+```js
+      if (busy || speakDraining || speakQueue.length) { earWatchUp(); return; }
+```
+
+— a backoff re-arm that lands while a turn is still in flight *drops itself* and hands the job
+to that watch. So a recognition service that dies while an answer is being read is retried at
+four hundred milliseconds with no backoff at all. That is the hammering the backoff was written
+to refuse, in the one situation where the page is already busiest.
+
+**The repair is a floor, in the one door all four callers come through.** The backoff got a
+name of its own —
+
+```js
+  function earBackoffMs() {
+    if (!ear.hardErrors) return 0;
+    return Math.min(EAR_REARM_MS * Math.pow(2, ear.hardErrors), EAR_BACKOFF_MAX_MS);
+  }
+```
+
+— the two inline copies in `onerror` now call it, and `earRearm` treats it as a minimum rather
+than as one caller's private business:
+
+```js
+    ear.rearmIn = Math.max(ms > 0 ? ms : EAR_REARM_MS, earBackoffMs());
+```
+
+Why a floor and not a guard in the watch: there are four paths that re-arm this ear — the error
+path, the `onend` self-heal, the watch, and `speakDone` — and three of them have no business
+knowing what a backoff is. Fixing the watch alone would have left `speakDone` free to re-arm a
+dead recogniser four hundred milliseconds after the answer, which is the same bug wearing a
+different sleeve. `hardErrors` is put back to zero by any result at all and by `no-speech` and
+`aborted`, so the floor is **zero in every ordinary moment** and the specified four hundred is
+untouched: this cannot make the ear slower to come back in a working room.
+
+**The assertion was rewritten too, because the arithmetic alone was luck.** The gaps caught
+this only because the watch happened to fire between attempt one and attempt two; had it fired
+a beat earlier or later the run would have been green with the page demonstrably hammering. So
+the fixture now samples the invariant itself throughout the fault — `rearmIn < backoffMs` is
+the defect, whoever caused it, and one sample convicts:
+
+```
+  ok   AND NOTHING SHORTENED THE STANDING BACKOFF: every re-arm scheduled inside the fault was
+       at least the delay the failure count had bought (the re-arm watch was UP when the service
+       went away, which is the case that used to skip the first doubling)
+```
+
+That parenthesis is read off the page (`__galaxy.ear.watch`, added with `backoffMs` for this),
+not asserted, so the line says out loud whether the run exercised the hole or merely missed it.
+In the run below it says UP.
+
+**Measured, same machine, same fixture, only the page changed:**
+
+| | first interval | second interval | standing off | result |
+|---|---|---|---|---|
+| before | **425 ms** | 1628 ms | 3200 ms | 102/103 FAIL |
+| after | **837 ms** | 1641 ms | 3200 ms | **104/104 PASS** |
+
+
+### 18.17 · The relaunch that shot the browser (Part F, and the fourth real defect of the round)
+
+`lock_proof.mjs` is the only harness that exercises the whole no-port chain, and it put its
+finger on the one line in it that cannot be checked by reading:
+
+```
+FAIL the relaunch restored his work tab: 
+BROKE: Cannot read properties of undefined (reading 'id')   at lock_proof.mjs:638
+FAILURE MODE: a hand that "relaunches Chrome" by killing it. --restore-last-session only
+works on a browser that was closed, not shot.
+```
+
+The empty string after the colon is the whole story: the work tab was not in `/json/list` at
+all, so the assertion had nothing to name and the next line crashed reaching for its id. The
+hand, `tools/relaunch_chrome.py`, was innocent; so were the launcher's flags. The fault was
+three deep in `launch-chrome.ps1`, in the twenty lines that close the profile politely before
+relaunching it, and each of the three fails the same way — a close that Chrome never finished
+is read as a close it refused, the force kill follows, and a force-killed Chrome writes no
+session for `--restore-last-session` to restore.
+
+**One: the wait counted processes that hold nothing.** The filter took every process whose
+command line mentions the profile. A Chrome browser has a dozen of those, and one of them,
+`--type=crashpad-handler`, outlives the browser it was started for. So the wait watched a
+handler that was never going to exit, timed out, printed `something on this profile ignored
+WM_CLOSE`, and shot everything — including a browser that had already gone quietly. Only the
+browser process holds the profile lock, owns a window and writes the session, and it is the
+only one the wait has any business watching: `Get-ProfileBrowsers` now excludes `--type=*`.
+
+**Two: the match depended on how the path was spelled.** The old filter compared the whole
+`--user-data-dir` string, so a browser launched with forward slashes, or a mixed-slash path of
+the sort Node hands out, held the profile while being invisible to the launcher. The launcher
+then started a second Chrome on a profile that was already owned; Chrome handed the URL to the
+first browser and the second process exited — taking the `--remote-debugging-port` with it. The
+port never answered and nothing said why. Matching is now on the profile **folder name**, which
+is the same in every spelling of its path.
+
+**Three, and the one a boss would actually meet: `CloseMainWindow()` asks one window.** It posts
+WM_CLOSE to whichever window Windows currently calls main. Chrome exits when its **last** window
+closes, and as each one goes it promotes the next. A browser with two windows open on this
+profile — the boss with a second window, or any earlier run of this launcher that opened one —
+was asked once, closed one window, sat there perfectly alive for the whole fifteen seconds of
+patience, and was then shot with its tabs in it. Measured on a real two-window profile, over
+`EnumWindows`:
+
+```
+pid 18280 top-level windows:
+   23331160 :: Restore pages?
+   24513884 :: Example Domain - Google Chrome
+   14616420 :: Restore pages?
+   22088368 :: Example Domain - Google Chrome
+```
+
+The wait now re-asks the newly promoted window about once a second until the process is gone. An
+extra WM_CLOSE to a window that is already closing costs nothing, and the patience went from
+eight seconds to fifteen.
+
+**A regression I wrote into the repair, worth the paragraph because PowerShell will do it
+again.** After the refactor the launcher reported `no chrome.exe browser on this profile - 11
+helper process(es) of a closed one` while the identical filter inline matched the browser
+perfectly. PowerShell unrolls a function's output: the `@()` written *inside*
+`Get-ProfileBrowsers` is undone on the way out, so one match comes back as a bare `CimInstance`,
+and `.Count` on a `CimInstance` is `$null`, not 1. `if ($mine.Count)` was therefore false in the
+commonest case of all — exactly one browser on the profile. The `@()` belongs at the **call
+sites**, and the same bug bit the scratch script written to measure the fix, which declared a
+clean exit `after 0.25s` and relaunched into a browser that was still dying. A test harness gets
+no exemption from the trap it was written to investigate.
+
+**The measurement, end to end, on the real path.** Two windows on the profile, no debugging
+port, a "Restore pages?" bubble on each, then `launch-chrome.ps1`:
+
+```
+  closing 1 chrome.exe browser process(es) on this profile - politely, so the tabs come back
+  ok    the profile is free and its session was written
+  ok    DevTools port 9222 is open - Chrome/153.0.8010.54
+  ok    /health reports focus.cdp = true - a session can lock the SITE, not just the app
+```
+
+— no `warn`, where every run before the repair had one. And with two marked tabs open before the
+launcher ran, `/json/list` afterwards:
+
+```
+   http://127.0.0.1:4700/
+   https://example.com/launcher-mark-B
+   https://example.com/launcher-mark-A
+   ...
+LAUNCHER MARKS RESTORED: 2 of 2
+```
+
+A control run settled that the flags were never the suspect: on a browser that exited cleanly,
+the launcher's exact argument line restores two marked tabs of two and Chrome writes a fresh
+`Default/Sessions/Session_13434895796847964`, 4006 bytes, at the moment of the close. Every
+zero-restore run in this investigation had a force-killed browser somewhere behind it.
+
+`lock_proof.mjs`: **70 checks, 0 failed** — the no-port press, the gated relaunch, the restored
+work tab, drift inside 1.5 s with one callout, the resume, the second drift, the summon accepted
+and the window in front again, and the unlock leaving zero watchers and no attached debugger.
+
+**And the harness's own safety net, which was copying nothing.** The same run printed `copied 0
+session file(s) aside` and, in teardown, `put 0 session file(s) back; the boss's tabs return on
+his next launch`. Both lines were true and neither meant anything: `SESSION_FILES` listed
+`Current Session` / `Last Session`, which is pre-M100 Chrome. On Chrome/153 the session lives in
+`Default/Sessions/` as `Session_<timestamp>` and `Tabs_<timestamp>`, so the backup matched no
+file and the teardown restored no file — while printing the sentence that says his tabs are
+safe. That is the same defect class as a frozen level that reads like a shut mouth, in a harness
+rather than in the product. It now matches on the pattern, keeps the legacy names for an older
+Chrome, and — because Chrome picks the **newest** `Session_<timestamp>` and would therefore have
+preferred the run's own session over the one restored beside it — clears what the run wrote
+before putting his back:
+
+```
+    2.38s  copied 4 session file(s) aside; they go back in teardown
+   71.19s  cleared 4 session file(s) this run wrote
+   71.19s  put 4 session file(s) back; the boss's tabs return on his next launch
+  70 checks, 0 failed
+```
+
+### 18.18 · The matrix, at the end of the round (Part H and Part I)
+
+Every standing harness, run in the foreground — which is itself a finding of this round: a
+harness launched from a backgrounded shell loses synthetic input and reds out on the product's
+behalf (§18.15). Summary lines as they printed:
+
+| harness | summary | what it stands over |
+| --- | --- | --- |
+| `routing_proof.mjs` | **65/65 PASS** | the funnel in the boss's own sentences, typed and spoken |
+| `conversation_proof.mjs` | **104/104 PASS** | three turns with eyes, ear and face live; the pulse; the ear fault and its backoff |
+| `persona_proof.mjs` | **19/19 PASS** | his name everywhere, no "Jarvis" left to a user's eye |
+| `capabilities_proof.mjs` | **16/16 PASS** | a canary hand fitted in a temp registry and named after a restart |
+| `nudge_proof.mjs` | **21/21 PASS** | posture and watch nudges caption-only while he is speaking or listening |
+| `voice_proof.mjs` | **133/133 PASS** | the full read, the barge-in gate, self-voice rejected and a true interruption accepted |
+| `deck_proof.mjs` | **208/208 PASS** | the deck, and the head's volume assertions |
+| `lock_proof.mjs` | **70/70 PASS** | the whole Part F chain on a real port-launched Chrome |
+| `eyes_live.mjs` | **56 checks, 0 failed** | posture, the relief valve, and no organ ever opening the microphone |
+| `brain_live.mjs` | **33 checks, 0 failed** | the live brain, and the seal that may not outlive its silence |
+| `tools_live.mjs` | **50/50 PASS** | the hands: gated, once, nothing kept |
+| `focus_probe.mjs` | **78 checks, 0 failed** | the session on the server, leaking nothing |
+| `desk_proof.mjs` | **44 checks, 0 failed** | the desk |
+| `layout_proof.mjs` | **72/72 PASS** | the layout under every width |
+| `followup_proof.mjs` | **47/47 PASS** | the antecedent memory |
+| `port_proof.mjs` | **24 checks, 0 failed** | the launcher's own promises; run last and alone |
+| `salutation_proof.mjs` | **26/34 FAIL** | red by decision, measured and reported in §18.14 — two world questions the archive answers from its prompt pack |
+| `preflight.py` | **15 pass, 0 fail, 4 warn** | nineteen checks, including 18 (the routing chain) and 19 (the lock chain) |
+
+The four preflight warns are the standing ones and none of them judges the code: no OpenRouter
+key in `config.json`, so the swapped brain's answer chain and the Astra look are unverified here
+(checks 10 and 12); no Chrome on the debugging port at that moment, so a session would degrade
+to the application (check 11); and the screen watch standing down rather than reading somebody
+else's cooldown, because check 12 had just spent a nudge (check 13). Only `fail` judges the code,
+and it reads zero.

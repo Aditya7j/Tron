@@ -209,6 +209,40 @@ CDP_EVAL_MAX_TABS = 24    # a bound, so forty open tabs cannot stall a button pr
 CAPABILITY_TTL_S = 3.0    # capability() only; the tick itself never reads a cache
 HASH_BYTES = 12           # truncated, salted, per-process: internal only, never sent
 
+# =============================================================================
+#  THE LOCK THAT LOCKS - the numbers behind the teeth
+# =============================================================================
+#
+# The tick reads the world once a second, which is the right cadence for a countdown
+# and far too slow for a tab. Measured on this machine (lookbook 18.4): the browser's
+# own account of which tab is live flips 13 ms after the switch, and one question to
+# one tab costs 1-2 ms on a fresh socket. So the whole of the second and a half allowed
+# for noticing a drift is spent on the poll interval and the grace, and there is no
+# reason for either to be generous.
+#
+# The grace is SERVED IN THE WATCHER rather than again in _off_target(), exactly as a
+# posture drift serves its grace in the page: Ctrl+Tab through a tab on the way back to
+# this one is not a drift, and charging the same patience twice would put the callout
+# the wrong side of the second and a half.
+LOCK_POLL_S = 0.30        # how often the locked tab is asked whether it is still live
+LOCK_GRACE_MS = 400       # passing through a tab is not leaving for one
+LOCK_TITLE_CHARS = 24     # what the card may show of the locked tab's title
+SUMMON_WITHIN_S = 30.0    # a second drift this soon after the first is a pull
+LOCK_ACTIVATE_S = 1.2     # how long an activation is given to actually take effect
+
+# WHY TAB-LEVEL LOCKING IS OFF, when it is - one word out of a fixed set, never a
+# sentence. The card turns it into prose; it stays a word here so that no call site can
+# put an explanation somebody wrote at two in the morning onto the wire.
+#
+#   ""          nothing to report: either a tab is locked, or none was asked for
+#   noport      Chrome has no --remote-debugging-port, and the hand has been offered
+#   declined    it was offered and you said no. The card says so and stops asking
+#   ambiguous   two windows both claim the front tab, or the browser's answer and the
+#               reader's target are not the same surface
+#   unreadable  nothing in front could be read as a page at all
+#   gone        the locked tab was closed, or navigated out from under the lock
+TAB_LOCK_WHY = ("", "noport", "declined", "ambiguous", "unreadable", "gone")
+
 LEDGER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            "focus-ledger.json")
 
@@ -256,6 +290,36 @@ LINES = {
     "notab": "I can see which application you are in, sir, but not which site. "
              "Application only, then.",
     "intent_noted": "Noted, sir.",
+
+    # -- THE LOCK THAT LOCKS ----------------------------------------------------
+    # The no-port path. What the SESSION says around the hand's offer: the sentence
+    # before it, and the sentence when it is declined. Both of them commit out loud to
+    # watching the application instead, because the whole law of this part is that the
+    # feature never keeps the word "locked" after quietly losing the meaning of it.
+    "lock_noport": "I cannot lock a tab, sir - Chrome has no debugging port open.",
+    "lock_declined": "Tab-level locking is off, then, sir: no debugging port, and you "
+                     "would rather I did not restart the browser. I shall watch the "
+                     "application only.",
+    # The tab went away under the lock. Said once, and it degrades honestly rather
+    # than going on reporting a tab that no longer exists.
+    "lock_gone": "The tab you locked has gone, sir. I am watching the application only.",
+    # THE TWO GATED OFFERS. These are the registry's own proposal sentences, held here
+    # a second time, and the duplication is deliberate: _emit() refuses any template
+    # that is not in LINE_REGISTRY, which is the structural half of the privacy promise
+    # and is not worth weakening so that a question can be phrased elsewhere. So the
+    # gate holds the real pending proposal and this file speaks its own registered copy
+    # of the words - and preflight check 19 asserts the two copies are identical, so the
+    # pair cannot drift apart in silence.
+    "ask_relaunch": "I need Chrome relaunched with the debugging port to lock a tab, "
+                    "sir. Shall I?",
+    "ask_summon": "Shall I bring you back?",
+    # The summon itself, and its two failures are as plainly said as its success: a
+    # summon that silently did nothing would be the worst sort of hand, because the one
+    # thing the boss can check for himself is whether his screen changed.
+    "summoned": "Here you are, sir - back where you said you would be.",
+    "summon_none": "There is no locked tab to bring you back to, sir.",
+    "summon_failed": "The tab would not come forward, sir, so you are still where you "
+                     "were.",
     "unreadable": "I cannot see your windows at all, sir, so I shall keep time and "
                   "take your word for the rest.",
     "back": "Back. Thank you, sir.",
@@ -326,6 +390,38 @@ CALLOUTS = {
         "We are well past the point where I pretend not to notice, sir.",
         "You are paying for this session in minutes, sir, and spending them here.",
         "I could stop the clock and we could both go home, sir.",
+        "Sir.",
+    ),
+}
+
+# THE LOCKED TAB'S OWN POOL. Reached only when the WATCHER caught the drift - the
+# browser's own account of which of its tabs is live - which is precisely the drift no
+# window reader can see: same machine, same application, same window, wrong tab.
+#
+# Tier one is the mandate's sentence, word for word. Note what none of these lines
+# contain: a {label}. The named pools exist because "that is not the invoice importer"
+# is a sharper callout than "that is not the task" - but here the sharpness is already
+# in the fact, and the fact is about the tab you PROMISED rather than the one you
+# wandered to. So this pool says where you should be and stays silent about where you
+# are, which is both the better sentence and the smaller claim. It is therefore not in
+# _NAMED_POOLS and needs no scrubbing: there is nothing in it to scrub.
+CALLOUTS_LOCKED = {
+    1: (
+        "You have left the locked tab, sir - drift {drifts}.",
+        "That is not the locked tab, sir.",
+        "The tab you asked me to hold you to is still open, sir. This is not it.",
+        "Off the locked tab, sir.",
+    ),
+    2: (
+        "Off the locked tab again, sir - that is drift {drifts}.",
+        "Drift {drifts}, sir, and not one of them in the tab you named.",
+        "You locked a tab, sir. We are not in it.",
+        "Sir. The locked tab is one keystroke away.",
+    ),
+    3: (
+        "{drifts} drifts off a tab you locked yourself, sir.",
+        "I am watching one tab, sir, and you are in all the others.",
+        "The lock is doing its half, sir.",
         "Sir.",
     ),
 }
@@ -487,6 +583,7 @@ EYE_POOLS = ([CALLOUTS_PHONE_DRILL, NUDGES_SLOUCH, NUDGES_ABSENT]
              + list(CALLOUTS_PHONE.values()))
 
 LINE_REGISTRY = frozenset(list(LINES.values())
+                          + [t for pool in CALLOUTS_LOCKED.values() for t in pool]
                           + list(CALLOUTS_INTENT)
                           + list(CALLOUTS_DRILL)
                           + [t for pool in CALLOUTS.values() for t in pool]
@@ -535,7 +632,11 @@ def _nth_word(count):
 
 STATES = ("idle", "arming", "running", "paused", "ended")
 END_REASONS = ("finished", "ended-early", "aborted", None)
-SAY_KINDS = ("callout", "nag", "note", "report", "nudge")
+# "ask" is a note with a Yes and a No behind it: a line the session speaks while a
+# proposal is pending at the hands gate, which the client paints as a proposal card
+# rather than as prose. It is a kind and not a new channel on purpose - it travels in
+# the same say queue, through the same _emit(), under the same registry.
+SAY_KINDS = ("callout", "nag", "note", "report", "nudge", "ask")
 
 PUBLIC_KEYS = {
     "state": str, "plannedS": int, "elapsedS": int, "remainingS": int,
@@ -577,6 +678,24 @@ PUBLIC_KEYS = {
     # instead of implying you are in the wrong window. Nameless either way.
     "postureDrift": bool,
     "hushed": bool, "hushLeftS": int, "nudges": int,
+    # THE LOCKED TAB. This is the second string in this whitelist that came from an
+    # observation, so it gets the same treatment the first one got - stated, bounded,
+    # and justified rather than dropped in.
+    #
+    # lockedTab is up to LOCK_TITLE_CHARS characters of the title of the tab actually
+    # being watched, stripped to a label's character set. It is here because the card
+    # was asked to say WHICH tab it is holding you to, and a card that says LOCKED
+    # without saying to what is the same card that used to say it while watching the
+    # whole browser. It is written only when a tab lock is really taken - by the
+    # deferred settle on a surface you stayed on, or by an explicit re-target - and it
+    # is cleared by unlock, re-target, abort and finish. It is absent from the ledger
+    # (SESSION_ROW_KEYS is unchanged), absent from the instrument, absent from every
+    # spoken line, and never written to disk.
+    #
+    # tabLockWhy is one word out of TAB_LOCK_WHY - never a sentence, so no call site can
+    # invent an explanation - and the card turns it into prose. It is how "no silent
+    # degradation" is kept on the screen as well as out loud.
+    "lockedTab": str, "tabLockWhy": str,
 }
 
 
@@ -604,6 +723,11 @@ TAB_READS = ("unknown",      # nothing readable in front at all
              "ambiguous",    # the endpoint is alive but two windows both claim front
              "noendpoint")   # a browser, with no --remote-debugging-port to ask
 LANES = ("on", "off", "unknown", "n/a")
+# What the TAB WATCHER is doing, for the instrument. "n/a" means there is no watcher at
+# all, which is the ordinary answer on a machine with no debugging port and the asserted
+# answer after an unlock - see lock_proof.mjs, which ends by reading watchers back to
+# zero and watchPolls frozen.
+WATCH_STATES = ("n/a", "on", "off", "gone")
 
 DIAG_KEYS = {
     # THE PROCESS. First, and not by accident: a fresh interpreter passes every
@@ -633,6 +757,11 @@ DIAG_KEYS = {
     "readerOnTarget": bool, "sessionOnTarget": bool, "atHome": bool,
     "drifting": bool, "inGrace": bool, "excused": bool, "snoozed": bool,
     "intentOpen": bool, "eyesOn": bool,
+    # THE TAB WATCHER, which is the one organ in this file that holds a plaintext
+    # handle on a tab - so the instrument reports only that it exists, what it last
+    # decided, and how many questions it has asked. watchers is the leak detector: a
+    # session that ended with a watcher still in it is a watcher still polling a tab.
+    "watchers": int, "watchPolls": int, "watchState": str,
 }
 
 
@@ -1215,6 +1344,225 @@ def _probe_front_window():
             "tab_readable": True, "ambiguous": False}
 
 
+# =============================================================================
+#  ASKING FOR A HAND, without knowing what hands are
+# =============================================================================
+#
+# Two things in this part are gated offers - relaunch the browser, bring me back - and
+# the gate they go through is the one the boss already answers "yes" to: hands.propose(),
+# one pending slot, the same two words, the same TTL. This file does not import that
+# module, and the reason is worth stating: focus.py is imported by a privacy test, a
+# preflight check and several harnesses that have no server around them, and a hard
+# dependency on the tool registry would drag a registry read into all of them. So the
+# server injects one callable here at import time, and this file knows nothing else
+# about it - not the tool's parameters, not its script, not its words.
+#
+# A None hook is not an error. It means nobody wired the hands up - a test, a harness -
+# and every caller below reads that as "no offer was made", which is the same outcome as
+# the boss saying no. Nothing here ever runs a tool; it only ever asks.
+ASK_HAND = None
+
+
+def _ask_hand(tool_id):
+    """Put a proposal in the gate. True if there is now something to say yes to.
+
+    The SENTENCE is not taken from the gate, deliberately - see LINES["ask_relaunch"].
+    What comes back from here is a boolean, so that a failure anywhere behind the hook
+    (a gate already holding a proposal, a registry that will not read, a tool that is
+    not installed) can neither be spoken as prose nor take the tick down with it.
+    """
+    hook = ASK_HAND
+    if hook is None:
+        return False
+    try:
+        return bool(hook(tool_id))
+    except Exception:                                          # noqa: BLE001
+        return False
+
+
+def _cdp_front_target():
+    """(target, endpoint_alive, ambiguous): the live tab as an IDENTITY, not a host.
+
+    _cdp_front_host() answers the question the tick asks - "which site am I looking at" -
+    and deliberately treats two tabs of the same host as agreement, because the host is
+    all it ever locks. This answers a different question: WHICH TAB, as something that
+    can be polled and activated later. Two tabs of the same host are therefore an
+    ambiguity here rather than an agreement: activating the wrong one of them would put
+    a page the boss did not ask for in front of him and call it a rescue.
+
+    Home base is dropped before a single question is asked, as everywhere else: the tab
+    you pressed the button in is not a candidate for the tab you meant.
+
+    What comes back is plaintext - a target id, a socket url, a title, a host - and it is
+    the caller's business to hold no more of it than it needs. Nothing on TargetReader
+    touches this; the reader goes on holding salted hashes and nothing else.
+    """
+    alive, asked = False, 0
+    hits, visible = [], []
+    for port in CDP_PORTS:
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:%d/json" % port,
+                                        timeout=CDP_TIMEOUT_S) as res:
+                targets = json.loads(res.read().decode("utf-8", "replace"))
+        except Exception:                                      # noqa: BLE001
+            continue
+        alive = True
+        if not isinstance(targets, list):
+            continue
+        for t in targets:
+            if asked >= CDP_EVAL_MAX_TABS:
+                break
+            if not isinstance(t, dict) or t.get("type") != "page":
+                continue
+            url = str(t.get("url") or "")
+            ws, host = t.get("webSocketDebuggerUrl"), _host_of(url)
+            ident = str(t.get("id") or "")
+            if not ws or not host or not ident or host in HOME_BASE_HOSTS:
+                continue
+            if not url.lower().startswith(("http://", "https://")):
+                continue
+            asked += 1
+            seen = _ws_eval_int(ws, _FRONT_EXPR)
+            if seen is None:
+                continue
+            found = {"id": ident, "ws": ws, "host": host, "port": port,
+                     "title": str(t.get("title") or "")}
+            if seen & 2:
+                hits.append(found)
+            elif seen & 1:
+                visible.append(found)
+    # Focused first, then merely visible - the same order as _cdp_front_host(), for the
+    # same reason: the window with the keyboard in it is a better answer than a window
+    # that merely has an active tab.
+    for pool in (hits, visible):
+        if len(pool) == 1:
+            return pool[0], alive, False
+        if len(pool) > 1:
+            return None, alive, True
+    return None, alive, False
+
+
+class LockWatch:
+    """The teeth. One tab, asked every LOCK_POLL_S whether it is still the live one.
+
+    It holds three things a TargetReader would refuse to hold - a CDP target id, a
+    socket url, and up to LOCK_TITLE_CHARS characters of the tab's title - so the
+    exception is deliberate, bounded, and worth saying exactly what buys what:
+
+      the id and the socket   are what makes the lock have teeth at all. Without an
+        identity there is nothing to poll and nothing to activate, and "leaving the
+        locked tab is noticed within a second and a half" is not implementable by
+        comparing salted hashes of a window title.
+      the title               is what the card was asked to show. It is the one observed
+        string this feature puts on the wire, it is cut to LOCK_TITLE_CHARS, stripped to
+        a label's character set, and it goes to the boss's own screen about the boss's
+        own tab. It is never in the ledger, never in the instrument, never in a spoken
+        line, and never on disk.
+
+    All three die with the session: unlock, re-target, abort and finish each call
+    release(), and after that this object answers "gone" to everything and holds nothing.
+
+    ON LEAVING NOTHING ATTACHED. Every question opens a socket, asks, and closes it
+    (_ws_eval_int), so between polls the browser reports this target as unattached -
+    measured, lookbook 18.4. The leak worth guarding against is therefore not a CDP
+    attachment, which cannot survive by construction; it is a watcher that goes on
+    polling a tab after the session that made it has ended. Hence release(), the `live`
+    flag every caller checks, and the `watchers` count in the instrument.
+    """
+
+    def __init__(self, port, target_id, ws_url, title):
+        self.port = int(port)
+        self.id = str(target_id)
+        self.ws = str(ws_url)
+        self.title = (_clean_label(title) or "")[:LOCK_TITLE_CHARS].strip()
+        self.live = True
+        self.state = "on"          # "on" | "off" | "gone"
+        self.off_since = None      # when it first stopped being the live tab
+        self.polls = 0
+        self.misses = 0            # consecutive unanswered questions
+        self.activations = 0
+
+    def poll(self, now=None):
+        """One question, and the state it leaves behind.
+
+        Three misses in a row is "gone" rather than "off", and that distinction is the
+        whole reason misses are counted: a tab that has been closed cannot be drifted
+        away from, and accusing the boss of leaving a tab that no longer exists is how a
+        man learns to ignore a watchdog.
+        """
+        if not self.live:
+            return "gone"
+        now = time.monotonic() if now is None else now
+        self.polls += 1
+        seen = _ws_eval_int(self.ws, _FRONT_EXPR)
+        if seen is None:
+            self.misses += 1
+            if self.misses >= 3:
+                self.state = "gone"
+            return self.state
+        self.misses = 0
+        # BIT 1, and not bit 2. Bit 1 is "I am the active tab of my window", which is
+        # the tab statement; bit 2 is "my window has the keyboard", which is the OS's
+        # statement about applications and is already the window reader's job. Reading
+        # tab-ness off bit 2 would count every click into VS Code twice.
+        if seen & 1:
+            self.state = "on"
+            self.off_since = None
+        else:
+            if self.state != "off":
+                self.off_since = now
+            self.state = "off"
+        return self.state
+
+    def drifted(self, now=None):
+        """Has it been off long enough to count? The grace lives here - LOCK_GRACE_MS."""
+        if not self.live or self.state != "off" or self.off_since is None:
+            return False
+        now = time.monotonic() if now is None else now
+        return (now - self.off_since) * 1000.0 >= LOCK_GRACE_MS
+
+    def activate(self):
+        """Bring the tab, and its window, to the front. True only if it worked.
+
+        /json/activate is Target.activateTarget, and on Windows it raises the WINDOW as
+        well as re-ordering the tabs - measured: the locked tab went from visible-but-
+        unfocused to focused and the window in front of it dropped back. So there is
+        nothing to synthesise here and no input to inject.
+
+        The verdict is read back off the TAB rather than off the HTTP status, because
+        "the browser accepted my request" is not the same claim as "the boss is looking
+        at it", and the second one is what the sentence afterwards will say.
+        """
+        if not self.live:
+            return False
+        self.activations += 1
+        try:
+            with urllib.request.urlopen(
+                    "http://127.0.0.1:%d/json/activate/%s" % (self.port, self.id),
+                    timeout=CDP_TIMEOUT_S) as res:
+                res.read()
+        except Exception:                                      # noqa: BLE001
+            return False
+        deadline = time.monotonic() + LOCK_ACTIVATE_S
+        while time.monotonic() < deadline:
+            seen = _ws_eval_int(self.ws, _FRONT_EXPR)
+            if seen is not None and seen & 1:
+                self.state = "on"
+                self.off_since = None
+                return True
+            time.sleep(0.1)
+        return False
+
+    def release(self):
+        """Stop watching, for good. Idempotent, and there is no way back from it."""
+        self.live = False
+        self.state = "gone"
+        self.off_since = None
+        self.ws = ""
+        self.id = ""
+        self.title = ""
+
+
 _CAPABILITY_CACHE = {"at": -1e9, "value": None}
 
 
@@ -1247,6 +1595,18 @@ def capability():
     }
     _CAPABILITY_CACHE.update({"at": now, "value": value})
     return dict(value)
+
+
+def _forget_capability():
+    """Throw the capability cache away.
+
+    Called in exactly one place - a relaunch hand that worked - because that is the one
+    moment when something has DELIBERATELY changed what this machine can watch. A
+    three-second-old "there is no debugging port" about a port that was opened half a
+    second ago would make the lock refuse itself for the very reason the boss said yes
+    to remove, which is a feature arguing with its own consent.
+    """
+    _CAPABILITY_CACHE.update({"at": -1e9, "value": None})
 
 
 class TargetReader:
@@ -1413,6 +1773,21 @@ class TargetReader:
         return {"ok": True, "reason": "", "tab": self._watch_tab,
                 "browser": bool(raw["browser"]),
                 "tab_readable": bool(raw["tab_readable"])}
+
+    def confirms_host(self, host):
+        """Is THIS the host you are holding me to? A comparator, not a setter.
+
+        The class promise is "answers only in booleans", and this keeps it: plaintext
+        goes in, a boolean comes out, nothing is assigned and nothing is returned that
+        was not already known to the caller. It exists because two organs now know about
+        the locked surface - this reader, by hash, and a LockWatch, by CDP target - and a
+        watcher pointed at a different tab from the one the reader is holding would be a
+        lock that disagreed with itself in silence. So the watcher is checked against the
+        reader at the moment it is made, and dropped if the two do not agree.
+        """
+        if not self._locked or self._host is None or not host:
+            return False
+        return self._h(host) == self._host
 
     def look(self):
         """The verdict: booleans, and at most one word.
@@ -1962,6 +2337,18 @@ class FocusSession:
         self._on_target_now = False
         self._at_home_now = False
 
+        # THE TAB WATCHER, and the small amount of bookkeeping the offers need.
+        #
+        # self.watch is a LockWatch or None, and None is the ordinary state: no tab lock
+        # has been taken yet, or this machine has no debugging port to ask. The three
+        # flags below are each "have I already said this", because the difference between
+        # a watchdog and a nag is entirely in how many times it offers the same thing.
+        self.watch = None
+        self.tab_lock_why = ""       # one word out of TAB_LOCK_WHY, for the card
+        self._lock_drift_at = 0.0    # when the last counted locked-tab drift began
+        self._summon_at = 0.0        # when the summon was last offered
+        self._relaunch_asked = False # once per session, whatever the answer
+
         # THE ANSWER WINDOW. The start line ends with a question, so the client opens
         # the microphone for exactly one answer and posts it back. Nothing waits on
         # it: an unanswered question costs you nothing but a slightly duller callout.
@@ -2157,6 +2544,19 @@ class FocusSession:
             return self._maybe_finish()
 
         if at_home or verdict["on_target"]:
+            # THE WATCHER'S HALF, and it is asked HERE - after home base and after the
+            # window reader have both said they are content - because it is the only
+            # organ that can see the drift neither of them can: same machine, same
+            # browser, same window, wrong tab. Two tabs of the same host read as the
+            # same surface to the reader, which is correct for the reader and is exactly
+            # the hole this closes.
+            #
+            # Home base outranks it, as it outranks everything: talking to me is not a
+            # drift. And a drift the reader has already caught never reaches this line,
+            # so no excursion is counted twice.
+            if not at_home and self._tab_drifted(now):
+                self._on_target_now = False
+                return self._off_target(now, dt, kind="locked")
             self._on_target_now = bool(verdict["on_target"]) and not at_home
             if at_home and not verdict["on_target"]:
                 self.home_s += dt
@@ -2207,6 +2607,11 @@ class FocusSession:
             self._next_nag = now + self.nag_s
             if not self.excused and self._may_speak(now):
                 self._callout(self._callout_pool(label), "callout", label=label)
+            # AND IF IT IS THE SECOND ONE OFF THE LOCKED TAB, soon after the first, the
+            # narrating stops and something is offered instead. After the callout, in
+            # this order: the fact first, then the question about it.
+            if self._off_kind == "locked":
+                self._after_locked_drift(now)
 
         self.drift_s += dt
         self._excursion_s += dt
@@ -2217,7 +2622,12 @@ class FocusSession:
         return self._maybe_finish()
 
     def _grace_ms(self):
-        return 0.0 if self._off_kind == "phone" else DRIFT_GRACE_MS
+        # A LOCKED-TAB drift has already served its grace, in the watcher, for the whole
+        # LOCK_GRACE_MS it had to stay off before drifted() would admit it - exactly as a
+        # posture drift serves its grace in the page. Charging DRIFT_GRACE_MS again here
+        # would be charging twice for the same patience, and it would put the callout the
+        # wrong side of the second and a half the mandate allows for noticing.
+        return 0.0 if self._off_kind in ("phone", "locked") else DRIFT_GRACE_MS
 
     def _may_speak(self, now):
         """Is this excursion allowed a word at this instant?
@@ -2311,6 +2721,12 @@ class FocusSession:
             self.state = "running"
             self.tab_watched = bool(step.get("tab"))
             self.tab_readable = bool(step.get("tab_readable"))
+            # THE TEETH GO ON HERE, before the line is spoken, so that "Locked on, sir."
+            # and the card underneath it are describing the same thing. No hand is
+            # offered on this path: the start line already said whether this machine can
+            # lock a tab at all, and proposing a browser restart forty-five seconds into
+            # a session nobody asked about would be an interruption dressed as a service.
+            self._attach_watch()
             # Four words, and they are the point: a wrong lock has to be AUDIBLE at
             # the moment it happens, not inferred from a callout three minutes later.
             self._note("settled")
@@ -2336,6 +2752,11 @@ class FocusSession:
         self.state = "running"
         self.readable = bool(info["readable"])
         self.tab_watched = False
+        # Giving up on the tab includes giving up the watcher. The word is left empty
+        # rather than set to a reason, because this path says what happened out loud in a
+        # whole sentence ("watching the application only") and a card repeating it in one
+        # word would be the same news twice.
+        self._release_watch("")
         self.tab_readable = bool(info.get("tab_readable"))
         if not info["locked"]:
             self._note("unreadable")
@@ -2382,12 +2803,26 @@ class FocusSession:
             self._note("settled")
             if step["browser"] and not step["tab"]:
                 self._note("notab")
+            # AND THE TEETH. This is the explicit "lock this tab" - the pill, or the
+            # sentence that means it - so this is the one path that may offer to relaunch
+            # the browser for the port. is_browser decides whether a port is even the
+            # right thing to want: a re-target onto an editor is a perfectly good lock
+            # with nothing to ask for.
+            self._offer_tab_lock(bool(step["browser"]))
             return None
 
         if step["reason"] == "unreadable" and not from_card:
             self._note("unreadable")
             return None
-        return self._rearm(now)
+        self._rearm(now)
+        # AND WHY IT COULD NOT BE DONE. A press that failed because Chrome has no
+        # debugging port open is not a mystery to be left on a card that has gone quiet;
+        # see _offer_port_after_failed_press(), which says so and offers the fix. Only
+        # from the card or the sentence that means it, and only after the re-arm above has
+        # finished clearing up after the old lock.
+        if from_card and step["reason"] == "unreadable":
+            self._offer_port_after_failed_press()
+        return None
 
     def _rearm(self, now):
         """Back to the deferred lock: nothing watched, and it says so out loud.
@@ -2398,6 +2833,11 @@ class FocusSession:
         your own account, the wrong one to be holding you to in the meantime.
         """
         self.reader.forget_target()
+        # THE UNLOCK. Every watcher goes with the target and goes here, in the same
+        # breath, because "I'll lock on where you land" has to be true at the moment it
+        # is said - and a watcher left polling the tab you have just told me is the wrong
+        # one would be the feature arguing with you.
+        self._release_watch("")
         # Paused stays paused for the same reason as above; resume() sees an unlocked
         # reader and arms by itself, with the full wait in front of it.
         if self.state != "paused":
@@ -2430,6 +2870,200 @@ class FocusSession:
             else:
                 self._note("back")
 
+    # -- the locked tab ----------------------------------------------------
+
+    def _tab_drifted(self, now):
+        """Has the watcher decided you are off the locked tab? Read only, and cheap.
+
+        The POLL happens on the manager's thread at LOCK_POLL_S, not here: the tick is
+        the thing that must not block, and a question that costs a socket has no business
+        in the middle of a countdown. This reads the answer the watcher already has.
+        """
+        watch = self.watch
+        if watch is None or not watch.live:
+            return False
+        if watch.state == "gone":
+            self._lose_the_locked_tab()
+            return False
+        return watch.drifted(now)
+
+    def _lose_the_locked_tab(self):
+        """The tab was closed, or navigated out from under the lock. Say so, once.
+
+        Degrading to the application is the right thing to do and saying nothing about it
+        is not: from here on the session is watching something weaker than it promised,
+        and a card that went on reading LOCKED while that was true would be the exact
+        silence this Part exists to remove.
+        """
+        self._release_watch("gone")
+        self._note("lock_gone")
+        return None
+
+    def _release_watch(self, why=None):
+        """Stop watching a tab. Every unlock path in this class ends up here.
+
+        why=None leaves the card's word alone (a re-target is about to set it); a word
+        out of TAB_LOCK_WHY replaces it. Anything else becomes "", because a call site
+        that invented a reason should get silence rather than a wire full of prose.
+        """
+        watch, self.watch = self.watch, None
+        if watch is not None:
+            watch.release()
+        if why is not None:
+            self.tab_lock_why = why if why in TAB_LOCK_WHY else ""
+        return None
+
+    def _attach_watch(self):
+        """Point a watcher at the tab this session is now holding you to.
+
+        Called only where a lock is actually taken - the deferred settle, and an explicit
+        re-target - and it asks the browser itself rather than being handed a target by
+        anybody. Every refusal leaves a WORD behind for the card, so that "tab-level
+        locking is off" is never a thing the boss has to deduce from a missing line.
+        """
+        self._release_watch("")
+        if not capability()["cdp"]:
+            # No endpoint at all. Said as a word here; whether it is also OFFERED as a
+            # hand is _offer_tab_lock()'s business, because only an explicit "lock this
+            # tab" earns an offer to restart the browser.
+            self.tab_lock_why = "noport"
+            return None
+        if not self.reader.watching_tab:
+            # An application-level lock, by the machine or by the 45-second fallback.
+            # There is no tab to watch and nothing to explain that the spoken line
+            # ("watching the application only") has not already said.
+            return None
+        found, alive, ambiguous = _cdp_front_target()
+        if not alive:
+            self.tab_lock_why = "noport"
+            return None
+        if ambiguous:
+            self.tab_lock_why = "ambiguous"
+            return None
+        if found is None:
+            self.tab_lock_why = "unreadable"
+            return None
+        if not self.reader.confirms_host(found["host"]):
+            # The browser's front tab and the reader's target are not the same surface.
+            # It happens when the window manager and the browser were read a moment
+            # apart, and the honest answer is to watch nothing rather than to watch a tab
+            # the session is not actually holding you to.
+            self.tab_lock_why = "ambiguous"
+            return None
+        self.watch = LockWatch(found["port"], found["id"], found["ws"], found["title"])
+        self.tab_lock_why = ""
+        return None
+
+    def _offer_tab_lock(self, is_browser):
+        """You asked for a tab lock. Take it, or say why not and offer to fix it.
+
+        The offer is made ONLY when the surface you locked is a browser: a re-target onto
+        VS Code has no tab to lock and no use for a debugging port, and proposing to
+        restart Chrome at that moment would be an assistant answering a question nobody
+        asked. Once per session either way - a gate that asks twice is a gate that gets
+        ignored on both occasions.
+        """
+        self._attach_watch()
+        if self.watch is not None or not is_browser:
+            return None
+        if self.tab_lock_why != "noport":
+            return None
+        return self._ask_for_the_port()
+
+    def _ask_for_the_port(self):
+        """Say that the debugging port is missing and, once, offer the hand that opens it.
+
+        Both callers arrive here having already set tab_lock_why to "noport": the press
+        that locked a browser it cannot read tabs out of, and the press that could not
+        read the browser at all. Once per session either way - a gate that asks twice is
+        a gate that gets ignored on both occasions - so the flag is set before the asking
+        and never cleared.
+        """
+        if self._relaunch_asked:
+            return None
+        self._relaunch_asked = True
+        self._note("lock_noport")
+        if not _ask_hand("relaunch_chrome"):
+            # Nothing to say yes to - no gate wired up, or it is already holding a
+            # proposal. Either way the honest thing is the plain sentence, not a question
+            # the boss cannot answer.
+            self.tab_lock_why = "declined"
+            self._note("lock_declined")
+            return None
+        self._ask("ask_relaunch")
+        return None
+
+    def _offer_port_after_failed_press(self):
+        """THE PORTLESS PRESS, which is the case the card used to swallow whole.
+
+        You pressed LOCK THIS TAB in a Chrome started without --remote-debugging-port.
+        The read that would have named the tab could not even be attempted - there is no
+        endpoint to ask - so settle_here() reported "unreadable" and the session re-armed.
+        That much is correct and stays. What was missing is the REASON, and a card that
+        simply goes quiet while the one thing you pressed it for silently does not happen
+        is the whole of what this Part exists to remove.
+
+        Called AFTER _rearm(), because _rearm() releases the watcher and clears the card's
+        word on its way past: setting the word first would be writing it into a puddle.
+        """
+        if capability()["cdp"]:
+            return None        # a port does exist; that read failed for another reason
+        front = _probe_raw()
+        if not front or not front["browser"]:
+            # Not a browser in front. There is no tab to lock here and nothing a debugging
+            # port would have fixed, so there is nothing to offer and nothing to explain.
+            return None
+        self.tab_lock_why = "noport"
+        return self._ask_for_the_port()
+
+    def decline_tab_lock(self):
+        """He said no to the relaunch. The card stops asking and says why."""
+        if self.watch is not None:
+            return None
+        self.tab_lock_why = "declined"
+        self._note("lock_declined")
+        return None
+
+    def _after_locked_drift(self, now):
+        """A second drift off the locked tab, soon after the first: offer to fix it.
+
+        The first drift is absent-mindedness and gets a sentence. A second one inside
+        SUMMON_WITHIN_S is a pull - something over there is winning - and at that point
+        another sentence is just the same sentence again. So the assistant stops
+        narrating and offers to do something, through the same gate as every other hand.
+
+        Never oftener than twice the window, which is the difference between a watchdog
+        and a man shouting the same question at you.
+        """
+        last, self._lock_drift_at = self._lock_drift_at, now
+        if not last or (now - last) > SUMMON_WITHIN_S:
+            return None
+        if self._summon_at and (now - self._summon_at) < SUMMON_WITHIN_S * 2:
+            return None
+        self._summon_at = now
+        if not _ask_hand("summon_tab"):
+            return None
+        self._ask("ask_summon")
+        return None
+
+    def note_summoned(self):
+        """The summon worked and the boss is back on the locked tab.
+
+        The drift is NOT refunded: it happened, he was away, and a rescue that also
+        cleaned the record would make the sparkline a record of how often he accepted
+        help rather than of how the session went. Quiet, because the hand is about to say
+        its own sentence and "Back. Thank you, sir." on top of it would be two lines
+        fighting over one moment.
+        """
+        self._end_excursion(time.monotonic(), refund=False, quiet=True)
+        self._on_target_now = True
+        return None
+
+    def _ask(self, key):
+        """A line with a Yes and a No behind it, through the one gate as always."""
+        self._emit(LINES[key], "ask")
+        return None
+
     def _callout_pool(self, label=None):
         """Which pool this callout comes out of. Two questions, in order.
 
@@ -2450,6 +3084,13 @@ class FocusSession:
         # like a tab drift and answers to "be harsher with me" the same way.
         if self._off_kind == "phone":
             return CALLOUTS_PHONE_DRILL if self.drill else CALLOUTS_PHONE[self.tier]
+        # THE LOCKED TAB, and it keeps its own pool in BOTH registers rather than
+        # deferring to the drill sergeant's. The drill pools are blunt and general -
+        # "back to work" - and this pool's whole value is the fact in it: you left the
+        # one tab you asked to be held to. Tiers still escalate, so "be harsher with me"
+        # is still answered; it is answered with sharper sentences about the right thing.
+        if self._off_kind == "locked":
+            return CALLOUTS_LOCKED[self.tier]
         named = bool(label) and NAME_DRIFTS
         if self.drill:
             return CALLOUTS_DRILL_NAMED if named else CALLOUTS_DRILL
@@ -2587,6 +3228,10 @@ class FocusSession:
         self.state = "ended"
         self.ended_reason = "aborted"
         self.report = ""
+        # The watcher dies with the session, here rather than at the next tick, because
+        # an ended session never ticks again - the same reason the name scrub is forced
+        # below. "Nothing recorded" has to include "nothing still watching".
+        self._release_watch("")
         # An ended session never ticks again, so the scrub that would have happened on
         # the next tick happens here instead. "Nothing recorded" has to include the
         # sentence that named the place you were when you gave up.
@@ -2599,6 +3244,7 @@ class FocusSession:
             return None
         self.state = "ended"
         self.ended_reason = reason
+        self._release_watch("")          # same reason as abort(): nothing left watching
         # Before the report card is built, for the same reason as in abort(): the last
         # thing in the queue of a finished session is the summary, and the summary has
         # never named anywhere and is not about to start now.
@@ -2700,31 +3346,76 @@ class FocusManager:
 
     def _loop(self):
         """One second, forever, independent of every browser tab in existence.
-        This is why a reload rejoins a session instead of restarting one."""
+        This is why a reload rejoins a session instead of restarting one.
+
+        TWO CADENCES, and only one of them is the tick. The countdown still beats once a
+        second and nothing about that has changed. But a locked TAB cannot be watched at
+        one hertz and still be noticed inside the second and a half the mandate allows -
+        so while a watcher is live this thread wakes every LOCK_POLL_S, asks the tab one
+        question, and forces a tick early the moment the answer CHANGES. A poll that finds
+        the same answer as last time is not news and costs a millisecond.
+
+        The poll happens OUTSIDE the lock. It opens a socket and waits on a browser, and
+        holding the session lock across that would make every /focus request queue behind
+        the watchdog - a freeze caused by the organ that exists to catch freezes.
+        """
+        next_tick = time.monotonic() + TICK_S
         while True:
-            time.sleep(TICK_S)
-            with self._lock:
-                # Stamped before the early return, because this is a fact about the
-                # THREAD and not about the session: "no session" must read as a quiet
-                # heartbeat, not as a freeze.
-                self._tick_at = time.monotonic()
-                self._ticks += 1
-                session = self._session
-                if session is None or session.state == "ended":
-                    continue
-                # len(say) is in here for one reason: the SCRUB. A tick that takes a
-                # named line out of the queue adds no seq and changes no state, so
-                # without this the stream would not push and every connected tab would
-                # go on holding the sentence that named a place long after the server
-                # had dropped it. A shorter queue is a change worth sending.
-                before = (session.seq, session.state, len(session.say))
-                try:
-                    session.tick()
-                except Exception:                              # noqa: BLE001
-                    # A reader that throws must not take the countdown with it.
-                    session.readable = False
-                if before != (session.seq, session.state, len(session.say)):
-                    self._version += 1
+            watch = self._watch()
+            due = max(0.0, next_tick - time.monotonic())
+            flipped = False
+            if watch is None:
+                time.sleep(due if due else TICK_S)
+            else:
+                time.sleep(min(LOCK_POLL_S, due) if due else 0.0)
+                was = watch.state
+                watch.poll()
+                # A verdict that CHANGED is worth a tick now: leaving the tab, and coming
+                # back to it, are both things the boss should hear about before the next
+                # second boundary rather than after it.
+                flipped = watch.state != was
+            now = time.monotonic()
+            if now < next_tick and not flipped:
+                continue
+            if now >= next_tick:
+                next_tick = now + TICK_S
+            self._beat()
+
+    def _watch(self):
+        """The live LockWatch, or None. Only a RUNNING session is watched: a paused one is
+        not being held to anything, and polling a tab through a pause would count a drift
+        against a clock that is deliberately not running."""
+        with self._lock:
+            session = self._session
+            if session is None or session.state != "running":
+                return None
+            watch = session.watch
+            return watch if (watch is not None and watch.live) else None
+
+    def _beat(self):
+        """One tick of the session, and one stamp of the pulse."""
+        with self._lock:
+            # Stamped before the early return, because this is a fact about the
+            # THREAD and not about the session: "no session" must read as a quiet
+            # heartbeat, not as a freeze.
+            self._tick_at = time.monotonic()
+            self._ticks += 1
+            session = self._session
+            if session is None or session.state == "ended":
+                return
+            # len(say) is in here for one reason: the SCRUB. A tick that takes a
+            # named line out of the queue adds no seq and changes no state, so
+            # without this the stream would not push and every connected tab would
+            # go on holding the sentence that named a place long after the server
+            # had dropped it. A shorter queue is a change worth sending.
+            before = (session.seq, session.state, len(session.say))
+            try:
+                session.tick()
+            except Exception:                                  # noqa: BLE001
+                # A reader that throws must not take the countdown with it.
+                session.readable = False
+            if before != (session.seq, session.state, len(session.say)):
+                self._version += 1
 
     # -- commands ----------------------------------------------------------
 
@@ -2800,6 +3491,77 @@ class FocusManager:
                 return None, self._state()
             self._version += 1
             return self._drain(), self._state()
+
+    # -- the locked tab ----------------------------------------------------
+
+    def summon(self):
+        """(line, summoned, state). Bring the boss back to the tab he locked.
+
+        Reached from exactly one place - tools/summon_tab.py, which posts
+        {"cmd": "summon"} to the loopback /focus after the boss said yes at the gate.
+        The hand carries NO parameters, which is the point: the identity of the locked tab
+        lives in this session and nowhere else, so there is no id for anybody to substitute
+        and no way to point this at an arbitrary tab in the browser.
+
+        The line comes back in the REPLY and is deliberately not queued - handle() reports
+        viaSession false for it - because the hand's stdout is the evidence the assistant
+        speaks, and the same sentence arriving twice from two directions is how a careful
+        feature starts sounding broken.
+        """
+        with self._lock:
+            session = self._session
+            live = session is not None and session.state != "ended"
+            watch = session.watch if live else None
+            if watch is None or not watch.live:
+                return LINES["summon_none"], False, self._state()
+        # OUTSIDE THE LOCK. activate() waits up to LOCK_ACTIVATE_S for the browser to
+        # actually put the tab in front - it reads the answer back off the tab rather than
+        # trusting the request - and holding the tick thread out for a second to do that
+        # would be exactly the freeze the pulse is there to catch.
+        done = watch.activate()
+        with self._lock:
+            session = self._session
+            if done and session is not None and session.watch is watch:
+                session.note_summoned()
+            self._version += 1
+            return ((LINES["summoned"] if done else LINES["summon_failed"]),
+                    bool(done), self._state())
+
+    def hand_outcome(self, tool, outcome="done"):
+        """(line, via_session). A proposal the FOCUS SESSION raised has been answered.
+
+        The server calls this wherever a proposal resolves - the voice door and the button
+        door alike - and it is the second half of "no silent degradation": a yes has to
+        finish the job it was asked for, and a no has to be admitted on the card instead
+        of leaving a feature that looks armed and is not.
+
+        A relaunch that worked ends with the lock TAKING ITSELF: the port is up now, so the
+        surface in front is read again through the browser's own account of it and locked
+        properly, teeth and all. That is why the boss said yes.
+        """
+        tool = str(tool or "").strip().lower()
+        good = str(outcome or "").strip().lower() in ("done", "ok", "yes", "success")
+        if tool != "relaunch_chrome":
+            # summon_tab needs nothing here: it speaks through its own stdout and its
+            # refusals are already sentences. Any other tool is none of this file's
+            # business at all.
+            return None, False
+        with self._lock:
+            session = self._session
+            if session is None or session.state == "ended":
+                return None, False
+            if good:
+                # THE CACHE IS THE ONE THING THAT WOULD LIE HERE - see
+                # _forget_capability(). The answer it is holding was taken before the
+                # browser was relaunched.
+                _forget_capability()
+                # from_card, because the press that started this is what brought the
+                # viewer to the front - the same reading the pill itself gets.
+                session.retarget(from_card=True)
+            else:
+                session.decline_tab_lock()
+            self._version += 1
+            return self._drain(), True
 
     def _drain(self):
         """The lines added by the command just handled, as one spoken string."""
@@ -2962,6 +3724,19 @@ class FocusManager:
                 "armingS": (now - session._arm_since) if (live and session.deferred)
                            else 0,
                 "settleNeeded": SETTLE_TICKS,
+                # THE WATCHER. watchers is the leak detector and the reason it is an int
+                # rather than a bool: "how many tabs is this process still polling" is the
+                # question lock_proof.mjs asks after the session ends, and the answer has
+                # to be zero. watchPolls frozen across the same interval is the second
+                # half of the same assertion - a released watcher does not just report
+                # itself gone, it stops asking.
+                "watchers": 1 if (live and session.watch is not None
+                                  and session.watch.live) else 0,
+                "watchPolls": (session.watch.polls
+                               if (live and session.watch is not None) else 0),
+                "watchState": (session.watch.state
+                               if (live and session.watch is not None
+                                   and session.watch.live) else "n/a"),
             }
             reader = session.reader if session is not None else None
         # Outside the lock from here down.
@@ -3003,6 +3778,8 @@ def public_diag(raw):
             text = "" if value is None else str(value)
             if key in ("appLane", "tabLane", "postureLane"):
                 out[key] = text if text in LANES else "unknown"
+            elif key == "watchState":
+                out[key] = text if text in WATCH_STATES else "n/a"
             elif key == "tabRead":
                 out[key] = text if text in TAB_READS else "unknown"
             elif key == "state":
@@ -3084,6 +3861,13 @@ def public_state(session):
             # there are two possible answers and both of them are about this app.
             "postureDrift": (session._off_kind == "phone" and session._counted
                              and session.state == "running"),
+            # THE LOCKED TAB, for the card. Read straight off the live watcher rather
+            # than from a copy kept beside it, so that "LOCKED: <title>" cannot outlive
+            # the thing it describes by even one frame: release() empties the title, and
+            # a released watcher is not this session's watcher any more either way.
+            "lockedTab": (session.watch.title
+                          if (session.watch is not None and session.watch.live) else ""),
+            "tabLockWhy": session.tab_lock_why,
         }
         raw.update(eyes_raw)
 
@@ -3105,6 +3889,16 @@ def public_state(session):
                 out[key] = text if text in STATES else "idle"
             elif key == "endedReason":
                 out[key] = text if text in END_REASONS else ""
+            elif key == "tabLockWhy":
+                # One word out of the fixed set or nothing at all. The enumeration is the
+                # guard: it is what makes it impossible for a reason to reach the wire as
+                # a sentence somebody wrote at a call site.
+                out[key] = text if text in TAB_LOCK_WHY else ""
+            elif key == "lockedTab":
+                # Cut again HERE as well as in LockWatch, because this is the last line
+                # before the wire and a bound that is only enforced at the source is a
+                # bound that the next constructor forgets.
+                out[key] = text[:LOCK_TITLE_CHARS]
             else:
                 out[key] = text
         elif kind is list:
@@ -3319,6 +4113,18 @@ def handle(payload):
         return 400, {"ok": False, "kind": "focus", "nodes": [],
                      "answer": "", "error": "The eyes report to POST /eyes.",
                      "focus": MANAGER.state()}
+
+    if cmd == "summon":
+        # THE ONE COMMAND WITH A THIRD ANSWER. Every other command replies with a line and
+        # a state; this one also has to say whether the screen actually changed, because
+        # the hand on the other end of it reports success or failure to the boss on the
+        # strength of this boolean and must not guess. viaSession is false and stated
+        # rather than computed: the line is in this reply and in no queue, so the caller -
+        # tools/summon_tab.py - is the only one who can say it.
+        line, done, state = MANAGER.summon()
+        return 200, {"ok": True, "kind": "focus", "nodes": [], "viaSession": False,
+                     "answer": line or "", "cmd": cmd, "summoned": bool(done),
+                     "focus": state}
 
     seq_before = MANAGER.say_seq()
     answer, state = MANAGER.command(cmd, minutes=kwargs.get("minutes"),

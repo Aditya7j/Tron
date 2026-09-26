@@ -106,6 +106,40 @@
       "proposal": "You are hearing {current} at the moment, sir. That would make it {voice} from the next word on. Shall I change the voice?"
     },
     {
+      "id": "relaunch_chrome",
+      "name": "Relaunch Chrome with the debugging port",
+      "script": "relaunch_chrome.py",
+      "capabilities": [
+        "open Chrome's debugging port so a focus session can lock a TAB rather than the whole browser",
+        "restart the browser with the debugging port when locking a tab is impossible without it",
+        "put back the tab-level watching that a browser started without the port cannot do"
+      ],
+      "triggers": [
+        "\\brelaunch\\b[^.]{0,20}\\b(?:chrome|browser)\\b",
+        "\\bdebugg?ing\\s+port\\b",
+        "\\bremote[-\\s]debugging\\b",
+        "\\b(?:restart|reopen)\\b[^.]{0,20}\\bchrome\\b"
+      ],
+      "params": [],
+      "timeout_s": 120,
+      "proposal": "I need Chrome relaunched with the debugging port to lock a tab, sir. Shall I?"
+    },
+    {
+      "id": "summon_tab",
+      "name": "Bring you back to the locked tab",
+      "script": "summon_tab.py",
+      "capabilities": [
+        "bring the employer back to the tab he locked a focus session on"
+      ],
+      "triggers": [
+        "\\bbring\\s+me\\s+back\\b",
+        "\\btake\\s+me\\s+back\\b[^.]{0,20}\\btab\\b"
+      ],
+      "params": [],
+      "timeout_s": 15,
+      "proposal": "Shall I bring you back?"
+    },
+    {
       "id": "selftest",
       "name": "Test the hands themselves",
       "script": "selftest.py",

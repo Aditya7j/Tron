@@ -95,6 +95,62 @@ import search as websearch
 # no tool outside tools/registry.json exists, and nothing runs without a human word.
 import hands
 
+
+# THE ONE WIRE BETWEEN THE TIMER AND THE HANDS, and it points this way on purpose.
+#
+# focus.py raises two gated offers of its own - relaunch Chrome for the debugging port,
+# and bring me back to the locked tab - and it must be able to ask for them without
+# importing this file or hands.py: it is imported by a privacy test, a preflight check
+# and several harnesses that have no server around them, and a registry read inside all
+# of those would be a dependency bought for nothing. So it declares a hook, this file
+# fills it in, and the coupling lives here where both modules are already known.
+def _focus_ask_hand(tool_id):
+    """Put one of the focus session's offers in the gate. True if there is now a
+    question the boss can answer.
+
+    IT NEVER SUPERSEDES. hands.propose() will happily push an existing proposal out of
+    the slot with an "I'll leave that" line, which is right when the boss himself has
+    just asked for something else and wrong here: he did not ask for this, and an offer
+    that arrives on its own has no business cancelling the email he is halfway through
+    approving. So a full slot is simply a no, and the session says its plain sentence
+    instead of asking a question.
+    """
+    try:
+        if hands.pending_public():
+            return False
+        status, _payload = hands.propose(tool_id, "", door="focus")
+        return status == 200
+    except Exception:                                          # noqa: BLE001
+        # A registry that will not read is not a reason for the countdown to stop.
+        return False
+
+
+def _hand_resolved(payload):
+    """A proposal has been answered, at whichever door. Tell the focus session.
+
+    It is called on EVERY outcome - ran, refused, failed, lapsed - and at every door,
+    because a feature that completes itself only when you click the button is a feature
+    that lies to the ear. The session cares about exactly one tool and ignores the rest;
+    what it does with the news is its own business (see FocusManager.hand_outcome), and
+    the line it may produce goes into its say queue, where every open tab speaks it once.
+
+    A yes is "ran" and nothing else. hands.execute() reports a failed script with the
+    tool id but without `ran`, which is precisely the case where the lock must NOT report
+    itself completed: the browser did not come back, so the card says why instead.
+    """
+    if not isinstance(payload, dict):
+        return
+    tool = str(payload.get("ran") or payload.get("tool")
+               or payload.get("lapsed") or "")
+    if not tool:
+        return
+    try:
+        focus.MANAGER.hand_outcome(tool, "done" if payload.get("ran") else "no")
+    except Exception:                                          # noqa: BLE001
+        pass
+
+
+focus.ASK_HAND = _focus_ask_hand
 # THE LOCAL VOICE. Text in, WAV bytes out, through the piper binary as a subprocess -
 # no pip dependency and nothing leaving the machine. Its own file for the same reason
 # the three above have theirs: it owns a cache directory, a concurrency gate and the
@@ -611,11 +667,17 @@ BOOT_GREETING = {
     "afternoon": "Good afternoon",
     # A butler treats 2am as the tail of the evening, not the start of the day.
     "evening": "Good evening",
-    "template": "{salutation}, sir. {notes} indexed, all present and accounted for.",
+    # {assistant} and {call} are filled in from the persona block by the /persona route,
+    # so his name is written down once in this file and nowhere else. {salutation} and
+    # {notes} are still the browser's to fill: the clock is the reader's, not the server's.
+    # This is the one line in the whole product where he introduces himself unasked, which
+    # is exactly where a butler does it - at the door, once, and then never again.
+    "template": "{salutation}, {call}. {assistant} here - {notes} indexed, all present "
+                "and accounted for.",
     "one": "1 note",
     "many": "{n} notes",
-    "empty": "{salutation}, sir. Not a single note indexed, which makes my "
-             "position here largely ceremonial.",
+    "empty": "{salutation}, {call}. {assistant} here, with not a single note indexed, "
+             "which makes my position largely ceremonial.",
 }
 
 # THE BACKCHANNEL. What the butler says when the employer says nothing: "ok", "got it",
@@ -684,6 +746,209 @@ COMPOSE_PROMPT = (
     "assistance."
 )
 
+# ----------------------------------------------------------------- WHO HE IS
+#
+# HIS NAME IS GALAXY, AND THE BOSS HAS TWO NAMES. Until this round the assistant had no
+# name of its own in any string a person could read: the prompts called it "the butler",
+# the launcher called it Jarvis, and the page's floating card was titled after a film
+# character. That is not a cosmetic complaint. A butler who cannot say who he is cannot
+# answer "who are you", and every one of those questions was falling through the funnel to
+# a web search - the machine looking up its own name on the internet, which is the single
+# most embarrassing failure this file has ever had.
+#
+# So the four values below are the whole of his identity, they live in config.json where
+# the boss owns them, and they are INJECTED INTO EVERY BRAIN CALL rather than typed into
+# the seven prompt constants above. The reason is the same one that generated the hands
+# block from the registry: a name that is written down in seven places is a name that is
+# wrong in six of them by Christmas.
+#
+#   assistant    what he is called. Galaxy.
+#   boss_formal  the full, formal name, used in identity answers and nowhere casual.
+#   boss_call    what he actually calls the boss in warm speech. Addi.
+#   self_intro   the one sentence he introduces himself with, verbatim.
+#
+# The register rule, because it is easy to get backwards: WARM LINES USE Addi - an answer,
+# an acknowledgment, a nudge. FORMAL LINES MAY KEEP "sir" - the consent gates, the
+# refusals, the drift callouts, anything with the weight of a request for permission
+# behind it. And an identity answer always names both, because "who are you" is a question
+# about whose assistant he is, not only about what he is called.
+PERSONA_DEFAULT = {
+    "assistant": "Galaxy",
+    "boss_formal": "Sir Aditya Singh",
+    "boss_call": "Addi",
+    "self_intro": ("I am Galaxy, the personal assistant of Sir Aditya Singh - Addi, "
+                   "to those he serves."),
+}
+
+
+def persona(cfg=None):
+    """The persona block: config.json's values laid over the defaults above.
+
+    Blank and missing are the same thing here - an empty string in config.json gets the
+    default back rather than erasing his name, because a nameless assistant is the bug
+    this block exists to fix and a typo should not be able to reintroduce it.
+    """
+    out = dict(PERSONA_DEFAULT)
+    block = (cfg or {}).get("persona")
+    if isinstance(block, dict):
+        for key in out:
+            value = block.get(key)
+            if isinstance(value, str) and value.strip():
+                out[key] = value.strip()
+    return out
+
+
+def persona_prompt(cfg=None):
+    """Who he is, in front of every system prompt this server sends."""
+    who = persona(cfg)
+    return (
+        "WHO YOU ARE\n"
+        "- Your name is %(assistant)s. You are the personal assistant of %(formal)s, "
+        "and you have served him long enough to call him %(call)s.\n"
+        "- Asked who or what you are, say it in your own voice, beginning from this: "
+        "\"%(intro)s\" Never answer that question with a search, never describe "
+        "yourself as a language model, and never give any other name - there is no "
+        "other name.\n"
+        "- Asked who HE is, or what his name is, or whether you know him: you do. He is "
+        "%(formal)s, and you call him %(call)s.\n"
+        "- HOW YOU ADDRESS HIM. In warm speech - an answer, an acknowledgment, a "
+        "remark - call him %(call)s. Keep \"sir\" for the formal moments: asking his "
+        "permission, declining something, calling him back to his work. Never both in "
+        "one sentence, and never in every sentence.\n"
+        % {"assistant": who["assistant"], "formal": who["boss_formal"],
+           "call": who["boss_call"], "intro": who["self_intro"]}
+    )
+
+
+# ------------------------------------------------- WHAT HE CAN DO, COUNTED AT START-UP
+#
+# THE MANIFEST IS GENERATED, NEVER WRITTEN. "What can you do" is a question about this
+# machine as it stands right now, so the answer is assembled at start-up out of the live
+# registry and the live organs rather than described in prose by me. A hand added to
+# tools/registry.json tomorrow is a capability he can name tomorrow, with no retraining
+# and no editing of this file - which is the whole point, and which capabilities_proof
+# tests by dropping a canary hand into a temporary registry, restarting, and asking him.
+#
+# It is deliberately SHORT. Every token here is paid on every brain call, and the brain
+# does not need the parameter shapes - hands.prompt_block() teaches those where they are
+# actually needed. This is a list of true sentences about himself, so that a free-form
+# answer stays in character instead of inventing an ability or disclaiming a real one.
+_MANIFEST = {"text": "", "built": "", "hands": (), "spoken": ""}
+
+
+def build_capabilities_manifest(cfg=None):
+    """Count the organs and the registry, and write the manifest. Called at start-up.
+
+    NEVER RAISES. A manifest is a nice-to-have on top of a working server, and an
+    assistant who will not answer a question about the notes because his self-description
+    could not count the archive is worse than one whose self-description is vague. Each
+    organ is counted in its own try for the same reason.
+    """
+    who = persona(cfg)
+    hand_lines, hand_ids = [], []
+    try:
+        for tool in hands.registry():
+            # The human name, not the id: this is what he SAYS he can do, and "Write
+            # something into the calendar" is how the boss would put it. selftest is
+            # included because it is a real, listed hand, and pretending it is not would
+            # make the manifest a curated brochure instead of a mirror of the registry.
+            hand_lines.append(tool["name"].strip().rstrip("."))
+            hand_ids.append(tool["id"])
+    except Exception:                                          # noqa: BLE001
+        pass
+
+    notes = 0
+    try:
+        ensure_index()
+        with _lock:
+            notes = len(_index["notes"] or ())
+    except Exception:                                          # noqa: BLE001
+        pass
+
+    archive = ""
+    try:
+        if ingest is not None:
+            st = ingest.store_state(None)
+            if st.get("on") and st.get("files"):
+                archive = ("; and a semantic archive of %d document%s, read in passages, "
+                           "which you cite by file and page"
+                           % (st["files"], "" if st["files"] == 1 else "s"))
+    except Exception:                                          # noqa: BLE001
+        pass
+
+    voice = ""
+    try:
+        if say.ready():
+            voice = " You speak in a local voice on this machine - no cloud, no account."
+    except Exception:                                          # noqa: BLE001
+        pass
+
+    lines = ["WHAT YOU CAN ACTUALLY DO, counted on this machine when the server started. "
+             "This is the whole list. Do not recite it unless he asks what you can do, "
+             "and never claim anything that is not on it.\n"]
+    if hand_lines:
+        lines.append("- HANDS, things you DO rather than say. %s. Every one of them is "
+                     "put to him for a yes before it runs, and you never say a thing is "
+                     "done until it is.\n" % _phrase(hand_lines))
+    lines.append("- SENSES. You can look at his screen when he asks (the Eyes), keep a "
+                 "quiet watch on it during a session and say something if it has not "
+                 "moved (the Watch), and listen to the room with your ear open for a "
+                 "whole conversation rather than one question (the Open Ear).\n")
+    lines.append("- MIND. %d note%s of his own writing, indexed and standing in front of "
+                 "him as a galaxy%s. You may also knock on the live web, but only for a "
+                 "question about the world, and you say when you have.\n"
+                 % (notes, "" if notes == 1 else "s", archive))
+    lines.append("- FOCUS. You can hold a timed working session for him and lock it to "
+                 "one tab, count what pulled him away, and call him back to it.%s\n"
+                 % voice)
+    lines.append("- AND WHAT YOU CANNOT. You have no hand that is not named above. If he "
+                 "asks for one, say plainly that you have not been given it - do not "
+                 "improvise a way, and do not promise it for later.")
+    # AND THE SAME FACTS, SAID OUT LOUD, for when the question is put to him directly.
+    # One count, two renderings: the block above is for the model to read and this is for
+    # the boss to hear, so "what can you do" is answered from the registry as it stands
+    # rather than from whatever the model remembers of the paragraph above. A hand added
+    # tomorrow appears in BOTH on the next start, which is the whole claim of this section.
+    spoken = ["I am %s, %s. " % (who["assistant"], who["boss_call"])]
+    if hand_lines:
+        spoken.append("I have hands: %s - each one put to you for a yes before it runs. "
+                      % _phrase(hand_lines))
+    else:
+        spoken.append("I have no hands configured just now, so there is nothing I can "
+                      "do for you beyond looking and answering. ")
+    spoken.append("I have senses: I can look at your screen, keep a watch on it while "
+                  "you work, and hold the ear open for a whole conversation. ")
+    spoken.append("I have a mind: %d note%s of yours, indexed%s, and the live web when "
+                  "the question is about the world. "
+                  % (notes, "" if notes == 1 else "s",
+                     archive.replace("; and a semantic archive of",
+                                     ", and an archive of").split(", which you")[0]
+                     if archive else ""))
+    spoken.append("And I hold your focus: a timed session locked to one tab, the drifts "
+                  "counted, and a way back to it. That is the whole list, sir - if you "
+                  "ask me for something that is not on it, I shall say so.")
+    _MANIFEST.update({"text": "".join(lines), "hands": tuple(hand_ids),
+                      "spoken": "".join(spoken),
+                      "built": time.strftime("%Y-%m-%d %H:%M:%S")})
+    sys.stderr.write("server.py: %s knows %d hand%s: %s\n"
+                     % (who["assistant"], len(hand_ids),
+                        "" if len(hand_ids) == 1 else "s",
+                        ", ".join(hand_ids) or "none"))
+    return _MANIFEST["text"]
+
+
+def capabilities_manifest(cfg=None):
+    """The manifest, built on first use if start-up has not got to it yet."""
+    if not _MANIFEST["text"]:
+        build_capabilities_manifest(cfg)
+    return _MANIFEST["text"]
+
+
+def brain_preamble(cfg=None):
+    """Who he is and what he can do, prefixed to every system prompt. See call_model."""
+    return persona_prompt(cfg) + "\n" + capabilities_manifest(cfg) + "\n\n"
+
+
 # =========================== end of the persona block ========================
 
 # ---------------------------------------------------------------- configuration
@@ -737,13 +1002,31 @@ DEFAULT_CONFIG = {
         "gpt-6": "openai/gpt-6-astra",
     },
 
+    # ---- WHO HE IS. See PERSONA_DEFAULT near the top of this file for what each of the
+    # four values does and for the Addi/sir register rule. They are injected into every
+    # brain call, so editing them here changes how he speaks everywhere at once - there is
+    # no second place his name is written down.
+    "persona": {
+        "assistant": "Galaxy",
+        "boss_formal": "Sir Aditya Singh",
+        "boss_call": "Addi",
+        "self_intro": ("I am Galaxy, the personal assistant of Sir Aditya Singh - Addi, "
+                       "to those he serves."),
+    },
+
     # ---- WHAT YOU CALL IT. Every name you address the assistant by, so that the name
     # can be peeled off a greeting instead of being searched for. See VOCATIVES: these
     # join a fixed list (sir, boss, computer, assistant, buddy, mate...) and are only ever
     # treated as an address by POSITION, so a real question about the word - "who is
     # JARVIS in the Marvel films?" - still travels. Rename it here and the next question
     # honours it; no restart.
-    "assistant_names": ["jarvis", "tron"],
+    #
+    # "galaxy" leads because that is his name now. The two old ones STAY, and deliberately:
+    # this list is an input vocabulary, not a label anybody reads, and the boss has said
+    # "jarvis" to this machine for months. Retiring a name he can see is the mandate;
+    # refusing to answer to a name he might still say out of habit would be a regression
+    # dressed up as tidiness.
+    "assistant_names": ["galaxy", "jarvis", "tron"],
 
     # ---- THE WEB LOOKUP. Both blank by default and meant to stay that way: the
     # search in search.py works with no key and no account, and these exist only so
@@ -1326,7 +1609,7 @@ CHATTER_RE = re.compile(r"""(?:
 # must win over the bare `look this up` it contains, or the peel would leave "jarvis".
 FORCE_WEB_RE = re.compile(r"""
     (?:^|\b)(?:
-        (?: hey \s+ | ok(?:ay)? \s+ )? jarvis \b [\s,.:;!-]*
+        (?: hey \s+ | ok(?:ay)? \s+ )? (?: galaxy | jarvis | tron ) \b [\s,.:;!-]*
           (?: please \s+ )? (?: can \s+ you \s+ )? (?: go \s+ and \s+ )?
           (?: look \s+ (?: this | that | it ) \s+ up
             | look \s+ up
@@ -1619,6 +1902,431 @@ def task_intent(question):
     return bool(TASK_RE.match(peeled))
 
 
+# ======================= THE FOUR PROTECTED CLASSES ==========================
+#
+# FOUR KINDS OF THING HE SAYS THAT MUST NEVER COST A LOOKUP, and they are in an order.
+# Each of them is a sentence about THIS MACHINE - the offer awaiting a word, whether the
+# ear is open, who he is, who I am, what I can do - and every one of them was, at some
+# point, answered by going and looking somewhere: "can you listen to me" spent a real web
+# search, and "what's my name" came back kind=notes with six of his own notes lit behind
+# an answer that was not in them. That is not a tuning problem. A question about the room
+# cannot be answered by anything outside it, so the retrieval is not merely wasteful, it
+# is a category error, and the fix is a funnel above the retrieval rather than a threshold
+# inside it.
+#
+# THE ORDER IS THE FEATURE:
+#   1 CONFIRMATION   while an offer lives, "yes" is that word and nothing else. Above all.
+#   2 META           "are you there" is about the ear, not about the world.
+#   3 IDENTITY       who you are, who he is, what you can do - persona and manifest.
+#   4 DIRECTIVES     the Third Door and the registry's hands, exactly as built.
+# Only when all four miss do the notes and the web get a say, and the web needs one more
+# thing besides - see web_intent(): a question about the WORLD.
+#
+# EVERY ONE OF THEM IS ANSWERED FROM STATE, NOT FROM A MODEL. Deterministic, so the same
+# sentence said twice gets the same answer, so the spoken fixture and the typed fixture can
+# be compared at all, and so a canary hand dropped into the registry is either named or not
+# named rather than probably mentioned. The persona block and the manifest are the source;
+# they are also injected into every brain call, so a free-form answer that wanders near
+# these subjects is in the same character as the fixed ones.
+
+PROTECTED_CLASSES = ("confirmation", "meta", "identity", "directive")
+
+
+def _addressless(question):
+    """The message with every ADDRESS taken out wherever it stands, then the pleasantries
+    and the filler peeled off the front. "hey galaxy are you there" -> "are you there".
+
+    THIS FORM IS READ BY THE PROTECTED CLASSES AND BY NOTHING ELSE, which is what makes it
+    safe. _strip_address() is careful about position - it has to be, because "who is JARVIS
+    in the Marvel films?" is a real question about a word that is also a name, and the notes
+    and the web both read the form it produces. Here the only question being asked of the
+    text is "is this whole utterance one of a few dozen fixed things about this machine?",
+    and a stray name in the middle of one of those ("yes yes do it galaxy") is an address by
+    construction. If the answer is no, this form is thrown away and the ordinary funnel
+    reads the ordinary one.
+    """
+    alts = "|".join(re.escape(w) for w in dict.fromkeys(_VOC["names"] + VOCATIVES))
+    bare = re.sub(r"\b(?:%s)\b" % alts, " ", _bare(question), flags=re.IGNORECASE)
+    return _peel(re.sub(r"\s+", " ", bare).strip())
+
+
+# THE NOISE HE MAKES BEFORE HE STARTS TALKING. Used by the protected classes and by
+# nothing else: FILLER_RE and PLEASANTRY_RE are read by _strip_address() and the whole
+# funnel below it, and widening them to swallow "umm" would change what counts as a
+# substantial question everywhere. Here it only ever decides whether one whole utterance is
+# one of a few dozen fixed things about this machine, so it can afford to be deaf to noise.
+_LEAD_NOISE_RE = re.compile(r"""^(?:
+      u+m+h? | e+r+m* | a+h+ | h+m+ | oh | uh+ | eh
+    | hey | hi | yo | hiya | so | well | alright | okay | ok | now | just | anyway
+  )\b[\s,]*""", re.IGNORECASE | re.VERBOSE)
+
+
+def _addressless_forms(question):
+    """Every form the message passes through as the pleasantries come off the front, the
+    longest first. ("hey are you there", "are you there") - and the empty string never.
+
+    _peel() IS ALLOWED TO BE GREEDY. Its contract, written in its own docstring, is that
+    "hey there, thanks, so..." comes away to nothing, and the price of that contract is that
+    "are you there" comes away to nothing too: "there" is a greeting's second half to the
+    tokeniser, and the tokeniser is right about nine sentences in ten. It is not right about
+    this one. _strip_address() depends on that greed - the trailing-vocative rule works by
+    asking whether the head peels to nothing - so the greed stays and the rungs are kept
+    instead.
+
+    FAILURE MODE THIS CATCHES: "hey galaxy are you there", one of the boss's own sentences,
+    written into the mandate by hand. The name came off, the peel ate the rest, class 2 was
+    handed the empty string and had nothing to match, and the sentence went down the funnel
+    to the notes and the web - a search engine asked whether anyone was listening. Now
+    "are you there" is one of the rungs, and one rung matching is a match.
+    """
+    forms, seen = [], set()
+
+    def rung(text):
+        text = re.sub(r"\s+", " ", str(text or "")).strip()
+        if text and text not in seen:
+            seen.add(text)
+            forms.append(text)
+        return text
+
+    # Rung nought is the message with its NAMES STILL IN IT, because one of the boss's own
+    # identity questions is "whose assistant are you" - and "assistant" is a vocative, so
+    # the stripper below takes it out and leaves "whose are you", which is not English and
+    # matches nothing. A fixed phrase that happens to contain an address word is still a
+    # fixed phrase, and every pattern read here is anchored to the whole utterance, so
+    # keeping this rung cannot widen anything: "who is jarvis in the Marvel films" matches
+    # no class with the name in and none with it out.
+    alts = "|".join(re.escape(w) for w in dict.fromkeys(_VOC["names"] + VOCATIVES))
+    step = rung(_bare(question))
+    step = rung(re.sub(r"\b(?:%s)\b" % alts, " ", step, flags=re.IGNORECASE))
+    # ONE SUBSTITUTION PER RUNG. _peel() runs a pleasantry and a filler in the same pass,
+    # which can step over the form that was wanted: "umm so are you still there" would go
+    # from noise straight past "are you still there" in a single stride.
+    for _ in range(10):
+        for pattern in (PLEASANTRY_RE, FILLER_RE, _LEAD_NOISE_RE):
+            shorter = re.sub(r"\s+", " ", pattern.sub("", step, count=1)).strip()
+            if shorter != step:
+                break
+        if shorter == step:
+            break
+        step = rung(shorter)
+    return tuple(forms)
+
+
+def confirmation_in(question):
+    """"yes", "no", or "" - the word of consent inside a message, vocatives and all.
+
+    hands.is_confirmation() insists on the WHOLE message being the answer, and it is right
+    to: "yes, and what is the population of Tokyo" is a new subject. But the boss says
+    "yes yes do it galaxy", and the whole of that message IS the answer once his name comes
+    off. So the raw form is tried first - it is the strict one - and then the addressless
+    form, which can only ever have lost pleasantries and names.
+
+    FAILURE MODE THIS CATCHES: the name at the end made "yes yes do it galaxy" a new
+    subject, which withdrew the offer he was accepting and then searched the notes for the
+    words "yes yes do it". Twice wrong from one missing peel.
+    """
+    for form in (str(question or ""), _addressless(question)):
+        if not form.strip():
+            continue
+        if hands.is_confirmation(form):
+            return "yes"
+        if hands.is_refusal(form):
+            return "no"
+    return ""
+
+
+# CLASS 2, META-CONVERSATIONAL. He is not asking about the world, he is asking whether
+# anyone is on the other end. Anchored whole-utterance on the addressless form, because
+# "can you listen to me" is this class and "can you listen to this recording and tell me
+# what key it is in" is not.
+META_RE = re.compile(r"""^(?:
+      (?:can|could|will|would|are)\s+you\s+(?:please\s+)?
+        (?:listen|listening|hear|hearing)(?:\s+(?:to\s+)?me)?
+    | do\s+you\s+(?:hear|understand)\s+me
+    | (?:are|you)\s+(?:you\s+)?(?:there|awake|around|alive|with\s+me|listening)
+    | is\s+(?:anyone|anybody|someone)\s+(?:there|listening)
+    | listen(?:\s+to\s+me)? | pay\s+attention | talk\s+to\s+me | speak\s+to\s+me
+    | (?:are\s+you\s+)?still\s+(?:there|listening|with\s+me)
+  )$""", re.IGNORECASE | re.VERBOSE)
+
+# CLASS 3, IDENTITY AND CAPABILITIES, in three questions: who are you, who am I, what can
+# you do. Every one of them is answered out of the persona block and the manifest.
+IDENTITY_SELF_RE = re.compile(r"""^(?:
+      who(?:\s+exactly)?\s+are\s+you | what\s+are\s+you
+    | who\s+are\s+you\s+(?:really|then) | what'?s\s+your\s+name
+    | what\s+is\s+your\s+name | who\s+am\s+i\s+talking\s+to
+    | whose\s+assistant\s+are\s+you | who\s+do\s+you\s+work\s+for
+    | who\s+is\s+your\s+(?:boss|employer|master)
+    | (?:please\s+)?introduce\s+yourself | tell\s+me\s+about\s+yourself
+  )$""", re.IGNORECASE | re.VERBOSE)
+IDENTITY_BOSS_RE = re.compile(r"""^(?:
+      who\s+am\s+i | what'?s\s+my\s+name | what\s+is\s+my\s+name
+    | do\s+you\s+know\s+(?:me|who\s+i\s+am) | do\s+you\s+remember\s+me
+    | what\s+do\s+you\s+call\s+me | say\s+my\s+name
+  )$""", re.IGNORECASE | re.VERBOSE)
+CAPABILITY_RE = re.compile(r"""^(?:
+      what\s+can\s+you\s+do(?:\s+for\s+me)? | what\s+are\s+you(?:r)?\s+capabilit(?:y|ies)
+    | what\s+else\s+can\s+you\s+do | what\s+are\s+you\s+able\s+to\s+do
+    | help(?:\s+me)? | what\s+do\s+you\s+do
+    | (?:what|which)\s+(?:things|tools|hands)\s+(?:can|do)\s+you\s+(?:do|have)
+  )$""", re.IGNORECASE | re.VERBOSE)
+
+
+# SPOKEN TO HIM, NOT ABOUT THE WORLD. The last clause of the funnel: after all four
+# protected classes have missed, the notes and the web decide - and the web needs one thing
+# more than "the notes are thin", which is that the question be about the WORLD.
+#
+# "Can you listen to me" is the sentence that taught this. It is not in class 2 only by
+# accident of wording - "can you hear me alright", "are you able to understand my accent",
+# "do you follow" all arrive the same way - and every one of them used to reach the gate as
+# a substantial question the notes held nothing on, which is precisely "thin", which spent a
+# real search on a real search engine asking it about the boss's own microphone. The class
+# list can never be complete; this is the rule that makes an incomplete list safe.
+SECOND_PERSON_RE = re.compile(r"""^(?:
+      (?:can|could|will|would|do|did|are|were|have|has|should|shall)\s+you\b
+    | you\s+(?:can|could|are|were|will|would|do|did)\b
+    | (?:tell|show|remind)\s+me\s+(?:about\s+)?your\b
+    | what'?s?\s+your\b | what\s+is\s+your\b | how\s+are\s+you\b
+  )""", re.IGNORECASE | re.VERBOSE)
+
+
+def spoken_to_him(question):
+    """Is this addressed to the assistant about himself, rather than asked of the world?
+
+    Reads every rung for the same reason class 2 does: "hey galaxy can you hear me" must not
+    reach a search engine because one greeting stood in front of the pronoun.
+    """
+    return any(SECOND_PERSON_RE.match(form) for form in _addressless_forms(question))
+
+
+def spoken_capabilities(cfg=None):
+    """What he can do, SAID OUT LOUD, off the same count the brain's manifest was built
+    from - see build_capabilities_manifest(), which puts the sentence in _MANIFEST.
+
+    Not a second description of the machine. A second description is a second thing to
+    forget to update, and the failure mode is the one this whole Part is about: an
+    assistant who names a hand he has not got, or does not name one he has.
+    """
+    if not _MANIFEST["spoken"]:
+        build_capabilities_manifest(cfg)
+    return _MANIFEST["spoken"]
+
+
+def protected_answer(question, cfg=None, ear_open=False):
+    """(class, payload) for a message that is about this machine, else (None, None).
+
+    Classes 2 and 3 only. Class 1 lives above this in _hands_gate(), where the pending
+    offer is, and class 4 is the Third Door and the registry, which answer_question()
+    already owns. Zero retrieval either way: this function reaches the notes, the archive
+    and the web exactly never, which is asserted rather than asserted-to in routing_proof.
+    """
+    forms = _addressless_forms(question)
+    if not forms:
+        return None, None
+
+    def said_it(pattern):
+        """Any rung of the peel, whole. See _addressless_forms(): the fully peeled form is
+        the usual reading, but a sentence that peels to nothing was still said."""
+        return any(pattern.match(form) for form in forms)
+
+    who = persona(cfg)
+    line = ""
+    name = ""
+    if said_it(META_RE):
+        name = "meta"
+        # FROM LIVE STATE, not from a hopeful fixed string. He is asking whether the ear
+        # is open; answering "the ear is open" to a shut ear would be the same class of
+        # lie as a frozen level bar that reads like a shut mouth.
+        line = ("I am listening, %s - the ear is open and the room is yours."
+                % who["boss_call"]) if ear_open else (
+                "I am here, %s - the ear is shut just now, so I have this one message. "
+                "Open it and the room is yours." % who["boss_call"])
+    elif said_it(IDENTITY_SELF_RE):
+        name = "identity"
+        line = who["self_intro"]
+    elif said_it(IDENTITY_BOSS_RE):
+        name = "identity"
+        line = ("You are %s, sir - %s, when we are talking like this."
+                % (who["boss_formal"], who["boss_call"]))
+    elif said_it(CAPABILITY_RE):
+        name = "identity"
+        line = spoken_capabilities(cfg)
+    if not name:
+        return None, None
+    return name, {"ok": True, "kind": "chat", "nodes": [], "answer": line,
+                  "route": name, "lookups": 0, "protected": name}
+
+
+# ================== PART B: TALKING ABOUT THE OFFER ==========================
+#
+# WHILE AN OFFER LIVES, NOT EVERYTHING IS A YES, A NO, OR A CHANGE OF SUBJECT. He asks
+# what address it is going to. He says make it tomorrow instead. He asks why. Before this
+# section those three were all "a new substantive question", which withdrew the offer he
+# was in the middle of examining and then went and searched the notes for the words he had
+# used to examine it. The offer he was about to accept was gone and something irrelevant
+# was lit behind an answer to a question he had not asked.
+#
+# So: a message that is ABOUT the offer keeps the offer alive and goes to the brain with
+# the offer in front of it. A message that is a genuine new request still releases the slot
+# with its own line, exactly as before - silence is not consent and neither is a change of
+# subject. The whole difficulty is telling those two apart, and it is done with two signals
+# and an order, each of which names what it is there to prevent.
+_AMEND_RE = re.compile(r"""(?:
+      \binstead\b | \brather\s+than\b | \bnot\s+\w+\s+but\b
+    | \bchange\s+(?:it|that|the|to)\b | \bmake\s+it\b | \bmake\s+that\b
+    | \buse\s+(?:this|that|the)\s+\w+\s+instead\b
+    | \bactually\b | \bon\s+second\s+thought
+    | \badd\b | \balso\s+(?:say|put|send|cc)\b | \bwithout\b
+    | \b(?:shorter|longer|softer|warmer|firmer|later|earlier)\b
+    | \bsend\s+it\s+to\b | \bcall\s+it\b
+    # "SAY" IS AN INSTRUCTION ONLY WHERE IT IS ADDRESSED TO ME. It has to be here at all
+    # because "say it warmer" and "just say sorry at the end" are amendments to a draft on
+    # the card and nothing else in this pattern would catch them. It was written \bsay\s+,
+    # which is the whole verb wherever it appears - and the verb appears in the middle of
+    # ordinary questions that have nothing to do with any offer.
+    #
+    # FAILURE MODE THIS CATCHES, and it was live: "what do my notes say about coffee" asked
+    # while a calendar proposal stood matched on "say about", so the change of subject was
+    # read as an amendment. The offer was neither executed nor released, the withdrawal line
+    # was never spoken, the page was handed the same pending slot back and re-drew the card,
+    # and the boss's actual question was answered as a remark about a reminder. Silence is
+    # not consent - and neither is a regex that swallows the change of subject. So the verb
+    # must be IMPERATIVE: at the head of what he said once the address is off it, or
+    # pointing at the offer with its object.
+    | (?:^|,\s*|\band\s+|\balso\s+|\bjust\s+|\bplease\s+|\bcan\s+you\s+)say\b
+    | \bsay\s+(?:it|that|this)\b
+  )""", re.IGNORECASE | re.VERBOSE)
+# A reference back to the thing on the table. The offer's own subject, pointed at rather
+# than named: the one word that separates "is it going to the right person" from "what is
+# react", both of which are questions and only one of which is about the offer.
+_DEICTIC_RE = re.compile(r"""\b(?:
+      it | it'?s | its | that | this | those | these | them | the\s+one | the\s+email
+    | the\s+message | the\s+draft | the\s+invite | the\s+meeting | you
+  )\b""", re.IGNORECASE | re.VERBOSE)
+_QUESTION_RE = re.compile(r"""^(?:
+      who | what | which | whose | whom | when | where | why | how
+    | is | are | was | were | does | do | did | can | could | will | would
+    | should | shall | am | have | has
+  )\b""", re.IGNORECASE | re.VERBOSE)
+
+
+def about_the_proposal(question, pending):
+    """Is this message about the offer awaiting a word, rather than a new request?
+
+    THE ORDER IS THE ARGUMENT.
+
+    1 AN AMENDMENT FIRST, above every other door. "Send it to Bob instead" reads to
+      hands_wanted() as a brand-new email, and treating it as one would drop the offer he
+      was correcting and compose a second one from scratch. Above the doors, so the
+      correction reaches the brain with the original in front of it and comes back as a
+      revision.
+    2 THE HARD DOORS SECOND. "Remember that ...", "go back to your normal brain",
+      "thirty minutes on this" are instructions to this machine, not remarks about the
+      offer, and they have always released the slot. They still do.
+    3 A QUESTION THAT POINTS AT IT, third and narrowly. A question alone is not enough:
+      "what is react" asked while an email waits is a genuine new request, and answering
+      it as chatter about the email would lose it. So a question must also POINT - it,
+      that, the message, you - and the deictic is the whole of the difference.
+    4 ANYTHING ELSE IS A NEW REQUEST, which is where this function started life and what
+      it still does in the ordinary case.
+    """
+    if not pending:
+        return False
+    said = _addressless(question)
+    if not said:
+        return False                      # a bare greeting; the gate leaves it alone
+    if _AMEND_RE.search(said):
+        return True
+    if (CAPTURE_RE.match(question) or is_swap_request(question)
+            or focus.is_focus_request(question)):
+        return False
+    asked = str(question or "").strip().endswith("?") or bool(_QUESTION_RE.match(said))
+    return bool(asked and _DEICTIC_RE.search(said))
+
+
+def proposal_context(pending):
+    """The offer, described to the brain in three lines and no more.
+
+    The PARAMETERS go in, because "what address is it going to" cannot be answered without
+    them, and they are already the boss's own words on his own machine - nothing here
+    travels anywhere he did not send it. The SENTENCE goes in verbatim so the brain answers
+    about the offer that is actually on the card rather than about a paraphrase of it.
+
+    FAILURE MODE THIS CATCHES, and it caught it: hands.pending_public() puts the VALUES in
+    `params` and the SCHEMA in `fields` - name, type, required, and no value anywhere - and
+    the sentence under `line`. Read the wrong halves and the block is syntactically perfect
+    and factually empty, which is worse than absent: asked what time his dentist appointment
+    was for, with "friday 3pm" sitting on the card in front of him, he was told "no hour was
+    ever set on it". An empty block would have made him repeat himself; a confidently empty
+    one contradicted the card.
+    """
+    if not isinstance(pending, dict):
+        return ""
+    params = pending.get("params")
+    params = params if isinstance(params, dict) else {}
+    labels = {}
+    for field in pending.get("fields") or []:
+        if isinstance(field, dict) and field.get("name"):
+            labels[field["name"]] = field.get("label") or field["name"]
+    detail = "; ".join("%s: %s" % (labels.get(key, key), value)
+                       for key, value in params.items()
+                       if str(value if value is not None else "").strip())
+    return (
+        "\n\nAWAITING HIS WORD, RIGHT NOW. You have offered to do something and he has "
+        "neither agreed nor refused - he has said the message below about it.\n"
+        "- The offer, in your own words: \"%s\"\n"
+        "- The tool: %s%s\n"
+        "- ANSWER THE REMARK, and keep the offer standing. Do not say it is done, do not "
+        "say it is cancelled, and do not ask him to repeat himself. If he is asking about "
+        "it, tell him from the details above. If he is CHANGING it, re-offer it with the "
+        "change using the tool tag, and say nothing about tags. If he is neither, answer "
+        "him plainly and remind him in one short clause that the offer is still waiting."
+        % (str(pending.get("line") or pending.get("proposal") or "").strip(),
+           pending.get("tool") or "?",
+           (" (%s)" % detail) if detail else ""))
+
+
+def talk_about_proposal(question, session, pending, cfg=None):
+    """Answer a remark about the offer, with the offer in front of the brain. No lookups.
+
+    ZERO RETRIEVAL, and that is a claim about correctness rather than about cost: the
+    answer to "what address is that going to" is in the slot, not in his notes and
+    certainly not on the web. A search here could only ever return something irrelevant,
+    and it would light the panel behind it while it did.
+
+    THE SLOT IS NOT TOUCHED unless the brain re-offers. The one thing this function must
+    never do is lose the offer: it is on the card, he is looking at it, and he has not
+    said yes or no yet.
+    """
+    if cfg is None:
+        cfg = load_config()[0]
+    with _lock:
+        history = list(_history.get(session, []))
+    messages = ([{"role": "system",
+                  "content": SMALLTALK_PROMPT + hands.prompt_block()
+                             + proposal_context(pending)}]
+                + history + [{"role": "user", "content": question.strip()}])
+    answer, error = call_model(cfg, messages)
+    if error:
+        return 502, {"error": error, "nodes": [], "kind": "chat",
+                     "route": "proposal", "lookups": 0}
+    wanted, params, _prose = hands.tool_tag(answer)
+    if wanted is not None:
+        # AN AMENDMENT, and the registry's own sentence says it back to him. propose()
+        # supersedes the standing offer with a line saying it has let the earlier one go,
+        # which is exactly right here: he asked for the change himself. The prose the
+        # model wrote around the tag is dropped, as it is everywhere else - one voice.
+        sys.stderr.write("  tool: the offer was AMENDED in conversation -> %s\n" % wanted)
+        return hands.propose(wanted, tool_facts(wanted, params), door="tag")
+    with _lock:
+        hist = _history.setdefault(session, [])
+        hist.append({"role": "user", "content": question.strip()})
+        hist.append({"role": "assistant", "content": answer})
+        del hist[:max(0, len(hist) - HISTORY_TURNS * 2)]
+    return 200, {"answer": answer, "nodes": [], "kind": "chat", "route": "proposal",
+                 "lookups": 0, "pending": hands.pending_public()}
+
+
 def private_identifier(question):
     """Does this message carry an email address, a telephone number or an address?
 
@@ -1627,6 +2335,42 @@ def private_identifier(question):
     no other business than research. See PRIVATE_RE for why it is deliberately eager.
     """
     return bool(PRIVATE_RE.search(str(question or "")))
+
+
+def semantic_holds_identifier(question, sem):
+    """May the MEANING search claim a question that carries a private identifier?
+
+    Only if what it found actually CONTAINS the identifier. A vector store answers every
+    question with its three nearest passages whether or not it holds the answer, and
+    "nearest" on a small collection is a low bar - so a question about a stranger's email
+    address comes back with whatever the collection is most about, at a score just over
+    the dial, and the notes door opens on it.
+
+    FAILURE MODE THIS CATCHES, measured: "who is zqtask@example.invalid", asked with a
+    previous question still in the session, scored 0.621 against a prompt pack in
+    archive/samples that does not contain the address and has nothing to do with it. The
+    door opened, kind became "notes", and the PII SHIELD - which is gated on kind for the
+    good reason that a note genuinely naming the correspondent should answer - was stepped
+    over. Nothing leaked: the notes branch searches no web, and what he said was true ("that
+    address appears nowhere in your notes"). What was lost was the REFUSAL, said out loud,
+    and the shield's own law is that a refusal the employer cannot see is indistinguishable
+    from a failure.
+
+    WHY THE TEST IS CONTAINMENT AND NOT A HIGHER DIAL. The threshold is right for prose,
+    where a passage can mean the same thing in different words. An identifier has no
+    synonyms: it either appears or it does not. So the evidence demanded here is the one
+    kind a private identifier admits, and the dial is left exactly where it is.
+
+    AND IT CANNOT COST A REAL NOTES ANSWER: the caller only consults this door when the
+    keyword half has already declined, so a note that shares the address with the question
+    has claimed it two branches earlier and never reaches here.
+    """
+    found = [m.group(0) for m in PRIVATE_RE.finditer(str(question or ""))]
+    if not found:
+        return True
+    quoted = " ".join(str(hit.get("text") or "")
+                      for hit in (sem.get("cited") or [])).lower()
+    return any(one.lower() in quoted for one in found)
 
 
 def substantial_question(question, prior=""):
@@ -1909,6 +2653,16 @@ def web_intent(question, confidence, prior="", in_scope=True):
         return ""                  # about this machine; the web has never met it
     if REALWORLD_RE.search(bare):
         return "world"
+    # THE LAST CLAUSE OF THE FUNNEL, and it only ever narrows "thin". A question about the
+    # world has already been answered "world" above and a forced lookup two branches before
+    # that; what is left here is a question the notes are thin on - and if it was SPOKEN TO
+    # HIM rather than asked of the world, thinness is not a reason to go looking. See
+    # spoken_to_him(): the protected classes catch the sentences he actually says, and this
+    # catches the ones nobody thought to list.
+    if spoken_to_him(question):
+        sys.stderr.write("  no lookup: %r is spoken to me, not about the world\n"
+                         % str(question).strip()[:60])
+        return ""
     if confidence < WEB_CONFIDENCE_THRESHOLD or not in_scope:
         return "thin"
     return ""
@@ -2245,6 +2999,29 @@ def build_context(picked):
 SEM_CONTEXT_CHARS = 1200      # per chunk, sent to the model
 
 
+# THE LOOKUP COUNTER, and it counts only what is actually SPENT: an embedding query put to
+# a model, and a search put to the web. Keyword scoring is arithmetic over an index this
+# machine already holds and is not a lookup in the sense that matters here - nothing leaves
+# the room and nothing is paid for.
+#
+# It exists so that "zero lookups" can be a measurement instead of a promise. routing_proof
+# reads the number off the reply for each of the boss's own sentences, which is the only way
+# to tell an answer that was cheap from an answer that was merely quick: a protected class
+# that quietly started searching again would still answer, in character, in good time.
+_LOOKUPS = {"n": 0}
+
+
+def _spent(what):
+    with _lock:
+        _LOOKUPS["n"] += 1
+        return _LOOKUPS["n"]
+
+
+def lookups_so_far():
+    with _lock:
+        return _LOOKUPS["n"]
+
+
 def semantic_recall(question, prior=""):
     """ingest.recall(), wrapped so that this file never has to ask whether it exists.
 
@@ -2258,6 +3035,7 @@ def semantic_recall(question, prior=""):
                 "hits": [], "cited": [], "best": 0.0, "best3": 0.0, "scans": [],
                 "threshold": 0.0, "ms": 0}
     try:
+        _spent("embed")
         return ingest.recall(question, prior)
     except Exception as exc:                                   # noqa: BLE001
         # recall() promises not to raise. If it ever does, that is a bug in it and not a
@@ -2996,6 +3774,29 @@ def call_openrouter(cfg, messages, image=None):
                "X-Title": "Knowledge Galaxy"})
 
 
+def wear_persona(cfg, messages):
+    """Put who he is and what he can do in front of the system prompt. Every call.
+
+    ONE PLACE, NOT EIGHT. There are eight sites in this file that build a system message -
+    notes, small talk, web, compose, vision, webcam, the nudge, the greeting - and the
+    mandate is that his name and his abilities are in ALL of them, so that a free-form
+    answer is in character and not only the hard-classed ones. Injecting per site means
+    eight edits now and a ninth site next month that quietly answers as a nameless butler.
+    So it happens here, in the funnel every provider goes through.
+
+    THE FAILURE MODE THIS GUARDS: a message list with no system role at all would silently
+    get no persona. That does not happen today, and if it ever does, one is inserted rather
+    than skipped. The list is copied - the caller's history is not ours to rewrite.
+    """
+    preamble = brain_preamble(cfg)
+    out = [dict(m) for m in messages]
+    for msg in out:
+        if msg.get("role") == "system":
+            msg["content"] = preamble + str(msg.get("content") or "")
+            return out
+    return [{"role": "system", "content": preamble.rstrip()}] + out
+
+
 def call_model(cfg, messages, image=None):
     """The one place that decides which provider gets the prompt.
 
@@ -3003,6 +3804,7 @@ def call_model(cfg, messages, image=None):
     encode it themselves, because they disagree about the shape and agree about
     nothing except the media type.
     """
+    messages = wear_persona(cfg, messages)
     provider = provider_of(cfg)
     if provider == "openrouter":
         return call_openrouter(cfg, messages, image)
@@ -4042,12 +4844,18 @@ def answer_question(question, session):
     #                     something adjacent to it, and answering a translation request
     #                     out of the employer's staffing notes would be worse than
     #                     useless. task_intent() keeps composition composed.
+    #   A PRIVATE IDENTIFIER whose passages do not contain it: an address has no synonyms,
+    #                     so a high score against prose that never mentions it is a
+    #                     coincidence, and walking past the PII shield on a coincidence
+    #                     swallows a refusal the employer is owed. See
+    #                     semantic_holds_identifier(), which names the measurement.
     # The one thing the door may not do is close: a question the keyword half already
     # claimed stays claimed, because it has evidence this one does not - a word the
     # employer actually typed.
     sem_opened = False
     if (sem.get("opens") and kind != "notes" and worth_embedding
-            and not task_intent(question)):
+            and not task_intent(question)
+            and semantic_holds_identifier(question, sem)):
         kind = "notes"
         sem_opened = True
         sys.stderr.write("  recall: the notes door opened on MEANING alone - %.3f "
@@ -4279,6 +5087,7 @@ def answer_question(question, session):
         # everything the browser is shown is built from those.
         query, rewrote = resolve_followup(query, recalled, recalled_kind, trace)
         started = time.monotonic()
+        _spent("web")
         web = websearch.search(query, cfg=cfg, trace=trace)
         # stderr, like every other diagnostic here, and for a reason worth the line:
         # stdout is block-buffered when the server is run with its output redirected,
@@ -4682,8 +5491,21 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
 
         if self.path.split("?")[0] == "/persona":
             # Wording only. The viewer supplies the note count from the graph data
-            # and the salutation from the reader's own clock.
-            return self._send_json(200, {"greeting": BOOT_GREETING})
+            # and the salutation from the reader's own clock; his name and the boss's come
+            # from the persona block here, so the page never has to know either.
+            #
+            # .replace() rather than .format(), because {salutation} and {notes} are the
+            # BROWSER'S placeholders and must survive this untouched - a .format() call
+            # would raise KeyError on them and serve the page nothing at all.
+            who = persona(load_config()[0])
+            greeting = {}
+            for key, line in BOOT_GREETING.items():
+                greeting[key] = (line.replace("{assistant}", who["assistant"])
+                                     .replace("{call}", who["boss_call"])
+                                     .replace("{formal}", who["boss_formal"]))
+            return self._send_json(200, {"greeting": greeting,
+                                         "assistant": who["assistant"],
+                                         "boss": who["boss_call"]})
 
         if self.path.split("?")[0] == "/health":
             ensure_index()
@@ -4779,7 +5601,7 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                                          or payload.get("error")))
         return status, payload
 
-    def _hands_gate(self, question):
+    def _hands_gate(self, question, session="default", ear_open=False):
         """THE CONFIRMATION, above every other door in /chat.
 
         Returns (status, payload) when the message was ABOUT a proposal - a yes, a no, or
@@ -4797,17 +5619,51 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
         """
         lapse_status, lapsed = hands.lapse_if_due()
         pending = hands.pending_public()
-        yes = hands.is_confirmation(question)
-        no = hands.is_refusal(question)
+        # CLASS 1 OF THE PROTECTED CLASSES, and the address comes off first: "yes yes do it
+        # galaxy" is the whole of a yes once his name is out of it. See confirmation_in().
+        word = confirmation_in(question)
+        yes, no = word == "yes", word == "no"
 
         if lapsed is not None and (yes or no):
             # They answered a question that had already expired. The truthful reply is
             # the lapse, not "there is nothing pending" - which would be true and useless.
+            _hand_resolved(lapsed)
             return lapse_status, lapsed
         if pending and yes:
-            return hands.execute(door="voice", proposal_id=pending["id"])
+            status, payload = hands.execute(door="voice", proposal_id=pending["id"])
+            # THE SPOKEN DOOR RESOLVES IT TOO. A yes said out loud has to finish the job
+            # a yes clicked would have finished - see _hand_resolved().
+            _hand_resolved(payload)
+            return status, payload
         if pending and no:
-            return hands.cancel(door="voice", proposal_id=pending["id"])
+            status, payload = hands.cancel(door="voice", proposal_id=pending["id"])
+            _hand_resolved(payload)
+            return status, payload
+        if pending:
+            # CLASSES 2 AND 3, WHILE AN OFFER STANDS. The funnel order in the mandate is
+            # confirmation, meta, identity, directives - so these come after the yes and the
+            # no above and before the proposal talk below, and they are here rather than at
+            # the /chat door because the door never sees a message that arrives with an
+            # offer live. The OFFER IS NOT TOUCHED: "who are you" is neither an answer to it
+            # nor a new request, so it is answered from state and the card keeps waiting.
+            #
+            # FAILURE MODE THIS CATCHES: with an offer standing, "who are you" was talk
+            # about the proposal - it went to the brain, which happened to be wearing the
+            # persona and happened to answer correctly. A right answer for the wrong reason
+            # is one prompt edit away from a wrong one, and it costs a model call to get.
+            klass, said = protected_answer(question, load_config()[0], ear_open)
+            if klass is not None:
+                said["pending"] = pending
+                sys.stderr.write("  route: %s - answered from state with an offer still "
+                                 "standing, 0 lookups: %r\n" % (klass, question[:60]))
+                return 200, said
+        if pending and about_the_proposal(question, pending):
+            # PART B. He is examining the offer, not answering it. The offer stands and the
+            # remark is answered with the offer in front of the brain - see
+            # talk_about_proposal(), which spends no lookup doing it.
+            sys.stderr.write("  route: proposal - talk about %s, the offer stands\n"
+                             % pending.get("tool"))
+            return talk_about_proposal(question, session, pending)
         if pending:
             # A NEW SUBSTANTIVE QUESTION IS A WITHDRAWAL. Silence is not consent and
             # neither is a change of topic, so the proposal goes and the question is
@@ -4817,9 +5673,18 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             # Nothing is pending, and this is also the second "yes" after a tool has
             # already run: it is refused rather than obeyed, because a confirmation can
             # only ever confirm the one thing it was given.
-            sys.stderr.write("  tool: a word of consent arrived with nothing pending\n")
+            #
+            # AND IT IS NEVER SEARCHED. This is the released-confirmation case the mandate
+            # names: the words are consent with nothing to consent to, and the one thing
+            # they must not become is a query. Answered here, by name, at zero cost.
+            sys.stderr.write("  route: confirmation - a word of consent with nothing "
+                             "pending, and nothing looked up\n")
+            who = persona(load_config()[0])
             return 409, {"ok": False, "kind": "tool", "nodes": [], "pending": None,
-                         "answer": hands.LINES["nothing"], "refused": "nothing-pending"}
+                         "answer": "Nothing is pending, %s - tell me what to do and I "
+                                   "shall propose it." % who["boss_call"],
+                         "refused": "nothing-pending",
+                         "route": "confirmation", "lookups": 0}
         if lapsed is not None:
             return None, lapsed["answer"]
         return None, ""
@@ -4886,11 +5751,33 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 return self._send_json(400, {
                     "error": "Ask me something first.", "nodes": [], "kind": "chat"})
             # THE GATE FIRST. While something is awaiting a word, what this message MEANS
-            # is decided here and nowhere else: see _hands_gate.
-            gate_status, gated = self._hands_gate(question)
+            # is decided here and nowhere else: see _hands_gate. That is protected class 1,
+            # and it is above the other three because a "yes" belongs to the offer on the
+            # card and to nothing else in this file.
+            # THE `ear` FIELD is the page saying whether the room is actually open. It is
+            # optional, and a message without it is answered as a typed one, which is what
+            # it is. Read before the gate because the gate answers class 2 itself when an
+            # offer is standing.
+            ear = data.get("ear")
+            ear_open = bool(ear.get("open") if isinstance(ear, dict) else ear)
+            gate_status, gated = self._hands_gate(question, session, ear_open)
             if gate_status is not None:
                 return self._send_json(gate_status, gated)
             prefix = str(gated or "")
+            # PROTECTED CLASSES 2 AND 3, above every retrieval in this server: whether the
+            # ear is open, who he is, who I am, what I can do. Answered from live state and
+            # the persona block, costing nothing - see protected_answer().
+            klass, said = protected_answer(question, load_config()[0], ear_open)
+            if klass is not None:
+                # THE TRACE NAMES THE CLASS. The failure this catches is silent: a routing
+                # change that quietly sends "who am i" back to the notes would still return
+                # an answer, and this is the line that would stop reading "protected".
+                sys.stderr.write("  route: %s - answered from state, 0 lookups: %r\n"
+                                 % (klass, question.strip()[:60]))
+                if prefix:
+                    said["answer"] = prefix + " " + said["answer"]
+                    said["handsLapsed"] = True
+                return self._send_json(200, said)
             # Backstop. The viewer routes "remember that ..." to /remember itself,
             # but a stale tab must not be able to answer a capture instead of
             # performing it - the server is the real classifier either way.
@@ -4906,12 +5793,19 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             # answered conversationally instead of started.
             if focus.is_focus_request(question):
                 return self._send_json(*focus.handle({"say": question}))
+            spent_before = lookups_so_far()
             try:
                 status, payload = answer_question(question, session)
             except Exception as exc:                           # noqa: BLE001
                 status, payload = 500, {
                     "error": "The brain hit an unexpected error: %s" % exc,
                     "nodes": [], "kind": "chat"}
+            # WHAT THIS ANSWER COST, measured rather than described: embeddings and web
+            # searches, counted as they happened. Class 4 and the ordinary road both come
+            # through here, so every reply this door sends carries the number - and a
+            # protected class that started searching again would be caught by the one it
+            # does NOT carry, which is why the field is set here and not per branch.
+            payload.setdefault("lookups", lookups_so_far() - spent_before)
             # THE MEMORY, written once, here, and with the FINAL kind - "web" is only
             # known after the lookup, and it is the kind a follow-up most needs to
             # inherit from. A brain swap is an instruction rather than a question, so it
@@ -5192,6 +6086,7 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                     "ok": False, "kind": "tool", "nodes": [], "pending": None,
                     "error": "The tool hit an unexpected error: %s" % exc,
                     "answer": hands.LINES["failed"].format(reason=str(exc)[:160])}
+            _hand_resolved(payload)
             return self._send_json(status, payload)
 
         if route == "/tools":
@@ -5215,6 +6110,10 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                         tool_facts(data.get("tool"), data.get("params")), door=door)
                 elif cmd == "cancel":
                     status, payload = hands.cancel(door=door, proposal_id=ident)
+                    # A no at the button door, told to the same organ the spoken no is
+                    # told to. This is where "the card says plainly that tab-lock is off
+                    # and why" actually happens.
+                    _hand_resolved(payload)
                 elif cmd == "withdraw":
                     # A CHANGED SUBJECT, from a door that is not /chat: the page took a
                     # sentence to an organ of its own - the screen, the eyes, a capture -
@@ -5227,6 +6126,10 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                         "answer": line, "withdrew": bool(line)}
                 elif cmd in ("lapse", "sweep"):
                     status, payload = hands.lapse_if_due()
+                    # A question that ran out of time is no consent, and the session is
+                    # told so: better a card that says tab-lock is off than one that waits
+                    # for an answer nobody is going to give.
+                    _hand_resolved(payload)
                     if payload is None:
                         # Nothing had run out of time. Not an error, and not a line worth
                         # speaking either - the tab simply asked.
@@ -5333,8 +6236,20 @@ def main():
     creds = resolve_aws(cfg)[0] if provider_of(cfg) == "bedrock" else None
     ready = credentials_error(cfg) is None
     print("")
+    # WHAT HE CAN DO, COUNTED ONCE, HERE. After ensure_index() so the note count is real
+    # and before the first request so no question pays for it. The vector store is still
+    # warming on the thread below, so the archive sentence may be absent from this first
+    # manifest - which is honest rather than broken: it says what was true at start-up, and
+    # it is rebuilt on the next restart like every other line in it.
+    who = persona(cfg)
+    build_capabilities_manifest(cfg)
+
+    # The PRODUCT is the Knowledge Galaxy - that name is in the page title and in three
+    # harnesses, and it stays. The ASSISTANT is Galaxy, and he gets his own line.
     print("  Knowledge Galaxy  ->  http://%s:%d" % (HOST, PORT))
     print("  serving           :  viewer/  (only)")
+    print("  assistant         :  %s, for %s (%s)"
+          % (who["assistant"], who["boss_formal"], who["boss_call"]))
     print("  notes indexed     :  %d" % len(_index["notes"]))
     print("  provider          :  %s%s" % (provider_of(cfg),
                                            "  (%s)" % creds["region"] if creds else ""))

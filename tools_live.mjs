@@ -417,6 +417,13 @@ async function main() {
   ok(await waitFor(page, '__galaxy.hands.shown === true', 90000),
      'one more proposal, to walk away from');
   const markDrop = await mark();
+  /* THIS SENTENCE, AND NOT A TIDIER ONE. It is a plain question about the notes that
+     happens to contain the verb "say", and that is the whole reason it is here: the amend
+     door in server.py once tested for that verb anywhere in the sentence, so this exact
+     question over a standing proposal was read as an amendment TO the proposal. The offer
+     was neither run nor released, the withdrawal below was never spoken, and the page was
+     handed the same pending slot back and drew the card again. A shorter probe - "what is
+     react" - passes without ever touching that door. Keep the verb. */
   await say('what do my notes say about coffee');
   const letGo = await waitSaid(/changed the subject|let that request go/i, 60000, markDrop);
   ok(!!letGo, 'changing the subject lets the proposal go, and says so: ' +
