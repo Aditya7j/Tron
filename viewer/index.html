@@ -752,7 +752,15 @@
     font-size:12px;line-height:1.55;margin-bottom:13px;font-family:var(--mono)}
   #a-ask .rows b{color:var(--muted);font-weight:500;letter-spacing:.02em;
     white-space:nowrap}
-  #a-ask .rows span{color:#f2f6ff;word-break:break-word;white-space:pre-wrap}
+  /* CLAMPED, AND THE CLAMP IS ABOUT ONE PARAMETER. Every value on this card until now was
+     a path, a subject line or a number - two lines at worst. `minutes` is a whole
+     document, and unbounded it pushes the Yes button off the bottom of the window: the one
+     thing on this deck that must never become unreachable. So a tall value scrolls inside
+     its own row. max-height and overflow, NOT a truncation - the full text stays in the
+     DOM, because the harness reads it and because a value the employer cannot scroll to
+     the end of is a value they cannot approve. */
+  #a-ask .rows span{color:#f2f6ff;word-break:break-word;white-space:pre-wrap;
+    max-height:190px;overflow:auto;overscroll-behavior:contain}
   #a-ask .rows i{color:rgba(143,160,192,.7);font-style:normal;font-family:var(--font)}
   #a-ask .pair{display:flex;align-items:center;gap:10px}
   #a-ask button{border-radius:999px;cursor:pointer;font-family:inherit;font-size:13px;
@@ -774,6 +782,75 @@
   #a-ask button:disabled{opacity:.45;cursor:default;transform:none}
   #a-ask .clock{font-size:11px;color:var(--muted);margin-left:auto;
     font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+  /* ---------- THE LIVE TRANSCRIPT ----------
+     WHERE IT LIVES AND WHY THAT IS THE WHOLE DESIGN. This panel is a CHILD OF #brain, the
+     bottom-anchored column that already holds the answer, the caption, the summoned line,
+     the status row and the bar. It is not a fixed surface of its own and it never will be,
+     because the Layout Governor owns #brain's rectangle and measures #brain's HEIGHT: put
+     the panel inside that column and the presence well's existing arithmetic - above the
+     toast while there is a band, beside it when there is not - keeps the two disjoint by
+     construction, with no new rule to get wrong. A sixth governed surface would have needed
+     a sixth lane; a child needs nothing.
+
+     THE SLIDE IS TRANSFORM AND OPACITY ONLY, on the mandate's own curve. `display` flips
+     because a closed panel must take no room in the column, and everything that moves is
+     composited: no top, no height, no box-shadow. The 320ms is the one place on this deck
+     where a long ease-out is right - the panel is rising into a meeting, not answering a
+     keypress - and it is stood down entirely under prefers-reduced-motion below.
+
+     MONO, because a transcript is a record. A proportional font in a scrolling column of
+     machine transcription makes two similar lines look identical, which is the one thing a
+     reader of minutes must be able to tell apart. */
+  #scribepanel{display:none;background:linear-gradient(200deg,rgba(9,16,28,.9),
+      rgba(5,8,16,.94));
+    border:1px solid rgba(34,224,255,.26);border-radius:16px;padding:13px 15px 12px;
+    backdrop-filter:var(--blur);
+    box-shadow:0 18px 54px rgba(0,0,0,.55),inset 0 0 40px rgba(34,224,255,.045)}
+  #scribepanel.show{display:block;
+    animation:scriberise .32s cubic-bezier(0.16,1,0.3,1)}
+  @keyframes scriberise{from{opacity:0;transform:translateY(14px)}
+    to{opacity:1;transform:none}}
+  #scribepanel .head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  #scribepanel .lbl{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
+    color:#7fe9ff}
+  /* The live dot, and it is the same borrowed beat as everything else that is running. */
+  #scribepanel .rec{width:8px;height:8px;border-radius:50%;background:#22e0ff;
+    box-shadow:0 0 11px #22e0ff;flex:0 0 auto;display:none;
+    animation:pulse 1.15s ease-in-out infinite}
+  #scribepanel.live .rec{display:block}
+  #scribepanel .meta{margin-left:auto;font-family:var(--mono);font-size:10.5px;
+    letter-spacing:.02em;color:var(--muted);font-variant-numeric:tabular-nums}
+  /* THE COLUMN ITSELF. A fixed ceiling rather than a growing panel: an hour's meeting is
+     hundreds of lines and a column that grew would walk up the window and out of it,
+     taking the toast's own rectangle with it. Scroll, auto-scrolled from the script while
+     the reader is at the bottom and left alone the moment they scroll up - see
+     scribeAppend(). */
+  #scribepanel .lines{max-height:198px;overflow-y:auto;overscroll-behavior:contain;
+    font-family:var(--mono);font-size:12px;line-height:1.62;color:#dfe9ff;
+    display:flex;flex-direction:column;gap:5px}
+  #scribepanel .lines p{margin:0;word-break:break-word}
+  #scribepanel .lines p .t{color:rgba(127,233,255,.6);margin-right:8px}
+  /* The three kinds of line that are not transcript: a refusal, a note about the machine,
+     and the placeholder before the first words land. Each is visibly not speech. */
+  #scribepanel .lines p.note{color:var(--muted);font-style:normal}
+  #scribepanel .lines p.bad{color:#ffb3a0}
+  #scribepanel .foot{display:none;align-items:center;gap:10px;margin-top:11px;
+    padding-top:10px;border-top:1px solid rgba(34,224,255,.16)}
+  #scribepanel.done .foot{display:flex}
+  #scribepanel .foot button{border-radius:999px;cursor:pointer;font-family:inherit;
+    font-size:12.5px;padding:8px 18px;
+    transition:background .16s,border-color .16s,color .16s,transform .12s ease-out}
+  #scribe-draft{background:linear-gradient(180deg,rgba(120,232,255,.3),
+      rgba(40,190,230,.18));
+    color:#e6fbff;border:1px solid rgba(34,224,255,.65);font-weight:600}
+  #scribe-draft:hover:not(:disabled){border-color:rgba(140,240,255,.95);
+    transform:translateY(-2px)}
+  #scribe-close{background:transparent;color:var(--muted);border:1px solid var(--line)}
+  #scribe-close:hover:not(:disabled){color:#fff;border-color:rgba(140,170,220,.5)}
+  #scribepanel .foot button:disabled{opacity:.45;cursor:default;transform:none}
+  #scribepanel .foot .said{margin-left:auto;font-size:11px;color:var(--muted);
+    font-family:var(--mono)}
 
   /* THE DECK DIMS. A full-window vignette that darkens the corners while a hand is
      offered, so the card carrying the two buttons is the only lit thing on screen.
@@ -1130,6 +1207,32 @@
     background:rgba(75,224,184,.14)}
   #focusbtn.on.drift{color:#ff6b7f;border-color:rgba(255,107,127,.7);
     background:rgba(255,107,127,.16)}
+
+  /* ---------- THE SCRIBE ----------
+     The fifth organ, and the loudest thing it does is say so. A tap opens a picker for
+     the system's own audio and the microphone at the same time, which is the most
+     intrusive thing on this deck after the screen share - so it wears the same discipline:
+     a lit button, a beating dot, and a ring that cannot be mistaken for decoration.
+     Cyan, because every other capture colour is taken: red is the screen, pink is the ear,
+     violet is the eyes, green is a focus session. A meeting being minuted is a fifth thing
+     and it gets a fifth colour rather than borrowing one and being ambiguous. */
+  #scribebtn{flex:0 0 auto;width:38px;height:38px;padding:0;border-radius:50%;
+    border:1px solid var(--line);background:transparent;color:var(--muted);
+    cursor:pointer;display:grid;place-items:center}
+  #scribebtn:hover:not(:disabled){color:#fff;border-color:rgba(140,170,220,.5)}
+  #scribebtn:disabled{opacity:.3;cursor:not-allowed}
+  #scribebtn svg{width:17px;height:17px;display:block}
+  #scribebtn.on{color:#22e0ff;border-color:rgba(34,224,255,.7);
+    background:rgba(34,224,255,.16)}
+  /* THE RING, and it is the mic's ring exactly: a bordered pseudo-element that scales and
+     fades, so a listening indicator costs one composited layer and no repaint. The motion
+     law forbids animating box-shadow and this is what obeying it looks like. */
+  #scribebtn.on::after{content:'';position:absolute;inset:-1px;border-radius:50%;
+    pointer-events:none;border:1px solid rgba(34,224,255,.55);
+    animation:miclive 1.5s ease-in-out infinite}
+  /* A chunk in flight. Amber, static, and only while a POST is open - the one honest way
+     to show that the transcriber is a round trip away rather than in this page. */
+  #scribebtn.sending{border-color:rgba(255,183,77,.75)}
 
   /* min-width is the FLOOR for the full-dress card and LAYOUT.CARD_W is what the
      governor sets it to; the two agree on 460 because the visage below needs a face's
@@ -1728,6 +1831,12 @@
        information, and the pulse is only the adverb. */
     [data-organ="live"] .od{animation:none;opacity:1;transform:scale(1)}
     #mic.on::after,#mic.ear::after{animation:none;opacity:.6}
+    /* The Scribe, both halves: the ring keeps its light and loses its breath, and the
+       panel simply IS there. scribe_proof clicks Draft Minutes in the tick after the panel
+       opens, so the 320ms rise is exactly the rectangle-in-flight this block exists for. */
+    #scribebtn.on::after{animation:none;opacity:.55}
+    #scribepanel.show{animation:none}
+    #scribepanel .rec{animation:none}
     #sharewash{animation:none}
     /* The summoned line arrives instantly - which is also what a harness that presses /
        and types in the next tick needs: nothing in flight to wait for. The caption keeps
@@ -2015,6 +2124,25 @@
       </div>
     </div>
   </div>
+  <!-- THE LIVE TRANSCRIPT. Inside #brain on purpose - see #scribepanel in the stylesheet:
+       the Layout Governor owns this column's rectangle and measures its height, so a panel
+       that is a child of it cannot overlap the presence well however long the meeting runs.
+       Between the answer and the caption because that is its place in the reading order: it
+       is a record being taken, below the answer that was given and above the subtitle of the
+       voice that gave it. -->
+  <div id="scribepanel">
+    <div class="head">
+      <span class="rec"></span>
+      <span class="lbl" id="scribe-lbl">taking the minutes</span>
+      <span class="meta" id="scribe-meta"></span>
+    </div>
+    <div class="lines" id="scribe-lines" aria-live="polite"></div>
+    <div class="foot">
+      <button id="scribe-draft" type="button">Draft Minutes</button>
+      <button id="scribe-close" type="button">Close</button>
+      <span class="said" id="scribe-said"></span>
+    </div>
+  </div>
   <!-- THE CAPTION. A subtitle for the voice, above the bar, gone four seconds after he
        stops. The answer itself is kept in the card above; this is what you read while
        you listen, which is why it has no chrome of any kind. -->
@@ -2055,6 +2183,18 @@
            stroke-linecap="round" aria-hidden="true">
         <circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.4"/>
         <path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3"/>
+      </svg><i class="od" aria-hidden="true"></i>
+    </button>
+    <!-- THE SCRIBE. A waveform, because that is what it is taking: not a recording - the
+         bytes never reach a disk on this machine or any other - but the shape of a meeting
+         turned into text as it happens. The tooltip says "share audio" out loud because the
+         one way this feature fails silently is a picker accepted with the Share Audio tick
+         left off, and a man who has been told to tick it will tick it. -->
+    <button id="scribebtn" class="organ" type="button"
+            title="Take the minutes · share a tab or window with “Share audio” ticked">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+           stroke-linecap="round" aria-hidden="true">
+        <path d="M2.5 12h2M7 7.5v9M11 4.5v15M15 8.5v7M19 10.5v3M21.5 12h0.01"/>
       </svg><i class="od" aria-hidden="true"></i>
     </button>
     <!-- THE EAR BUTTON. Named that in the tooltip because the assistant names it in a
@@ -3989,6 +4129,13 @@ async function loadLib() {
          absent key, an old server or a failed fetch all leave the sky at rest, because
          rest is the default and the answer that costs nothing if it is wrong. */
       skySpin(!!(data && data.sky && data.sky.spin));
+      /* AND WHETHER THIS MACHINE CAN TRANSCRIBE, on the same trip and for the same reason as
+         the voice: the server knows whether faster-whisper imported and the page is the only
+         thing that can act on it. Re-read every poll, so a transcriber that finished loading
+         since the last one enables the button without a reload - and so a server restarted
+         without it disables the button rather than leaving an organ that opens a picker onto
+         a hole. See scribeHealthFrom(). */
+      if (data && data.scribe) scribeHealthFrom(data.scribe);
       /* AND THE RAIL, on the same trip and for the same reason as the three above it: the
          question is "what is this machine actually doing", and /health is the only thing
          that can answer it. Last, so a rail that threw could never cost the chip its
@@ -4153,7 +4300,7 @@ async function loadLib() {
      The tooltip is base + '\n' + state, and the base is read off the DOM once rather
      than copied into this file, so the sentence a designer wrote in the markup stays the
      one authority on what the button is FOR. */
-  const ORGANS = ['screen', 'eye', 'focusbtn', 'mic', 'reset'];
+  const ORGANS = ['screen', 'eye', 'focusbtn', 'scribebtn', 'mic', 'reset'];
   const ORGAN_TIP = {};              // id -> the button's own title, captured once
   const organs = { paints: 0, live: 0 };
   let organsObs = null;
@@ -4183,6 +4330,35 @@ async function loadLib() {
           ? 'LOCKED · and you have drifted' : 'LOCKED · a session is running' };
       }
       return { organ: 'off', line: 'idle · no session' };
+    }
+    if (id === 'scribebtn') {
+      /* THREE STATES AND A REFUSAL, and the refusal is the one worth reading: a machine
+         whose transcriber will not import must say so on the button rather than open a
+         picker and discover it afterwards. `held` is a finished meeting whose transcript is
+         still on the screen waiting to be minuted - true, but nothing is happening.
+         THIS IS THE ONLY AUTHOR OF THIS BUTTON'S STATE LINE - see scribeHealthFrom, which
+         used to write the tooltip itself and was quietly overwritten every paint. */
+      if (c.contains('on')) {
+        return { organ: 'live', line: c.contains('sending')
+          ? 'TAKING THE MINUTES · a chunk is with the transcriber'
+          : 'TAKING THE MINUTES · audio is never written to disk' };
+      }
+      /* BEFORE THE FIRST /health there is no answer yet, and "unavailable" would be a
+         guess. The button is disabled either way; only the sentence differs, and a man
+         hovering it in the first second deserves the true one. */
+      if (!scribe.asked) {
+        return { organ: 'off',
+                 line: 'checking whether this machine has a transcriber…' };
+      }
+      if (el.disabled) {
+        return { organ: 'off', line: 'unavailable · the transcriber is offline · ' +
+                 (scribe.why || 'faster-whisper is not installed') };
+      }
+      const panel = $('scribepanel');
+      if (panel && panel.classList.contains('show')) {
+        return { organ: 'held', line: 'a transcript is held · it can still be minuted' };
+      }
+      return { organ: 'off', line: 'idle · no meeting is being minuted' };
     }
     if (id === 'mic') {
       /* BOTH DIRECTIONS OF ONE CHANNEL, and they can now be true together. The old rule
@@ -8407,6 +8583,42 @@ async function loadLib() {
   const SEAL_FAULT_WORD = 'ear fault · retrying';   // #seal is text-transform:uppercase
   const earFault = { on: false, at: 0, worst: 0, why: '', episodes: 0 };
 
+  /* ---------- THE SCRIBE'S THREE REFUSALS, ON THE SEAL ----------
+     SCRIBE: CANCELLED · SCRIBE: SHARE AUDIO OFF · SCRIBE: TRANSCRIBER OFFLINE.
+
+     WHY THE SEAL AND NOT THE STATUS STRIP. All three are answers to a button that was just
+     pressed and did not do the thing, and the status strip is where the page narrates what
+     it IS doing - a refusal written there scrolls past behind the next idle line. The seal
+     is the one readout on this deck that is always in the same place and always current, so
+     a refusal put here is still on screen when the man looks up from the picker he has just
+     dismissed. It is TRANSIENT because a refusal is an event, not a state: the state it
+     leaves behind is a Scribe that is off, and the organ dot already says that.
+
+     WHERE IT SITS IN THE ORDER, which is the only interesting decision here: BELOW the ear
+     fault and ABOVE everything else. A recogniser that has died three times outranks a
+     picker that was dismissed - the fault is about the machine and this is about a choice
+     just made - but both outrank MUTED and the ordinary state word, because a word the page
+     would have shown anyway cannot be more useful than a sentence somebody is waiting for.
+
+     Declared HERE, immediately above sealPaint and beside earFault, for the reason stated
+     there: sealPaint is written above the ear, above the Scribe and above the tones, and it
+     depends on nothing any of them own. A `let` declared down in the Scribe's own section
+     would be in its temporal dead zone for every sealPaint() the boot sequence makes. */
+  const SCRIBE_SEAL_MS = 4400;
+  const scribeSeal = { word: '', timer: null, said: '', times: 0 };
+
+  function scribeSealSay(word, ms) {
+    scribeSeal.word = String(word || '');
+    scribeSeal.said = scribeSeal.word;
+    scribeSeal.times++;
+    clearTimeout(scribeSeal.timer);
+    scribeSeal.timer = setTimeout(function () {
+      scribeSeal.word = '';
+      sealPaint();
+    }, ms || SCRIBE_SEAL_MS);
+    sealPaint();
+  }
+
   function earFaultPaint(errors, why) {
     const on = errors >= EAR_FAULT_AFTER;
     if (on && !earFault.on) { earFault.episodes++; earFault.at = Date.now(); }
@@ -8425,6 +8637,7 @@ async function loadLib() {
        colour. A muted tab whose recogniser has died three times is still a tab whose
        recogniser has died three times, and that is the more useful of the two facts. */
     const word = earFault.on ? SEAL_FAULT_WORD
+               : scribeSeal.word ? scribeSeal.word
                : MUTED && !cls ? 'muted' : (SEAL_WORDS[cls] || 'ready');
     /* ASKED OF THE EAR BUTTON AND NOT OF THE EAR'S OWN FLAG, for the same reason the organ
        rail is a reader: the class on #mic is what the session actually set, so a seal that
@@ -8441,6 +8654,10 @@ async function loadLib() {
       if (cell.textContent !== said) cell.textContent = said;
     }
     el.classList.toggle('open', open);
+    /* THE DATA-STATE IS NOT OVERRIDDEN BY A REFUSAL, and that is deliberate rather than an
+       oversight: data-state drives the seal's COLOUR, and the colour is the transparency
+       law - open means a microphone is open and must go on saying so while a Scribe refusal
+       is being read across it. A refusal borrows the word and never the light. */
     const state = earFault.on ? 'fault' : open ? 'open' : (cls || 'ready');
     if (el.getAttribute('data-state') !== state) el.setAttribute('data-state', state);
   }
@@ -9586,6 +9803,312 @@ async function loadLib() {
     }, FINISH_MS);
   }
 
+  /* ======================== THE ECHO LAW: HE MUST NOT ANSWER HIMSELF ==================
+     THE DEFECT. The microphone can hear the speakers. So the recogniser transcribes the
+     butler's own answer, the transcript arrives at the funnel looking exactly like a
+     question, and the page asks itself the thing it just finished saying. Left alone it
+     compounds: answer two is a transcript of answer one, answer three of answer two, and
+     the conversation runs away from the room entirely.
+
+     WHY THE THINGS ALREADY HERE ARE NOT ENOUGH, each measured rather than assumed:
+       echoCancellation is asked for and granted, and it only cancels what the BROWSER
+         renders - on the browser-voice path the words are spoken by the operating system's
+         synthesiser and never pass through the page's audio graph. See THE BARGE-IN GATE.
+       earTurnHold() shuts the recogniser while he reads, and it cannot be the whole answer
+         because the recogniser delivers a final up to a second AFTER the audio it heard:
+         the words arrive when the recogniser is back up and the queue is already dry.
+       THE SEAL drops finals for 900ms after a thought is sent (EAR_SEAL_MS). Answers last
+         seconds. The seal covers the beginning of the leak and nothing after it.
+     Hence two layers, neither of which trusts the other.
+
+     LAYER 1 - THE FUZZY ECHO FILTER, which is about the WORDS. Every transcript is
+     compared against what the engine is saying right now: the chunk in flight plus every
+     chunk still queued behind it. Similarity above ECHO_SIMILARITY, or the transcript
+     appearing inside the spoken text, means echo - dropped silently, counted, never routed.
+     FUZZY AND NOT EQUAL, because a recogniser hearing a speaker does not return the
+     sentence: it returns most of a fragment of it, mangled, unpunctuated, with words
+     missing. Exact matching catches none of the real cases.
+
+     LAYER 2 - THE ACOUSTIC GATE, which is about the LOUDNESS, and it is what makes Layer 1
+     safe to be strict. While the engine is speaking, the words the recogniser produces are
+     treated as silence UNLESS the room is measurably louder than what is leaving the
+     speakers - ECHO_GATE_RATIO times the live output reference, held ECHO_GATE_SUSTAIN_MS.
+     That is a person leaning in and talking over him, and nothing else is. So a transcript
+     that Layer 1 could not read as an echo, because the recogniser mangled it past
+     recognition, is still dropped: to get through, something in the room has to have been
+     loud enough to be a human being.
+
+     WHY IT IS DECIDED AT THE TRANSCRIPT AND NOT AT THE STREAM. The mandate asks for the
+     audio fed to the recogniser to be gated. IT CANNOT BE, and the reason is the Web Speech
+     API: window.SpeechRecognition opens its OWN capture inside the browser and takes no
+     MediaStream from us - our getUserMedia stream feeds an AnalyserNode and nothing else
+     (see earStreamUp), so there is no node in this page's graph between the microphone and
+     the recogniser to turn down. A MediaStreamAudioDestinationNode could be gated, but
+     nothing would be listening to it. The gate is therefore enforced where this page's
+     control actually begins - the transcript boundary - and the effect on the brain is
+     identical: while the gate is shut, what reaches it from the recogniser is nothing at
+     all. The measurement is real either way; only the valve moved.
+
+     AND THE SAME NUMBER IS NOT USED TWICE. The barge-in gate's ratio is 1.6 and it decides
+     whether to INTERRUPT an answer - a decision that can be wrong cheaply, because the
+     worst case is a sentence stopped early. This gate decides whether words reach the
+     BRAIN, where being wrong costs a question nobody asked, so it asks for 3.0. Two
+     thresholds because they are two different wagers, and BARGE_RATIO is untouched. ===== */
+  const ECHO_SIMILARITY = 0.70;        // the mandate's threshold, on the metric below
+  const ECHO_GATE_RATIO = 3.0;         // input : output reference for a true human barge-in
+  const ECHO_GATE_SUSTAIN_MS = 200;    // held that loud this long, so one clatter is not a man
+  /* HOW LONG THE GATE STAYS OPEN ONCE A PERSON HAS BEEN HEARD. The words follow the
+     loudness: the recogniser needs a moment to turn what it heard into a final, and a gate
+     that shut on the same frame the shouting stopped would throw away the transcript of the
+     very barge-in it had just accepted. */
+  const ECHO_GATE_HOLD_MS = 2500;
+  /* AND HOW LONG A FINISHED LINE IS STILL HIS VOICE. The queue going dry does not mean the
+     air is clear - the last chunk's audio is still arriving at the microphone and the final
+     it produces lands after it. A transcript this soon after the engine went quiet is
+     compared against what he had just finished saying as well. */
+  const ECHO_TAIL_MS = 1600;
+  /* ...AND IN THAT TAIL WINDOW ONLY A DISTINCTIVE TRANSCRIPT IS JUDGED. The engine is no
+     longer speaking, so a genuine short answer - "yes", "the second one" - is now possible,
+     and a short phrase turns up inside a long paragraph by coincidence rather than by echo.
+     While a chunk is actually IN FLIGHT there is no such thing as a genuine answer arriving
+     through a held recogniser, so no floor applies there. */
+  const ECHO_TAIL_MIN_CHARS = 12;
+  const ECHO_NEEDLE_MAX = 240;         // the arithmetic below is O(needle x spoken)
+  const ECHO_SPOKEN_MAX = 1600;
+  const ECHO_LOG_MAX = 24;
+  const echo = {
+    dropped: 0, passed: 0, layer1: 0, layer2: 0, lastWhy: '', lastText: '',
+    liveAt: 0, gateAt: 0, gateOpens: 0, gateHeld: 0, overSince: 0, overFor: 0,
+    ratio: 0, ref: 0, refFrom: 'none', input: 0, log: []
+  };
+
+  /* THE METRIC. Levenshtein distance is the right one here for a reason that is about
+     recognisers and not about strings: the errors it counts - a substituted word, a dropped
+     syllable, a run-together pair - are exactly the errors a recogniser makes on a speaker
+     leak, and it counts them without needing to agree with us about where the word
+     boundaries were. Two rows rather than a full matrix, so the cost is O(min) in space. */
+  function echoLevenshtein(a, b) {
+    const n = a.length, m = b.length;
+    if (!n) return m;
+    if (!m) return n;
+    let prev = new Array(m + 1), cur = new Array(m + 1);
+    for (let j = 0; j <= m; j++) prev[j] = j;
+    for (let i = 1; i <= n; i++) {
+      cur[0] = i;
+      const ca = a.charCodeAt(i - 1);
+      for (let j = 1; j <= m; j++) {
+        const cost = ca === b.charCodeAt(j - 1) ? 0 : 1;
+        let v = prev[j - 1] + cost;
+        if (prev[j] + 1 < v) v = prev[j] + 1;
+        if (cur[j - 1] + 1 < v) v = cur[j - 1] + 1;
+        cur[j] = v;
+      }
+      const t = prev; prev = cur; cur = t;
+    }
+    return prev[m];
+  }
+
+  /* AND THE ONE THE LAW ACTUALLY USES, which is NOT plain distance, and the difference is
+     the whole reason the first version of this would have caught nothing.
+     A TRANSCRIPT IS A FRAGMENT OF A PARAGRAPH. The engine is reading four hundred
+     characters; the recogniser hands back eighteen of them. Plain Levenshtein between those
+     two strings is a distance of ~382, a similarity of about 0.05, and a perfect echo sails
+     through a 0.70 threshold untouched. So the distance is taken against the BEST-MATCHING
+     SUBSTRING of what is being spoken, which is one line of arithmetic away: row zero is
+     initialised to zeros, so the match may begin anywhere in the spoken text for free, and
+     the verdict is the minimum of the last row, so it may end anywhere for free too. One
+     pass, exact, no window-sliding and no guess about where to look.
+     The mandate's substring test is then the same test with distance zero - it is kept as
+     its own named reason anyway, because "he said those exact words" is worth reading in a
+     log rather than inferring from a 1.00. */
+  function echoSubDistance(needle, hay) {
+    const n = needle.length, m = hay.length;
+    if (!n) return 0;
+    if (!m) return n;
+    let prev = new Array(m + 1), cur = new Array(m + 1);
+    for (let j = 0; j <= m; j++) prev[j] = 0;          // free prefix: begin anywhere
+    for (let i = 1; i <= n; i++) {
+      cur[0] = i;
+      const cn = needle.charCodeAt(i - 1);
+      for (let j = 1; j <= m; j++) {
+        const cost = cn === hay.charCodeAt(j - 1) ? 0 : 1;
+        let v = prev[j - 1] + cost;
+        if (prev[j] + 1 < v) v = prev[j] + 1;
+        if (cur[j - 1] + 1 < v) v = cur[j - 1] + 1;
+        cur[j] = v;
+      }
+      const t = prev; prev = cur; cur = t;
+    }
+    let best = prev[0];
+    for (let j = 1; j <= m; j++) if (prev[j] < best) best = prev[j];   // and end anywhere
+    return best;
+  }
+
+  /* The same flattening heardFinal does to make `bare`, for the same reason: the recogniser
+     punctuates and capitalises to its own taste and none of that is evidence. */
+  function echoBare(s) {
+    return String(s == null ? '' : s).toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  /* 0 .. 1, asymmetric on purpose: "how much of this transcript appears in what he is
+     saying", which is the question being asked. A symmetric score would punish the
+     transcript for being short, and being short is the normal case. */
+  function echoSimilarity(transcript, spoken) {
+    const a = echoBare(transcript).slice(0, ECHO_NEEDLE_MAX);
+    const b = echoBare(spoken);
+    if (!a || !b) return 0;
+    const s = 1 - echoSubDistance(a, b) / a.length;
+    return s < 0 ? 0 : s;
+  }
+
+  /* WHAT THE ENGINE IS SAYING RIGHT NOW: the chunk in flight, then everything queued behind
+     it, which is the mandate's "the active chunk and speakQueue". Read, never written - the
+     funnel is not touched by any of this. */
+  function echoSpokenNow() {
+    const parts = [];
+    if (speakNow && speakNow.text) parts.push(String(speakNow.text));
+    for (let i = 0; i < speakQueue.length; i++) {
+      if (speakQueue[i] && speakQueue[i].text) parts.push(String(speakQueue[i].text));
+    }
+    return parts.join(' ').slice(0, ECHO_SPOKEN_MAX);
+  }
+
+  /* ...AND WHAT HE HAD JUST FINISHED SAYING. saidLines already holds the last six seconds
+     of lines for the `said` door, so the tail needs no new bookkeeping and no new memory -
+     it is the same list, read through a tighter clock. */
+  function echoSpokenTail() {
+    const cut = Date.now() - SAID_TTL_MS;
+    const parts = [];
+    for (let i = 0; i < saidLines.length; i++) {
+      if (saidLines[i].at >= cut && saidLines[i].text) parts.push(String(saidLines[i].text));
+    }
+    const all = parts.join(' ');
+    return all.length > ECHO_SPOKEN_MAX ? all.slice(all.length - ECHO_SPOKEN_MAX) : all;
+  }
+
+  function echoTtsLive() { return !!(speakDraining || speakQueue.length); }
+
+  /* WHEN THE ENGINE WAS LAST BUSY, stamped by a timer of its own rather than by a hook in
+     the funnel - the funnel is protected and does not need to know this exists. Ten times a
+     second is four readings inside the shortest chunk and sixteen inside ECHO_TAIL_MS,
+     which is resolution to spare for a decision measured in whole seconds. */
+  setInterval(function () { if (echoTtsLive()) echo.liveAt = Date.now(); }, 100);
+
+  function echoSinceLive() {
+    if (echoTtsLive()) return 0;
+    return echo.liveAt ? Date.now() - echo.liveAt : Infinity;
+  }
+
+  /* ---- LAYER 2, THE MEASUREMENT ----
+     Driven from earVad() on the same frames as bargeWatch and off the same reference, so
+     there is one place in this page that knows how loud the speakers are and both gates
+     read it. It does not touch barge state and barge does not touch this. */
+  function echoGateWatch(lvl, now) {
+    echo.input = lvl;
+    if (!echoTtsLive()) {
+      /* Not speaking, so there is nothing to be louder than - and the hold is deliberately
+         NOT cleared here: a barge-in accepted on the last frame of an answer must still be
+         open when the transcript of it lands a second later. */
+      echo.overSince = 0; echo.overFor = 0;
+      return false;
+    }
+    const ref = bargeReference();
+    echo.ref = ref.rms;
+    echo.refFrom = ref.from;
+    echo.ratio = ref.rms > 0 ? lvl / ref.rms : 0;
+    /* NO REFERENCE MEANS THE GATE STAYS SHUT, which is the opposite of what the barge gate
+       does with the same situation, and deliberately. Barge treats "I cannot measure the
+       output" as permission to interrupt, because the cost of being wrong is a sentence cut
+       short. Here the cost is a question nobody asked, so an unmeasurable frame is not
+       evidence of a human being. It is also the leakiest moment there is - the first
+       BARGE_DEAF_MS of a browser-voice answer, before anything has been calibrated. */
+    const over = ref.rms > 0 && lvl >= EAR_VAD_ON && lvl > ref.rms * ECHO_GATE_RATIO;
+    if (!over) {
+      if (!echo.overSince || now - echo.overSince > ECHO_GATE_SUSTAIN_MS + BARGE_GAP_MS) {
+        echo.overSince = 0; echo.overFor = 0;
+      }
+      return false;
+    }
+    if (!echo.overSince) echo.overSince = now;
+    echo.overFor = now - echo.overSince;
+    if (echo.overFor < ECHO_GATE_SUSTAIN_MS) return false;
+    if (!echo.gateAt || now - echo.gateAt > ECHO_GATE_HOLD_MS) echo.gateOpens++;
+    echo.gateAt = now;
+    return true;
+  }
+
+  function echoGateOpen() {
+    return !!echo.gateAt && Date.now() - echo.gateAt <= ECHO_GATE_HOLD_MS;
+  }
+
+  /* THE VERDICT, PURE. Text in, a kind out, no counters moved and nothing dropped - so the
+     door below can ask what the law thinks of a sentence without spending it, and the two
+     callers can share one rule instead of keeping two that drift. */
+  function echoJudge(text) {
+    const bare = echoBare(text);
+    const live = echoTtsLive();
+    const sinceLive = echoSinceLive();
+    const spoken = live ? echoSpokenNow() : '';
+    const tail = (!live && sinceLive <= ECHO_TAIL_MS) ? echoSpokenTail() : '';
+    const against = spoken || tail;
+    const where = spoken ? 'the chunk in flight and the queue behind it'
+                         : (tail ? 'the line he had just finished' : '');
+    if (!bare) return { kind: 'heard', why: 'nothing to judge', similarity: 0, layer: 0 };
+    if (!against) {
+      return { kind: 'heard', layer: 0, similarity: 0, gate: echoGateOpen(),
+               why: 'the engine is not speaking and has not spoken recently' };
+    }
+    if (!spoken && bare.length < ECHO_TAIL_MIN_CHARS) {
+      return { kind: 'heard', layer: 0, similarity: 0, gate: echoGateOpen(),
+               why: 'too short to judge against a finished line (' + bare.length + ' < ' +
+                    ECHO_TAIL_MIN_CHARS + ' chars)' };
+    }
+    const hay = echoBare(against);
+    const sim = echoSimilarity(bare, against);
+    const inside = hay.indexOf(bare.slice(0, ECHO_NEEDLE_MAX)) >= 0;
+    if (inside) {
+      return { kind: 'echo', layer: 1, similarity: sim, gate: echoGateOpen(),
+               why: 'word for word inside ' + where };
+    }
+    if (sim > ECHO_SIMILARITY) {
+      return { kind: 'echo', layer: 1, similarity: sim, gate: echoGateOpen(),
+               why: sim.toFixed(2) + ' similar to ' + where + ' (over ' +
+                    ECHO_SIMILARITY + ')' };
+    }
+    /* LAYER 2. The words did not give it away, so the room has to. Only while he is
+       actually speaking: once the queue is dry there is no leak to be louder than, and
+       holding the gate over the tail window would refuse the first real thing he said. */
+    if (live && !echoGateOpen()) {
+      return { kind: 'echo', layer: 2, similarity: sim, gate: false,
+               why: 'the acoustic gate is shut: nothing in the room reached ' +
+                    ECHO_GATE_RATIO + 'x the output reference (' +
+                    Number(echo.input).toFixed(3) + ' against ' +
+                    Number(echo.ref).toFixed(3) + ' from ' + echo.refFrom + ')' };
+    }
+    return { kind: 'heard', layer: 0, similarity: sim, gate: echoGateOpen(),
+             why: live ? 'distinct words, and the gate is open on a real voice'
+                       : 'distinct from ' + where };
+  }
+
+  /* AND THE GUARD THE FUNNEL CALLS. Silently, as specified - a caption or a line saying
+     "that was you" would be the butler answering himself by another route. The count and
+     the log are the transparency instead: __galaxy.ear.echo. */
+  function echoDrop(text) {
+    const v = echoJudge(text);
+    if (v.kind !== 'echo') { echo.passed++; return false; }
+    echo.dropped++;
+    if (v.layer === 1) echo.layer1++; else if (v.layer === 2) echo.layer2++;
+    echo.lastWhy = v.why;
+    echo.lastText = String(text).slice(0, 80);
+    echo.log.push({ at: Date.now(), text: echo.lastText, layer: v.layer,
+                    similarity: +Number(v.similarity).toFixed(3), why: v.why,
+                    engine: speakEngine, input: +Number(echo.input).toFixed(4),
+                    output: +Number(echo.ref).toFixed(4), reference: echo.refFrom });
+    while (echo.log.length > ECHO_LOG_MAX) echo.log.shift();
+    return true;
+  }
+
   function heardFinal(text) {
     const raw = String(text == null ? '' : text).trim();
     if (!raw) return;
@@ -9594,6 +10117,12 @@ async function loadLib() {
        sentence he already finished saying, and honouring it would cancel the answer to his
        own question. ear.sealed counts them, so the drop is visible rather than silent. */
     if (thoughtIsSealed()) { ear.sealed++; return; }
+    /* THE ECHO LAW, AND IT IS AHEAD OF THE INTERRUPTS ON PURPOSE. "Stop" is a barked word
+       that skips the buffer and empties the queue, so an answer containing "...I'll stop
+       there, sir" leaked into the microphone and transcribed as "stop" would cancel itself
+       mid-sentence - the self-answer defect wearing a control's clothes. Checked after the
+       seal so that every existing count means exactly what it meant before. */
+    if (echoDrop(raw)) return;
     const bare = raw.toLowerCase().replace(/[.,!?;:'"]/g, '').replace(/\s+/g, ' ').trim();
     if (INTERRUPTS.has(bare)) return interrupt(bare);   // straight past the buffer
     /* AND THE CLOSERS, which are also barked and also skip the buffer - but only while a
@@ -9614,6 +10143,12 @@ async function loadLib() {
 
   function heardInterim(text) {
     if (thoughtIsSealed()) { ear.sealed++; return; }
+    /* AND THE INTERIMS TOO, because they are not harmless. An interim does not reach the
+       brain by itself, but it re-arms the finish timer and it lands in lastInterim, where
+       flushThought() appends it to the thought - so a leaked interim is a sentence of his
+       own voice stapled onto the front of the next real question, and the finish timer it
+       kept resetting is the courtesy clock that decides when the room has gone quiet. */
+    if (echoDrop(text)) return;
     // More words are arriving, so that last pause was not the end of anything.
     lastInterim = String(text == null ? '' : text).trim();
     armFinishTimer();
@@ -9955,6 +10490,10 @@ async function loadLib() {
        own voice in the speakers also satisfies; the barge gate answers "is the room louder
        than what is leaving the speakers", which it does not. See bargeWatch(). */
     bargeWatch(lvl, now);
+    /* AND THE ECHO LAW'S SECOND LAYER IS MEASURED ON THE SAME FRAME, off the same output
+       reference, and decides something else entirely: not "interrupt him" but "may these
+       words reach the brain at all". See THE ECHO LAW. */
+    echoGateWatch(lvl, now);
     if (lvl >= EAR_VAD_ON) {
       ear.over++;
       ear.under = 0;
@@ -10685,6 +11224,704 @@ async function loadLib() {
     renderAnswer('', line, false, null);          // no ids, so the graph is untouched
     if (!speak(line)) idleStatus();               // held until the first click
   }
+
+  /* ============== THE SCRIBE: A MEETING, TAKEN DOWN AS IT HAPPENS ==============
+     One organ, two microphones, and not one byte of audio on any disk.
+
+     WHAT IT ACTUALLY DOES. A tap on #scribebtn opens getDisplayMedia({video, audio}) - the
+     browser's picker, with the Share audio tick - and getUserMedia for the local
+     microphone. Both streams are fed into the page's existing AudioContext, summed in one
+     gain node, and read by an AudioWorklet that hands back three seconds of Float32 at a
+     time. Each chunk is downsampled to 16 kHz, wrapped in a WAV header and POSTed to
+     /scribe/transcribe as multipart/form-data. The text comes back and goes into the panel.
+     The chunk is dropped.
+
+     WHY getDisplayMedia AND NOT SOMETHING SIMPLER. There is no audio-only display capture:
+     Chrome will reject `{video: false, audio: true}` outright, and the tick that produces a
+     system audio track only exists on the tab and window surfaces of the screen picker. So
+     a video track is requested, granted, and then deliberately never rendered - no <video>
+     element, no canvas, no frame taken from it, and nothing anywhere in this section that
+     could send one. It is kept LIVE rather than stopped because stopping it ends the whole
+     capture and takes the audio track with it. That is the cost of the only route the
+     platform offers, and it is written down here rather than discovered later.
+
+     WHY AN AudioWorklet AND NOT MediaRecorder, which is the obvious answer. MediaRecorder
+     with start(3000) hands back a blob every three seconds, and only the FIRST of those
+     blobs carries the webm/EBML header: every later one is a bare cluster. PyAV - which is
+     what faster-whisper decodes with - cannot decode a headerless cluster, so chunk 1 would
+     transcribe and chunks 2..n would every one of them come back as "that chunk was not
+     audio this machine could decode". The workarounds are all worse than the problem:
+     restart the recorder every chunk and lose the words that fall in the gap, or prepend a
+     remembered header and hope the timestamps agree. A worklet gives raw samples, and a WAV
+     built from raw samples is complete by construction - every chunk is a whole file.
+
+     WHY THE MICROPHONE ASKS FOR echoCancellation AND THE SYSTEM AUDIO DOES NOT. Both halves
+     of the meeting arrive twice: the far end comes in cleanly on the display capture AND
+     again as speaker bleed into the microphone, a few milliseconds later and worse. Summed
+     raw, that is every remote sentence transcribed twice, in two slightly different wrong
+     ways. AEC on the microphone is exactly the tool for it - it subtracts what the machine
+     is playing from what the machine is hearing - so the microphone contributes the room and
+     the display capture contributes the call, which is the split we want. The system track
+     is taken untouched, because processing a signal that never went through a room would
+     only cost it consonants.
+
+     THE ZERO-GAIN PULL, and this is the trap that eats an afternoon. A worklet's process()
+     is only called if the node is connected to something that reaches the destination -
+     dangle it and it is never pulled, no error, no chunks, a panel that stays empty and a
+     button that looks perfectly alive. So the tap is connected to a gain of 0 which is
+     connected to the destination: the graph is pulled and NOTHING IS PLAYED BACK INTO THE
+     ROOM. A gain of 1 here would put the far end of the call back out of the speakers,
+     into the microphone, and round again.
+
+     THE PRIVACY LAW, which is the same sentence server-side and here. No audio is written
+     to disk, ever: there is no download, no IndexedDB, no File and no object URL in this
+     section, and the only Blob that exists is the one handed to fetch(), which is released
+     the moment the POST resolves. The TRANSCRIPT is text and is held in `scribe.lines` -
+     in RAM, in this tab, for this session. A reload loses it, which is the correct and
+     intended behaviour: the only way a word of a meeting reaches this disk is the
+     save_minutes hand, through the Hands gate, with the employer's Yes. */
+  const SCRIBE_CHUNK_S = 3;            // the mandate's cadence
+  const SCRIBE_RATE = 16000;           // what whisper resamples to anyway - do it once, here
+  const SCRIBE_MAX_LINES = 5000;       // an eight-hour day of speech; a runaway guard, not a limit
+  const SCRIBE_MAX_CHARS = 400000;     // and the same guard on the transcript we would post
+
+  /* The tap, as a module. A Blob URL rather than a file because this page is one file and
+     the harness serves it from viewer/ - a second script would be a second thing to keep in
+     step. `sampleRate` is a global inside AudioWorkletGlobalScope, so the worklet knows the
+     hardware rate without being told and the main thread is told it back with every chunk
+     rather than assuming 48000. */
+  const SCRIBE_TAP_SRC = [
+    'class ScribeTap extends AudioWorkletProcessor {',
+    '  constructor (opts) {',
+    '    super();',
+    '    const s = (opts && opts.processorOptions && opts.processorOptions.seconds) || 3;',
+    '    this.want = Math.max(1, Math.round(sampleRate * s));',
+    '    this.buf = new Float32Array(this.want);',
+    '    this.n = 0;',
+    '  }',
+    '  process (inputs) {',
+    '    const ch = inputs[0] && inputs[0][0];',
+    '    if (ch) {',
+    '      for (let i = 0; i < ch.length; i++) {',
+    '        this.buf[this.n++] = ch[i];',
+    '        if (this.n >= this.want) {',
+    '          const out = this.buf;',
+    '          this.buf = new Float32Array(this.want);',
+    '          this.n = 0;',
+    /* TRANSFERRED, not copied: a three-second chunk is half a megabyte and the audio
+       thread has 2.6ms to spare. The buffer is replaced above first, so there is no
+       window in which this processor is holding a detached one. */
+    '          this.port.postMessage({ pcm: out, rate: sampleRate }, [out.buffer]);',
+    '        }',
+    '      }',
+    '    }',
+    /* true for ever: a tap whose process() returned false would be collected by the
+       browser mid-meeting, which is a silent stop. It is stopped by disconnect() and by
+       nothing else. */
+    '    return true;',
+    '  }',
+    '}',
+    'registerProcessor("scribe-tap", ScribeTap);'
+  ].join('\n');
+
+  const scribe = {
+    /* what /health says */
+    installed: false, ready: false, why: '', model: '', asked: false,
+    /* what this page is doing */
+    on: false, starting: false, mode: '', trouble: '',
+    sys: null, mic: null, micWhy: '', hasSys: false, hasMic: false,
+    mix: null, sink: null, tap: null, sysSrc: null, micSrc: null,
+    /* the record, in RAM, this session only */
+    lines: [], chars: 0,
+    /* counts, for the panel and for the harness */
+    chunks: 0, kept: 0, skipped: 0, posted: 0, failed: 0, bytes: 0,
+    seq: 0, sending: 0, startedAt: 0, stoppedAt: 0, lastMs: 0,
+    /* the minutes half */
+    drafting: false, drafted: false, minutes: '', title: '', exists: false,
+    raw: false, minutesWhy: ''
+  };
+  let scribeModuleUp = false;
+
+  /* ---- /health, once a poll. The button is disabled by a FACT, not by a hope ----
+     THE TOOLTIP IS NOT WRITTEN HERE, and the reason is a bug scribe_proof found rather
+     than a preference. organsPaint() sets every organ's title to ORGAN_TIP[id] + '\n' +
+     the state line, and ORGAN_TIP is the button's title captured on the FIRST paint. So
+     any title this function assigned was overwritten on the next paint - it was dead code
+     that read like the authority - and if it happened to be assigned before that first
+     paint it became the permanent base sentence instead, which is how "Checking whether
+     this machine has a transcriber…" got itself adopted as the description of what the
+     button is FOR. One author for that attribute: organRead, off the markup.
+     So this sets the one thing it owns - whether the control can be pressed - and asks
+     for a repaint UNCONDITIONALLY, because `why` can change while `installed` does not
+     and the reason is the half of the tooltip worth reading. */
+  function scribeHealthFrom(state) {
+    if (!state) return;
+    scribe.installed = !!state.installed;
+    scribe.ready = !!state.ready;
+    scribe.why = String(state.why || '');
+    scribe.model = String(state.model || '');
+    scribe.asked = true;
+    const btn = $('scribebtn');
+    if (!btn) return;
+    btn.disabled = !scribe.installed;
+    organsPaint();
+  }
+
+  /* ---- THE PANEL ---- */
+  function scribePanelUp(live) {
+    const el = $('scribepanel');
+    if (!el) return;
+    el.classList.add('show');
+    el.classList.toggle('live', !!live);
+    el.classList.toggle('done', !live);
+    /* AND RE-MEASURE, for the same reason renderAnswer() ends with it: this panel is inside
+       #brain, so opening it changes the toast column's HEIGHT, and the governor's clearance
+       arithmetic and the presence well's band are both statements about that height. */
+    layout();
+    organsPaint();
+  }
+
+  function scribePanelDown() {
+    const el = $('scribepanel');
+    if (!el) return;
+    el.classList.remove('show', 'live', 'done');
+    layout();
+    organsPaint();
+  }
+
+  function scribeStamp(ms) {
+    const s = Math.max(0, Math.round(ms / 1000));
+    return String(Math.floor(s / 60)) + ':' + ('0' + (s % 60)).slice(-2);
+  }
+
+  /* One line into the column. `kind` is '' for speech, 'note' for a fact about the machine
+     and 'bad' for a refusal - three visibly different things, because a reader scanning a
+     transcript for what was said must not have to wonder whether a line was said. */
+  function scribeAppend(text, kind, at) {
+    const body = String(text || '').trim();
+    if (!body) return;
+    const box = $('scribe-lines');
+    if (!box) return;
+    if (!kind) {
+      if (scribe.lines.length >= SCRIBE_MAX_LINES) scribe.lines.shift();
+      scribe.lines.push(body);
+      scribe.chars += body.length + 1;
+    }
+    /* AT THE BOTTOM ONLY IF HE IS AT THE BOTTOM. A reader who has scrolled up to check
+       something said two minutes ago is reading, and yanking them back to the live edge
+       every three seconds makes the panel unusable for the one job it has. 24px of slack,
+       because a scroll container is rarely exactly at its end. */
+    const atEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+    const p = document.createElement('p');
+    if (kind) p.className = kind;
+    if (!kind) {
+      const t = document.createElement('span');
+      t.className = 't';
+      t.textContent = scribeStamp((at === undefined ? Date.now() : at) -
+                                  (scribe.startedAt || Date.now()));
+      p.appendChild(t);
+    }
+    p.appendChild(document.createTextNode(body));
+    box.appendChild(p);
+    if (atEnd) box.scrollTop = box.scrollHeight;
+    scribeMetaPaint();
+  }
+
+  function scribeMetaPaint() {
+    const el = $('scribe-meta');
+    if (!el) return;
+    const ran = (scribe.stoppedAt || Date.now()) - (scribe.startedAt || Date.now());
+    const words = scribe.lines.join(' ').split(/\s+/).filter(Boolean).length;
+    const bits = [scribeStamp(scribe.startedAt ? ran : 0),
+                  scribe.chunks + ' chunks',
+                  words + (words === 1 ? ' word' : ' words')];
+    if (scribe.skipped) bits.push(scribe.skipped + ' skipped');
+    const want = bits.join(' · ');
+    if (el.textContent !== want) el.textContent = want;
+    const lbl = $('scribe-lbl');
+    if (lbl) {
+      const say = scribe.on ? 'taking the minutes' : 'transcript · the meeting has ended';
+      if (lbl.textContent !== say) lbl.textContent = say;
+    }
+  }
+
+  function scribeTranscript() {
+    return scribe.lines.join('\n').slice(-SCRIBE_MAX_CHARS).trim();
+  }
+
+  /* ---- THE CHUNK: Float32 in, a whole WAV file out ---- */
+  function scribeWav(pcm, rate) {
+    const ratio = Math.max(1, rate / SCRIBE_RATE);
+    const n = Math.max(1, Math.floor(pcm.length / ratio));
+    const bytes = 44 + n * 2;
+    const buf = new ArrayBuffer(bytes);
+    const view = new DataView(buf);
+    const ascii = function (at, s) {
+      for (let i = 0; i < s.length; i++) view.setUint8(at + i, s.charCodeAt(i));
+    };
+    ascii(0, 'RIFF'); view.setUint32(4, bytes - 8, true); ascii(8, 'WAVE');
+    ascii(12, 'fmt '); view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);                 // PCM
+    view.setUint16(22, 1, true);                 // mono
+    view.setUint32(24, SCRIBE_RATE, true);
+    view.setUint32(28, SCRIBE_RATE * 2, true);   // byte rate
+    view.setUint16(32, 2, true);                 // block align
+    view.setUint16(34, 16, true);                // bits
+    ascii(36, 'data'); view.setUint32(40, n * 2, true);
+    /* AVERAGED, NOT PICKED. 48000 -> 16000 by taking every third sample folds everything
+       between 8 kHz and 24 kHz down into the speech band as aliasing - which sounds like
+       nothing much and transcribes like a bad line. A box average over each source window
+       is a crude low-pass, it costs one add per sample, and it is the difference between
+       "the quarterly review" and "the quarter of you". */
+    let at = 44;
+    for (let i = 0; i < n; i++) {
+      const from = Math.floor(i * ratio);
+      const to = Math.min(pcm.length, Math.max(from + 1, Math.floor((i + 1) * ratio)));
+      let sum = 0;
+      for (let j = from; j < to; j++) sum += pcm[j];
+      let v = sum / (to - from);
+      if (!(v > -1)) v = v < 0 ? -1 : v;         // NaN and -Inf both land on a valid sample
+      if (v > 1) v = 1;
+      view.setInt16(at, Math.round(v < 0 ? v * 32768 : v * 32767), true);
+      at += 2;
+    }
+    return new Blob([buf], { type: 'audio/wav' });
+  }
+
+  async function scribePost(pcm, rate) {
+    if (!scribe.on) return;                      // a chunk that landed after Stop is dropped
+    scribe.chunks++;
+    const seq = ++scribe.seq;
+    let blob = null;
+    try {
+      blob = scribeWav(pcm, rate);
+    } catch (e) {
+      scribe.failed++;
+      scribeAppend('a chunk could not be packed on this machine', 'bad');
+      return;
+    }
+    scribe.bytes += blob.size;
+    const form = new FormData();
+    form.append('seq', String(seq));
+    form.append('audio', blob, 'chunk-' + seq + '.wav');
+    scribe.sending++;
+    $('scribebtn').classList.add('sending');
+    organsPaint();
+    const t0 = Date.now();
+    let data = null;
+    try {
+      const res = await fetch('/scribe/transcribe', { method: 'POST', body: form });
+      data = await res.json();
+    } catch (e) {
+      data = null;
+    } finally {
+      /* THE BYTES GO HERE AND NOWHERE ELSE. The Blob and the FormData are the only copies
+         that ever existed outside the audio thread, and both references die on this line. */
+      blob = null;
+      scribe.sending = Math.max(0, scribe.sending - 1);
+      if (!scribe.sending) $('scribebtn').classList.remove('sending');
+      organsPaint();
+    }
+    scribe.lastMs = Date.now() - t0;
+    scribe.posted++;
+    if (!data) {
+      scribe.failed++;
+      /* ONE LINE PER OUTAGE, NOT ONE PER CHUNK. A server that has gone away will refuse
+         every chunk for as long as the meeting runs, and twenty identical red lines is a
+         panel nobody can read the transcript out of. */
+      if (scribe.failed === 1 || scribe.failed % 10 === 0) {
+        scribeAppend('the transcriber could not be reached · chunk ' + seq + ' is lost',
+                     'bad');
+      }
+      return;
+    }
+    if (data.scribe) scribeHealthFrom(data.scribe);
+    if (data.ok === false) {
+      scribe.skipped++;
+      /* A skipped chunk is NOT an error line. It is three seconds the machine could not
+         make out, it happens, and the note says so once every ten rather than every time. */
+      if (scribe.skipped === 1) {
+        scribeAppend('a chunk would not decode and was skipped · ' +
+                     (data.error || 'no reason given'), 'note');
+      }
+      scribeMetaPaint();
+      return;
+    }
+    const text = String(data.text || '').trim();
+    if (!text) { scribeMetaPaint(); return; }     // three quiet seconds: a true answer
+    scribe.kept++;
+    scribeAppend(text, '', Date.now());
+  }
+
+  /* ---- THE GRAPH ---- */
+  async function scribeTapUp() {
+    /* THE WORKLET FIRST, AND THE FALLBACK IS REAL. Every browser this deck supports has
+       audioWorklet; a browser that does not gets a ScriptProcessorNode, which is deprecated,
+       runs on the main thread and is perfectly adequate for summing into a buffer. A feature
+       that refuses to work rather than working worse is the wrong trade for a meeting
+       somebody is in the middle of. */
+    if (actx.audioWorklet) {
+      try {
+        if (!scribeModuleUp) {
+          const url = URL.createObjectURL(
+            new Blob([SCRIBE_TAP_SRC], { type: 'text/javascript' }));
+          try {
+            await actx.audioWorklet.addModule(url);
+            scribeModuleUp = true;
+          } finally {
+            /* Revoked at once: the module is compiled by the time addModule resolves, and
+               an object URL left alive is a reference the page cannot collect. */
+            URL.revokeObjectURL(url);
+          }
+        }
+        const node = new AudioWorkletNode(actx, 'scribe-tap', {
+          numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
+          processorOptions: { seconds: SCRIBE_CHUNK_S }
+        });
+        node.port.onmessage = function (ev) {
+          const d = ev.data;
+          if (d && d.pcm) scribePost(d.pcm, d.rate || actx.sampleRate);
+        };
+        scribe.mode = 'worklet';
+        return node;
+      } catch (e) {
+        scribe.trouble = 'the worklet was refused (' + ((e && e.name) || 'error') + ')';
+      }
+    }
+    if (!actx.createScriptProcessor) return null;
+    const want = Math.max(1, Math.round(actx.sampleRate * SCRIBE_CHUNK_S));
+    const node = actx.createScriptProcessor(4096, 1, 1);
+    let buf = new Float32Array(want), n = 0;
+    node.onaudioprocess = function (ev) {
+      const ch = ev.inputBuffer.getChannelData(0);
+      for (let i = 0; i < ch.length; i++) {
+        buf[n++] = ch[i];
+        if (n >= want) {
+          const out = buf;
+          buf = new Float32Array(want); n = 0;
+          scribePost(out, actx.sampleRate);
+        }
+      }
+    };
+    scribe.mode = 'scriptprocessor';
+    return node;
+  }
+
+  function scribeGraphDown() {
+    ['tap', 'sink', 'mix', 'sysSrc', 'micSrc'].forEach(function (k) {
+      const node = scribe[k];
+      if (!node) return;
+      try { if (node.port) node.port.onmessage = null; } catch (e) { /* not a worklet */ }
+      try { node.onaudioprocess = null; } catch (e) { /* not a processor */ }
+      try { node.disconnect(); } catch (e) { /* already gone */ }
+      scribe[k] = null;
+    });
+    /* AND THE TRACKS ARE STOPPED, not merely dropped. A live track is what keeps the
+       browser's own capture indicator lit and the "stop sharing" bar on screen; a page that
+       leaves them running has told the truth on its own seal and lied to the operating
+       system. */
+    ['sys', 'mic'].forEach(function (k) {
+      const stream = scribe[k];
+      if (!stream) return;
+      try {
+        stream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) { /**/ } });
+      } catch (e) { /* a stream with no tracks is one that is already down */ }
+      scribe[k] = null;
+    });
+    scribe.hasSys = false; scribe.hasMic = false;
+  }
+
+  /* ---- START, AND THE THREE REFUSALS ---- */
+  async function scribeStart() {
+    if (scribe.on || scribe.starting) return false;
+    /* REFUSAL ONE, and it is checked before a picker can open. A machine whose transcriber
+       will not import must say so on a button press rather than take three seconds of
+       somebody's meeting and discover there is nowhere to send it. */
+    if (!scribe.installed) {
+      scribeSealSay('scribe: transcriber offline');
+      setStatus('', 'the transcriber is offline · ' +
+                    (scribe.why || 'faster-whisper is not installed'));
+      setTimeout(function () { if (!busy) idleStatus(); }, 3200);
+      return false;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      scribeSealSay('scribe: no capture');
+      setStatus('', 'this browser cannot capture system audio');
+      setTimeout(function () { if (!busy) idleStatus(); }, 3200);
+      return false;
+    }
+    if (!tonesUp()) {
+      scribeSealSay('scribe: no audio engine');
+      setStatus('', 'no AudioContext on this machine · ' + (toneTrouble || 'refused'));
+      setTimeout(function () { if (!busy) idleStatus(); }, 3200);
+      return false;
+    }
+    /* A CHANGED SUBJECT IS A WITHDRAWAL, the same law the share, the eyes and the watch
+       obey: starting a meeting is not an answer to "shall I send that email". */
+    if (proposal) await withdrawProposal();
+
+    scribe.starting = true;
+    scribe.trouble = '';
+    setStatus('', 'choose what to share · and tick Share audio');
+    let sys = null;
+    try {
+      /* video:true IS NOT OPTIONAL - see the block above. The frame rate is floored because
+         a track nobody renders should cost nothing, and audio asks for the raw signal:
+         echo cancellation on a capture that never went through a room only removes
+         consonants. */
+      sys = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 1, max: 4 } },
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+      });
+    } catch (e) {
+      /* REFUSAL TWO. Dismissing a picker is a decision, not a fault: the seal says so in
+         two words and nothing is spoken. */
+      scribe.starting = false;
+      scribeSealSay('scribe: cancelled');
+      setStatus('', (e && e.name === 'NotAllowedError')
+        ? 'the minutes were cancelled'
+        : 'the capture was refused · ' + ((e && e.name) || 'unknown'));
+      setTimeout(function () { if (!busy) idleStatus(); }, 2800);
+      return false;
+    }
+    const atrack = sys.getAudioTracks()[0] || null;
+    if (!atrack) {
+      /* REFUSAL THREE, AND IT IS THE ONE THIS FEATURE WOULD OTHERWISE FAIL SILENTLY ON. The
+         picker was accepted with the Share audio tick left off: there is a live video track,
+         the button would light, the panel would open, and every chunk would be three seconds
+         of the room with none of the call in it. So the whole capture is stopped and the seal
+         names the tick by its own label. */
+      try {
+        sys.getTracks().forEach(function (t) { try { t.stop(); } catch (e2) { /**/ } });
+      } catch (e) { /* nothing to stop */ }
+      scribe.starting = false;
+      scribeSealSay('scribe: share audio off');
+      setStatus('', 'no audio was shared · tick “Share audio” in the picker');
+      setTimeout(function () { if (!busy) idleStatus(); }, 4200);
+      return false;
+    }
+    scribe.sys = sys;
+    scribe.hasSys = true;
+    /* The browser's own Stop sharing bar ends the track and tells this page nothing else,
+       which makes this the one signal that must never be missed. */
+    sys.getTracks().forEach(function (t) {
+      t.addEventListener('ended', function () {
+        if (scribe.on) scribeStop('the share ended');
+      });
+    });
+
+    /* THE MICROPHONE, AND A REFUSED MICROPHONE IS NOT A FAILED MEETING. Half a meeting is
+       worth minuting, so this continues with system audio alone and SAYS SO in the panel -
+       visibly, as a note, rather than leaving a man to wonder later why his own half of the
+       conversation is missing from the minutes. */
+    scribe.micWhy = '';
+    try {
+      scribe.mic = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: false
+      });
+      scribe.hasMic = true;
+    } catch (e) {
+      scribe.mic = null;
+      scribe.micWhy = 'the microphone was refused (' + ((e && e.name) || 'error') + ')';
+    }
+
+    let tap = null;
+    try {
+      scribe.mix = actx.createGain();
+      scribe.mix.gain.value = 1;
+      scribe.sysSrc = actx.createMediaStreamSource(sys);
+      scribe.sysSrc.connect(scribe.mix);
+      if (scribe.mic) {
+        scribe.micSrc = actx.createMediaStreamSource(scribe.mic);
+        scribe.micSrc.connect(scribe.mix);
+      }
+      tap = await scribeTapUp();
+      if (!tap) throw new Error('no tap');
+      scribe.tap = tap;
+      scribe.mix.connect(tap);
+      /* THE ZERO-GAIN PULL. See the block above: without a path to the destination the tap
+         is never called, and with a gain of anything but zero the call comes back out of the
+         speakers and round again. */
+      scribe.sink = actx.createGain();
+      scribe.sink.gain.value = 0;
+      tap.connect(scribe.sink);
+      scribe.sink.connect(actx.destination);
+      if (actx.state === 'suspended') { try { await actx.resume(); } catch (e) { /**/ } }
+    } catch (e) {
+      scribe.starting = false;
+      scribeGraphDown();
+      scribe.trouble = scribe.trouble ||
+        ('the audio graph was refused (' + ((e && e.message) || 'error') + ')');
+      scribeSealSay('scribe: no audio engine');
+      setStatus('', scribe.trouble);
+      setTimeout(function () { if (!busy) idleStatus(); }, 3600);
+      return false;
+    }
+
+    scribe.on = true;
+    scribe.starting = false;
+    scribe.startedAt = Date.now();
+    scribe.stoppedAt = 0;
+    scribe.lines = []; scribe.chars = 0;
+    scribe.chunks = 0; scribe.kept = 0; scribe.skipped = 0;
+    scribe.posted = 0; scribe.failed = 0; scribe.bytes = 0; scribe.seq = 0;
+    scribe.drafted = false; scribe.minutes = ''; scribe.title = '';
+    scribe.exists = false; scribe.raw = false; scribe.minutesWhy = '';
+    const box = $('scribe-lines');
+    if (box) box.innerHTML = '';
+    /* The class is the whole of it: organRead turns .on into the live sentence and
+       organsPaint writes the tooltip. Setting .title here as well would last until the
+       next paint, which is the observer firing on this very class change. */
+    $('scribebtn').classList.add('on');
+    scribePanelUp(true);
+    scribeAppend('listening · ' + (scribe.hasMic ? 'system audio and your microphone'
+                                                 : 'system audio only') +
+                 ' · nothing is written to disk', 'note');
+    if (scribe.micWhy) scribeAppend(scribe.micWhy + ' · your own half will be missing',
+                                    'bad');
+    if (scribe.mode === 'scriptprocessor') {
+      scribeAppend('this browser has no AudioWorklet · using the older tap', 'note');
+    }
+    scribeMetaPaint();
+    chime('wake');
+    setStatus('', 'taking the minutes · ' + SCRIBE_CHUNK_S + 's at a time');
+    setTimeout(function () { if (!busy) idleStatus(); }, 2600);
+    organsPaint();
+    return true;
+  }
+
+  /* ---- STOP. The panel STAYS, which is the whole of the mandate's fourth part ---- */
+  function scribeStop(why) {
+    if (!scribe.on) return false;
+    scribe.on = false;
+    scribe.stoppedAt = Date.now();
+    scribeGraphDown();
+    $('scribebtn').classList.remove('on', 'sending');
+    /* THE TRANSCRIPT IS NOT CLEARED AND THE PANEL IS NOT CLOSED. A meeting that has ended
+       is the only moment at which the minutes can be drafted, so this is the state the
+       feature exists to reach: the full transcript, on screen, with a button under it. */
+    scribePanelUp(false);
+    const words = scribe.lines.join(' ').split(/\s+/).filter(Boolean).length;
+    scribeAppend('the meeting ended' + (why ? ' · ' + why : '') + ' · ' +
+                 (words ? words + (words === 1 ? ' word' : ' words') + ' taken down'
+                        : 'nothing was heard'), 'note');
+    const draft = $('scribe-draft');
+    if (draft) draft.disabled = false;
+    const said = $('scribe-said');
+    if (said) said.textContent = words ? '' : 'there is nothing to minute';
+    scribeMetaPaint();
+    setStatus('', 'the minutes are taken · draft them when you like');
+    setTimeout(function () { if (!busy) idleStatus(); }, 2800);
+    organsPaint();
+    return true;
+  }
+
+  /* ---- THE MINUTES HAND. The brain drafts, the gate asks, the tool writes ---- */
+  async function scribeDraft() {
+    if (scribe.drafting) return;
+    const text = scribeTranscript();
+    /* REFUSAL ONE OF THE MANDATE'S THREE, in its own words. Spoken as well as shown,
+       because pressing a button and getting nothing is the failure this replaces. */
+    if (text.length < 12) {
+      const line = 'There is nothing to save, Addi.';
+      const said = $('scribe-said');
+      if (said) said.textContent = line;
+      renderAnswer('', line, true, null);
+      if (!speak(line)) idleStatus();
+      return;
+    }
+    scribe.drafting = true;
+    const draft = $('scribe-draft');
+    if (draft) draft.disabled = true;
+    const said = $('scribe-said');
+    if (said) said.textContent = 'drafting…';
+    setStatus('thinking', 'drafting the minutes');
+    let data = null;
+    try {
+      const res = await fetch('/scribe/minutes', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript: text })
+      });
+      data = await res.json();
+    } catch (e) { data = null; }
+    scribe.drafting = false;
+    if (draft) draft.disabled = false;
+    if (!data || !data.minutes) {
+      const line = (data && data.error) ||
+        'I could not reach the brain to draft those minutes, Addi.';
+      if (said) said.textContent = 'not drafted';
+      renderAnswer('', line, true, null);
+      if (!speak(spokenForm(line))) idleStatus();
+      return;
+    }
+    scribe.minutes = String(data.minutes);
+    scribe.title = String(data.title || '');
+    scribe.exists = !!data.exists;
+    scribe.drafted = data.drafted !== false;
+    scribe.raw = !scribe.drafted;
+    scribe.minutesWhy = String(data.error || '');
+    /* REFUSAL TWO: the brain failed, so what is on the table is the raw transcript under
+       four headings and the panel says exactly that. The OFFER is not a second dialog - it
+       is the Hands gate, which is already a question with a Yes and a No, and the body it is
+       about is rendered on the card where it can be read before it is approved. Inventing a
+       second confirmation in front of the one this deck already has would be two gates for
+       one decision. */
+    if (scribe.raw) {
+      scribeAppend((data.offer || 'The minutes could not be drafted.') +
+                   ' The card below holds the raw transcript.', 'bad');
+    }
+    /* REFUSAL THREE: the file exists. Yes on the card is Overwrite - the `overwrite` row is
+       rendered on it, so what is being approved is visible - and No is Cancel.
+       save_minutes.py refuses again without that flag, which is the lock; this is the
+       courtesy of asking rather than the guess of renaming. */
+    if (said) {
+      said.textContent = scribe.exists
+        ? 'notes/' + scribe.title + '.md exists · Yes replaces it'
+        : (scribe.raw ? 'raw transcript · not summarised' : 'drafted · awaiting your word');
+    }
+    const body = await toolPost('/tools', {
+      cmd: 'propose', tool: 'save_minutes', door: 'button',
+      params: { title: scribe.title, minutes: scribe.minutes, overwrite: scribe.exists }
+    });
+    if (!body || !body.pending) {
+      const line = (body && (body.error || body.answer)) ||
+        'The server would not take those minutes, sir, so nothing is pending.';
+      renderAnswer('', line, true, null);
+      if (!speak(spokenForm(line))) idleStatus();
+      return;
+    }
+    renderAnswer('', body.answer || '', false, null);
+    showProposal(body.pending);
+    if (!speak(spokenForm(body.answer || ''))) idleStatus();
+  }
+
+  /* ---- THE ONE CONTROL, AND IT TOGGLES ---- */
+  $('scribebtn').onclick = function () {
+    unlockAudio();
+    if (scribe.on) { scribeStop(''); return; }
+    scribeStart();
+  };
+  $('scribe-draft').onclick = function () { scribeDraft(); };
+  /* Close CLEARS the transcript, and that is the honest reading of the button: the record
+     lives in this tab only, so closing the panel is the only way to be rid of it and a
+     Close that left it in memory would be a lie about where it went. */
+  $('scribe-close').onclick = function () {
+    if (scribe.on) scribeStop('closed');
+    scribe.lines = []; scribe.chars = 0;
+    const box = $('scribe-lines');
+    if (box) box.innerHTML = '';
+    const said = $('scribe-said');
+    if (said) said.textContent = '';
+    scribePanelDown();
+  };
+  /* Until the first /health says otherwise the button is off: an organ that offered to
+     record a meeting before anything had confirmed there was a transcriber would be
+     promising on credit. The SENTENCE that goes with this second belongs to organRead's
+     `!scribe.asked` case and must not be written here: the first organsPaint() captures
+     whatever .title holds as the button's permanent base description, and a placeholder
+     captured there outlives the condition it described. */
+  $('scribebtn').disabled = true;
 
   /* ==================================================================
      THE TYPEWRITER
@@ -15694,6 +16931,70 @@ async function loadLib() {
       },
       paint: organsPaint,
     },
+    /* THE SCRIBE, and what a harness is allowed to do through this door is deliberately
+       narrow: it may READ everything and it may press the two buttons a hand can press. It
+       may NOT be handed a fabricated transcript - `lines` is a copy, and there is no setter -
+       because scribe_proof has to prove that words got from a real getDisplayMedia capture
+       through a real worklet to a real transcriber, and a door that could inject text would
+       make that proof worthless. start() is the same function the click calls, which is the
+       only way the picker can be reached at all. */
+    scribe: {
+      get installed() { return scribe.installed; },
+      get ready() { return scribe.ready; },
+      get why() { return scribe.why; },
+      get on() { return scribe.on; },
+      get mode() { return scribe.mode; },
+      get trouble() { return scribe.trouble; },
+      get hasSys() { return scribe.hasSys; },
+      get hasMic() { return scribe.hasMic; },
+      get micWhy() { return scribe.micWhy; },
+      get chunks() { return scribe.chunks; },
+      get kept() { return scribe.kept; },
+      get skipped() { return scribe.skipped; },
+      get posted() { return scribe.posted; },
+      get failed() { return scribe.failed; },
+      get bytes() { return scribe.bytes; },
+      get sending() { return scribe.sending; },
+      get lastMs() { return scribe.lastMs; },
+      get lines() { return scribe.lines.slice(); },
+      get text() { return scribeTranscript(); },
+      get drafted() { return scribe.drafted; },
+      get raw() { return scribe.raw; },
+      get title() { return scribe.title; },
+      get minutes() { return scribe.minutes; },
+      get exists() { return scribe.exists; },
+      /* THE PRIVACY LAW, WHERE A HARNESS CAN READ IT. Both are the same claim the server
+         publishes on /health: this page has no path it writes audio to, and the transcript
+         is in this tab's memory and nowhere else. A harness that asserts these is asserting
+         the promise itself rather than the absence of a bug. */
+      keepsAudio: false,
+      get keepsText() { return scribe.lines.length > 0; },
+      /* The panel, read off the DOM rather than off a flag, for the same reason the organ
+         rail is a reader: the classes are what the page actually did. */
+      get panel() {
+        const el = document.getElementById('scribepanel');
+        if (!el) return null;
+        const rows = el.querySelectorAll('.lines p');
+        return {
+          open: el.classList.contains('show'),
+          live: el.classList.contains('live'),
+          done: el.classList.contains('done'),
+          rows: rows.length,
+          meta: (document.getElementById('scribe-meta') || {}).textContent || '',
+          said: (document.getElementById('scribe-said') || {}).textContent || '',
+          /* The column's own text, which is what the mandate's assertion is about. */
+          shown: Array.prototype.map.call(rows, function (p) {
+            return String(p.textContent || '').trim();
+          }),
+        };
+      },
+      get seal() { return { word: scribeSeal.word, said: scribeSeal.said,
+                            times: scribeSeal.times }; },
+      start: scribeStart,
+      stop: function (why) { return scribeStop(why || 'the harness'); },
+      draft: scribeDraft,
+      health: scribeHealthFrom,
+    },
     /* THE COMMAND PANEL, and everything a harness needs to prove it without a keyboard:
        open() is what Ctrl+K does, run(id) is what a click on a row does, and rows is what
        the row actually SAYS - so "the panel offers five orders and each one reports the
@@ -16044,6 +17345,55 @@ async function loadLib() {
                    bargeIns: ear.bargeIns, lastWhy: barge.lastWhy };
         },
         get log() { return barge.log.slice(); }
+      },
+      /* ---- THE ECHO LAW, READABLE AND DRIVABLE ----
+         THE SAME SHAPE AS barge FOR THE SAME REASON. judge() is the rule with no page state
+         moved by asking it, so "his own sentence is refused" and "a different sentence is
+         not" are two calls and two assertions rather than a story about a room. similarity()
+         is the metric on its own, because a threshold nobody can evaluate is a number in a
+         comment. And `log` is every drop with both the score and the loudness in it: the
+         interesting half of this feature is the refusals, and a refusal without its
+         measurement is a claim. */
+      echo: {
+        SIMILARITY: ECHO_SIMILARITY, GATE_RATIO: ECHO_GATE_RATIO,
+        GATE_SUSTAIN_MS: ECHO_GATE_SUSTAIN_MS, GATE_HOLD_MS: ECHO_GATE_HOLD_MS,
+        TAIL_MS: ECHO_TAIL_MS, TAIL_MIN_CHARS: ECHO_TAIL_MIN_CHARS,
+        /* WHY THE VALVE IS AT THE TRANSCRIPT AND NOT AT THE STREAM, published rather than
+           buried: the recogniser owns its own capture, so there is no node of ours between
+           the microphone and it. A proof can read this and say so in its transcript. */
+        streamGated: false, transcriptGated: true,
+        gatedWhy: 'the Web Speech API opens its own capture; our getUserMedia stream feeds ' +
+                  'an AnalyserNode and nothing else, so there is no node of ours to mute',
+        levenshtein: function (a, b) {
+          return echoLevenshtein(echoBare(a), echoBare(b));
+        },
+        similarity: function (transcript, spoken) {
+          return +echoSimilarity(transcript, spoken).toFixed(3);
+        },
+        judge: function (text) {
+          const v = echoJudge(text);
+          return { kind: v.kind, layer: v.layer, why: v.why, gate: !!v.gate,
+                   similarity: +Number(v.similarity).toFixed(3) };
+        },
+        get spoken() {
+          return { live: echoTtsLive(), now: echoSpokenNow(),
+                   tail: echoSinceLive() <= ECHO_TAIL_MS ? echoSpokenTail() : '',
+                   sinceLiveMs: echoSinceLive() === Infinity ? null
+                                                            : Math.round(echoSinceLive()) };
+        },
+        get gate() {
+          return { open: echoGateOpen(), opens: echo.gateOpens,
+                   sustainedMs: Math.round(echo.overFor),
+                   ratio: +Number(echo.ratio).toFixed(2),
+                   input: +Number(echo.input).toFixed(4),
+                   output: +Number(echo.ref).toFixed(4), reference: echo.refFrom };
+        },
+        get state() {
+          return { dropped: echo.dropped, passed: echo.passed,
+                   layer1: echo.layer1, layer2: echo.layer2,
+                   lastWhy: echo.lastWhy, lastText: echo.lastText };
+        },
+        get log() { return echo.log.slice(); }
       }
     },
     /* THE UNASKED SENTENCE, and whether it was allowed to be a sentence. See nudgeSpeak():

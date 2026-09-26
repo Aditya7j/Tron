@@ -30,6 +30,7 @@ import json
 import os
 import re
 import subprocess
+from tools import _proc
 import sys
 import textwrap
 import time
@@ -599,7 +600,7 @@ def check_remember():
         os.remove(path)
         if not captures_existed and os.path.isdir(notes_dir) and not os.listdir(notes_dir):
             os.rmdir(notes_dir)
-        rebuild = subprocess.run([sys.executable, os.path.join(ROOT, "build.py")],
+        rebuild = _proc.run([sys.executable, os.path.join(ROOT, "build.py")],
                                  capture_output=True, text=True, timeout=180)
         if rebuild.returncode != 0:
             notes.append("removed %s but build.py exited %d, so the index may still "
@@ -3112,7 +3113,7 @@ def check_hands():
 
 def _rebuild_vectors(timeout=420):
     """Run the real build, vectors and all, and hand back (ok, one line about it)."""
-    done = subprocess.run([sys.executable, os.path.join(ROOT, "build.py")],
+    done = _proc.run([sys.executable, os.path.join(ROOT, "build.py")],
                           capture_output=True, text=True, timeout=timeout, cwd=ROOT)
     tail = [ln.strip() for ln in (done.stdout or "").splitlines()
             if "vectors" in ln or "chunk" in ln]
@@ -3750,6 +3751,692 @@ def check_lock():
     return PASS, notes
 
 
+# ------------------------------------------------------------------ 20. the Scribe chain
+
+SCRIBE_LINE = ("The quarterly review is on Thursday at ten. We agreed to send the deck "
+               "by Wednesday evening.")
+# The words asserted, and "ten" is deliberately not among them: base.en writes it "10",
+# which is correct, and an assertion that broke on it would be testing spelling.
+SCRIBE_WORDS = ("quarterly", "thursday", "wednesday")
+AUDIO_SUFFIX = (".wav", ".webm", ".ogg", ".mp3", ".m4a", ".opus", ".pcm", ".raw")
+# say-cache/ IS EXCLUDED, and the exclusion is stated out loud rather than buried, because
+# an exemption nobody can see is how a privacy sweep stops meaning anything. It holds the
+# speech this machine PRODUCES - piper's output, keyed by the sentence the server spoke -
+# which is the opposite direction of travel from a captured meeting, and (b) below puts a
+# file in it deliberately by asking /say for the fixture. Nothing else is exempt.
+SCRIBE_SKIP_DIRS = {".git", "__pycache__", "node_modules", ".venv", "_runs", "say-cache"}
+
+
+def _audio_on_disk():
+    """Every audio-looking file under the project root, with its size. The privacy law
+    says no audio byte reaches a disk, and the only way to assert that from outside the
+    process making the promise is to photograph the tree twice."""
+    found = {}
+    for here, dirs, files in os.walk(ROOT):
+        dirs[:] = [d for d in dirs if d not in SCRIBE_SKIP_DIRS]
+        for name in files:
+            if name.lower().endswith(AUDIO_SUFFIX):
+                path = os.path.join(here, name)
+                try:
+                    found[path] = os.path.getsize(path)
+                except OSError:
+                    pass
+    return found
+
+
+def _multipart(parts):
+    """(boundary, body) for parts of (name, filename|None, content_type|None, bytes).
+
+    Written out by hand because that is what the page's FormData puts on the wire, and
+    this check is about the server reading a real multipart body rather than about
+    urllib's opinion of one.
+    """
+    boundary = "----preflightScribe%s" % hashlib.sha256(
+        ("%f" % time.time()).encode()).hexdigest()[:20]
+    buf = bytearray()
+    for name, filename, ctype, data in parts:
+        buf += b"--%s\r\n" % boundary.encode("ascii")
+        disp = 'form-data; name="%s"' % name
+        if filename:
+            disp += '; filename="%s"' % filename
+        buf += b"Content-Disposition: %s\r\n" % disp.encode("ascii")
+        if ctype:
+            buf += b"Content-Type: %s\r\n" % ctype.encode("ascii")
+        buf += b"\r\n" + data + b"\r\n"
+    buf += b"--%s--\r\n" % boundary.encode("ascii")
+    return boundary, bytes(buf)
+
+
+def _post_chunk(parts, timeout=120, label=None):
+    boundary, body = _multipart(parts)
+    return http_call("POST", "/scribe/transcribe", body,
+                     {"Content-Type": "multipart/form-data; boundary=%s" % boundary,
+                      "Content-Length": str(len(body))}, timeout, label)
+
+
+def _wav16k(raw):
+    """A piper WAV in, a 16 kHz mono 16-bit WAV out - the exact shape the page posts.
+
+    Resampled here rather than posted as-is because the page's AudioWorklet hands the
+    server 16 kHz mono and this check is worth nothing if it proves a path the page never
+    takes. Linear interpolation, not sample dropping: taking every other sample folds
+    everything above 8 kHz back down into the speech band as aliasing, and the difference
+    it makes is the difference between "the quarterly review" and "the quarter of you".
+    audioop would have done this in one call and was removed in Python 3.13.
+    """
+    import wave
+    import struct
+    import io
+    with wave.open(io.BytesIO(raw), "rb") as src:
+        chans, width, rate, frames = (src.getnchannels(), src.getsampwidth(),
+                                      src.getframerate(), src.getnframes())
+        if width != 2:
+            return None, "the voice returned %d-bit audio; this expects 16" % (width * 8)
+        pcm = src.readframes(frames)
+    mono = struct.unpack("<%dh" % (len(pcm) // 2), pcm)
+    if chans > 1:
+        mono = [sum(mono[i:i + chans]) // chans for i in range(0, len(mono), chans)]
+    out_rate, n = 16000, len(mono)
+    m = max(1, int(n * out_rate / float(rate)))
+    res = []
+    for i in range(m):
+        at = i * rate / float(out_rate)
+        a = int(at)
+        b = min(n - 1, a + 1)
+        t = at - a
+        res.append(int(round(mono[a] * (1 - t) + mono[b] * t)))
+    body = struct.pack("<%dh" % len(res), *res)
+    head = (b"RIFF" + struct.pack("<I", 36 + len(body)) + b"WAVEfmt " +
+            struct.pack("<IHHIIHH", 16, 1, 1, out_rate, out_rate * 2, 2, 16) +
+            b"data" + struct.pack("<I", len(body)))
+    return head + body, ""
+
+
+def _silence16k(seconds=3):
+    import struct
+    n = int(16000 * seconds)
+    body = b"\x00\x00" * n
+    head = (b"RIFF" + struct.pack("<I", 36 + len(body)) + b"WAVEfmt " +
+            struct.pack("<IHHIIHH", 16, 1, 1, 16000, 32000, 2, 16) +
+            b"data" + struct.pack("<I", len(body)))
+    return head + body
+
+
+def _run_minutes_hand(params, timeout=20):
+    """tools/save_minutes.py, run the way hands.py runs it: stdin in, one line out.
+
+    _proc.run and not subprocess.run, because check 21 parses THIS file too and a bare
+    spawn here would be a real failure in a real file - the audit does not have a category
+    for "but it is only the preflight".
+    """
+    script = os.path.join(ROOT, "tools", "save_minutes.py")
+    done = _proc.run([sys.executable, script], input=json.dumps(params).encode("utf-8"),
+                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
+    return done.returncode, done.stdout.decode("ascii", "replace").strip()
+
+
+def check_scribe():
+    """20. A meeting is heard, minuted, and written only when somebody says yes.
+
+    The Scribe is three routes, one script and a promise, and the promise is the part a
+    test has to work hardest at: audio bytes never reach a disk. Everything below is live
+    against the running server, and the audio under test is real speech - piper's, fetched
+    from this machine's own /say - because a synthesised tone transcribes to nothing and
+    would prove only that the plumbing returns 200.
+
+      (a) THE GATE IS A FACT. /health carries the scribe block: whether faster-whisper
+          imported, the model, the device, the compute type, and the two privacy booleans.
+          The page disables its organ off this, so a block that lies here is a picker
+          opened on a machine with nowhere to send the audio.
+      (b) THE KNOWN SENTENCE, through the shape the page really posts - 16 kHz mono
+          16-bit WAV, multipart, a part named "audio". The words must come back. This is
+          the only assertion in this file that proves the model is loaded and working
+          rather than merely importable.
+      (c) SILENCE IS NOT AN ERROR. Three seconds of digital silence must come back as a
+          clean empty answer, because vad_filter drops it and a meeting is mostly pauses.
+          A 4xx or a 500 here would close a working panel over a working microphone.
+      (d) THE THREE WAYS A CHUNK CAN BE WRONG: no multipart at all, a part under the wrong
+          name, and bytes that are not audio. The first two are 400s that name the fix;
+          the third is a 200 carrying ok:false ON PURPOSE - one skipped three seconds of a
+          meeting that is otherwise still running is not a broken session.
+      (e) THE MINUTES ARE DRAFTED, NOT WRITTEN. /scribe/minutes returns four headings and
+          writes nothing: notes/ is digested before and after. An empty transcript is
+          refused in the mandate's own words, a body that is not JSON is refused, and a
+          title carrying ..\\..\\ comes back as a NAME rather than a path.
+      (f) THE HAND'S OWN REFUSALS, run directly on tools/save_minutes.py: no minutes, a
+          title that would escape notes/, and a file that already exists without
+          `overwrite`. Each must exit 1 and leave the filesystem where it found it. Then
+          one real write, read back, and removed - this check leaves nothing behind.
+      (g) AND THE PRIVACY LAW, MEASURED. Every audio-looking file under the project root
+          is listed before and after. Not one may appear, and none may grow.
+
+    The browser half - the picker, the worklet, the panel, the organ, the three seals -
+    is scribe_proof.mjs's, which drives a real getDisplayMedia and cannot run from here.
+    """
+    notes, warnings = [], []
+
+    # -- (a) the gate.
+    status, _, body = http_call("GET", "/health", timeout=20, label="GET /health (scribe)")
+    block = (as_json(body) or {}).get("scribe")
+    if status != 200 or not isinstance(block, dict):
+        return FAIL, ["/health came back %s with no scribe block - the page gates its "
+                      "organ on this and would have nothing to gate on" % status]
+    if not block.get("installed"):
+        return FAIL, ["the transcriber is offline, so the Scribe chain is dead: %s"
+                      % (block.get("why") or "no reason given")]
+    for key, want in (("model", "base.en"), ("device", "cpu"), ("computeType", "int8")):
+        if block.get(key) != want:
+            warnings.append("(a) /health says %s=%r and the specification says %r"
+                            % (key, block.get(key), want))
+    if block.get("keepsAudio") is not False or block.get("keepsText") is not False:
+        return FAIL, ["(a) /health publishes keepsAudio=%r keepsText=%r - the privacy law "
+                      "is the one claim this feature cannot be wrong about"
+                      % (block.get("keepsAudio"), block.get("keepsText"))]
+    notes.append("(a) the transcriber is up: %s on %s/%s, %d thread%s, loaded in %dms - "
+                 "keepsAudio false, keepsText false, chunk ceiling %dMB"
+                 % (block.get("model"), block.get("device"), block.get("computeType"),
+                    block.get("cpuThreads") or 0,
+                    "" if block.get("cpuThreads") == 1 else "s",
+                    block.get("loadMs") or 0,
+                    (block.get("maxChunkBytes") or 0) // (1024 * 1024)))
+    chunks_before = block.get("chunks") or 0
+    audio_before = _audio_on_disk()
+
+    # -- (b) the known sentence. piper first, because there is no other source of speech
+    #        on this machine and a tone would prove nothing.
+    status, head, raw = post_json("/say", {"text": SCRIBE_LINE}, timeout=120,
+                                 label="POST /say (the Scribe fixture)")
+    if status != 200 or not head.get("content-type", "").startswith("audio/"):
+        return WARN, notes + ["(b) /say answered %s %s, so there is no speech to transcribe "
+                              "and the model could not be exercised"
+                              % (status, head.get("content-type"))]
+    chunk, why = _wav16k(raw)
+    if chunk is None:
+        return WARN, notes + ["(b) the fixture could not be resampled: %s" % why]
+    notes.append("(b) the fixture: %d bytes of piper speech resampled to 16 kHz mono "
+                 "16-bit - “%s”" % (len(chunk), SCRIBE_LINE))
+    status, _, body = _post_chunk(
+        [("seq", None, None, b"1"), ("audio", "chunk-1.wav", "audio/wav", chunk)],
+        label="POST /scribe/transcribe (the known sentence)")
+    data = as_json(body) or {}
+    if status != 200 or not data.get("ok"):
+        return FAIL, notes + ["(b) /scribe/transcribe answered %s %r on a real WAV - the "
+                              "whole feature is this one call"
+                              % (status, first_line(data.get("error") or body))]
+    heard = str(data.get("text") or "")
+    missing = [w for w in SCRIBE_WORDS if w not in heard.lower()]
+    if missing:
+        return FAIL, notes + ["(b) the transcriber heard %r and did not return %s - the "
+                              "model answered but not about this audio"
+                              % (first_line(heard), ", ".join(missing))]
+    for field in ("start", "end", "language"):
+        if field not in data:
+            return FAIL, notes + ["(b) the answer is missing %r; the mandate asks for "
+                                  "text, start, end and language" % field]
+    notes.append("(b) heard back in %dms over %.2fs of audio [%s]: “%s”"
+                 % (data.get("tookMs") or 0, data.get("durationS") or 0,
+                    data.get("language"), first_line(heard)))
+
+    # -- (c) silence. A meeting is mostly pauses and none of them is an error.
+    status, _, body = _post_chunk(
+        [("seq", None, None, b"2"),
+         ("audio", "chunk-2.wav", "audio/wav", _silence16k(3))],
+        label="POST /scribe/transcribe (three seconds of silence)")
+    data = as_json(body) or {}
+    if status != 200:
+        return FAIL, notes + ["(c) three seconds of silence answered %s - a pause in a "
+                              "meeting must not read to the page as a broken session"
+                              % status]
+    if str(data.get("text") or "").strip():
+        warnings.append("(c) silence transcribed as %r, which means the VAD is not "
+                        "dropping it and the panel will fill with inventions"
+                        % first_line(data.get("text")))
+    else:
+        notes.append("(c) three seconds of silence: 200, no words, no error - vad_filter "
+                     "is doing its job and a pause costs nothing")
+
+    # -- (d) the three ways a chunk can be wrong.
+    status, _, body = http_call(
+        "POST", "/scribe/transcribe", b'{"audio":"not multipart"}',
+        {"Content-Type": "application/json", "Content-Length": "25"}, 30,
+        label="POST /scribe/transcribe (not multipart)")
+    data = as_json(body) or {}
+    if status != 400 or not data.get("error"):
+        return FAIL, notes + ["(d) a JSON body was answered %s %r and should be a named "
+                              "400" % (status, first_line(body))]
+    status, _, body = _post_chunk(
+        [("sound", "chunk.wav", "audio/wav", _silence16k(1))],
+        label="POST /scribe/transcribe (the part is misnamed)")
+    data = as_json(body) or {}
+    if status != 400 or "audio" not in str(data.get("error") or ""):
+        return FAIL, notes + ["(d) a part named \"sound\" was answered %s %r; the refusal "
+                              "has to name the part it wanted"
+                              % (status, first_line(data.get("error") or body))]
+    named400 = first_line(data.get("error"))
+    status, _, body = _post_chunk(
+        [("seq", None, None, b"3"),
+         ("audio", "chunk-3.wav", "audio/wav", b"this is not a wave file, sir" * 40)],
+        label="POST /scribe/transcribe (bytes that are not audio)")
+    data = as_json(body) or {}
+    if status != 200 or data.get("ok") is not False or not data.get("error"):
+        return FAIL, notes + ["(d) undecodable bytes were answered %s ok=%r - this has to "
+                              "be a 200 carrying ok:false, because one unreadable three "
+                              "seconds is not a broken meeting"
+                              % (status, data.get("ok"))]
+    notes.append("(d) the three wrong chunks: a JSON body is a 400, a misnamed part is "
+                 "“%s”, and undecodable bytes are a 200 with ok:false "
+                 "(“%s”) so the meeting keeps running"
+                 % (named400, first_line(data.get("error"), 52)))
+
+    # -- (e) the minutes are drafted and nothing is written.
+    notes_dir = os.path.join(ROOT, "notes")
+    before = sorted(os.listdir(notes_dir)) if os.path.isdir(notes_dir) else []
+    status, _, body = post_json("/scribe/minutes", {"transcript": "  "}, timeout=30,
+                               label="POST /scribe/minutes (nothing said)")
+    data = as_json(body) or {}
+    if status != 400 or data.get("error") != "There is nothing to save, Addi.":
+        return FAIL, notes + ["(e) an empty transcript was answered %s %r and the mandate "
+                              "asks for “There is nothing to save, Addi.”"
+                              % (status, first_line(data.get("error") or body))]
+    status, _, body = http_call("POST", "/scribe/minutes", b"transcript=hello",
+                                {"Content-Type": "application/x-www-form-urlencoded",
+                                 "Content-Length": "16"}, 30,
+                                label="POST /scribe/minutes (not JSON)")
+    if status != 400:
+        return FAIL, notes + ["(e) a form-encoded body was answered %s and should be a "
+                              "named 400" % status]
+    transcript = (heard + " " + heard + " Addi asked for the deck before Wednesday and "
+                  "the review was confirmed for Thursday morning.")
+    status, _, body = post_json(
+        "/scribe/minutes", {"transcript": transcript, "title": "../../escaped by me"},
+        timeout=180, label="POST /scribe/minutes (a real draft)")
+    data = as_json(body) or {}
+    if status != 200 or not data.get("minutes"):
+        return FAIL, notes + ["(e) /scribe/minutes answered %s %r on a real transcript"
+                              % (status, first_line(data.get("error") or body))]
+    title = str(data.get("title") or "")
+    if "/" in title or "\\" in title or ".." in title:
+        return FAIL, notes + ["(e) the title came back as %r - a title becomes a filename "
+                              "and this one is a path" % title]
+    drafted = str(data.get("minutes"))
+    heads = [h for h in ("## Attendees", "## Key Decisions", "## Action Items",
+                         "## Raw Excerpts") if h in drafted]
+    if data.get("drafted") is True and len(heads) != 4:
+        return FAIL, notes + ["(e) the brain drafted minutes carrying %d of the four "
+                              "headings (%s) - the shape is the whole contract between "
+                              "this route and the hand" % (len(heads), ", ".join(heads))]
+    if data.get("drafted") is not True:
+        warnings.append("(e) the brain could not draft, so the raw-transcript fallback "
+                        "was served instead: %s" % first_line(data.get("error")))
+    after = sorted(os.listdir(notes_dir)) if os.path.isdir(notes_dir) else []
+    if after != before:
+        return FAIL, notes + ["(e) /scribe/minutes changed notes/ (%s) - this route DRAFTS "
+                              "and the hand writes; a route that wrote would be a file "
+                              "created without anybody saying yes"
+                              % ", ".join(sorted(set(after) ^ set(before)))]
+    notes.append("(e) drafted %d chars under %d headings from %d of transcript, the "
+                 "traversal title came back as the name %r, and notes/ did not move - "
+                 "this route writes nothing"
+                 % (len(drafted), len(heads), len(transcript), title))
+
+    # -- (f) the hand's own refusals, and then one real write.
+    code, line = _run_minutes_hand({"title": "Preflight-empty", "minutes": "   "})
+    if code == 0 or "no minutes" not in line.lower():
+        return FAIL, notes + ["(f) save_minutes.py accepted empty minutes (exit %d, %r) - "
+                              "an empty minute is the one artefact that gets believed six "
+                              "weeks later because it is on disk" % (code, line)]
+    refused_empty = first_line(line, 64)
+    # THE ../ TITLE IS DEFANGED, NOT REFUSED, and the difference is worth stating because
+    # the first version of this check asserted the wrong one and then reported that a file
+    # it had just created had been refused. safe_title() strips the separator before the
+    # basename is taken, so "../preflight-escaped" is the NAME "preflight-escaped" and the
+    # write lands inside notes/ like any other. What must never happen is the write landing
+    # one directory up, so that is what is asserted - in both plausible spellings, because
+    # a stripper that turned "../x" into "..x" would still be inside notes/ and still wrong.
+    escaped_name = "preflight-escaped"
+    outside = [os.path.join(os.path.dirname(ROOT), escaped_name + ".md"),
+               os.path.join(ROOT, escaped_name + ".md")]
+    inside = os.path.join(notes_dir, escaped_name + ".md")
+    try:
+        code, line = _run_minutes_hand({"title": "../" + escaped_name,
+                                        "minutes": "## Attendees\n\nnobody\n"})
+        strayed = [p for p in outside if os.path.exists(p)]
+        if strayed:
+            for p in strayed:
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+            return FAIL, notes + ["(f) save_minutes.py wrote %s - a title is a filename "
+                                  "and ../ has to become a name, never a parent"
+                                  % ", ".join(strayed)]
+        if code != 0 or not os.path.isfile(inside):
+            return FAIL, notes + ["(f) a ../ title neither escaped nor landed in notes/ "
+                                  "(exit %d, %r) - one of those two has to be true or the "
+                                  "hand has a third behaviour nobody has described"
+                                  % (code, first_line(line))]
+        notes.append("(f) empty minutes are refused by the hand itself (“%s”), and a "
+                     "“../%s” title is DEFANGED rather than refused: it wrote notes/%s.md "
+                     "and nothing appeared above notes/ or beside the project folder"
+                     % (refused_empty, escaped_name, escaped_name))
+    finally:
+        try:
+            os.remove(inside)
+        except OSError:
+            pass
+
+    probe = "Preflight-minutes-%s" % hashlib.sha256(
+        ("%f" % time.time()).encode()).hexdigest()[:8]
+    path = os.path.join(notes_dir, probe + ".md")
+    try:
+        code, line = _run_minutes_hand({"title": probe, "minutes": drafted})
+        if code != 0 or not os.path.isfile(path):
+            return FAIL, notes + ["(f) save_minutes.py would not write notes/%s.md (exit "
+                                  "%d, %r)" % (probe, code, line)]
+        with open(path, "r", encoding="utf-8") as fh:
+            back = fh.read()
+        if not back.startswith("# " + probe) or "by the Scribe" not in back:
+            return FAIL, notes + ["(f) the file was written without its heading or its "
+                                  "stamp: %r" % first_line(back)]
+        again_code, again = _run_minutes_hand({"title": probe, "minutes": drafted})
+        if again_code == 0 or "already exists" not in again:
+            return FAIL, notes + ["(f) the same title written twice was accepted (exit "
+                                  "%d, %r) - the same meeting written twice is a "
+                                  "correction, and that is a decision for the employer"
+                                  % (again_code, again)]
+        over_code, over = _run_minutes_hand({"title": probe, "minutes": drafted,
+                                             "overwrite": True})
+        if over_code != 0 or not over.startswith("Replaced"):
+            return FAIL, notes + ["(f) overwrite:true was refused (exit %d, %r)"
+                                  % (over_code, over)]
+        notes.append("(f) one real write, read back, refused on the second pass "
+                     "(“%s”) and replaced only when told to: “%s”"
+                     % (first_line(again, 56), first_line(over, 64)))
+    finally:
+        # This check leaves nothing in the employer's notes, the way the /remember probe
+        # does not.
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+    # -- (g) the privacy law, measured from outside the process that promises it.
+    audio_after = _audio_on_disk()
+    fresh = sorted(set(audio_after) - set(audio_before))
+    grew = sorted(p for p in audio_before
+                  if audio_after.get(p, audio_before[p]) != audio_before[p])
+    if fresh or grew:
+        return FAIL, notes + ["(g) audio reached the disk during this check: %s - the "
+                              "privacy law is that no byte of a meeting is ever written "
+                              "anywhere" % ", ".join(fresh + grew)]
+    block2 = (as_json(http_call("GET", "/health", timeout=20,
+                                label="GET /health (scribe, after)")[2]) or {}
+              ).get("scribe") or {}
+    if (block2.get("chunks") or 0) <= chunks_before:
+        warnings.append("(g) the server's chunk counter did not move (%r -> %r), so it is "
+                        "not counting what it transcribed"
+                        % (chunks_before, block2.get("chunks")))
+    if block2.get("transcribedChars") and block2.get("keepsText") is not False:
+        return FAIL, notes + ["(g) /health still says keepsText - the server counted the "
+                              "characters and kept them"]
+    # AND NOTHING IS LEFT IN THE EMPLOYER'S NOTES. (e) took this photograph before the
+    # route was asked to draft; (f) then wrote two real files and removed both. A check that
+    # proves a hand can write and leaves the evidence behind has added a note to the galaxy.
+    left = sorted(set(os.listdir(notes_dir) if os.path.isdir(notes_dir) else []) -
+                  set(before))
+    if left:
+        return FAIL, notes + ["(g) this check left %s in notes/ - preflight writes into the "
+                              "real corpus and has to take it back out again"
+                              % ", ".join(left)]
+    notes.append("(g) %d audio file%s under the project root before this check and the "
+                 "same %d after, none of them larger (say-cache/ excluded by name - it is "
+                 "the voice this machine PRODUCES, and (b) put the fixture there); notes/ "
+                 "holds exactly the %d file%s it held before; the server transcribed %d "
+                 "chunk%s of this check's audio and has passed %.1fMB through RAM "
+                 "cumulatively without writing any of it"
+                 % (len(audio_before), "" if len(audio_before) == 1 else "s",
+                    len(audio_after), len(before), "" if len(before) == 1 else "s",
+                    (block2.get("chunks") or 0) - chunks_before,
+                    "" if (block2.get("chunks") or 0) - chunks_before == 1 else "s",
+                    (block2.get("audioBytes") or 0) / (1024.0 * 1024.0)))
+
+    proof = os.path.join(ROOT, "scribe_proof.mjs")
+    notes.append("the browser half - a real getDisplayMedia, the worklet, the panel, the "
+                 "organ and the three seals - is scribe_proof.mjs%s, which drives Chrome "
+                 "and so is never run from preflight"
+                 % ("" if os.path.exists(proof) else " (MISSING)"))
+    if not os.path.exists(proof):
+        warnings.append("scribe_proof.mjs is missing, so nothing in this repository proves "
+                        "the picker, the worklet or the panel")
+
+    if warnings:
+        return WARN, notes + warnings
+    return PASS, notes
+
+
+# ----------------------------------------------------- 21. the silent subprocess policy
+
+SPAWN_ATTRS = {"run", "Popen", "call", "check_call", "check_output"}
+QUIET_ATTRS = {"run", "popen"}
+# tools/_proc.py is the one file allowed to touch subprocess directly: it IS the policy.
+POLICY_FILE = os.path.join("tools", "_proc.py")
+
+
+def _spawn_sites(path):
+    """(bare, quiet) call sites in one file, PARSED rather than grepped.
+
+    ast, and the difference is not fastidiousness. hands.py's module docstring explains the
+    call it makes by writing `subprocess.run([sys.executable, script], ...)` in prose; the
+    first, regex-based version of this audit read that sentence as a call and failed the
+    very file it had just been repaired in. A parser sees a Call node or it sees a string
+    constant and never confuses the two.
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            tree = ast.parse(fh.read(), filename=path)
+    except (OSError, SyntaxError) as exc:
+        return None, str(exc)
+    bare, quiet = [], []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        if not isinstance(fn, ast.Attribute) or not isinstance(fn.value, ast.Name):
+            continue
+        mod, attr = fn.value.id, fn.attr
+        if mod == "subprocess" and attr in SPAWN_ATTRS:
+            bare.append((node.lineno, "subprocess.%s" % attr))
+        elif mod == "os" and attr == "system":
+            bare.append((node.lineno, "os.system"))
+        elif mod == "_proc" and attr in QUIET_ATTRS:
+            quiet.append((node.lineno, "_proc.%s" % attr))
+    return (bare, quiet), ""
+
+
+def check_quiet_spawn():
+    """21. Nothing this server starts is allowed to show a console window.
+
+    The complaint was a black window blinking on the desktop after every spoken answer. It
+    was say.py handing piper to subprocess.run() with the default creation flags: Windows
+    gives a console program a console, and a console has a window. Measured before anything
+    was changed, class PseudoConsoleWindow, parented to the server.
+
+    Three parts, because no one of them is evidence on its own:
+      (a) THE AUDIT. Every .py in the repository is parsed and every spawn call is
+          attributed. One bare call is a failure, wherever it is, because the flash is a
+          property of the call site and not of the feature that owns it.
+      (b) THE POLICY. _proc's own decision, exercised directly: a caller who says nothing
+          gets CREATE_NO_WINDOW, and a caller who passes creationflags is left alone -
+          DETACHED_PROCESS and CREATE_NEW_CONSOLE are deliberate, and or-ing a flag into
+          them is how a launcher stops launching.
+      (c) A LIVE WATCH. The source can be right and the desktop still wrong, so a real
+          synthesis is made to happen on the running server while console_watch.py polls
+          user32 at 8 ms, and the verdict is read off the desktop.
+    """
+    notes, warnings = [], []
+
+    # -- (a) the audit. Every file, including this one.
+    files = sorted([f for f in os.listdir(ROOT) if f.endswith(".py")])
+    tools_dir = os.path.join(ROOT, "tools")
+    files += [os.path.join("tools", f) for f in sorted(os.listdir(tools_dir))
+              if f.endswith(".py")]
+    bare_all, quiet_all, unread = [], [], []
+    for rel in files:
+        sites, why = _spawn_sites(os.path.join(ROOT, rel))
+        if sites is None:
+            unread.append("%s (%s)" % (rel, why))
+            continue
+        bare, quiet = sites
+        for lineno, what in bare:
+            if rel == POLICY_FILE:
+                continue                    # the policy is the one place subprocess lives
+            bare_all.append("%s:%d %s" % (rel, lineno, what))
+        for lineno, what in quiet:
+            quiet_all.append("%s:%d %s" % (rel, lineno, what))
+    if unread:
+        return FAIL, ["these files could not be parsed, so the audit is not an audit: %s"
+                      % ", ".join(unread)]
+    if bare_all:
+        return FAIL, ["(a) %d spawn(s) reach subprocess or os.system directly, and each "
+                      "one is a console window on the employer's desktop: %s"
+                      % (len(bare_all), ", ".join(bare_all)),
+                      "every one of them belongs in tools/_proc.run or tools/_proc.popen"]
+    by_file = {}
+    for site in quiet_all:
+        by_file.setdefault(site.split(":")[0], []).append(site.split(" ")[0].split(":")[1])
+    notes.append("(a) %d .py files parsed; %d spawn call(s), all of them through the "
+                 "policy: %s"
+                 % (len(files), len(quiet_all),
+                    ", ".join("%s(%s)" % (f, ",".join(ls)) for f, ls in sorted(by_file.items()))))
+    if not quiet_all:
+        return FAIL, notes + ["(a) the audit found no spawn call at all, which means it is "
+                              "looking in the wrong place rather than that the repository "
+                              "has stopped starting processes"]
+
+    # -- (b) the policy itself, exercised rather than read.
+    if sys.platform != "win32":
+        notes.append("(b) not Windows: _proc is a pass-through here by design, so there is "
+                     "no flag to check")
+    else:
+        before = _proc.applied
+        silent_caller = _proc._quiet({})
+        detached = 0x00000008                           # DETACHED_PROCESS
+        loud_caller = _proc._quiet({"creationflags": detached})
+        if silent_caller.get("creationflags") != _proc.CREATE_NO_WINDOW:
+            return FAIL, notes + ["(b) a caller that asked for nothing was given %r rather "
+                                  "than CREATE_NO_WINDOW (0x%08X), so the policy is not "
+                                  "applied at all"
+                                  % (silent_caller.get("creationflags"),
+                                     _proc.CREATE_NO_WINDOW)]
+        if loud_caller.get("creationflags") != detached:
+            return FAIL, notes + ["(b) a caller that passed DETACHED_PROCESS came back with "
+                                  "%r - the helper overrode a deliberate choice, which is "
+                                  "how a launcher stops launching"
+                                  % loud_caller.get("creationflags")]
+        if _proc.applied != before + 1:
+            return FAIL, notes + ["(b) the counter moved %d -> %d across one silent caller "
+                                  "and one explicit one; it must move exactly once, or it "
+                                  "cannot be used as evidence that the flag ever fired"
+                                  % (before, _proc.applied)]
+        notes.append("(b) the policy decides correctly both ways: nothing asked -> "
+                     "CREATE_NO_WINDOW 0x%08X, DETACHED_PROCESS passed -> left untouched"
+                     % _proc.CREATE_NO_WINDOW)
+
+    # -- (c) the live watch. The desktop, while the server really works.
+    watcher = os.path.join(ROOT, "console_watch.py")
+    proof = os.path.join(ROOT, "console_proof.mjs")
+    if not os.path.exists(proof):
+        warnings.append("console_proof.mjs is missing, so nothing in this repository "
+                        "proves the desktop stays empty across a long answer, a voice "
+                        "recast and a proposal")
+    else:
+        notes.append("the four-case desktop matrix - a short answer, a long one, a voice "
+                     "recast and a proposal - is proved by console_proof.mjs, which drives "
+                     "a headed browser and so is never run from preflight")
+    if not os.path.exists(watcher):
+        return WARN, notes + warnings + ["console_watch.py is missing, so (c) cannot run "
+                                         "and the desktop is only argued about"]
+    if sys.platform != "win32":
+        notes.append("(c) not Windows: there is no console window to watch for")
+        return (WARN, notes + warnings) if warnings else (PASS, notes)
+
+    status, _head, body = http_call("GET", "/focus/diag", timeout=20,
+                                    label="GET /focus/diag (pid for the watch)")
+    diag = ((as_json(body) or {}).get("diag") or {})
+    pid = diag.get("pid")
+    if status != 200 or not pid:
+        return WARN, notes + warnings + ["(c) the server would not name its own pid, so "
+                                         "the parent filter has nothing to anchor to"]
+    if not (state.get("health", {}).get("say") or {}).get("ready"):
+        return WARN, notes + warnings + ["(c) the local voice is not ready, so there is no "
+                                         "spawn to watch; the audit above still stands"]
+
+    # NOT a fresh process list: two python.exe have shared port 4700 on this machine
+    # before, and watching the wrong one is an empty desktop for the wrong reason.
+    watch = _proc.popen([sys.executable, watcher, "--pid", str(pid), "--seconds", "60"],
+                        stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE, text=True, cwd=ROOT)
+    verdict, raw = None, ""
+    try:
+        line = watch.stdout.readline()
+        if "WATCHING" not in line:
+            watch.kill()
+            return WARN, notes + warnings + ["(c) the watcher never started watching: %r"
+                                             % first_line(line, 70)]
+        # A sentence this machine has never synthesised, so piper MUST run: a say-cache hit
+        # would spawn nothing and report an empty desktop as a success.
+        token = hashlib.sha256(("%f" % time.time()).encode()).hexdigest()[:8]
+        started = time.time()
+        sstatus, shead, sbody = post_json(
+            "/say", {"text": "Preflight, reference %s, sir." % token},
+            timeout=90, label="POST /say (a cold line, watched)")
+        spoke = sstatus == 200 and shead.get("content-type", "").startswith("audio/")
+        time.sleep(0.8)                     # the window appears as the child starts, not as
+        watch.stdin.write("stop\n")         # it exits; do not close the watch on the tick
+        watch.stdin.flush()                 # the answer arrives
+        raw = watch.stdout.readline()
+        verdict = json.loads(raw)
+    except Exception as exc:                                   # noqa: BLE001
+        return WARN, notes + warnings + ["(c) the watch itself failed: %s: %s"
+                                         % (type(exc).__name__, exc)]
+    finally:
+        try:
+            watch.kill()
+        except Exception:                                      # noqa: BLE001
+            pass
+
+    if not spoke:
+        return WARN, notes + warnings + ["(c) /say answered %s %s, so nothing was spawned "
+                                         "to watch" % (sstatus, shead.get("content-type"))]
+    if verdict.get("polls", 0) < 40:
+        return FAIL, notes + ["(c) the watcher polled the desktop %d time(s) in %.1fs - it "
+                              "returned before it had looked, which is the one way this "
+                              "check can pass without examining anything"
+                              % (verdict.get("polls", 0), time.time() - started)]
+    windows = verdict.get("windows") or []
+    if windows:
+        return FAIL, notes + ["(c) %d console WINDOW(s) appeared in the server's process "
+                              "tree while it spoke - this is the black flash itself: %s"
+                              % (len(windows),
+                                 "; ".join("%s at +%sms %s" % (w.get("class"), w.get("atMs"),
+                                                               " <- ".join(w.get("chain") or []))
+                                           for w in windows))]
+    hidden = verdict.get("hiddenConsoles") or []
+    notes.append("(c) %d bytes of real speech synthesised under pid %s while the desktop "
+                 "was polled %d times: not one console window, and %d hidden console "
+                 "host(s) - which is CREATE_NO_WINDOW working, since the flag means a "
+                 "console with no window rather than no console"
+                 % (len(sbody), pid, verdict.get("polls"), len(hidden)))
+    if verdict.get("bystanders"):
+        notes.append("(c) %d console window(s) belonging to other processes were seen and "
+                     "correctly disregarded by the parent-chain filter"
+                     % len(verdict["bystanders"]))
+
+    if warnings:
+        return WARN, notes + warnings
+    return PASS, notes
+
+
 CHECKS = [
     ("the server is up and serving the viewer", check_server),
     ("the graph data loads and has nodes", check_graph),
@@ -3770,6 +4457,8 @@ CHECKS = [
     ("a PDF in archive/ is read, cited by page, and answers", check_documents),
     ("the four classes answer for nothing and cannot be searched", check_routing),
     ("the tab lock explains itself and asks in one voice", check_lock),
+    ("a meeting is heard, minuted, and written only on a yes", check_scribe),
+    ("nothing the server starts shows a console window", check_quiet_spawn),
 ]
 
 

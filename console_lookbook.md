@@ -2087,3 +2087,730 @@ key in `config.json`, so the swapped brain's answer chain and the Astra look are
 to the application (check 11); and the screen watch standing down rather than reading somebody
 else's cooldown, because check 12 had just spent a nudge (check 13). Only `fail` judges the code,
 and it reads zero.
+
+## 20 · The Silent Subprocess, the Echo Law and the Scribe
+
+This section is the round's own record. One research paragraph per Part, written before the
+code for that Part existed; the audit that found the defect; and the evidence each Part was
+asked to produce. Nothing here is a plan — every number in it was measured on this machine.
+
+### 20.1 · Part 0, the research — how a console window gets onto a desktop nobody asked
+
+`CREATE_NO_WINDOW` does not mean "no console". It means *a console with no window*: Windows
+still allocates a console object for the child and still starts a `conhost.exe` to host it,
+and that host simply never shows itself. This matters because the obvious way to check the
+repair — "assert no console host was created" — passes the bug and fails the fix. An A/B on
+the real piper binary said so in the plainest possible terms:
+
+```
+MODE=old  (no creationflags)     windows: []   consoles: []
+MODE=new  (CREATE_NO_WINDOW)     windows: []   consoles: [conhost(37184) <- piper(42260)]
+```
+
+The unflagged spawn allocated nothing because it **inherited** its parent's console. That is
+the whole mechanism of the complaint. A console program started with the default flags gets a
+usable console if one can be inherited, and a brand-new one otherwise — and when Windows has
+to allocate a new console it opens the machine's *default terminal application* to host it.
+On this box that arrives as a pair: a `CASCADIA_HOSTING_WINDOW_CLASS` window (Windows
+Terminal) followed 80–320 ms later by a visible `PseudoConsoleWindow` owned by the child. That
+pair is the black flash. It appears in the boss's ordinary use — where the shell that started
+the server has long since gone, so there is no console left to inherit — and it does *not*
+appear under a harness holding a live pty, which is exactly why the first control written for
+this reported a clean desktop and why the field condition cannot be reproduced on demand
+inside one terminal session. Two further consequences shaped the code. First, the window class
+is `PseudoConsoleWindow`, not the famous `ConsoleWindowClass`, because the server is started
+from a shell holding a ConPTY; a detector looking for the famous name sees nothing. Second, the
+flag beats `STARTUPINFO`/`SW_HIDE`, which hides a window that has already been created — a
+race the flash can win — and does nothing at all about a console the OS allocates on the
+child's behalf. `CREATE_NO_WINDOW` removes the dependency on inheritance entirely: the child's
+console never needs a window, so no terminal is opened to host one. And because the flag is a
+property of the *call site* rather than of the feature, the policy had to become a module every
+call site goes through, not a keyword typed into the one line that was flashing.
+
+### 20.2 · Part 0, the audit — every spawn in the repository, before and after
+
+Found by parsing, not by grepping: `hands.py`'s own module docstring explains the call it makes
+by writing `subprocess.run([sys.executable, script], ...)` in prose, and the first regex-based
+version of this audit read that sentence as a call and failed the very file it had just been
+repaired in. `ast` sees a `Call` node or it sees a string constant and never confuses the two.
+
+There is no `subprocess.Popen`, no `subprocess.call` and no `os.system` anywhere in the
+repository — the audit looked for all of them. `focus.py`'s Windows reader is pure `ctypes`,
+so it spawns nothing at all; its five sites are the mac and linux readers.
+
+| call site | what it starts | creationflags before | after |
+| --- | --- | --- | --- |
+| `say.py:258` | **piper** — the voice | *(none — the defect)* | `_proc.run` → `CREATE_NO_WINDOW` |
+| `hands.py:651` | **every registry hand** (`python.exe <script>`) | *(none)* | `_proc.run` → `CREATE_NO_WINDOW` |
+| `focus.py:1035,1046,1057,1060` | `osascript` / `xdotool` — the mac and linux window readers | *(none)* | `_proc.run` → no-op off Windows, by design |
+| `focus.py:1300` | the posture/idle reader's platform helper | *(none)* | `_proc.run` |
+| `tools/relaunch_chrome.py:124` | `powershell launch-chrome.ps1` | *(none)* | `_proc.run` (imported as `import _proc`: a script inside `tools/` has that directory as `sys.path[0]`) |
+| `preflight.py:603,3116` | `build.py` | *(none)* | `_proc.run` |
+| `preflight.py:3913` | `console_watch.py`, for check 20(c) | — | `_proc.popen` (new this round) |
+| `test_email_wiring.py:131` | the wiring probe's child | *(none)* | `_proc.run` |
+| `tools/_proc.py:66,71` | `subprocess.run` / `subprocess.Popen` | — | **the policy itself — the one file allowed to reach subprocess** |
+
+The measurement that named the defect, taken before a line was changed, with a tight `user32`
+poll running while `POST /say` was in flight:
+
+```
+HIT +2,300ms  pid 45448  class PseudoConsoleWindow
+      chain: piper.exe(45448) <- python.exe(42376)
+```
+
+And the same instrument after the migration, during a real 354,860-byte synthesis:
+
+```
+NEW VISIBLE CONSOLE WINDOWS: 0        (859 polls)
+```
+
+`console_watch.py` was then validated against a deliberately loud spawn — `CREATE_NEW_CONSOLE`
+forced on — to prove it can still fail:
+
+```json
+{"root": 10072, "polls": 1168,
+ "windows": [{"pid": 10120, "class": "PseudoConsoleWindow", "atMs": 3510,
+              "chain": ["cmd.exe(10120)", "python.exe(10072)"]}],
+ "bystanders": [{"pid": 45396, "class": "CASCADIA_HOSTING_WINDOW_CLASS", "atMs": 3428}],
+ "hiddenConsoles": [{"pid": 32052, "image": "conhost.exe"}],
+ "silent": false}
+```
+
+The CASCADIA bystander 82 ms before the hit is the same pair described in §20.1. A detector
+that had only watched for `ConsoleWindowClass`, or that had failed on the presence of a
+`conhost.exe`, would have got both of these backwards.
+
+### 20.3 · Part 0, the four silent desktops (`console_proof.mjs` — 30/30 PASS)
+
+Four real things, each watched at 8 ms from the moment before it started to the moment after
+it finished, filtered by parent chain to the pid the server names for itself:
+
+| case | how it was driven | spawns inside the watch | polls | verdict |
+| --- | --- | --- | --- | --- |
+| a short answer | **typed** — `/` summons the vanishing input, text inserted, Enter — then read aloud | 2 piper | 2,775 | **silent** |
+| a long answer | typed, five or six sentences, one spawn per spoken chunk | 2–3 piper | 3,123 | **silent** |
+| a voice recast | the casting panel's audition door, `__galaxy.cmd.cast.hear('en_US-ryan-high')` | 1 piper, cold | 492 | **silent** |
+| a proposal | `propose` + `execute` on the hermetic `selftest` hand — `python.exe`, not the voice | 1 hand | 176 | **silent** |
+
+```
+  note A SHORT ANSWER: 2775 polls · 0 window(s) ours · 0 bystander(s) · 2 hidden console host(s)
+  note A LONG ANSWER:  3123 polls · 0 window(s) ours · 0 bystander(s) · 3 hidden console host(s)
+  note A VOICE RECAST:  492 polls · 0 window(s) ours · 0 bystander(s) · 1 hidden console host(s)
+  note A PROPOSAL:      176 polls · 0 window(s) ours · 0 bystander(s) · 0 hidden console host(s)
+```
+
+Every one of those hidden console hosts is the policy working rather than failing — see §20.1.
+
+Three things in that harness are there because of how this test could have lied:
+
+**It cannot pass on a cache hit.** `say.py` writes its trace line on a synthesis and never on
+a `say-cache/` read, so "piper really ran" is read out of `server-trace.log` rather than
+assumed; and each case is made cold on purpose. The two answer cases speak one nonce sentence
+through the page's own funnel, and the recast case has its `say-cache` entry *deleted* first —
+addressed exactly as `say.py` addresses it, `sha256(model \0 lengthScale \0 noiseScale \0 text)`,
+cross-checked against `say._key()` before it was trusted. Without that, an empty desktop is the
+desktop of a machine that was asked to do nothing.
+
+**It cannot pass without having looked.** `polls` is asserted above a floor per case. The first
+version of `console_watch.py` treated end-of-input as a stop, so a watcher spawned without a
+stdin pipe returned `polls: 0, silent: true` before examining the desktop once — a green light
+for an unwatched screen. End of input is now explicitly *not* a stop; only a written `stop` is.
+
+**It is headed and not muted.** The spawn under test only happens when a chunk is really
+fetched and really played. A `?mute=1` tab would have reported four silent desktops with
+nothing started behind any of them.
+
+Two discretion decisions, recorded because the mandate words them differently. The filter is by
+**window class, visible only**, not by image name: the visible window in the field measurement
+was owned by `piper.exe` rather than by `conhost.exe`, and `conhost.exe` is what the repair
+legitimately produces, so an image-name test would have passed the bug and failed the fix. And
+the proposal case is raised through `/tools` + `/execute` on the hermetic hand rather than by
+typing an instruction, because a harness that types and then clicks **Yes** on whatever comes
+back is a harness that can click Yes on `send_email`; the spawn's parentage, which is the whole
+subject, is identical either way.
+
+### 20.4 · Part 0, preflight's new check
+
+`preflight.py` gained **check 20, "nothing the server starts shows a console window"** — it
+becomes check 21 when Part 5 inserts the Scribe chain ahead of it. Three parts, because no one
+of them is evidence alone: **(a)** every `.py` in the repository parsed with `ast` and every
+spawn attributed, one bare call anywhere being a failure; **(b)** the policy function exercised
+in both directions, since a helper that overrode a caller's explicit `DETACHED_PROCESS` is how
+a launcher stops launching; **(c)** a live watch on the running server while it really speaks.
+
+```
+  ✓  20. nothing the server starts shows a console window   2797 ms
+        (a) 24 .py files parsed; 12 spawn call(s), all of them through the policy:
+            focus.py(1035,1057,1060,1046,1300), hands.py(651), preflight.py(3116,3913,603),
+            say.py(258), test_email_wiring.py(131), tools\relaunch_chrome.py(124)
+        (b) the policy decides correctly both ways: nothing asked -> CREATE_NO_WINDOW
+            0x08000000, DETACHED_PROCESS passed -> left untouched
+        (c) 250924 bytes of real speech synthesised under pid 12036 while the desktop was
+            polled 273 times: not one console window, and 1 hidden console host(s) - which is
+            CREATE_NO_WINDOW working, since the flag means a console with no window rather
+            than no console
+
+  17 pass, 0 fail, 3 warn
+```
+
+The three warns are the standing ones and none of them judges the code: no OpenRouter key in
+`config.json`, so the swapped brain's answer chain and the Astra look are unverified (checks 10
+and 12), and no Chrome on the debugging port at that moment, so a session would degrade to the
+application (check 11). Only `fail` judges the code, and it reads zero.
+
+### 20.5 · Part 1, the research — edit distance on a recogniser's mistakes, and why the stream cannot be gated
+
+**Why the metric is Levenshtein and not equality.** The transcript a microphone produces from a
+loudspeaker is not the sentence the loudspeaker was given. It is that sentence with
+*substitutions* in it — `roaster` → `roster`, `shelf` → `shell`, `warm` → `worm` — because a
+recogniser under leaked audio is still doing acoustic modelling and still picking the nearest
+word it knows. Substitution is exactly the operation Levenshtein counts, at a cost of one, which
+is why edit distance is the right family of measure here and why a hash, an equality test or a
+token-set overlap is not: the first two see a different string, and the third sees a different
+bag of words. The implementation is the standard two-row dynamic program — `O(n·m)` time but
+`O(m)` memory, two arrays swapped each row, because the full matrix is never needed when only the
+last row is read. It is asserted against the textbook value, `levenshtein("kitten","sitting") === 3`,
+since a function that merely returns small numbers for similar strings would pass a vaguer test
+and still be wrong arithmetic.
+
+**The part that plain distance gets backwards.** A recogniser does not hand back the whole
+sentence. It hands back a *final* every time the room goes briefly quiet, so what arrives is a
+fragment of what is being said. Measured plainly, a fragment is maximally *unlike* the paragraph
+it came out of, because every character of the paragraph it does not cover counts as a deletion.
+This was measured on the pair under test and it is the whole reason the law is not one line long:
+
+```
+  the fragment against the whole line: plain distance 125 (similarity about 0.25 if taken
+  that way) but the law scores 1
+```
+
+A word-for-word piece of the butler's own sentence reads as **0.25 similar** — far under the
+mandate's 0.70 — and a perfect echo would have been routed to the brain. So the distance is taken
+against the best-matching **substring** of what is being spoken, by the free-ended form of the
+same dynamic program: row 0 is all zeros, which lets the match *begin* anywhere in the spoken
+text at no cost, and the answer is the minimum of the last row, which lets it *end* anywhere.
+The same pair then scores **1.000**. The threshold still discriminates afterwards, which is the
+other half of the research and the assertion most likely to be forgotten: the mangled fragment
+scores **0.963** (the case exact matching cannot catch, and the only reason to be fuzzy at all)
+while a different sentence of similar length scores **0.342** — *0.621 of daylight* between a
+leak and a question. Without that second number every drop in the harness would be consistent
+with a filter that drops everything.
+
+**Web Audio, AEC, and the limitation this Part publishes rather than hides.** The mandate asked
+for Layer 2 as a *stream* gate: feed the recogniser silence unless the room beats the output by
+3×. That cannot be built on this page, and the reason is architectural rather than awkward.
+`webkitSpeechRecognition` opens its **own** capture inside the browser; it accepts no
+`MediaStream` argument and exposes no input node. This page's `getUserMedia` stream is a separate
+capture that feeds an `AnalyserNode` and nothing else. There is therefore no node of ours between
+the microphone and the recogniser to attenuate — inserting a `GainNode` would silence an analyser
+that nobody listens to and leave the recogniser hearing the room exactly as before. Chrome's own
+`echoCancellation: true` is already requested and is already insufficient: AEC models the path
+from *this process's* output device to the mic, and it degrades badly on the delays, gain and
+nonlinearity of real speakers in a real room — which is why the leak exists at all. So the 3.0×
+decision is enforced at the only boundary this page actually controls, the transcript boundary,
+and the page says so out loud in its own door rather than implying a mute that isn't there:
+
+```js
+streamGated: false,
+transcriptGated: true,
+gatedWhy: 'the Web Speech API opens its own capture; our getUserMedia stream feeds an ' +
+          'AnalyserNode and nothing else, so there is no node of ours to mute'
+```
+
+The harness asserts those three fields. The effect the mandate wanted — his own voice never
+reaches the brain — is delivered in full; the mechanism is one valve downstream of where the
+mandate placed it, and the existing `earTurnHold()` still stops the recogniser outright while he
+speaks, so this is a third layer behind two, not a replacement for either.
+
+**The four discretion decisions, each with the failure it is a wager against.**
+
+1. **The valve sits at the transcript boundary** (above). Cost of being wrong: none to
+   behaviour, one paragraph of honesty owed — hence the published fields.
+2. **`ECHO_GATE_RATIO = 3.0` is a new constant and `BARGE_RATIO = 1.6` is untouched.** They look
+   like the same number and are two different wagers: 1.6 decides whether to *cut a sentence
+   short*, which is cheap to get wrong and recoverable; 3.0 decides whether words *reach the
+   brain*, which is not. `voice_proof.mjs` asserts the first, and echo_proof asserts it is still
+   1.6, so neither can be tuned by way of the other.
+3. **A finished line is still his voice for `ECHO_TAIL_MS = 1600`**, read off the existing
+   `saidLines` ring under `SAID_TTL_MS` — no new bookkeeping and no new memory. A recogniser
+   delivers a final up to a second after the audio that produced it, so a law that consulted only
+   the live queue would let the last sentence of every answer through. The tail carries a
+   `ECHO_TAIL_MIN_CHARS = 12` floor *in the tail only*: a short phrase turns up inside a long
+   paragraph by coincidence, and once the engine is quiet a genuinely short reply is possible
+   again.
+4. **No reference means the gate stays shut** — the opposite of `bargeWatch`, which treats an
+   unmeasurable reference as permission. The two are right in opposite directions because the
+   cost of being wrong differs: there, a missed barge-in; here, a question nobody asked, answered
+   out loud, on the record.
+
+**And it is ahead of the interrupts on purpose.** `INTERRUPTS` catches barked words — `stop`,
+`quiet`, `enough` — and the butler's own sentence contains *"I shall stop there"*. Placed behind
+the interrupts, the law would be reached too late: a leaked `stop` empties the queue and he cuts
+himself off mid-sentence. `echoDrop(raw)` therefore runs between the seal and the interrupt
+lookup, and the harness asserts the queue is *still draining* after the leaked `stop` arrives.
+
+### 20.6 · Part 1, the proof (`echo_proof.mjs` — 49/49 PASS)
+
+Headed, **unmuted** Chrome on port 9248 with `--use-fake-ui-for-media-stream` — the *prompt* is
+automated, the *device* stays real, because a fake device would be a signal the harness invented.
+What the file does not claim is written in its own header: no audio is fed to the recogniser,
+because the Web Speech API takes no `MediaStream` and Chrome's cloud service is throttled to
+silence under a harness, so transcripts arrive through `__galaxy.speech.feedFinal`. The two
+halves that matter are real — **real piper audio through the real graph**, and a **really open
+microphone** — and Layer 2's output reference is post-gain RMS read off `speechBus` through the
+analyser already tapped there for the mouth, never a number this harness handed in.
+
+Three preconditions are assertions of their own, because each one is a way this file could pass
+for the wrong reason: a real mouse gesture unlocks the `AudioContext`; the tab is **not muted**
+(a muted tab gives a reference of zero and passes every gate claim); and the engine is **piper**
+before a word is spoken, since `speakEngine` starts at `'web'` and only becomes `'piper'` on a
+`/health` poll — the browser synthesiser never passes through this page's graph, so a harness
+that speaks on the first tick measures an output of zero. A further wait — *a chunk is in flight
+rather than queued behind a synthesis* — closes the ~1 s window in which the queue is live while
+the bus is silent, which is a reference of zero wearing the clothes of a real measurement.
+
+```
+  ·· 4. LAYER 2 - the words got past the filter; the room did not
+  note a quiet room against a live answer: input 0.01 against output 0.0118 from the bus (0.85x)
+  ok   the output reference is REAL: 0.0118 RMS of post-gain samples read off speechBus through
+       the analyser already tapped there for the mouth - not a number this harness handed in,
+       which is what would make the whole of Layer 2 circular
+  ok   and the gate is SHUT, because nothing in the room came to 3x that - the machine's own
+       speakers leaking into the machine's own microphone measured 0.85x, which is the field
+       condition this law exists for
+
+  ·· 5. AND THE BARGE-IN REGISTERS - the assertion that stops Layer 2 being a mute button
+  note a voice leaning in: 0.053 against 0.005 = 10.95x, held 228ms
+  ok   and held there 228ms, over the 200ms asked - so one slammed door or one loud consonant
+       is not a human being
+  ok   THE GATE IS OPEN. Without this assertion every refusal above is consistent with a gate
+       welded shut, which would be a page that had stopped listening rather than a page that
+       had stopped answering itself
+  ok   THE BARGE-IN REACHED THE BRAIN: exactly one new request to /chat, counted at the wire -
+       one question in, one question through, and the law let it past on the loudness rather
+       than on the words
+```
+
+**The self-recording rejection log**, the mandate's `kind: echo` ledger, printed by the page's own
+`__galaxy.ear.echo.log` at the end of the run:
+
+```
+  note the law's ledger: 6 dropped (5 by the words, 1 by the room) and 2 passed
+       drop  L1  sim 1      "The roaster on the second shelf is warm, sir, "
+             word for word inside the chunk in flight and the queue behind it
+       drop  L1  sim 1      "and I have set the table by the window"
+             word for word inside the chunk in flight and the queue behind it
+       drop  L1  sim 0.963  "the roster on the second shell is worm sir and"
+             0.96 similar to the chunk in flight and the queue behind it (over 0.7)
+       drop  L1  sim 1      "and I have set the table by the window"
+             word for word inside the chunk in flight and the queue behind it
+       drop  L1  sim 1      "stop"
+             word for word inside the chunk in flight and the queue behind it
+       drop  L2  sim 0.342  "What is the weather in Vancouver tomorrow afte"
+             the acoustic gate is shut: nothing in the room reached 3x the output reference
+             (0.010 against 0.012 from bus)
+  note piper synthesised 0 chunk(s) inside this run; the other 2 came back out of say-cache/,
+       which is the same bytes through the same bus
+  ok   nothing was kept: no audio, no recorder, and an empty transcript buffer at the end of a
+       run that put nine transcripts through the funnel
+
+  VERIFY 49/49 PASS
+```
+
+**One assertion in that ledger was demoted to a note during Part 5's regression sweep, and the
+demotion is a correction rather than a concession.** It was written as
+`ok(n > 0, 'and piper really synthesised …')`, reasoning that a `say-cache/` hit would mean the
+output reference had been measured from "a file being reread". That reasoning is wrong twice over.
+It is wrong about the mechanism: `say.py` hands back the same WAV bytes either way, the page
+decodes them and plays them through the same `speechBus`, and the analyser reads **post-gain**
+samples off that bus — a cache hit is not a silent bus, and the run that first failed this
+assertion measured **0.2449 RMS** on one. And it is wrong about itself: `LINE` is a fixed
+sentence, so the cache is cold exactly **once per machine** — the assertion could only ever pass
+on the first run on a given desktop and then fail for ever, which is an assertion that tests the
+age of a directory. What it was reaching for is asserted properly at the Layer 2 gate above:
+`reference === 'bus' && output > 0`, which is the measurement itself rather than a proxy for it.
+The count stays as evidence, phrased as what it is.
+
+**The mandate's own two claims, and two more the mandate did not ask for.** *The brain receives
+zero inputs* is counted **at the wire** by CDP — `0 request(s) to /chat` across all five Layer 1
+drops, and `0` thoughts formed — and not by asking the page whether it had behaved; *the barge-in
+registers* is the same counter reading exactly one. The two extra claims are the ways this feature
+fails without anybody noticing: a sentence scoring **0.342**, invisible to Layer 1, is dropped by
+the gate anyway and counted against **Layer 2 specifically**, so the two layers cannot hide behind
+one another; and **in a quiet room the law is inert** — after 2537 ms of silence, past the 1600 ms
+tail, *his own sentence, verbatim*, is heard and reaches the brain, because the law is about a
+leak in progress and not a blacklist of things the butler has ever said.
+
+**Three traps this file fell into first, kept as notes because each is a way a later harness will
+fail.** (a) A voice loud enough to clear 3.0× has *already* cleared the 1.6× barge gate, so the
+answer is cancelled, the queue goes dry and `echoGateWatch` resets its own sustain — the gate's
+evidence erased by the gate working. The loud pump therefore carries `maxSustainedMs` and
+`maxRatio` out of its loop and breaks the moment the gate is open with sustain met. (b) `ask()`
+begins `if (busy || ...) return;` and there is no `busy` door, so a question asked into a thinking
+page leaves the wire still and looks exactly like a refusal; the file waits on
+`Network.loadingFinished` versus `requestWillBeSent` plus `status.className !== 'thinking'`, and
+asserts that wait as its own claim so the trap is on the record. (c) `heardFinal` *buffers* and
+`flushThought` fires on the 900 ms pause, so a harness reading the wire on the next tick reads
+zero and calls it a refusal.
+
+**Regression, on the three harnesses most at risk** — the ear, the funnel and the routing:
+`voice_proof.mjs` **133/133**, `conversation_proof.mjs` **104/104**, `routing_proof.mjs`
+**65/65**. Preflight after the change: **`17 pass, 0 fail, 3 warn`**, the three standing warns.
+
+### 20.7 · A harness-environment law found while proving Part 1 — the occluded window gets no frames
+
+`voice_proof.mjs` failed **128/133** three times in a row, always on `__galaxy.presence.*`
+reading zeros: *0 frames were drawn*, *0 points in FACE mode*, *uJaw never varied*. It was not a
+regression. **A Chrome window that is behind another application is OCCLUDED, and an occluded
+window is given no `requestAnimationFrame` at all** — measured on this machine at **61 frames a
+second raised against 0 occluded**. The viewer's boot chain is a promise chain of frame-driven
+stages,
+
+```js
+planetBoot().then(flowStart).then(deckBoot).then(stillPin).then(presBoot)
+```
+
+so without frames it **stalls before `presBoot()` ever runs**: `presence.built:false`,
+`points:0`, `mode:""`, and — the tell that separates this from a real failure —
+`trouble:""`, `why:""`, `three:""`, `notes:[]`. Nothing failed. Nothing ran. A harness reading
+`built:false` and reporting a broken head would be reporting the desktop. With the window raised:
+`built:true, points:12000`, and **133/133**.
+
+The workaround was a scratch PowerShell raiser that walked `Win32_Process` for
+`chrome.exe` command lines containing `remote-debugging-port` and called `ShowWindow` /
+`SetWindowPos(HWND_TOPMOST)` / `SetForegroundWindow` on each, every 400 ms. It is **deleted
+rather than promoted**, for a reason worth writing down: it steals focus while it runs, and a
+harness with a *real* recogniser needs the room and the foreground to itself —
+`routing_proof.mjs` read 62/65 with the raiser alive and **65/65** solo, which is the same lesson
+the sweep rule already teaches. The law stays here as the thing to check first when a headed
+harness reports a zero for something that should have been drawn: **raise the window, or expect
+no frames.**
+
+### 20.8 · Part 2, the research — how a call gets into a transcriber without going through the room
+
+Four mechanics had to be settled before a line of the tap was written, and three of them are
+counter-intuitive enough that getting them wrong produces a feature that *looks* finished.
+
+**`getDisplayMedia` is the only door to system audio, and video is not optional.** Chrome will
+not return an audio track for a display capture requested with `audio` alone; the picker itself
+is a video picker, and `Share audio` is a tick *inside* it. So the Scribe asks for
+`video: { frameRate: { ideal: 1, max: 4 } }` — a track nobody renders, floored so it costs
+nothing — purely to be allowed to ask for the audio beside it. It also means the third refusal
+exists at all: the picker can be **accepted with `Share audio` left unticked**, which returns a
+perfectly healthy video track and no audio. Nothing throws. The button would light, the panel
+would open, and every chunk would be three seconds of the room with none of the call in it. That
+is the one way this feature fails while reporting success, so the whole capture is stopped and
+the seal names the tick by its own label.
+
+**The AEC split — the two tracks take opposite constraints, and the reason is which side of the
+speaker each one sits on.** The microphone asks for `echoCancellation`, `noiseSuppression` and
+`autoGainControl` **all true**: it is a real microphone in a real room and the room is noise. The
+system-audio track takes **all three false**: echo cancellation on a signal that never went
+through a room does not remove an echo, it removes consonants, and automatic gain applied to a
+call that already has its own levelling pumps every pause. Same page, same graph, opposite
+requests.
+
+```js
+sys = await navigator.mediaDevices.getDisplayMedia({
+  video: { frameRate: { ideal: 1, max: 4 } },
+  audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+mic = await navigator.mediaDevices.getUserMedia({
+  audio: { echoCancellation: true,  noiseSuppression: true,  autoGainControl: true }, video: false });
+```
+
+**The zero-gain pull.** A Web Audio graph is pulled from the destination backwards. An
+`AudioWorkletNode` whose output goes nowhere is **never called** — `process()` does not run, no
+error is raised, and the tap looks exactly like a muted microphone. But connecting it to
+`destination` plays the other side of the call back into the room at full volume and straight
+into the echo law. The resolution is a gain node pinned at **0**:
+`tap → gain(0) → destination`. The node is pulled because it reaches the destination; nothing is
+heard because the gain is zero. It is three lines and it is the whole difference between a tap
+that works and a tap that silently does nothing, which is why `scribe_proof` asserts *the worklet
+is being PULLED* as a claim of its own rather than trusting that a graph was built.
+
+**The `MediaRecorder` trap, which is why there is a worklet here at all.** The obvious design is
+`new MediaRecorder(stream)` with `start(3000)` and one POST per `dataavailable` blob. It does not
+work, and it fails in the way that costs a day: with a timeslice, **only the first blob carries
+the WebM/EBML header**. Every later blob is a bare cluster, and PyAV — correctly — refuses it as
+undecodable. A naive harness transcribes chunk 1, gets words, and passes. The repair is not to
+re-glue headers; it is to stop using a container. The `AudioWorklet` takes raw `Float32Array`
+frames, the page sums the two sources through one gain node, resamples to **16 kHz mono** (what
+Whisper wants anyway), and writes its own **44-byte RIFF header** per chunk. Every chunk is then
+a complete, independently decodable file — **94 KB each**, which is exactly what three seconds of
+16 kHz mono 16-bit should weigh and is asserted as such. `scribe_proof` states the trap as a
+number rather than a comment — *2 of 2 chunks came back with words* — because "more than one chunk
+decoded" is the only assertion that distinguishes the worklet from the recorder.
+
+### 20.9 · Part 3, the research — what a local transcriber actually costs, and the 3.13 hole under it
+
+**faster-whisper, measured on this machine before the route was designed.** `import` is
+**0.20 s**; the first `WhisperModel('base.en', device='cpu', compute_type='int8')` is the
+expensive moment at **0.98–1.45 s** cold (**1664 ms** in the preflight run quoted below), and it
+is paid **once** — so the model is held by the long-lived server and never constructed per
+request. After that a **3 s** chunk costs roughly **0.5 s** of CPU, and the whole **5.14 s**
+fixture came back in **894 ms**: comfortably real-time on four threads, which is what makes a 3 s
+chunk cadence honest rather than a queue that grows for the length of the meeting.
+
+Three behaviours decided three route decisions:
+
+- **`BytesIO` decodes identically to a path.** Measured, not assumed — and it is the finding the
+  privacy law rests on. There is no temporary file anywhere in the chain; the WAV arrives as a
+  multipart part, is handed to the decoder as bytes, and is dropped. `keepsAudio: false` is
+  published on `/health` as a boolean precisely so a harness can read the promise, and
+  `scribe_proof` then checks it **from outside the process** by walking the project root for new
+  audio files across the whole meeting.
+- **Silence is not an error.** Three seconds of digital silence with `vad_filter=True` yields
+  **zero segments** — no exception, no empty-string hallucination. So a pause in a meeting costs
+  a `200` with no words rather than a red line in the panel. Without the VAD filter, Whisper
+  reliably invents a sentence over silence; the filter is load-bearing, not a tuning.
+- **Junk bytes raise `av.error.InvalidDataError`, and that must not be a 500.** A single corrupt
+  chunk in a forty-minute meeting has to cost that chunk and nothing else, so an undecodable body
+  is a **`200` with `ok:false`** and an English reason (*"that chunk was not audio this machine
+  could decode"*) — the meeting keeps running. A malformed *request*, by contrast, is a real
+  `400`, and a misnamed part gets told which name to use (*"Send the audio in a part named
+  \"audio\"."*). Those are the three ways a chunk can be wrong, and preflight check 20(d)
+  exercises all three.
+
+**And the hole under all of it: `audioop` was removed in Python 3.13.** Preflight has to build a
+16 kHz fixture to post, and `audioop.ratecv` — the one-line answer every example gives — no longer
+exists in the interpreter this machine runs. `_wav16k()` therefore resamples by hand with `wave`
+and `struct`, and it **interpolates linearly rather than dropping samples**. That is not
+fastidiousness: piper renders at 22050 Hz, and decimating to 16 kHz by taking every *n*th sample
+folds everything above 8 kHz back down into the speech band as aliasing — sibilants become buzzes
+and the transcriber starts guessing. The difference is audible and it is measurable in the
+transcript, which is why the method is named in the source rather than left to be inferred.
+
+### 20.10 · Part 4, the research — a panel that outlives the meeting, and a hand that writes nothing
+
+Part 4's mechanics are less exotic and its failure modes are worse, because each one loses work
+that was already done.
+
+**The panel stays open on stop.** The natural symmetry — press to start, press to close — takes
+the only copy of the meeting off the screen at the exact moment it becomes useful, since
+*stopping* is the moment the minutes can first be drafted. So `scribeStop()` releases both
+captures (which is what turns the browser's own recording indicator off, and is asserted for that
+reason), leaves the transcript where it is, and moves the organ to **HELD** — *something is true
+and nothing is happening*. `scribe_proof` asserts the panel's survival as a named failure mode
+rather than as an incidental.
+
+**The minutes are drafted, never written.** `/scribe/minutes` returns text and touches no file;
+the write is `tools/save_minutes.py` through the ordinary Hands gate, on the employer's Yes. Two
+consequences are assertions: **the file does not exist before the Yes** — a hand that wrote on
+`propose` rather than on `execute` would have written it by then, and no amount of correct UI
+would undo that — and **the minutes shown on the card are the minutes that would be written**,
+all four headings present, so what is approved is the artefact and not a promise about it.
+
+**The `overwrite` flag is a visible row, not a hidden parameter.** Yes on an existing file means
+*Replace*, and a decision that destructive has to be readable where it is taken. That makes the
+card taller, which makes the third assertion necessary: **the `minutes` row is clamped and Yes is
+still on the screen.** An unbounded value there pushes the one button that must never be
+unreachable off the bottom of the window — a card that cannot be refused is worse than no card.
+The harness finds that row by walking `#ask-rows` in label/value pairs and matching the `b` whose
+text is `minutes`, having first tried `:last-of-type` and learnt that it silently depends on the
+registry's field order.
+
+### 20.11 · Part 4, a real defect the Scribe fixture found — a tooltip with two authors
+
+`scribe_proof`'s offline-refusal case asked for something simple: with the transcriber down, the
+button's tooltip should say what the button is **for** and why it cannot be pressed. It said only
+this:
+
+```
+  Checking whether this machine has a transcriber…
+```
+
+Neither half. Not what it does, not why it is dead — and it said it permanently, long after the
+check it described had finished. The mechanism is worth writing down because it will catch the
+next organ too. `organsPaint()` sets every organ's title to `ORGAN_TIP[id] + '\n' + state.line`,
+and **`ORGAN_TIP[id]` is captured lazily off the markup on the FIRST paint of that organ** and
+never again. `organsUp()` runs at the end of boot; the Scribe's own section runs long before it.
+So the boot line
+
+```js
+$('scribebtn').title = 'Checking whether this machine has a transcriber…';   /* deleted */
+```
+
+was not a placeholder that would be replaced — it was **adopted as the button's permanent base
+description**, because it is what `.title` held when the first paint read it. And the three
+*later* writes, in `scribeHealthFrom`, `scribeStart` and `scribeStop`, were the opposite error:
+each lasted until the next paint, milliseconds, because the class change they accompanied is what
+triggers the observer that repaints. Four title writes; one of them permanent and wrong, three of
+them dead code that read like the authority.
+
+The repair is one author for that attribute. All four writes are deleted; `organRead` owns the
+sentence, off the markup; and because there genuinely is a second in which the answer is not back
+yet, it gained a case for it rather than guessing:
+
+```js
+/* BEFORE THE FIRST /health there is no answer yet, and "unavailable" would be a
+   guess. The button is disabled either way; only the sentence differs, and a man
+   hovering it in the first second deserves the true one. */
+if (!scribe.asked) {
+  return { organ: 'off', line: 'checking whether this machine has a transcriber…' };
+}
+if (el.disabled) {
+  return { organ: 'off', line: 'unavailable · the transcriber is offline · ' +
+           (scribe.why || 'faster-whisper is not installed') };
+}
+```
+
+`scribeHealthFrom` now sets the one thing it owns — whether the control can be pressed — and calls
+`organsPaint()` **unconditionally**, because `why` can change while `installed` does not, and the
+reason is the half of the tooltip worth reading. The assertion that caught it is phrased as the
+law rather than as the symptom:
+
+```
+  ok   and the tooltip carries BOTH the markup’s sentence and the server’s own reason - it
+       outlives the four seconds the seal gives it, and a tooltip written by two authors is a
+       tooltip that shows whichever of them painted last
+```
+
+### 20.12 · Part 5, the meeting itself (`scribe_proof.mjs` — 58 checks · 58 pass · 0 fail)
+
+Headless-new Chrome with `--auto-select-desktop-capture-source=Entire screen`,
+`--use-fake-ui-for-media-stream`, `--use-fake-device-for-media-stream` and
+`--use-file-for-fake-audio-capture=<fixture>`. **Nothing in the chain is mocked except the two
+picker-return refusals**, which have no other way to be provoked: the dismissal and the
+`Share audio`-unticked case. The rest is a real `getDisplayMedia`, a real worklet, real POSTs
+counted at the wire off `Network.requestWillBeSent`, the real transcriber, the real brain, the
+real Hands gate and a real file on disk.
+
+**The fake-device finding, which is what makes the fixture possible.** Measured under all three
+auto-accept flag sets, a display capture requested with `{video, audio}` comes back as
+
+```json
+{"audio":1,"video":1,"alabel":"Fake audio","vlabel":"screen:-3:0"}
+```
+
+— the video track is a real screen source and **the display capture's audio track *is* the fake
+device**, so it reads the fixture WAV. That is the whole reason a scripted meeting can be spoken
+at this feature at all. It has a consequence the fixture has to absorb: **both** capture devices
+are the same fake device, so the display-audio track and the microphone track carry the *same
+file*, and the page sums them through one gain node. Two identical signals added clip. The fixture
+is therefore **peak-limited to 0.4** before it is written — a measured accommodation of the
+harness environment, recorded here because a reader finding `0.4` in the source would otherwise
+have to guess at it. The builder also **walks the RIFF chunk list instead of assuming data starts
+at byte 44**, because piper's output does not always oblige.
+
+**Typed and spoken, and the honest version of that rule for this Part.** The Scribe's *input* is
+spoken — real piper speech through a real capture device, which is as spoken as a fixture gets —
+and its *controls* are clicked. There is no spoken trigger for the Scribe and there will not be
+one: `getDisplayMedia` requires **transient user activation**, so a voice command cannot legally
+open the picker, and a butler who could start recording a room because he thought he heard his
+name is not a feature. The typed half of the round's fixtures lives in Part 0's four desktop
+cases (§20.3), which drive the vanishing input.
+
+**The transcript, as the panel showed it:**
+
+```
+  | listening · system audio and your microphone · nothing is written to disk
+  | 0:04  quarterly review is on Thursday at 10. We agree.
+  | 0:07  to send the deck by Wednesday evening. The quarterly reading.
+```
+
+Spoken at it: *"The quarterly review is on Thursday at ten. We agreed to send the deck by
+Wednesday evening."* The keywords asserted are **quarterly**, **thursday**, **wednesday**;
+*"ten"* is deliberately **not** among them, because `base.en` writes it as **10** — an assertion
+on the word would have been an assertion about a transcriber's formatting, which is not what this
+file is for. The chunk boundary at 0:04/0:07 is visible in the output (*"We agree."* / *"to send
+the deck"*), which is what three-second chunking looks like honestly reported rather than
+stitched over.
+
+**The minutes, drafted by the brain from that transcript and written after the Yes:**
+
+```markdown
+# Meeting-2026-09-26-2111
+
+Minutes taken Saturday 26 September 2026 at 21:11 by the Scribe.
+
+## Attendees
+Not named in the recording.
+
+## Key Decisions
+- Quarterly review is on Thursday at 10.
+- "to send the deck by Wednesday evening."
+
+## Action Items
+- Owner not stated - send the deck - by Wednesday evening.
+
+## Raw Excerpts
+> quarterly review is on Thursday at 10. We agree.
+
+> to send the deck by Wednesday evening. The quarterly reading.
+```
+
+`Written to notes/Meeting-2026-09-26-2111.md - 65 words in 4 sections.` — the hand's own stdout,
+asserted to be the answer the card shows, so the tool says where it put the file rather than the
+page claiming it on the tool's behalf. Note *"Attendees: Not named in the recording"* and
+*"Owner not stated"*: the draft declines to invent the two things a five-second fixture cannot
+contain, which is the behaviour worth having. The harness writes **exactly one file**, prints it,
+and deletes it on both the success and the failure path.
+
+**The privacy law, measured from outside:** *not one audio file appeared anywhere under the
+project root during the meeting*, and the server — asked afterwards — reported the chunk count it
+transcribed while holding no audio and no text. Preflight check 20(g) makes the same measurement
+server-side, counting audio files under the root before and after and asserting none grew, with
+`say-cache/` excluded **by name and out loud**, because it holds the speech this machine
+*produces* and because 20(b) deliberately puts the fixture there. An exemption nobody can see is
+how a privacy sweep stops meaning anything.
+
+### 20.13 · The matrix at the end of the round (Part 5), and what is left open
+
+Every standing harness, run solo, the last leg against a server started fresh (`pid 15548`);
+`port_proof.mjs` last, because it can leave a Chrome on 9222.
+
+| harness | result | what it holds down |
+| --- | --- | --- |
+| `scribe_proof.mjs` | **58 checks · 58 pass · 0 fail** | the whole Scribe chain, the three refusals, the privacy law from outside |
+| `console_proof.mjs` | **30/30 PASS** | four silent desktops, parentage-filtered, polled |
+| `echo_proof.mjs` | **49/49 PASS** | the echo law, both layers: self-voice dropped, barge-in let past |
+| `deck_proof.mjs` | **208/208 PASS** | the cinematic deck and the six-organ rail |
+| `routing_proof.mjs` | **65/65 PASS** | the funnel |
+| `voice_proof.mjs` | **133/133 PASS** | the full read, the barge-in gate, the head |
+| `conversation_proof.mjs` | **104/104 PASS** | the turn, the amend door |
+| `layout_proof.mjs` | **72/72 PASS** | the desk |
+| `followup_proof.mjs` | **47/47 PASS** | the antecedent memory |
+| `nudge_proof.mjs` | **21/21 PASS** | the purse and the callouts |
+| `persona_proof.mjs` | **19/19 PASS** | the persona block |
+| `capabilities_proof.mjs` | **16/16 PASS** | the injected capability list, counted not typed |
+| `desk_proof.mjs` | **44 checks, 0 failed** | the still frame and the pin |
+| `focus_probe.mjs` | **PROBE 26/26 · 78 checks, 0 failed** | the focus session's own instrument |
+| `lock_proof.mjs` | **70 checks, 0 failed** | the lock with CDP teeth — see the note below |
+| `brain_live.mjs` | **33 checks, 0 failed** | the live brain and the recogniser seal |
+| `eyes_live.mjs` | **56 checks, 0 failed** | the eyes, and that no organ turns the microphone on |
+| `tools_live.mjs` | **VERIFY 50/50 PASS** | the hands, end to end, calendar restored |
+| `port_proof.mjs` | **24 checks, 0 failed** | the debugging-port launcher (run last) |
+| `preflight.py` | **21 checks · 18 pass, 0 fail, 3 warn** | checks 20 and 21 are new this round |
+
+**Open, named. (1) `salutation_proof.mjs` — 26/34, pre-existing and not caused by this round.**
+The failing set is **byte-identical** to the one in `_runs/salutation_proof.txt` from 13:42, and
+appears in five prior logs across the day — `diff` of the `FAILED:` lines is empty, including
+against a run made on a freshly started server, which rules out long-lived process state. The
+cause is corpus growth: the assertions want *"who is JARVIS in the movies?"* to fall through the
+thin-score trigger and reach the web (`kind=web, searched=thin`), and the answer now comes back
+`{"kind":"notes"}` — the archive PDF indexed in an earlier round scores well enough to keep the
+web gate shut. **The web gate is on this mandate's DO-NOT-ALTER list**, so this is reported rather
+than tuned. Either the harness's questions or the corpus would have to change, and both are
+decisions above a regression sweep's pay grade.
+
+**(2) `lock_proof.mjs` — a failure that was process state, not code.** It read **65 checks, 17
+failed** during the sweep and reproduced identically solo after an eight-second settle
+(`_runs/lock_proof.sweep.txt`, `_runs/lock_proof.solo2.txt`). Every premise and every step through
+the relaunch passed — port 9222 answering, `cdp=true`, the work tab restored — and then the
+deferred lock never completed inside the ~14 s the harness allows: `lockedTab=""`, `watchers=0`,
+`watchPolls=0`, and every downstream timing check overrunning its budget by roughly **2×**
+(*noticed in 2834 ms, budget 1500 ms*). The same file on the same code read **70 checks, 0 failed**
+at 10:40 and reads **70 checks, 0 failed** now. The one variable that changed is the server
+process: the failing runs were answered by a pid that had been up ~18 minutes through the entire
+sweep, including a harness-driven Chrome relaunch; the passing runs by a pid started minutes
+before. Nothing edited this round touches `focus.py`, and **the lock with CDP teeth is on the
+DO-NOT-ALTER list**, so no repair was attempted. The shape — ticks arriving late rather than not at
+all, since the session did eventually reach `running` — points at the **tick thread being starved**
+in a process that has had a day of harnesses through it, and that is a hypothesis and not a
+finding: the failing process was killed before it could be interrogated, and `/focus/diag`
+publishes `tickAlive`, `ticks` and `tickAgeS` precisely for the next time (a healthy process
+measured **1.25 ticks/s** here). **The rule that follows is operational and belongs beside the
+sweep rule: a lock sweep gets a freshly started server**, and a lock failure seen against a
+long-running one is not evidence until it survives a restart. The route's own docstring already
+warned of this from the other end — *"a fresh interpreter passes every check while the one
+actually holding your session sits on a tick thread that died forty minutes ago."*

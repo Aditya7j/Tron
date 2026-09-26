@@ -88,6 +88,7 @@ import re
 import socket
 import struct
 import subprocess
+from tools import _proc
 import sys
 import threading
 import time
@@ -1031,7 +1032,7 @@ def _read_darwin():
     is exactly why it is a subprocess and not NSWorkspace's notification centre.
     In a long-lived non-app process that API stops firing and the last value it
     handed you becomes a permanent lie."""
-    front = subprocess.run(
+    front = _proc.run(
         ["osascript", "-e",
          'tell application "System Events" to get bundle identifier of first '
          'application process whose frontmost is true'],
@@ -1042,7 +1043,7 @@ def _read_darwin():
         name = dict(_DARWIN_BROWSERS).get(app)
         if name:
             # Ask the browser itself for the URL; the host is taken from it below.
-            tab = subprocess.run(
+            tab = _proc.run(
                 ["osascript", "-e",
                  'tell application "%s" to get URL of active tab of front window'
                  % name],
@@ -1053,10 +1054,10 @@ def _read_darwin():
 
 def _read_linux():
     """Best effort, and honest about it: no xdotool means no reading."""
-    out = subprocess.run(["xdotool", "getactivewindow", "getwindowclassname"],
+    out = _proc.run(["xdotool", "getactivewindow", "getwindowclassname"],
                          capture_output=True, text=True, timeout=3)
     app = (out.stdout or "").strip().lower() or None
-    name = subprocess.run(["xdotool", "getactivewindow", "getwindowname"],
+    name = _proc.run(["xdotool", "getactivewindow", "getwindowname"],
                           capture_output=True, text=True, timeout=3)
     return {"app": app, "title": (name.stdout or "").strip()}
 
@@ -1296,7 +1297,7 @@ def _front_window_darwin():
     """
     for bundle, name in _DARWIN_BROWSERS:
         try:
-            out = subprocess.run(
+            out = _proc.run(
                 ["osascript", "-e",
                  'if application "%s" is running then tell application "%s" to get '
                  'URL of active tab of every window' % (name, name)],

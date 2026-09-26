@@ -48,6 +48,7 @@ import shutil
 import smtplib
 import socket
 import subprocess
+from tools import _proc
 import sys
 import tempfile
 import threading
@@ -127,7 +128,7 @@ def wire(**settings):
 def run(params, raw=None, timeout=25):
     """The copy, in its own process, JSON on stdin - the way hands.py runs it."""
     payload = raw if raw is not None else json.dumps(params)
-    done = subprocess.run([PY, str(COPY)], input=payload.encode("utf-8"),
+    done = _proc.run([PY, str(COPY)], input=payload.encode("utf-8"),
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           timeout=timeout, shell=False)
     return (done.returncode,

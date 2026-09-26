@@ -46,6 +46,7 @@ WHAT THIS IS CAREFUL ABOUT, and each line of it was measured rather than assumed
 import json
 import os
 import subprocess
+import _proc
 import sys
 import time
 import urllib.request
@@ -120,7 +121,7 @@ def main():
 
     started = time.monotonic()
     try:
-        done = subprocess.run(
+        done = _proc.run(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
              "-File", LAUNCHER, "-Port", str(PORT), "-Quiet"],
             capture_output=True, text=True, encoding="utf-8", errors="replace",

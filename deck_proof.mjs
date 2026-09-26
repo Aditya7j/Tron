@@ -1894,16 +1894,21 @@ async function main() {
   })()`);
   note('organ rail: ' + JSON.stringify(Object.keys(org.state || {}).map((k) =>
     k + '=' + ((org.state[k] || {}).organ || '?'))) + ' · live ' + org.live);
+  /* SIX, AND THE SIXTH IS THE SCRIBE. This list is spelled out rather than counted on
+     purpose - it is the tripwire that fires when a button is added to the markup and
+     forgotten in ORGANS, which paints no dot and reports no state and therefore looks
+     exactly like nothing being wrong. #scribebtn joined it in the same commit that added
+     the button, which is the only way this assertion is worth keeping. */
   ok(JSON.stringify(org.ids) ===
-     JSON.stringify(['screen', 'eye', 'focusbtn', 'mic', 'reset']),
-     'THE ORGAN RAIL IS THE FIVE BUTTONS THAT WERE ALREADY THERE: #screen #eye #focusbtn ' +
+     JSON.stringify(['screen', 'eye', 'focusbtn', 'scribebtn', 'mic', 'reset']),
+     'THE ORGAN RAIL IS THE SIX BUTTONS ON THE BAR: #screen #eye #focusbtn #scribebtn ' +
      '#mic #reset, under the ids every other harness in this repo already clicks',
      JSON.stringify(org.ids));
   const dots = org.ids.every((id) => org.state[id] && org.state[id].dot);
   ok(dots, 'each one carries a state dot', JSON.stringify(org.state));
   const lines = org.ids.filter((id) => !(org.state[id] || {}).line);
   ok(lines.length === 0,
-     'and a state line in its tooltip, on every one of the five',
+     'and a state line in its tooltip, on every one of the six',
      'no line on: ' + JSON.stringify(lines));
   const twoLine = org.ids.filter((id) =>
     String((org.tips[id] || {}).title || '').split('\n').length !== 2);

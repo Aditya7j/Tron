@@ -260,8 +260,16 @@ try {
   if (!up1) throw new Error('no server after the first restart');
   const line1 = manifestLine(mark1);
   note('he wrote at start-up: ' + line1.trim());
-  ok(/knows 7 hands/.test(line1) && line1.indexOf(CANARY_ID) >= 0,
-     'HE COUNTED THE NEW HAND HIMSELF: the start-up line says seven and names ' + CANARY_ID +
+  /* COUNTED, NOT TYPED. `ids0.length` is what the registry held before the canary went in,
+     so the number expected here is that plus one - and it stays right the next time a hand
+     is added to the registry, which is exactly the property the assertion is about. A
+     literal here would have to be edited by whoever adds the eighth hand, and an assertion
+     that has to be edited to keep passing has stopped being evidence. */
+  const fittedCount = ids0.length + 1;
+  ok(new RegExp('knows ' + fittedCount + ' hands').test(line1) &&
+     line1.indexOf(CANARY_ID) >= 0,
+     'HE COUNTED THE NEW HAND HIMSELF: the start-up line says ' + fittedCount +
+     ' and names ' + CANARY_ID +
      ' - the manifest counted the registry rather than repeating a number I typed',
      JSON.stringify(line1));
 
@@ -318,8 +326,9 @@ try {
   if (!up2) throw new Error('no server after the second restart');
   const line2 = manifestLine(mark2);
   note('he wrote at start-up: ' + line2.trim());
-  ok(/knows 6 hands/.test(line2) && line2.indexOf(CANARY_ID) < 0,
-     'HE STOPPED COUNTING IT: back to six, and the canary is not among them',
+  ok(new RegExp('knows ' + ids0.length + ' hands').test(line2) &&
+     line2.indexOf(CANARY_ID) < 0,
+     'HE STOPPED COUNTING IT: back to ' + ids0.length + ', and the canary is not among them',
      JSON.stringify(line2));
   const gone = await askedOutright();
   note('asked outright: "' + gone.answer.slice(0, 200) + '"');

@@ -34,6 +34,7 @@ import hashlib
 import os
 import shutil
 import subprocess
+from tools import _proc
 import sys
 import threading
 import time
@@ -250,7 +251,11 @@ def synthesise(text, model=DEFAULT_MODEL):
     if not acquired:
         return None, "the local voice was busy for longer than it is worth waiting.", ""
     try:
-        proc = subprocess.run(
+        # _proc.run, NOT subprocess.run. This is the line that flashed a black window on
+        # the boss's desktop after every spoken answer: piper is a console program, and a
+        # console program started with the default flags is given a console, which has a
+        # window. Measured, class PseudoConsoleWindow, parented to the server.
+        proc = _proc.run(
             argv, input=line.encode("utf-8"),
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             timeout=SYNTH_TIMEOUT_S, shell=False, cwd=ROOT)

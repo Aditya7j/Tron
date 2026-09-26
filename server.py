@@ -159,6 +159,20 @@ focus.ASK_HAND = _focus_ask_hand
 # falls back to the browser's own engine.
 import say
 
+# THE SCRIBE'S EAR, the other direction: a few seconds of meeting in, a line of text
+# out, through faster-whisper in this process. Its own file for the same reasons as
+# say.py - it owns a model, a lock and a warm-up thread - and it never raises either,
+# so a machine without faster-whisper reports `installed: false` on /health, the organ
+# refuses with SCRIBE: TRANSCRIBER OFFLINE, and nothing else in this file notices.
+#
+# Imported in a try for the same reason ingest is: a missing library must not stop a
+# working server from starting.
+try:
+    import scribe
+except Exception as _scribe_exc:                               # noqa: BLE001
+    scribe = None
+    sys.stderr.write("scribe: unavailable - %s\n" % _scribe_exc)
+
 # =============================================================================
 #  THE PERSONA - everything the character is, lives in this one block.
 #
@@ -744,6 +758,59 @@ COMPOSE_PROMPT = (
     "- Say \"sir\" only now and then, not every time. No exclamation marks, no emoji, "
     "no forced cheer, no list of your own capabilities, no closing offer of further "
     "assistance."
+)
+
+# WHY THE SCRIBE GETS ITS OWN PROMPT AND NOT COMPOSE_PROMPT. A meeting transcript is
+# unlike every other input in this file: it arrives in the wrong order, with two people
+# talking over one another, with the recogniser's mishearings still in it, and with no
+# question anywhere in it. COMPOSE_PROMPT would hand back a graceful paragraph about the
+# meeting. What a minute needs is the opposite of graceful - four fixed headings, in a
+# fixed order, with the action items carrying names, because minutes are read six weeks
+# later by somebody deciding whether they owe anybody anything.
+#
+# THE ONE LAW IT REPEATS TWICE: nothing may appear in the minutes that is not in the
+# transcript. A model asked to write minutes will invent an attendee list, because every
+# minute it has ever seen had one. So the attendees are the voices the transcript
+# actually names, "Not named in the recording" is an allowed and expected answer for all
+# four sections, and the raw excerpts exist precisely so the employer can check the three
+# sections above them against the words that were said.
+MINUTES_PROMPT = (
+    "You are the butler of a private knowledge galaxy, taking the minutes of a meeting "
+    "your employer has just recorded. You are given a raw machine transcript: it has no "
+    "speaker labels, it contains mishearings, and it may contain half-sentences. Turn it "
+    "into minutes.\n"
+    "\n"
+    "Output GitHub-flavoured Markdown, and nothing else - no preamble, no closing "
+    "remark, no code fence around the whole thing. Use exactly these four sections, in "
+    "this order, each as a level-two heading:\n"
+    "\n"
+    "## Attendees\n"
+    "## Key Decisions\n"
+    "## Action Items\n"
+    "## Raw Excerpts\n"
+    "\n"
+    "- Attendees: only names the transcript itself says. If it names nobody, write "
+    "\"Not named in the recording.\" Do not guess from context and do not list roles as "
+    "people.\n"
+    "- Key Decisions: one bullet per decision actually reached, in the words of the "
+    "meeting rather than yours. Something discussed and left open is not a decision; if "
+    "it matters, put it under Action Items as a bullet saying it is still open.\n"
+    "- Action Items: one bullet each, in the form \"Owner - the task - by when\". Where "
+    "the transcript does not say the owner or the date, write \"owner not stated\" or "
+    "\"no date stated\" in that slot. Never assign a task to somebody who was not "
+    "mentioned.\n"
+    "- Raw Excerpts: three to six short verbatim quotations from the transcript that the "
+    "sections above rest on, each on its own line as a Markdown blockquote. Quote "
+    "exactly, mishearings included - this section is how your employer checks your work, "
+    "so tidying it defeats it.\n"
+    "\n"
+    "NOTHING MAY APPEAR IN THESE MINUTES THAT IS NOT IN THE TRANSCRIPT. No invented "
+    "attendees, no inferred deadlines, no decisions that were only half-said. If a "
+    "section has nothing in it, say so in one short line under its heading and move on. "
+    "If the transcript is too short or too garbled to minute at all, output only the four "
+    "headings with \"Nothing usable in the recording.\" under each.\n"
+    "Keep it plain: no \"sir\", no flourishes, no summary of the summary. Minutes are the "
+    "one thing you write in nobody's voice."
 )
 
 # ----------------------------------------------------------------- WHO HE IS
@@ -3447,6 +3514,59 @@ def voice_state(cfg):
     }
 
 
+def scribe_state():
+    """The transcriber, described the way the voice is: booleans, names and counts.
+
+    Published on /health because the ORGAN has to know before it opens a picker: a
+    machine without faster-whisper must refuse in a sentence rather than record three
+    seconds of a meeting and then discover there is nothing to send it to. No word of
+    any transcript is in here, and there is no field that could hold one.
+    """
+    if scribe is None:
+        return {"installed": False, "ready": False, "loading": False,
+                "model": "base.en", "device": "cpu", "computeType": "int8",
+                "keepsAudio": False, "keepsText": False,
+                "why": "faster-whisper is not importable in this server process",
+                "chunks": 0, "refused": 0, "audioSeconds": 0, "audioBytes": 0,
+                "transcribedChars": 0, "transcribeMs": 0, "loadMs": 0,
+                "cpuThreads": 0, "maxChunkBytes": 0}
+    return scribe.state()
+
+
+# The same stripping tools/save_minutes.py does, for the same reason and one step
+# earlier. This is NOT the security check - that is save_minutes.py's resolved-path test,
+# which runs whatever this returns. This exists so the proposal card shows the employer
+# the name the file will actually have, rather than the name they typed and a surprise.
+MINUTES_UNSAFE = re.compile(r"[^A-Za-z0-9 ._-]+")
+
+
+def minutes_title(raw):
+    """A title fit to be a filename, or the dated default. Never a path."""
+    clean = MINUTES_UNSAFE.sub(" ", str(raw or "")).strip()
+    clean = re.sub(r"\s+", " ", clean)[:120].strip(" .")
+    clean = os.path.basename(clean)
+    return clean or ("Meeting-" + time.strftime("%Y-%m-%d-%H%M"))
+
+
+def minutes_raw(transcript, title):
+    """The fallback minutes: the transcript itself, under the four headings.
+
+    WHEN THE BRAIN CANNOT BE REACHED the meeting is still gone, and the employer's
+    choice is between a raw file and nothing. So this produces something with the same
+    SHAPE as real minutes - four headings, so a later reader is not misled about what
+    they are holding - and puts the whole transcript under the fourth, where a verbatim
+    record belongs. The line under each of the first three says plainly that no brain
+    read this, because minutes nobody summarised must not be mistaken for minutes
+    somebody did.
+    """
+    unread = "Not summarised - the brain was unavailable when these minutes were saved."
+    return ("## Attendees\n\n%s\n\n"
+            "## Key Decisions\n\n%s\n\n"
+            "## Action Items\n\n%s\n\n"
+            "## Raw Excerpts\n\nThe full transcript, verbatim:\n\n%s\n"
+            % (unread, unread, unread, str(transcript or "").strip()))
+
+
 # ------------------------------------------------------------- THE CASTING CALL
 #
 # Three voices, one sentence, and the boss picks. Everything about this is deliberately
@@ -5325,6 +5445,59 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                           % (len(data), length))
         return data, None
 
+    def _read_multipart(self, limit):
+        """multipart/form-data -> ({name: {filename, type, data}}, None) or (None, why).
+
+        Written out by hand rather than handed to cgi.FieldStorage, and the reason is
+        not taste: cgi was REMOVED from the standard library in Python 3.13, which is
+        the interpreter this project runs on, and email.parser wants the whole body as
+        one str-or-bytes message anyway. What is left is a boundary split, which for a
+        single audio part is fifteen lines and has no surprises in it.
+
+        The two details that bite: the boundary in the body is `--<boundary>`, two
+        dashes more than the header's, and every part's body ends with the CRLF that
+        precedes the next boundary - a decoder handed those two extra bytes rejects the
+        whole chunk. Both are proved by the route below refusing junk in one sentence
+        rather than raising.
+        """
+        ctype = self.headers.get("Content-Type") or ""
+        if "multipart/form-data" not in ctype.lower():
+            self._read_bytes(limit)          # drain, so the socket is not left half-read
+            return None, ("send the chunk as multipart/form-data, not %r."
+                          % (ctype.split(";")[0] or "nothing"))
+        match = re.search(r'boundary=(?:"([^"]*)"|([^;]+))', ctype, re.I)
+        boundary = ((match.group(1) or match.group(2)) if match else "").strip()
+        if not boundary:
+            self._read_bytes(limit)
+            return None, "the multipart body named no boundary."
+        body, why = self._read_bytes(limit)
+        if body is None:
+            return None, why
+        fields = {}
+        marker = b"--" + boundary.encode("latin-1", "replace")
+        for chunk in body.split(marker):
+            if chunk in (b"", b"--", b"--\r\n", b"\r\n"):
+                continue
+            head, sep, data = chunk.lstrip(b"\r\n").partition(b"\r\n\r\n")
+            if not sep:
+                continue
+            if data.endswith(b"\r\n"):
+                data = data[:-2]
+            head_text = head.decode("utf-8", "replace")
+            name = re.search(r'name="([^"]*)"', head_text)
+            filename = re.search(r'filename="([^"]*)"', head_text)
+            part_type = re.search(r'Content-Type:\s*([^\r\n]+)', head_text, re.I)
+            if not name:
+                continue
+            fields[name.group(1)] = {
+                "filename": os.path.basename(filename.group(1)) if filename else "",
+                "type": part_type.group(1).strip() if part_type else "",
+                "data": data,
+            }
+        if not fields:
+            return None, "the multipart body held no parts this server could read."
+        return fields, None
+
     def _query(self):
         return urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
 
@@ -5557,6 +5730,13 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 # one sentence the page logs when it names its fallback. A model name
                 # and two knobs are preferences, not credentials.
                 "say": voice_state(cfg),
+                # AND WHETHER THERE IS ANYTHING TO TRANSCRIBE INTO. The Scribe organ
+                # reads `installed` before it opens a screen-share picker, because a
+                # machine with no faster-whisper must refuse in a sentence rather than
+                # record three seconds of a meeting and then find there is nowhere to
+                # send it. `keepsAudio: false` is the privacy law, published where a
+                # harness can assert it instead of only in a comment.
+                "scribe": scribe_state(),
                 # AND WHETHER THE SKY TURNS. A preference about the camera, published
                 # for the same reason the voice pin is: the browser owns the camera and
                 # cannot be told by any other route. Absent or false means the galaxy
@@ -5738,6 +5918,136 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                     "ok": False, "engine": "piper", "say": state,
                     "error": "The local voice could not speak that: %s" % why})
             return self._send_wav(wav, source)
+
+        # THE SCRIBE, and it is second for the same reason /say is first: during a
+        # meeting this is the route that arrives every three seconds, and it must not
+        # queue behind anything. ThreadingHTTPServer gives each chunk its own thread;
+        # scribe.py holds the one model behind one lock, so chunks transcribe in the
+        # order they land and a slow one delays only the next one.
+        #
+        # THE AUDIO NEVER TOUCHES DISK. It arrives in a bytes object, is decoded out of
+        # a BytesIO, and the reference is dropped before this function returns. There is
+        # no temp file, no cache and no log line with a transcript in it - the stderr
+        # line below counts characters and never prints them.
+        if route == "/scribe/transcribe":
+            state = scribe_state()
+            # THE REFUSAL, AND IT IS FIRST. A machine without faster-whisper says so
+            # before a byte is read, which is what lets the organ put SCRIBE:
+            # TRANSCRIBER OFFLINE on the seal and refuse to start rather than record a
+            # meeting into a hole.
+            if not state["installed"]:
+                self._read_bytes(scribe.MAX_CHUNK_BYTES if scribe else 1024)
+                return self._send_json(503, {
+                    "ok": False, "kind": "scribe", "scribe": state, "text": "",
+                    "error": "The transcriber is offline: %s." % (state["why"] or
+                             "faster-whisper is not installed")})
+            fields, why = self._read_multipart(scribe.MAX_CHUNK_BYTES)
+            if fields is None:
+                return self._send_json(400, {
+                    "ok": False, "kind": "scribe", "scribe": state, "text": "",
+                    "error": "That chunk could not be read: %s" % why})
+            part = fields.get("audio") or fields.get("chunk") or fields.get("file")
+            if not part or not part["data"]:
+                return self._send_json(400, {
+                    "ok": False, "kind": "scribe", "scribe": state, "text": "",
+                    "error": "Send the audio in a part named \"audio\"."})
+            seq = fields.get("seq", {}).get("data", b"")
+            try:
+                seq = int(seq.decode("ascii", "replace") or 0)
+            except ValueError:
+                seq = 0
+            out, why = scribe.transcribe(part["data"])
+            part["data"] = None                  # the only copy, dropped here
+            fields = None
+            if out is None:
+                # A 200 CARRYING ok:false ON PURPOSE. A chunk that will not decode - a
+                # recorder restarting, a fragment, a burst of nothing - is one skipped
+                # three seconds of a meeting that is otherwise still running. A 4xx here
+                # would read to the page as a broken session, and the panel would close
+                # over a working microphone.
+                sys.stderr.write("scribe: chunk %d skipped - %s\n" % (seq, why))
+                return self._send_json(200, {
+                    "ok": False, "kind": "scribe", "scribe": scribe_state(),
+                    "text": "", "start": 0, "end": 0, "language": "",
+                    "seq": seq, "error": why})
+            sys.stderr.write("scribe: chunk %d  %.1fs audio  %d chars  %dms\n"
+                             % (seq, out["durationS"], len(out["text"]), out["tookMs"]))
+            return self._send_json(200, {
+                "ok": True, "kind": "scribe", "scribe": scribe_state(), "seq": seq,
+                # The mandate's four fields, and two more that cost nothing and save a
+                # harness from timing the server itself.
+                "text": out["text"], "start": out["start"], "end": out["end"],
+                "language": out["language"],
+                "tookMs": out["tookMs"], "durationS": out["durationS"]})
+
+        # THE MINUTES HAND'S FIRST HALF, and the division of labour is the whole design:
+        # THE BRAIN SUMMARISES HERE, THE TOOL ONLY WRITES. tools/save_minutes.py takes
+        # finished markdown and puts it in a file - it holds no key, makes no network call
+        # and decides nothing. That is what lets the Hands gate work as advertised: the
+        # employer reads the actual minutes on the proposal card and says yes to THOSE
+        # words, not to a promise that a subprocess will write something reasonable.
+        #
+        # So this route drafts and hands back; it writes NOTHING. The page then proposes
+        # save_minutes through the door it already has, POST /tools {cmd:"propose"}.
+        if route == "/scribe/minutes":
+            data = self._read_json(400 * 1024)     # a long meeting, not a runaway
+            if not isinstance(data, dict):
+                return self._send_json(400, {
+                    "ok": False, "kind": "minutes",
+                    "error": "Send a JSON body like {\"transcript\": \"...\"}."})
+            transcript = str(data.get("transcript") or "").strip()
+            title = minutes_title(data.get("title"))
+            # THE FIRST REFUSAL, in the mandate's own words. A meeting that recorded
+            # nothing must not produce a file: an empty minute is the one artefact that
+            # will be believed six weeks later precisely because it is on disk.
+            if len(transcript) < 12:
+                return self._send_json(400, {
+                    "ok": False, "kind": "minutes", "title": title, "minutes": "",
+                    "exists": False, "error": "There is nothing to save, Addi."})
+
+            # Does the name already exist? Asked HERE so the panel can put Overwrite and
+            # Cancel in front of the employer before anything is proposed. It is asked
+            # again, independently, inside save_minutes.py - that one is the lock, this
+            # one is the courtesy.
+            path = os.path.join(ROOT, "notes", minutes_title(title) + ".md")
+            exists = os.path.isfile(path)
+
+            cfg = load_config()[0]
+            why = credentials_error(cfg)
+            answer = ""
+            if not why:
+                messages = [{"role": "system", "content": MINUTES_PROMPT},
+                            {"role": "user",
+                             "content": "Minute this recording.\n\nTranscript:\n\n%s"
+                                        % transcript[:120000]}]
+                answer, why = call_model(cfg, messages)
+            if why or not str(answer or "").strip():
+                # THE SECOND REFUSAL: the brain failed, so the raw transcript is offered
+                # instead. 200, not 502, and `minutes` is already filled with the raw
+                # fallback - the page has a real choice to put in front of the employer
+                # rather than an error and a lost meeting. `drafted:false` is the flag a
+                # harness and a panel both read to know nobody summarised this.
+                sys.stderr.write("minutes: brain unavailable - %s\n"
+                                 % (why or "empty answer"))
+                return self._send_json(200, {
+                    "ok": True, "kind": "minutes", "drafted": False,
+                    "title": title, "minutes": minutes_raw(transcript, title),
+                    "exists": exists,
+                    "error": why or "The brain returned nothing to minute.",
+                    "offer": "I could not draft the minutes, Addi. Shall I save the raw "
+                             "transcript instead?"})
+
+            minutes = str(answer).strip()
+            # A model that fenced the whole document is stripped of the fence and nothing
+            # else: four headings inside a code block would render as one grey brick.
+            if minutes.startswith("```"):
+                minutes = re.sub(r"^```[a-zA-Z]*\s*", "", minutes)
+                minutes = re.sub(r"\s*```$", "", minutes).strip()
+            sys.stderr.write("minutes: drafted %d chars from %d of transcript for %r\n"
+                             % (len(minutes), len(transcript), title))
+            return self._send_json(200, {
+                "ok": True, "kind": "minutes", "drafted": True, "title": title,
+                "minutes": minutes, "exists": exists, "error": ""})
 
         if route == "/chat":
             data = self._read_json()
@@ -6274,6 +6584,16 @@ def main():
     if ingest is not None:
         threading.Thread(target=ingest.warm, kwargs={"log": _warm_log},
                          name="vector-warm", daemon=True).start()
+
+    # ---- AND THE TRANSCRIBER, FOR THE SAME REASON AND ON ITS OWN THREAD. A warm load
+    # of base.en costs 0.98s on this machine and a cold one pays for a 145 MB download
+    # once; either way it is spent here, after the socket is listening, rather than on
+    # the first three seconds of somebody's meeting. scribe.warm() returns False and
+    # says nothing on a machine without faster-whisper - the organ reads that off
+    # /health and refuses politely.
+    if scribe is not None and scribe.warm():
+        print("  transcriber       :  %s warming on a thread (cpu, int8)"
+              % scribe.MODEL_NAME)
 
     try:
         httpd.serve_forever()

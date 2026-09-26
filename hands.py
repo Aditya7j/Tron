@@ -48,6 +48,7 @@ import json
 import pathlib
 import re
 import subprocess
+from tools import _proc
 import sys
 import threading
 import time
@@ -644,7 +645,10 @@ def execute(door="button", proposal_id=None):
         body = json.dumps(slot["params"], ensure_ascii=False)
         started = time.monotonic()
         try:
-            done = subprocess.run(
+            # _proc.run, so a hand runs without a console window of its own. python.exe is
+            # a console program too, and every hand is one - the flash was not the voice's
+            # alone.
+            done = _proc.run(
                 [sys.executable, str(script)], input=body,
                 capture_output=True, text=True, encoding="utf-8", errors="replace",
                 timeout=tool["timeout_s"], shell=False, cwd=str(TOOLS_DIR))
