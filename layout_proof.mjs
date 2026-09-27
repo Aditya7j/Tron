@@ -84,7 +84,13 @@ class Page {
     const r = await this.send('Runtime.evaluate',
       { expression, returnByValue: true, awaitPromise: true, userGesture });
     if (r.result && r.result.exceptionDetails) {
-      throw new Error('page threw: ' + r.result.exceptionDetails.text);
+      /* THE DESCRIPTION AND THE EXPRESSION, not just `text`. `text` is the string "Uncaught"
+         for every exception a page can raise, so the old line reported that some evaluate
+         somewhere in nine hundred lines had failed and nothing whatever about which one - a
+         harness that finds a fault and then hides it. */
+      const d = r.result.exceptionDetails;
+      throw new Error('page threw: ' + ((d.exception && (d.exception.description ||
+        d.exception.value)) || d.text) + '  <- ' + expression.slice(0, 160));
     }
     return r.result && r.result.result ? r.result.result.value : undefined;
   }
@@ -211,12 +217,36 @@ async function main() {
      'the viewer is up and exposes the layout governor');
 
   /* ---- 1. a real note panel ------------------------------------------- */
+  /* A NOTE WITH NEIGHBOURS, AND NOT MERELY THE FIRST ONE. Section 3 asserts that the
+     spoken report's toast does not bury the panel's CONNECTED chips, and a note with no
+     links has no chips to bury - so with nodes[0] the check was really an assertion about
+     the ORDER of the graph. Measured: at the round's baseline nodes[0] was "Customer
+     Feedback Log" with seven neighbours and the check passed; after a brain rebuild - the
+     one preflight's own canary check provokes every time it runs - nodes[0] was a loose
+     "Meeting 2026-09-26-2132" of degree zero, and the same check read "every one of the 0
+     CONNECTED chips is legible" and failed. Nothing about the layout had moved. So the
+     node is CHOSEN here by the property the section needs, and named in the line, and the
+     first node is still the fallback so that a graph with no links at all still opens a
+     panel and fails on the chip count itself rather than on an undefined id. */
   await waitFor(page, '__galaxy.nodes.length > 0', 20000);
-  await page.evaluate('__galaxy.focus(__galaxy.nodes[0].id,true)');
+  const pick = await page.json(
+    '(function(){var ns=__galaxy.nodes||[],deg={},' +
+    'ls=(__galaxy.strongLinks&&__galaxy.strongLinks.length?__galaxy.strongLinks' +
+    ':(__galaxy.allLinks||[])),' +
+    /* force-graph rewrites source/target from ids to node objects once it has run, so
+       both shapes are read - a degree table built off the wrong one is all zeroes. */
+    'id=function(x){return x&&typeof x==="object"?x.id:x;};' +
+    'for(var i=0;i<ls.length;i++){var a=id(ls[i].source),b=id(ls[i].target);' +
+    'deg[a]=(deg[a]||0)+1;deg[b]=(deg[b]||0)+1;}' +
+    'var best=ns[0],n=best?(deg[best.id]||0):0;' +
+    'for(var j=0;j<ns.length;j++){var d=deg[ns[j].id]||0;if(d>n){n=d;best=ns[j];}}' +
+    'return {id:best.id,degree:n,of:ns.length,links:ls.length};})()');
+  await page.evaluate('__galaxy.focus(' + JSON.stringify(pick.id) + ',true)');
   await sleep(700);
   const title = await page.evaluate('document.getElementById("p-label").textContent');
   const open = await page.json('__galaxy.layout.last');
-  ok(open.panelOpen === true, 'a note panel is open: "' + title + '"', JSON.stringify(open));
+  ok(open.panelOpen === true, 'a note panel is open: "' + title + '" - the best-connected '
+     + 'of ' + pick.of + ' notes, degree ' + pick.degree, JSON.stringify(open));
 
   /* ---- 2. a session by VOICE: no gesture, so the card stays in-page ---- */
   await page.evaluate('__galaxy.session.start(1)');
@@ -644,6 +674,100 @@ async function main() {
      'that never had one',
      JSON.stringify(WELL_AT));
 
+  /* ---- 2f. THE CONTAINED PAGE: one word 400 characters long ------------- */
+  /* THE ENEMY IS NOT A LONG ANSWER. It is a long answer with no space in it. Everything
+     else on this deck wraps: a paragraph of prose finds a break every six characters and
+     the governor's arithmetic holds. A 400-character identifier, a base64 blob, a signed
+     URL - those are ONE WORD to a layout engine, and `white-space:pre-wrap` on the answer
+     body means the browser will honour it by making the paragraph 400 characters wide.
+     Which makes #brain that wide, which makes the document that wide, and then the whole
+     cinematic deck slides sideways under a horizontal scrollbar while the galaxy behind it
+     goes off the edge of the world.
+     So the injection is deliberately unreasonable and deliberately realistic: 5,000
+     characters of answer carrying one 400-character unbroken token and one 300-character
+     URL, which is a shape the web gate can genuinely produce from a real search result.
+     Three widths, because the failure is a function of how much room there is to overflow
+     INTO and 1920 is the width most likely to hide it.
+     Failure mode each assertion names, in order: the body text lost overflow-wrap and is
+     now wider than its own box; the document itself scrolls sideways; the clamp is not
+     clamping and the card has grown to the height of the answer; nobody with a keyboard
+     can reach the part of the answer that is below the fold. */
+  const BIG_TOKEN = 'x7Q'.repeat(134).slice(0, 400);
+  /* 20 characters of scheme and host plus 280 of path: exactly 300, counted rather than
+     sliced, so a reader can see the arithmetic. */
+  const BIG_URL = 'https://example.com/' + 'a1b2c3d4e5'.repeat(28);
+  const FILLER = 'The quarterly numbers came in and they read better than anyone expected. ';
+  /* THE TWO HOSTILE TOKENS GO NEAR THE TOP AND THE PADDING GOES AT THE BOTTOM, and that
+     ordering is a bug this section already had once: with the filler first, the slice to
+     5,000 fell in the middle of the URL and the harness spent its run proving that a
+     214-character URL wraps. The assertion below counts both tokens INSIDE the injected
+     string for exactly that reason - a length check on the constants would have passed. */
+  const LONG = (FILLER.repeat(10) + '\n\n' + BIG_TOKEN + '\n\n' + FILLER.repeat(10) +
+                '\n\n' + BIG_URL + '\n\n' + FILLER.repeat(60)).slice(0, 5000);
+  note('2f: injecting ' + LONG.length + ' characters carrying a ' + BIG_TOKEN.length +
+       '-character unbroken token and a ' + BIG_URL.length + '-character URL');
+  ok(LONG.length === 5000 && BIG_TOKEN.length === 400 && BIG_URL.length === 300 &&
+     LONG.indexOf(BIG_TOKEN) > 0 && LONG.indexOf(BIG_URL) > 0 &&
+     !/\s/.test(BIG_TOKEN) && !/\s/.test(BIG_URL),
+     'the injection is what it claims to be: 5,000 characters, one 400-character word ' +
+     'and one 300-character URL, neither with a space in it',
+     JSON.stringify({ answer: LONG.length, token: BIG_TOKEN.length, url: BIG_URL.length }));
+  await page.evaluate('__galaxy.page.render("a very long answer",' + JSON.stringify(LONG) + ')');
+  await sleep(300);
+  for (const w of WELL_AT) {
+    await page.send('Emulation.setDeviceMetricsOverride',
+                    { width: w, height: H, deviceScaleFactor: 0, mobile: false });
+    await sleep(500);
+    await page.evaluate('__galaxy.layout.run()');
+    await page.evaluate('__galaxy.page.reach()');
+    await sleep(350);
+    const a = await page.json('__galaxy.page.answer');
+    const d = await page.json('__galaxy.page.doc');
+    note('at ' + w + ': body ' + a.scrollWidth + '/' + a.clientWidth + ' wide, ' +
+         a.scrollHeight + '/' + a.clientHeight + ' tall (max ' + a.maxHeight + ') · ' +
+         'document ' + d.scrollWidth + '/' + d.innerWidth + ' · wrap ' + a.wrap +
+         ' · overflow ' + a.overflowY + ' · tabindex ' + JSON.stringify(a.tabindex));
+    ok(a.scrollWidth <= a.clientWidth,
+       'at ' + w + ': THE BODY TEXT FITS ITS OWN BOX - the 400-character word was broken ' +
+       'rather than allowed to widen the paragraph (' + a.scrollWidth + ' <= ' +
+       a.clientWidth + ')', JSON.stringify(a));
+    ok(a.cardScrollWidth <= a.cardClientWidth,
+       'at ' + w + ': and the card around it has nothing overflowing it either (' +
+       a.cardScrollWidth + ' <= ' + a.cardClientWidth + ')', JSON.stringify(a));
+    /* THE ONE THAT MATTERS. Every rule above is a means; this is the end. */
+    ok(d.scrollWidth <= d.innerWidth && d.bodyScrollWidth <= d.innerWidth,
+       'at ' + w + ': THE DOCUMENT DOES NOT SCROLL SIDEWAYS (' + d.scrollWidth + ' and ' +
+       d.bodyScrollWidth + ' <= ' + d.innerWidth + ')', JSON.stringify(d));
+    ok(a.scrollHeight > a.clientHeight && a.clientHeight < H,
+       'at ' + w + ': the answer is TALLER THAN ITS BOX and the box is shorter than the ' +
+       'window - so it is scrolling inside the glass rather than growing the card',
+       JSON.stringify(a));
+    ok(a.wrap === 'break-word',
+       'at ' + w + ': and it is break-word that is doing it, declared on the body text',
+       JSON.stringify(a.wrap));
+    /* A SCROLLBAR NOBODY CAN REACH IS NOT A SCROLLBAR. Focus it the way a keyboard would
+       - the element must accept focus at all - and then drive it with a real Page Down. */
+    ok(a.focusable && a.role === 'region',
+       'at ' + w + ': the overflowing answer is FOCUSABLE and announces itself as a ' +
+       'region, so a keyboard and a screen reader can both get into it',
+       JSON.stringify({ tabindex: a.tabindex, role: a.role }));
+    await page.evaluate('document.getElementById("a-text").focus()');
+    const owns = await page.evaluate('document.activeElement === document.getElementById("a-text")');
+    const before = await page.evaluate('document.getElementById("a-text").scrollTop');
+    for (const type of ['keyDown', 'keyUp']) {
+      await page.send('Input.dispatchKeyEvent', {
+        type, key: 'PageDown', code: 'PageDown',
+        windowsVirtualKeyCode: 34, nativeVirtualKeyCode: 34 });
+    }
+    await sleep(350);
+    const after = await page.evaluate('document.getElementById("a-text").scrollTop');
+    ok(owns && after > before,
+       'at ' + w + ': and a real Page Down on it actually scrolls the text (' + before +
+       ' -> ' + after + 'px)',
+       JSON.stringify({ focused: owns, before, after }));
+    await page.evaluate('document.getElementById("a-text").scrollTop = 0');
+  }
+
   await page.send('Emulation.clearDeviceMetricsOverride');
   await sleep(600);
   await page.evaluate('__galaxy.layout.run()');
@@ -651,6 +775,278 @@ async function main() {
   const back = await page.json('({vw:innerWidth,vh:innerHeight})');
   ok(back.vh > SHORT, 'the window is its own size again: ' + back.vw + 'x' + back.vh,
      JSON.stringify(back));
+  /* AND A SHORT ANSWER IS NOT GIVEN A TAB STOP IT DOES NOT NEED, which is the other half
+     of the accessibility claim: a focus stop that does nothing teaches a keyboard user to
+     tab straight past the one case where it matters. */
+  await page.evaluate('__galaxy.page.render("a short one","Running late, sir.")');
+  await sleep(250);
+  const small = await page.json('__galaxy.page.answer');
+  ok(!small.focusable && small.role === null,
+     'a SHORT answer carries no tab stop and no region role - the reach is granted by ' +
+     'measurement, not by decoration', JSON.stringify(small));
+
+  /* ---- 2g. THE TRIPLE SURFACE: a gate, a transcript and a caption at once --
+     THE SCREENSHOT THIS CAME FROM. A calendar proposal with a description line, the minutes
+     panel live underneath it and a caption under both - and the top of the amber card sitting
+     behind the telemetry rail, where the question the human was being asked to answer could
+     not be read. Nothing about it was a styling bug. #brain is anchored at the BOTTOM and
+     every surface in it takes the height its content wants, so the column grew upward past the
+     window's top edge, and it does so silently: overflow off the top of a fixed element is not
+     a scrollbar, it is an absence.
+
+     WHAT THIS SECTION ASSERTS IS THE PRECEDENCE AND NOT JUST THE FIT. A page that made the
+     card 200px tall and scrolled all of it would also "fit", and would be a worse machine. So
+     at each width: the caption gives way first and completely, the minutes give way second and
+     down to their head only, and the gate card gives way last and only by scrolling its rows
+     while Yes and No stay where the eye and the mouse expect them. The last of those is the
+     one that matters most and it is checked with elementFromPoint at the button's own centre,
+     because "visible" and "clickable" part company the moment anything is laid over it.
+
+     THREE WIDTHS, AND 860 IS THE SHORT ONE ON PURPOSE: the vertical budget is a claim about
+     HEIGHT, and 1280x860 is the shortest viewport the mandate names, so it is the one where
+     the sum is tightest and the only one where the cap is expected to bind at all.
+     The note panel is left OPEN, as it was for the well at 2e, because a narrower canvas makes
+     the toast narrower, which makes every paragraph in it wrap more, which makes the column
+     TALLER. The crowded case is the case. */
+  /* A REAL CALENDAR PROPOSAL, six parameters and a description of three sentences. The
+     description is what makes this the fixture from the screenshot rather than a short mock:
+     it is the one field that has no length anybody controls, and it is why the rows need a
+     scroll of their own. */
+  const PROPOSAL = {
+    name: 'add_calendar_event',
+    expiresInS: 600,
+    fields: [{ name: 'title' }, { name: 'start' }, { name: 'end' },
+             { name: 'attendees' }, { name: 'location' }, { name: 'description' }],
+    params: {
+      title: 'Quarterly review with the Galaxy team',
+      start: '2026-09-29T16:00:00+05:30',
+      end: '2026-09-29T17:00:00+05:30',
+      attendees: 'aditya@example.com, priya@example.com, dev@example.com',
+      location: 'Meeting room two, with a video link for the three who are travelling',
+      description: 'Walk the deck end to end: the ear, the scribe, the hands and the gate. ' +
+        'Bring the lookbook plates and the preflight summary line for each of them. ' +
+        'Forty minutes on the agenda and twenty on whatever turns out to be actually wrong.'
+    }
+  };
+  const CAP_LINE = 'The calendar wants your word on the quarterly review, sir.';
+  /* The surfaces the budget is about: #brain and every child of it that can hold a rectangle.
+     #brain alone would not do - it is exactly as tall as its contents, so it reports its own
+     overflow as a height and never as a violation. */
+  const STACK = ['brain', 'answer', 'a-ask', 'ask-rows', 'ask-yes', 'ask-no',
+                 'scribepanel', 'typeline', 'status', 'bar'];
+  /* THE CLICK TEST, at the centre of the button and from the page's own point of view. A
+     rectangle on screen proves nothing about a rectangle under a transparent overlay, and
+     #handswash is exactly such an overlay - pointer-events:none by law, and this is the check
+     that would catch the law being broken. */
+  const HITTEST = `(function () {
+    const out = {};
+    ['ask-yes', 'ask-no'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (!el) { out[id] = { there: false }; return; }
+      const r = el.getBoundingClientRect();
+      const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2);
+      const hit = document.elementFromPoint(x, y);
+      const cs = getComputedStyle(el);
+      out[id] = { there: true, x: x, y: y, w: Math.round(r.width), h: Math.round(r.height),
+                  inView: r.top >= 0 && r.bottom <= innerHeight && r.width > 0 && r.height > 0,
+                  mine: !!(hit && (hit === el || el.contains(hit))),
+                  hit: hit ? (hit.id || hit.tagName.toLowerCase()) : null,
+                  disabled: !!el.disabled, vis: cs.visibility, op: cs.opacity,
+                  pe: cs.pointerEvents };
+    });
+    /* AND THE DOCUMENT ITSELF MUST NOT HAVE GROWN A SCROLL AXIS. Asked two ways, because a
+       page can overflow without being scrollable and can be scrollable without having been
+       scrolled: the measurement, and then a real attempt to move it. */
+    const de = document.documentElement;
+    scrollTo(0, 400);
+    out.doc = { scrollH: de.scrollHeight, clientH: de.clientHeight, vh: innerHeight,
+                movedTo: Math.round(window.scrollY || de.scrollTop || 0) };
+    scrollTo(0, 0);
+    return out;
+  })()`;
+  const VP = [[1280, 860], [1600, 900], [1920, 1080]];
+  const plates = [];
+  let boundOnce = false;
+  for (const [vw, vh] of VP) {
+    await page.send('Emulation.setDeviceMetricsOverride',
+                    { width: vw, height: vh, deviceScaleFactor: 0, mobile: false });
+    await sleep(600);
+    /* THE THREE SURFACES, RAISED IN THE ORDER A REAL TURN RAISES THEM: the answer and its
+       transcript first, then the voice that reads it, and the gate last - because a proposal
+       arrives at the END of the turn that asked for it, which is exactly why it is the surface
+       that finds the column already full. */
+    await page.evaluate('__galaxy.page.render(' +
+      JSON.stringify('put the quarterly review on my calendar for tuesday') + ',' +
+      JSON.stringify('I can do that, sir - here is what I would write down, and I would ' +
+        'rather you read it back to me before I touch the calendar itself.') + ')');
+    await page.evaluate('__galaxy.scribe.up(true)');
+    for (const line of ['So the quarterly review is tuesday at four, then.',
+                        'Four to five, and Priya is travelling that week.',
+                        'Put the video link in it and I will forward it on.',
+                        'And bring the lookbook plates, all of them.']) {
+      await page.evaluate('__galaxy.scribe.append(' + JSON.stringify(line) + ')');
+    }
+    await page.evaluate('__galaxy.speech.speakLine(' + JSON.stringify(CAP_LINE) + ')');
+    await sleep(300);
+    /* THE BEFORE READING, taken with the caption up and the transcript rolling and NO gate,
+       so that "the caption gave way" and "the minutes gave way" are differences rather than
+       states. Without this the two could pass on a page that never showed either one. */
+    const openBefore = await page.json('({rects: __galaxy.layout.rects,' +
+      ' panel: __galaxy.scribe.panel, cap: __galaxy.caption.up,' +
+      ' budget: __galaxy.layout.last.vbudget})');
+    await page.evaluate('__galaxy.hands.paint(' + JSON.stringify(PROPOSAL) + ')');
+    await sleep(450);
+    const r = await page.json('__galaxy.layout.rects');
+    const vb = await page.json('__galaxy.layout.last.vbudget');
+    const panel = await page.json('__galaxy.scribe.panel');
+    const hands = await page.json('__galaxy.hands.shown');
+    const capUp = await page.json('__galaxy.caption.up');
+    const hit = await page.json(HITTEST);
+    const where = vw + 'x' + vh;
+    note('at ' + where + ' the budget is ' + JSON.stringify(vb));
+    note('at ' + where + ' the gate is ' + JSON.stringify(r.answer) +
+         ' · rail bottom ' + (r.toprail && r.toprail.bottom) +
+         ' · strip ' + JSON.stringify(r.scribepanel) +
+         ' · rows ' + JSON.stringify(r['ask-rows']));
+
+    ok(hands === true && !!r.answer && !!r['a-ask'],
+       'at ' + where + ': the triple is live - a calendar proposal with six parameters and a ' +
+       'description, the minutes panel, and a caption that was up a moment ago',
+       JSON.stringify({ hands: hands, answer: r.answer, ask: r['a-ask'] }));
+
+    /* ---- THE ONE THE SCREENSHOT WAS ABOUT ---- */
+    ok(!!r.answer && r.answer.top >= 0,
+       'at ' + where + ': THE GATE\'S TOP EDGE IS ON THE SCREEN - top ' +
+       (r.answer && r.answer.top) + ', and a negative number here is the defect this part was ' +
+       'written for: a question scrolled off the top of a fixed column, where no scrollbar ' +
+       'ever appears to say so', JSON.stringify(r.answer));
+    ok(!!r.answer && !!r.toprail && r.answer.top >= r.toprail.bottom,
+       'at ' + where + ': and it clears the telemetry rail - gate top ' +
+       (r.answer && r.answer.top) + ' at or below rail bottom ' +
+       (r.toprail && r.toprail.bottom) + ', so the rail is a floor and not a lid',
+       JSON.stringify({ gate: r.answer, rail: r.toprail }));
+
+    /* ---- PRECEDENCE 1: THE CAPTION WENT, AND IT WAS THERE TO GO ---- */
+    ok(openBefore.cap === true && !!openBefore.rects.caption,
+       'at ' + where + ': the caption WAS up with a rectangle of its own before the gate ' +
+       'opened (' + JSON.stringify(openBefore.rects.caption) + '), so what follows is a ' +
+       'surface giving way and not a surface that was never there',
+       JSON.stringify({ up: openBefore.cap, rect: openBefore.rects.caption }));
+    ok(r.caption === null,
+       'at ' + where + ': AND IT STOOD DOWN WHILE THE GATE IS OPEN - no rectangle at all, so ' +
+       'the room went with the words; the gate\'s line is already on the card and saying it ' +
+       'twice cost the column a line it did not have',
+       JSON.stringify({ caption: r.caption, up: capUp }));
+
+    /* ---- PRECEDENCE 2: THE MINUTES KEPT THEIR HEAD ---- */
+    ok(openBefore.panel.open === true && openBefore.panel.rows >= 4 &&
+       !openBefore.panel.strip,
+       'at ' + where + ': the minutes were rolling with ' + openBefore.panel.rows +
+       ' lines and the full column before the gate opened',
+       JSON.stringify(openBefore.panel));
+    /* h > 0 WOULD HAVE PASSED ON A TWO-LINE STRIP, and did: the first run of this section read
+       49px at 1280 and at 1600 against 34px at 1920, printed it beside the declared floor, and
+       called it green, because a floor is satisfied by anything above it. The strip was wrapping
+       its own head at every width where the note panel narrows the column - which is every width
+       the mandate's fixture actually cares about - and the assertion that was meant to prove
+       'one line' proved only 'some lines'. The failure mode this now catches is the strip
+       silently growing a second row and eating the space it was introduced to hand over. */
+    ok(panel.strip === true && !!r.scribepanel && r.scribepanel.h > 0 &&
+       r.scribepanel.h <= vb.STRIP_H + 1,
+       'at ' + where + ': AND THEY COLLAPSED TO A STRIP OF EXACTLY ONE LINE - ' +
+       r.scribepanel.h + 'px against a declared ' + vb.STRIP_H +
+       ' - so the recording did not visibly stop, it got out of the way',
+       JSON.stringify({ panel: panel, rect: r.scribepanel, STRIP_H: vb.STRIP_H }));
+    ok(panel.rows >= 4 && /\d+ chunks/.test(panel.meta) && /\d+ words/.test(panel.meta),
+       'at ' + where + ': and the strip still carries the four things that say it is running - ' +
+       'the label, the timer, the chunks and the words: "' + panel.meta + '" over ' +
+       panel.rows + ' lines still held', JSON.stringify(panel));
+    ok(!!openBefore.rects.scribepanel &&
+       r.scribepanel.h < openBefore.rects.scribepanel.h,
+       'at ' + where + ': and the collapse is a MEASURED saving, not a class - ' +
+       openBefore.rects.scribepanel.h + 'px of transcript became ' + r.scribepanel.h + 'px ' +
+       'of strip, ' + (openBefore.rects.scribepanel.h - r.scribepanel.h) + 'px handed to the gate',
+       JSON.stringify({ was: openBefore.rects.scribepanel, now: r.scribepanel }));
+
+    /* ---- PRECEDENCE 3: THE CARD YIELDED LAST, AND NOT BY LOSING ITS BUTTONS ---- */
+    ok(hit['ask-yes'].inView && hit['ask-no'].inView,
+       'at ' + where + ': Yes and No are both fully on screen - Yes at ' +
+       JSON.stringify([hit['ask-yes'].x, hit['ask-yes'].y]) + ', No at ' +
+       JSON.stringify([hit['ask-no'].x, hit['ask-no'].y]),
+       JSON.stringify(hit));
+    ok(hit['ask-yes'].mine && hit['ask-no'].mine &&
+       !hit['ask-yes'].disabled && !hit['ask-no'].disabled,
+       'at ' + where + ': AND HIT-TESTABLE - elementFromPoint at each button\'s own centre ' +
+       'comes back with the button and not with the vignette over it, and neither is disabled',
+       JSON.stringify(hit));
+    if (vb.capped) {
+      boundOnce = true;
+      const rows = r['ask-rows'];
+      ok(!!rows && rows.h > 0 && r.answer.h <= vb.gateMax + 2,
+         'at ' + where + ': the card took the cap the governor declared - ' + r.answer.h +
+         'px against a max of ' + vb.gateMax + ' (ceiling ' + vb.GATE_MAX + ', floor ' +
+         vb.GATE_MIN + ') - and the rows are what scrolls inside it',
+         JSON.stringify({ answer: r.answer, rows: rows, vb: vb }));
+    } else {
+      ok(vb.fits === true,
+         'at ' + where + ': the column fitted without a cap at all - ' + vb.height +
+         'px of a ' + vb.budget + 'px budget - so the card was left at its natural height, ' +
+         'which is the right answer when there is room', JSON.stringify(vb));
+    }
+
+    /* ---- AND NOTHING ANYWHERE IN THE COLUMN IS OFF EITHER EDGE ---- */
+    const spill = STACK.filter((id) => r[id] && (r[id].top < 0 || r[id].bottom > vh + 1))
+                       .map((id) => id + ' ' + JSON.stringify(r[id]));
+    ok(spill.length === 0,
+       'at ' + where + ': NOT ONE OF THE ' + STACK.length + ' SURFACES IN THE COLUMN IS ' +
+       'CLIPPED, above or below - every top is >= 0 and every bottom is <= ' + vh,
+       JSON.stringify(spill));
+    ok(!!vb && vb.fits === true && vb.height <= vb.budget,
+       'at ' + where + ': and the governor agrees with the browser - it published a ' +
+       vb.budget + 'px budget between the rail at ' + vb.top + ' and the bottom margin at ' +
+       vb.bottom + ', and the column measures ' + vb.height + ' (it wanted ' + vb.wanted + ')',
+       JSON.stringify(vb));
+    ok(hit.doc.scrollH <= hit.doc.clientH + 1 && hit.doc.movedTo === 0,
+       'at ' + where + ': AND THE DOCUMENT DOES NOT SCROLL VERTICALLY while the triple is ' +
+       'live - scrollHeight ' + hit.doc.scrollH + ' against clientHeight ' + hit.doc.clientH +
+       ', and a real scrollTo(0,400) left it at ' + hit.doc.movedTo,
+       JSON.stringify(hit.doc));
+
+    plates.push(await page.shot('layout-triple-' + vw + 'x' + vh + '.png'));
+
+    /* ---- AND IT ALL COMES BACK WHEN THE GATE CLOSES ---- */
+    await page.evaluate('__galaxy.hands.close()');
+    await page.evaluate('__galaxy.speech.speakLine(' + JSON.stringify(CAP_LINE) + ')');
+    await sleep(400);
+    const after2 = await page.json('({rects: __galaxy.layout.rects,' +
+      ' panel: __galaxy.scribe.panel, cap: __galaxy.caption.up,' +
+      ' budget: __galaxy.layout.last.vbudget})');
+    ok(after2.panel.strip === false && after2.rects.scribepanel &&
+       after2.rects.scribepanel.h > r.scribepanel.h,
+       'at ' + where + ': the gate closes and THE ROLLING TRANSCRIPT COMES BACK - ' +
+       r.scribepanel.h + 'px of strip back to ' + after2.rects.scribepanel.h + 'px of column',
+       JSON.stringify({ strip: r.scribepanel, back: after2.rects.scribepanel,
+                        panel: after2.panel }));
+    ok(after2.cap === true && !!after2.rects.caption,
+       'at ' + where + ': and so does the caption, with a rectangle of its own again - ' +
+       JSON.stringify(after2.rects.caption),
+       JSON.stringify({ up: after2.cap, rect: after2.rects.caption }));
+    ok(after2.budget.gateOpen === false && after2.budget.captionOff === false,
+       'at ' + where + ': and the governor says so in the same words it used to take them ' +
+       'away, so the budget is a state and not a one-way door', JSON.stringify(after2.budget));
+    await page.evaluate('__galaxy.scribe.down()');
+    await page.evaluate('__galaxy.caption.clear()');
+    await sleep(250);
+  }
+  ok(boundOnce,
+     'and the cap actually BOUND at one of ' + VP.map((v) => v.join('x')).join(' / ') +
+     ' - the assertions above are about a ceiling that was reached, not about three roomy ' +
+     'windows in which any arrangement would have fitted', JSON.stringify(VP));
+  note('the triple-surface plates: ' + plates.join(' · '));
+  await page.send('Emulation.clearDeviceMetricsOverride');
+  await sleep(500);
+  await page.evaluate('__galaxy.layout.run()');
+  await sleep(350);
 
   /* ---- 3. the report, and the toast that must stop at the panel -------- */
   await page.evaluate('__galaxy.session.end()');

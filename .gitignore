@@ -2,6 +2,15 @@
 config.json
 .env
 
+# GOOGLE OAUTH. secrets/ holds the downloaded client file and the token the loopback
+# flow exchanges for it - an access token, a refresh token and the account's address.
+# A refresh token does not expire on its own, which makes this folder strictly worse to
+# leak than config.json, and config.json is already in this repo's history. The folder is
+# listed before it exists on purpose: the ignore rule is the cheap half and the rotation
+# is the expensive one. The server never serves anything outside viewer/, so nothing in
+# here is reachable from the browser either.
+secrets/
+
 # PYTHON CACHES
 __pycache__/
 *.pyc

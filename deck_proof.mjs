@@ -181,6 +181,19 @@ class Page {
 const cdp = async (p) => { const r = await fetch(CDP + p); const t = await r.text();
   try { return JSON.parse(t); } catch { return t; } };
 
+/* THE SERVER, FOR THE ONE SECTION THAT NEEDS A REAL SESSION. Work mode is subscribed to
+   focus.py's SSE push and to nothing else, so the only honest way to make the room change
+   is to start a session on the server the way the card does. It is ended with `abort`,
+   which records no ledger row and moves no streak - the same precedent lock_proof.mjs
+   sets for exactly this reason: an instrument that edits what it measures is not one. */
+const galaxy = async (path, body) => {
+  const r = await fetch(GALAXY + path, body === undefined ? { }
+    : { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body) });
+  const t = await r.text();
+  try { return JSON.parse(t); } catch { return t; }
+};
+
 /* A DEADLINE, not a number of tries. This counted iterations - ms/150 of them - on the
    assumption that a poll costs nothing, which is true right up until the section that
    throttles the CPU twenty times over. There, every evaluate takes seconds, and a "30s"
@@ -694,9 +707,22 @@ async function main() {
     const max = Math.max(r, g, b), min = Math.min(r, g, b);
     return max > 224 && max - min > 120;
   });
-  ok(sky.palette.length === 7 && candy.length === 0,
-     'the palette is seven jewels and not one of them is a boiled sweet: ' +
-     sky.palette.join(' '), JSON.stringify(candy));
+  /* THE COUNT IS NOT SEVEN, IT IS ENOUGH. This read `palette.length === 7` until the
+     corpus grew an eighth cluster - "unfiled", which is what build.py calls a note saved
+     at the root of notes/ rather than inside a folder, so it arrives the first time the
+     scribe writes a meeting without being told where to file it. Seven strings and eight
+     clusters made COLOUR IS CLUSTER above fail by arithmetic: colorOf wraps on
+     PALETTE.length, so the eighth folder shared steel blue with the first. The two checks
+     could not both hold, and the one to give was this one, because a hardcoded 7 was never
+     what it claimed to measure - its own comment says "by MEASUREMENT rather than by
+     matching seven strings". So it now asserts the precondition the partition check
+     silently depends on: at least one nameable colour per cluster on screen, and not one
+     of them a sweet. Strictly stronger than the number it replaced. */
+  ok(sky.palette.length >= byGroup.size && sky.palette.length >= 7 && candy.length === 0,
+     'the palette carries ' + sky.palette.length + ' jewels for ' + byGroup.size +
+     ' clusters - a nameable colour each, and not one of them a boiled sweet: ' +
+     sky.palette.join(' '),
+     JSON.stringify({ candy: candy, clusters: byGroup.size }));
 
   /* ---- 1c-2. THE DEEP FIELD ------------------------------------------------
      THE DEEP FIELD asks for four things, and three of them are the kind of claim that
@@ -1599,6 +1625,252 @@ async function main() {
      'at 90 degrees for whatever runs next',
      JSON.stringify({ freed, yawHold: uFree && uFree.yawHold }));
 
+  /* ---- 2c-3. THE COMPACT TIER: THE HEAD DOES NOT GO DARK ON A LAPTOP ------
+     WHAT WAS WRONG WITH THE OLD BEHAVIOUR, AND IT WAS NOT THE FLOOR. PRES_MIN is 168 and
+     the governor was right to refuse a 12px well - a 12px head is a smudge, not a face. It
+     was the CONSEQUENCE that was wrong: on a window with the note panel open and a
+     countdown card up, the head that a whole Part was spent building simply was not there.
+     So there is a second floor, PRES_MIN_COMPACT, and between the two the head renders at
+     reduced point density instead of not at all: same three modes, same shader, same one
+     material, fewer points.
+     THE WIDTH IS FOUND, NOT ASSUMED. How much square the governor has left at a given width
+     depends on how crowded the top-right lane is in this run, and this file's window is not
+     the 1280 the complaint was about. So the ladder is walked downwards and the first width
+     that actually produces the compact tier is the one measured - which is the measurement
+     the mandate asked for rather than a number this file asserts and the page obeys.
+     AND IT AUDITIONS ITSELF, through the mechanism that already exists. There is no second
+     audition and no new floor: presCompactAudition calls the same presAudition FACE-vs-RING
+     uses, so the verdict is the same 55fps floor and the same 90%-of-baseline rule, and the
+     fallback if even the compact tier cannot hold it is the same RING.
+     THE LANE HAS TO BE CROWDED FIRST, and this is the measurement that says so: narrowing
+     an otherwise empty deck from 1600 to 1180 left the well at 300px at every single rung,
+     because the well's room is bounded by what is ABOVE it - the chips, the toast and the
+     card - and not by the width alone. The stand-down the mandate is about was measured with
+     the note panel open and a countdown card up, so both are put there before the ladder is
+     walked. Which also means the compact tier's audition is sampled with work mode on, and
+     that is the honest condition: nobody has a narrow window and an empty room. */
+  const TIER_H = 860;
+  const TIER_LADDER = [1600, 1536, 1440, 1366, 1280, 1180];
+  const TIER_READ = '({tier: __galaxy.presence.well.tier,' +
+    ' builtTier: __galaxy.presence.well.builtTier, side: __galaxy.presence.well.side,' +
+    ' fits: __galaxy.presence.well.fits, why: __galaxy.presence.well.why,' +
+    ' density: __galaxy.presence.well.density, min: __galaxy.presence.well.min,' +
+    ' minCompact: __galaxy.presence.well.minCompact, mode: __galaxy.presence.mode,' +
+    ' points: __galaxy.presence.points, degraded: __galaxy.presence.degraded,' +
+    ' compactAudit: __galaxy.presence.compactAudit, trial: __galaxy.presence.trial,' +
+    ' baseline: __galaxy.presence.baseline, probation: __galaxy.presence.probation})';
+  const atWidth = async (w) => {
+    await page.send('Emulation.setDeviceMetricsOverride',
+      { width: w, height: TIER_H, deviceScaleFactor: 0, mobile: false });
+    await sleep(300);
+    await page.evaluate('__galaxy.layout.run()');
+    await sleep(280);
+    return page.json(TIER_READ);
+  };
+  const crowdId = await page.evaluate('__galaxy.nodes[0].id');
+  await page.evaluate('__galaxy.focus(' + JSON.stringify(crowdId) + ', true)', true);
+  const crowdStart = await galaxy('/focus', { cmd: 'start', minutes: 9 });
+  note('the lane crowded: the note panel open and a real session card up (state=' +
+       ((crowdStart && crowdStart.focus && crowdStart.focus.state) || '?') + ')');
+  await sleep(1400);
+  const wide = await atWidth(1920);
+  ok(wide.tier === 'full' && wide.builtTier === 'full' && wide.density === 1 &&
+     wide.points > 0,
+     'at 1920x' + TIER_H + ' the well is ' + wide.side + 'px, clear of the ' + wide.min +
+     'px full floor, and the head is at full density: ' +
+     wide.points.toLocaleString() + ' points',
+     JSON.stringify(wide));
+  const rungs = [];
+  let compact = null;
+  for (const w of TIER_LADDER) {
+    const r = await atWidth(w);
+    rungs.push(w + '→' + r.side + 'px ' + (r.tier || '-'));
+    if (r.tier === 'compact') { compact = Object.assign({ w: w }, r); break; }
+  }
+  note('the tier ladder at ' + TIER_H + ' tall: ' + rungs.join('   '));
+  ok(!!compact,
+     compact
+       ? 'THE COMPACT TIER ENGAGES AT ' + compact.w + 'x' + TIER_H + ': ' + compact.side +
+         'px of room, under the ' + compact.min + 'px full floor and over the ' +
+         compact.minCompact + 'px compact one - "' + compact.why + '"'
+       : 'no width on the ladder produced the compact tier, so its point count and its ' +
+         'audition cannot be measured in this window',
+     JSON.stringify(rungs));
+  if (compact) {
+    /* THE VERDICT, WAITED FOR RATHER THAN GUESSED AT. The audition is two 2.2-second
+       samples and a refill between them, and it is started by the resize itself - so the
+       point count read here is the RING's until it finishes. Read after.
+       AND THE WAIT IS FOR A VERDICT, NOT FOR A VALUE. This read `compactAudit !== ""`
+       first, which returns the moment the field says "running" - so the check reported the
+       audition's own in-flight marker as its verdict ("running" - 60.2fps against 39.3fps)
+       and went red while nothing was wrong. The two words that end it are named instead. */
+    const audited = await waitFor(page,
+      '__galaxy.presence.compactAudit === "kept" || ' +
+      '__galaxy.presence.compactAudit === "dropped"', 30000);
+    await sleep(600);
+    const ca = await page.json(TIER_READ);
+    ok(audited && (ca.compactAudit === 'kept' || ca.compactAudit === 'dropped'),
+       'and it AUDITIONS ITSELF on the mechanism that already exists: "' +
+       ca.compactAudit + '" - ' + ca.trial + 'fps compact against ' + ca.baseline +
+       'fps with the ring, floor ' + FPS_FLOOR + ', keep-ratio 90%',
+       JSON.stringify({ audited: audited, ca: ca }));
+    ok(ca.compactAudit === 'kept' ? ca.mode === 'face' : ca.mode === 'ring',
+       ca.compactAudit === 'kept'
+         ? 'the verdict and the room agree: kept, and the mode is still ' + ca.mode
+         : 'the verdict and the room agree: dropped, and it fell back to the RING the ' +
+           'existing law names - not to nothing, and not to a second new mode',
+       JSON.stringify({ verdict: ca.compactAudit, mode: ca.mode, degraded: ca.degraded }));
+    if (ca.mode !== 'face') {
+      note('the compact tier could not hold ' + FPS_FLOOR + 'fps on this GPU: putting ' +
+           'FACE back by hand to read the point count it would have drawn');
+      await page.evaluate('__galaxy.presence.set("face")');
+      await sleep(1200);
+    }
+    const cf = await page.json(TIER_READ);
+    const ratio = wide.points > 0 ? cf.points / wide.points : 0;
+    ok(cf.builtTier === 'compact' && cf.points > 0 && cf.points < wide.points &&
+       ratio > 0.3 && ratio < 0.6,
+       'AND IT IS THE SAME HEAD WITH FEWER POINTS: ' + cf.points.toLocaleString() +
+       ' points at ' + Math.round(cf.density * 100) + '% density against ' +
+       wide.points.toLocaleString() + ' full - ' + Math.round(ratio * 1000) / 10 +
+       '% of the vertices for ' + Math.round((compact.side / wide.side) * 100) +
+       '% of the width',
+       JSON.stringify({ compact: cf, fullPoints: wide.points, ratio: ratio }));
+    const three = await page.json('({objects: __galaxy.presence.objects,' +
+      ' materials: __galaxy.presence.materials, shader: __galaxy.presence.shader})');
+    ok(three.objects === 1 && three.materials === 1 && three.shader === true,
+       'still one object, one material and a real shader at the compact tier - the density ' +
+       'changed and nothing else did', JSON.stringify(three));
+    /* THE WELL'S OWN RECTANGLE, RE-READ. wellRect above is where the full-size well was;
+       a plate of the compact head taken through it would be a plate of the sky beside it. */
+    const compactRect = await page.json('__galaxy.layout.rects.presence');
+    if (compactRect) {
+      await page.shot('deck-head-compact.png', compactRect);
+      note('wrote deck-head-compact.png (the head in a ' + compact.side + 'px well at ' +
+           compact.w + 'px wide)');
+    }
+  }
+  /* AND THE ROOM GOES BACK, because everything after this takes pictures: the width, the
+     panel and the session, in that order, each by the door that opened it. */
+  await page.send('Emulation.clearDeviceMetricsOverride');
+  await sleep(300);
+  await page.evaluate(`(function(){
+    var c = document.getElementById('close');
+    if (c && document.getElementById('panel').classList.contains('open')) c.click();
+    return document.getElementById('panel').classList.contains('open');
+  })()`);
+  await galaxy('/focus', { cmd: 'abort' });
+  await sleep(1400);
+  await page.evaluate('__galaxy.layout.run()');
+  await sleep(400);
+  const backWide = await page.json(TIER_READ);
+  ok(backWide.tier === 'full' && backWide.builtTier === 'full' && backWide.density === 1 &&
+     backWide.points === wide.points,
+     'and the tier is not a one-way door: the window comes back and so does the full ' +
+     'density - ' + backWide.points.toLocaleString() + ' points again',
+     JSON.stringify(backWide));
+  if (backWide.mode !== 'face') {
+    await page.evaluate('__galaxy.presence.set("face")');
+    await sleep(1000);
+  }
+
+  /* ---- 2c-4. WORK MODE IS THE ROOM, NOT THE CARD --------------------------
+     WHAT IS BEING CHECKED, AND WHY EACH HALF OF IT IS SEPARATE. A tint on the countdown
+     card is a label; the room going quiet is the feature. So three things are read, and
+     from three different organs: the DEEP FIELD's two nebula layers, the DECK's star
+     parallax swing, and the PLANETARIUM's emissive desaturation. One number moving would
+     be a tint by another name.
+     THE SESSION IS REAL. There is no setter for work mode on purpose - it is subscribed to
+     focus.py's own SSE push - so this starts a session on the server and aborts it. `arming`
+     counts as started: focus.py promotes to `running` only once its reader has LOCKED ON,
+     which on a machine whose front window is a headless Chrome never happens, and the room
+     is meant to change when the session begins rather than when the lock lands.
+     AND THE CROSSFADE IS PROVED BY AN INTERMEDIATE FRAME. A cut and a 900ms ease look
+     identical in a before-and-after pair, which is the whole reason the mandate asked for
+     the frame in between: at least one sample has to be caught strictly between the two
+     ends, in both directions. */
+  const workRead = '({t: Math.round(performance.now()), w: __galaxy.work})';
+  const nebCss = await page.evaluate(
+    '(function(){var e=document.getElementById("nebula-work");if(!e)return null;' +
+    'var c=getComputedStyle(e);return JSON.stringify({z:c.zIndex,pe:c.pointerEvents,' +
+    'op:c.opacity,pos:c.position,stops:(c.backgroundImage.match(/rgba?\\(/g)||[]).length});})()');
+  const neb = nebCss ? JSON.parse(nebCss) : null;
+  ok(!!neb && neb.z === '1' && neb.pe === 'none' && neb.pos === 'fixed' &&
+     +neb.op === 0 && neb.stops >= 2,
+     'THE WORKING SKY IS A SECOND LAYER, not a repaint of the first: #nebula-work sits on ' +
+     'layer ' + (neb && neb.z) + ' beside the nebula, ' + (neb && neb.stops) +
+     ' gradients, pointer-events ' + (neb && neb.pe) + ', and at rest it is invisible',
+     JSON.stringify(neb));
+  const w0 = await page.json('__galaxy.work');
+  ok(w0.on === false && w0.k === 0 && w0.neb === 1 && w0.nebWork === 0 && w0.sway === 1 &&
+     w0.desat === 0,
+     'and with no session the room is exactly the room it always was: k=0, nebula at ' +
+     w0.neb + ', the second layer at ' + w0.nebWork + ', full parallax, no desaturation',
+     JSON.stringify(w0));
+  ok(w0.tune && w0.tune.MS === 900 && w0.tune.NEB_IDLE === 1 && w0.tune.NEB_WORK === 0.3 &&
+     w0.tune.SWAY === 0.45 && w0.tune.DESAT === 0.45,
+     'the five numbers are declared where they can be argued with: ' +
+     JSON.stringify(w0.tune) + ' - 900ms is three times --spring-ms, the nebula dims to ' +
+     '30% rather than to nothing so the cloud keeps its shape, and the sway and the ' +
+     'emissive both give up 55%',
+     JSON.stringify(w0.tune));
+  const swingIdle = w0.swing;
+  await galaxy('/focus', { cmd: 'abort' });
+  await sleep(500);
+  const started = await galaxy('/focus', { cmd: 'start', minutes: 9 });
+  const sState = (started && started.focus && started.focus.state) || '?';
+  note('/focus start answered state=' + sState);
+  const up = [];
+  for (let i = 0; i < 16; i++) { up.push(await page.json(workRead)); await sleep(110); }
+  await sleep(700);
+  const w1 = await page.json('__galaxy.work');
+  note('the ramp up: ' + up.map((r) => r.w.k).join(' → ') + ' → ' + w1.k);
+  const mid = up.filter((r) => r.w.k > 0 && r.w.k < 1);
+  ok(mid.length >= 2,
+     'THE ROOM CROSSFADES RATHER THAN CUTTING: ' + mid.length + ' of ' + up.length +
+     ' samples caught it strictly between the two ends (' +
+     mid.slice(0, 4).map((r) => r.w.k).join(', ') + ' …)',
+     JSON.stringify(up.map((r) => r.w.k)));
+  const first1 = up.find((r) => r.w.k === 1);
+  const span = first1 ? first1.t - up[0].t : 0;
+  ok(!first1 || (span >= 500 && span <= 1700),
+     first1
+       ? 'and it takes ' + span + 'ms of wall clock to arrive, against the 900ms declared ' +
+         '- one --spring curve, not a step'
+       : 'the ramp was still moving at the end of the sampling window, which is the same ' +
+         'claim from the other side',
+     JSON.stringify({ span: span, ms: w0.tune.MS }));
+  ok(w1.on === true && w1.k === 1 && w1.neb === 0.3 && w1.nebWork === 1 &&
+     w1.desat === 0.45 && Math.abs(w1.sway - 0.45) < 1e-6,
+     'AND ALL THREE ORGANS ANSWERED: the nebula fell to ' + w1.neb + ' with the cooler ' +
+     'band up at ' + w1.nebWork + ', the star parallax from ' + swingIdle + ' to ' +
+     w1.swing + ' units, and the world emissive desaturated by ' +
+     Math.round(w1.desat * 100) + '%',
+     JSON.stringify(w1));
+  ok(w1.turns === w0.turns + 1 && w1.why.includes(sState),
+     'once, and it says what turned it: "' + w1.why + '" (turn ' + w1.turns + ')',
+     JSON.stringify({ before: w0.turns, after: w1.turns, why: w1.why }));
+  await page.shot('deck-work-mode.png');
+  note('wrote deck-work-mode.png (the room with a session running)');
+  /* AND IT REVERSES, on the same curve. A one-way tint is a bug that only shows up after
+     the session the user was not measuring. */
+  await galaxy('/focus', { cmd: 'abort' });
+  const down = [];
+  for (let i = 0; i < 16; i++) { down.push(await page.json(workRead)); await sleep(110); }
+  await sleep(800);
+  const w2 = await page.json('__galaxy.work');
+  note('the ramp down: ' + down.map((r) => r.w.k).join(' → ') + ' → ' + w2.k);
+  const midDown = down.filter((r) => r.w.k > 0 && r.w.k < 1);
+  ok(midDown.length >= 2 && w2.k === 0 && w2.neb === 1 && w2.nebWork === 0 &&
+     w2.desat === 0 && w2.sway === 1,
+     'THE ROOM WARMS BACK UP THE SAME WAY IT COOLED: ' + midDown.length +
+     ' intermediate samples on the way home, and it settles exactly back on the room it ' +
+     'started from - k=' + w2.k + ', nebula ' + w2.neb + ', swing ' + w2.swing,
+     JSON.stringify({ down: down.map((r) => r.w.k), settled: w2 }));
+  ok(w2.turns === w0.turns + 2,
+     'two turns for one session, and not one per SSE push: turns=' + w2.turns,
+     JSON.stringify(w2.turns));
+
   /* ---- 3. THE PICTURE OF THE GALAXY -------------------------------------- */
   await page.shot('deck-galaxy.png');
   note('wrote deck-galaxy.png (the glowing galaxy, nothing open over it)');
@@ -1985,17 +2257,21 @@ async function main() {
   const rows = sheet.rows || {};
   note('orders: ' + Object.keys(rows).map((k) => k + ' "' + (rows[k] || {}).label + '" · ' +
     (rows[k] || {}).line).join(' | '));
-  /* SIX ORDERS NOW, AND IN THIS ORDER. The presence was the sixth act added to this sheet -
-     the only way to change the hologram's mode by hand - and it sits after `links` because
-     the sheet reads outward from the session: what you are doing, where, what you can see,
-     what is looking back, what it knows, how it sounds. The list is asserted whole rather
-     than by length so that an order appearing, disappearing or MOVING is a failure with a
-     name in it. */
+  /* SEVEN ORDERS NOW, AND IN THIS ORDER. The presence was the sixth act added to this
+     sheet - the only way to change the hologram's mode by hand - and it sits after `links`
+     because the sheet reads outward from the session: what you are doing, where, what you
+     can see, what is looking back, what it knows, WHAT IT CAN REACH, how it sounds.
+     `google` is the seventh and it went between `archive` and `cast` for that reading: the
+     archive is what this machine holds, the grant is what it can touch outside the house,
+     and the voice is how it tells you about either. The list is asserted whole rather than
+     by length so that an order appearing, disappearing or MOVING is a failure with a name
+     in it - which is exactly what caught this assertion when the seventh arrived. */
   ok(JSON.stringify(sheet.ids) ===
-     JSON.stringify(['focus', 'lock', 'links', 'presence', 'archive', 'cast']) &&
-     sheet.count === 6,
-     'SIX DIEGETIC ORDERS, and they are the six the constitution lists: start focus, ' +
-     'lock the tab, simplify the links, change the presence, open the archive, cast the voice',
+     JSON.stringify(['focus', 'lock', 'links', 'presence', 'archive', 'google', 'cast']) &&
+     sheet.count === 7,
+     'SEVEN DIEGETIC ORDERS, and they are the seven the constitution lists: start focus, ' +
+     'lock the tab, simplify the links, change the presence, open the archive, connect ' +
+     'Google, cast the voice',
      JSON.stringify({ ids: sheet.ids, rendered: sheet.count }));
   const dumb = sheet.ids.filter((id) => !rows[id] || !rows[id].label || !rows[id].line ||
                                         !rows[id].shown);

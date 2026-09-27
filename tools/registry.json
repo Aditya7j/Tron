@@ -10,8 +10,21 @@
   "holding something sharp.",
   "",
   "No key, token or password ever appears here, and none is ever passed to a script. A",
-  "tool that needs a credential reads config.json itself, server-side, and the wire",
-  "between this machine and the browser never carries one.",
+  "tool that needs a credential fetches it itself, server-side - config.json for the",
+  "model keys, secrets/google_token.json for the Google grant - and the wire between",
+  "this machine and the browser never carries one.",
+  "",
+  "  proposal blanks are usually parameter names, but the calendar hand earns two DERIVED",
+  "              blanks that hands.py composes and the script never receives: {when} and",
+  "              {duration}, from a start/end pair. They exist so the spoken sentence can",
+  "              be a human reading of a machine stamp - 'Monday 28 September at 4:00 pm'",
+  "              rather than '2026-09-28T16:00' - while the rows underneath still show the",
+  "              employer the exact values that will travel. They are computed from the",
+  "              validated parameters by the same code the script uses, so the card and the",
+  "              wire cannot disagree.",
+  "              An email body has NO such blank, on purpose: `proposal` is spoken out loud,",
+  "              and preflight check 16(f) plants a canary in that body and fails if it is",
+  "              ever heard. The body is shown on the card and never read to the room.",
   "",
   "Each entry:",
   "  id          the name the brain asks for and the ledger counts under. [a-z0-9_-]",
@@ -60,18 +73,23 @@
      "required": true
     },
     {
-     "name": "when",
+     "name": "start",
      "type": "string",
      "required": true
     },
     {
-     "name": "notes",
+     "name": "end",
+     "type": "string",
+     "required": false
+    },
+    {
+     "name": "description",
      "type": "text",
      "required": false
     }
    ],
-   "timeout_s": 10,
-   "proposal": "That would be '{title}' at {when}, sir, written into your calendar. Shall I put it in?"
+   "timeout_s": 45,
+   "proposal": "That would be '{title}', {when}, {duration}, sir, written into your Google calendar. Shall I put it in?"
   },
   {
    "id": "send_email",
@@ -103,8 +121,8 @@
      "required": true
     }
    ],
-   "timeout_s": 30,
-   "proposal": "I have an email ready for {to}, sir, under the subject '{subject}'. Shall I send it?"
+   "timeout_s": 45,
+   "proposal": "I have an email ready for {to}, sir, under the subject '{subject}'. The card carries what it says. Shall I send it?"
   },
   {
    "id": "set_voice",

@@ -100,6 +100,32 @@ const note = (m) => say('  note ' + m);
 const step = (m) => say('\n  \u00b7\u00b7 ' + m);
 const procs = []; const profiles = []; const wrote = [];
 
+/* THREE NETS UNDER ONE FILE, because the first two already failed once. This harness
+   drives the Scribe through a real save_minutes, which writes a real note into notes/ -
+   the same notes/ that build.py embeds into the semantic store. Deleting it in the
+   success path is not enough and deleting it in the catch is not enough either: a run
+   stopped with Ctrl-C, killed by a timeout, or lost when the shell went away never
+   reaches either, and two artefacts that escaped that way shut the web gate on
+   followup_proof for a day. So: (1) unlinkAt() the instant the assertions are done,
+   (2) the end-of-run sweep over `wrote`, (3) these handlers, which fire on the ways a
+   node process leaves without running its own last line. 'exit' cannot do async work,
+   which is exactly why the unlink is sync. */
+function unlinkAt(p) {
+  try { unlinkSync(p); say('  note removed ' + p); } catch (e) { /* already gone */ }
+  const i = wrote.indexOf(p);
+  if (i >= 0) wrote.splice(i, 1);
+}
+function sweepNotes() { wrote.slice().forEach(unlinkAt); }
+process.on('exit', sweepNotes);
+['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK'].forEach(function (sig) {
+  process.on(sig, function () { sweepNotes(); process.exit(130); });
+});
+process.on('uncaughtException', function (e) {
+  sweepNotes();
+  say('  the harness itself threw: ' + (e && e.message));
+  process.exit(1);
+});
+
 /* ================================ THE SENTENCE ================================
    Plain, common words on purpose. piper renders an unusual proper noun into something a
    transcriber then spells its own way - "Priya" comes back as "Pre-E" - and an assertion
@@ -632,6 +658,22 @@ async function main() {
     text.split('\n').forEach((l) => say('  | ' + l));
     say('  ---- end ----');
     say('');
+    /* AND IT GOES NOW, NOT AT THE END OF THE RUN. Every assertion about this file has
+       been made by this line, so the file has no further purpose - and the run has ten
+       more seconds of Section 8 to survive before the old end-of-run sweep would have
+       reached it. Two of these artefacts DID survive, Meeting-2026-09-26-2132 and -2135,
+       from runs that were killed rather than finished, and they sat in notes/ for a day:
+       the 2135 one's Raw Excerpts contain the line "> What is react?", which scored well
+       enough on a question about React to keep the WEB GATE SHUT and took followup_proof
+       from 47/47 to 42/47. A harness that seeds the semantic corpus is measuring a
+       machine that no longer exists, so the window in which the file exists is now
+       seconds and the deletion is asserted rather than hoped for. The end-of-run sweep
+       and the signal handlers stay as the second and third nets. */
+    unlinkAt(path);
+    ok(!existsSync(path),
+       'AND THE ARTEFACT IS GONE THE MOMENT IT HAS BEEN READ - a harness may prove the ' +
+       'Scribe writes notes and may not leave one in the corpus it is measured against',
+       path);
   }
 
   /* ---- 8. AND NOTHING WAS RECORDED TO DISK ------------------------------- */
@@ -654,14 +696,14 @@ async function main() {
 }
 
 main().then(() => {
-  wrote.forEach((p) => { try { unlinkSync(p); say('  note removed ' + p); } catch (e) { } });
+  sweepNotes();
   cleanup();
   say('\n  ' + (pass + fail) + ' checks \u00b7 ' + pass + ' pass \u00b7 ' + fail + ' fail \u00b7 ' +
       (fail ? 'FAIL' : 'PASS') + '\n');
   if (fail) failures.forEach((f) => say('    - ' + f));
   process.exit(fail ? 1 : 0);
 }).catch((e) => {
-  wrote.forEach((p) => { try { unlinkSync(p); } catch (e2) { } });
+  sweepNotes();
   cleanup();
   say('\n  the harness itself broke: ' + (e && e.message));
   say(String(e && e.stack).split('\n').slice(1, 4).join('\n'));

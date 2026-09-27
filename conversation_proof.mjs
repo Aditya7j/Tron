@@ -66,7 +66,14 @@ const HEADED = process.env.CONV_HEADED === '1';
    read out loud end to end is the slowest thing in this suite, so the budget is generous -
    but a harness with no ceiling is a harness that can hang a preflight, and one that hangs
    without saying where it was is worse than one that fails. */
-const BUDGET_MS = Number(process.env.CONV_BUDGET_MS || 900000);
+/* RAISED FROM 900s WHEN SECTION 9 LANDED, and the arithmetic is the whole justification: the
+   run used to read four model answers out loud end to end and now reads ten, because the
+   longevity section is six more full turns in a third session. A budget left at fifteen
+   minutes would not have failed the new section - it would have killed the run inside it and
+   reported "HUNG at: 9 · turn 4", which is a harness that outgrew its own patience wearing
+   the costume of the defect it was added to find. That exact mistake cost this round a
+   misdiagnosis already, in mouth.mjs's settledArm. */
+const BUDGET_MS = Number(process.env.CONV_BUDGET_MS || 2100000);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /* WRITTEN SYNCHRONOUSLY TO FD 1, and not through console.log. Node's stdout is block-
@@ -1201,6 +1208,212 @@ async function main() {
   ok(bitten.running === true,
      'and the heartbeat is still beating after the stall it reported - it observes, it does ' +
      'not die with the thing it watched', JSON.stringify(bitten));
+
+  /* ---- 9. THE LONGEVITY: SIX TURNS, ONE SESSION, NO REFRESH -------------- */
+  /* THE COMPLAINT THIS ANSWERS. Three turns is a demonstration; the report from the room was
+     that a conversation degrades - that somewhere after the first few sentences the ear starts
+     keeping only a word or two of what was said. Nothing above this can see that, because
+     everything above this stops at three.
+     SIX SENTENCES OF FOUR TO TWELVE WORDS, in one session, with no page refresh between them
+     and nobody's hand anywhere near the mouse after the click that opens it. Per turn: the
+     words that went in, the words the page kept, the percentage, and whether the reset
+     contract ran exactly once for that turn's arm. Two assertions, and the second is the one
+     that describes the actual complaint:
+        heard >= 90% of spoken, every turn;
+        and no turn under three words when the sentence carried four or more.
+
+     WHAT THIS MEASURES AND WHAT IT DOES NOT, said plainly, because a table of percentages
+     invites more belief than it has earned. The sentences go in through feedFinal() - the
+     recogniser's own door - so everything downstream is the real thing: the flush, the
+     antecedent memory, the echo law, the thought seal, the turn counter, the re-arm, the reset
+     contract. What is NOT in the loop is the acoustics - the microphone, the VAD's gates, the
+     recognition service - so a percentage here cannot clear or convict those. A turn that
+     arrives as one word because the recogniser only ever returned one word would be invisible
+     to this section by construction.
+     THAT HALF IS MEASURED SOMEWHERE ELSE AND IT IS MEASURED. ear_dump.mjs speaks six
+     sentences of four to eleven words out of the machine's speakers into the real microphone,
+     in one session with no refresh, and reads the page's own per-turn record afterwards; its
+     table is the acoustic half of this claim and it scored 4/4, 7/7, 9/9, 5/5, 11/11 and 8/8.
+     This section is here for what that one cannot do: run headless, run in preflight, and run
+     every time.
+     AND THE SECTION IS NOT MERGED INTO THAT ONE ON PURPOSE. Making this file speak would mean
+     launching its Chrome with --use-fake-ui-for-media-stream instead of the fake zero-filled
+     device, and installing a recogniser tap before the first navigation - which changes the
+     room every section above was measured in, and the mandate says those are unchanged.
+
+     A THIRD SESSION, AND A THIRD CLICK. The one-click claim is about the three turns in
+     section 2 and is already proved there; section 5 has already spent a second click on the
+     courtesy clock. What matters to THIS claim is that the six turns below happen inside one
+     session with no refresh, and the click counter is asserted to be still three at the end -
+     so the six turns cost nothing.
+
+     AND IT RUNS AFTER SECTION 8 RATHER THAN BEFORE IT, which reads backwards - section 8 says
+     it is last on purpose because it stalls the page deliberately. The reason is section 8's
+     own arithmetic: it asserts EXACTLY ONE new stall against a baseline taken one line
+     earlier, and six model answers read out loud is the most main-thread work this harness
+     does. Put this section in front of it and a GPU having a bad afternoon makes section 8
+     red for a reason that has nothing to do with watchdogs. Nothing here reads the pulse, and
+     a 1.6-second block that finished 1.4 seconds ago cannot reach a table built over the
+     several minutes below - so the order that keeps both sections honest is this one. */
+  step('9 · six turns in one session');
+  const LONG = [
+    'what is the web gate',                                        // 4
+    'and what does the third door actually do',                     // 8
+    'tell me about the antecedent memory again',                    // 7
+    'and who am i',                                                // 4
+    'tell me everything you know about how the web gate scores a source',  // 12
+    'what else is worth knowing about the doors'                    // 8
+  ];
+  const words = (s) => String(s || '').trim().split(/\s+/).filter(Boolean).length;
+  /* THE CLOCK, PUT BACK. Section 5 shortened it to four seconds to watch a silent room close
+     itself, and four seconds is shorter than one model answer: left alone, the session below
+     would close itself in the middle of turn one and the whole table would read zero. */
+  await page.evaluate('__galaxy.ear.hold(600)');
+  const longBefore = await page.json('({clicks: __galaxy.ear.opened,' +
+    ' resets: (__galaxy.ear.arm||{}).resets, races: (__galaxy.ear.arm||{}).races,' +
+    ' stale: (__galaxy.ear.arm||{}).staleFlags})');
+  line('EMPLOYER', '[clicks the ear a third time, for six questions in a row]');
+  await page.click('mic');
+  ok(CLICKS === 3, 'a third conversation costs exactly one more click: ' + CLICKS);
+  ok(await waitFor(page, '__galaxy.ear.open === true', 8000),
+     'the session opens for the six-turn run');
+  await waitFor(page, '__galaxy.ear.listening === true', 8000);
+  /* THE RESET CONTRACT'S OWN COUNTERS ARE ZEROED BY earOpen(), which is the session boundary
+     it is specified to start over at - so everything below is read against zero and not
+     against whatever the two sessions above left behind. */
+  const armAtOpen = await page.json('__galaxy.ear.arm');
+  ok(armAtOpen && armAtOpen.resets === 1 && armAtOpen.state === 'live',
+     'THE RESET CONTRACT RAN FOR THE SESSION’S FIRST ARM and the lifecycle word is ' +
+     '"' + (armAtOpen && armAtOpen.state) + '": resets ' + (armAtOpen && armAtOpen.resets) +
+     ' at the first arm of a conversation, which is the one arm that used to have no ' +
+     'measured floor of its own', JSON.stringify(armAtOpen));
+
+  const rows = [];
+  for (let i = 0; i < LONG.length; i++) {
+    const n = i + 1;
+    const sentence = LONG[i];
+    step('9 · turn ' + n + ' of ' + LONG.length + ': ' + sentence);
+    const before = await page.json('({said: window.__conv.said.length,' +
+      ' done: window.__conv.done, turns: __galaxy.ear.turns, arms: __galaxy.ear.arms,' +
+      ' thoughts: __galaxy.ear.thoughts.length, opened: __galaxy.ear.opened,' +
+      ' arm: __galaxy.ear.arm})');
+    line('EMPLOYER', sentence);
+    await page.evaluate('__galaxy.speech.feedFinal(' + JSON.stringify(sentence) + ')');
+    const became = await waitFor(page,
+      '__galaxy.ear.turns === ' + (before.turns + 1), 8000);
+    /* WHAT THE PAGE KEPT, from the page's own thought ledger rather than from anything this
+       file remembers: that ledger is what was actually handed to the brain, which is the only
+       definition of "heard" that means anything. */
+    const thoughts = await page.json('__galaxy.ear.thoughts');
+    const mine = thoughts.length > before.thoughts ? thoughts[thoughts.length - 1] : null;
+    const heard = mine ? String(mine.text || '') : '';
+    step('9 · turn ' + n + ': waiting for the answer to be read to its last word');
+    const spoke = await waitFor(page, 'window.__conv.said.length > ' + before.said, 150000);
+    const drained = await waitFor(page, 'window.__conv.done > ' + before.done, 240000);
+    const rearmed = await waitFor(page, '__galaxy.ear.arms > ' + before.arms, 12000);
+    const after = await page.json('({arms: __galaxy.ear.arms, turns: __galaxy.ear.turns,' +
+      ' opened: __galaxy.ear.opened, open: __galaxy.ear.open, why: __galaxy.ear.rearmWhy,' +
+      ' arm: __galaxy.ear.arm})');
+    const said = await page.json('window.__conv.said');
+    line('BUTLER', said.length ? said[said.length - 1].text : '');
+    const spokenWords = words(sentence);
+    const heardWords = words(heard);
+    rows.push({
+      n: n, sentence: sentence, heard: heard,
+      spokenWords: spokenWords, heardWords: heardWords,
+      pct: spokenWords ? Math.round((heardWords / spokenWords) * 100) : 0,
+      why: mine ? String(mine.why || '') : '',
+      became: !!became, spoke: !!spoke, drained: !!drained, rearmed: !!rearmed,
+      arms: after.arms - before.arms,
+      resets: (after.arm.resets || 0) - (before.arm.resets || 0),
+      races: after.arm.races || 0, stale: after.arm.staleFlags || 0,
+      floor: after.arm.floor, samples: after.arm.floorSamples,
+      sameSession: after.opened === before.opened && after.open === true,
+      rearmWhy: String(after.why || '')
+    });
+  }
+
+  /* ---- AND THE TABLE, BEFORE ANY OF IT IS JUDGED ---- */
+  say('');
+  say('  ---- six turns, one session, no refresh ' + '-'.repeat(34));
+  say('  turn  said  heard    %   arm  reset  why the turn ended     the sentence');
+  for (const r of rows) {
+    say('  ' + String(r.n).padEnd(6) + String(r.spokenWords).padEnd(6) +
+        String(r.heardWords).padEnd(7) + (r.pct + '%').padEnd(6) +
+        String(r.arms).padEnd(5) + String(r.resets).padEnd(7) +
+        (r.why || '-').slice(0, 22).padEnd(23) + r.sentence.slice(0, 40));
+  }
+  say('  ' + '-'.repeat(74));
+  const totalSaid = rows.reduce((a, r) => a + r.spokenWords, 0);
+  const totalHeard = rows.reduce((a, r) => a + r.heardWords, 0);
+  say('  ' + rows.length + ' turns  ' + totalSaid + ' words in  ' + totalHeard +
+      ' words kept  ' + Math.round((totalHeard / totalSaid) * 100) + '%  ' +
+      '(the acoustic half of this claim is ear_dump.mjs)');
+  say('');
+
+  /* ---- THE ASSERTIONS ---- */
+  const cycled = rows.filter((r) => r.became && r.spoke && r.drained && r.rearmed);
+  ok(cycled.length === rows.length,
+     'SIX TURNS COMPLETED THEIR WHOLE CYCLE: each sentence ended by itself, was answered, ' +
+     'was read to its last word, and the ear came back up - ' + cycled.length + ' of ' +
+     rows.length,
+     JSON.stringify(rows.map((r) => ({ n: r.n, became: r.became, spoke: r.spoke,
+                                       drained: r.drained, rearmed: r.rearmed }))));
+  const oneSession = rows.every((r) => r.sameSession);
+  ok(oneSession && CLICKS === 3,
+     'ALL SIX IN ONE SESSION WITH NO REFRESH AND NO FURTHER CLICK: the click counter still ' +
+     'reads ' + CLICKS + ' at the end of the sixth turn',
+     JSON.stringify(rows.map((r) => r.sameSession)));
+  /* THE FIRST OF THE TWO THE MANDATE NAMES. The failure mode is a session that thins: the
+     first sentence arrives whole and the fourth arrives as a fragment, which is exactly what
+     a stale gate reference or a drifting floor would look like from here. */
+  const thin = rows.filter((r) => r.pct < 90);
+  ok(thin.length === 0,
+     'AND NO TURN LOST MORE THAN A TENTH OF ITS WORDS: ' +
+     rows.map((r) => r.pct + '%').join('  ') + ' against a 90% floor',
+     JSON.stringify(thin.map((r) => ({ n: r.n, said: r.spokenWords, heard: r.heardWords,
+                                       text: r.heard.slice(0, 60) }))));
+  /* AND THE SECOND, WHICH IS THE COLLAPSE ITSELF. A percentage can hide it - one word of one
+     is a hundred per cent - so the floor is also stated in whole words. */
+  const collapsed = rows.filter((r) => r.spokenWords >= 4 && r.heardWords < 3);
+  ok(collapsed.length === 0,
+     'AND NO TURN COLLAPSED TO A FRAGMENT: every sentence of four words or more arrived with ' +
+     'at least three, the smallest being ' +
+     Math.min.apply(null, rows.map((r) => r.heardWords)) + ' words',
+     JSON.stringify(collapsed.map((r) => ({ n: r.n, said: r.spokenWords,
+                                            heard: r.heard.slice(0, 60) }))));
+  /* THE RESET CONTRACT, ACROSS THE WHOLE RUN. One reset per arm is the contract's shape -
+     it is called from startListening() behind the already-listening guard, so a count that
+     drifted from the arm count would mean a second caller had appeared or the guard had
+     stopped guarding. */
+  const armTotal = rows.reduce((a, r) => a + r.arms, 0);
+  const resetTotal = rows.reduce((a, r) => a + r.resets, 0);
+  const last = rows[rows.length - 1];
+  ok(armTotal === resetTotal,
+     'ONE RESET PER ARM ACROSS ALL SIX TURNS: ' + armTotal + ' arms, ' + resetTotal +
+     ' resets - the contract runs once per arm and not once per request to arm',
+     JSON.stringify({ armTotal: armTotal, resetTotal: resetTotal }));
+  ok(last.races === 0 && last.stale === 0,
+     'AND NOTHING WAS STALE AND NOTHING RACED: ' + last.races + ' restart races (a .start() ' +
+     'into an instance that had not yet ended) and ' + last.stale + ' arms that found the ' +
+     'funnel still draining after its own cancel',
+     JSON.stringify({ races: last.races, stale: last.stale }));
+  const armEnd = await page.json('__galaxy.ear.arm');
+  ok(armEnd.state === armEnd.stored,
+     'and the lifecycle word agrees with itself: armRead() says "' + armEnd.state +
+     '" and the stored arm.state says "' + armEnd.stored + '" - two answers here would mean ' +
+     'a second writer, which is what preflight 24 forbids', JSON.stringify(armEnd));
+  note('the reset contract at the end of six turns: ' + JSON.stringify({
+    resets: armEnd.resets, races: armEnd.races, staleFlags: armEnd.staleFlags,
+    floor: armEnd.floor, floorSamples: armEnd.floorSamples,
+    floorVoids: armEnd.floorVoids, loudRoom: armEnd.loudRoom,
+    recogStarts: armEnd.recogStarts, recogEnds: armEnd.recogEnds
+  }) + ' - the floor is the 300ms sample at the last arm, and it is a measurement');
+  /* AND THE SESSION IS PUT AWAY, so section 6's "it opens and shuts with the session" is read
+     on a closed ear exactly as it was before this section existed. */
+  await page.evaluate('__galaxy.speech.feedFinal("thank you, goodbye")');
+  await waitFor(page, '__galaxy.ear.open === false', 8000);
+  await waitFor(page, '__galaxy.voice.draining === false', 60000);
 
   /* ---- THE TRANSCRIPT --------------------------------------------------- */
   step('the transcript');

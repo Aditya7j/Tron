@@ -245,16 +245,35 @@ export function Mouth(page, log) {
      false negative indistinguishable from a routing bug. So: wait for listening, note WHICH
      arm it is, settle, then check the arm did not change underneath. If it did, that session
      died during the settle and this one gets the full settle of its own. */
-  async function settledArm(settleMs) {
+  async function settledArm(settleMs, waitMs) {
+    /* HOW LONG "WAIT FOR THE EAR" IS ALLOWED TO BE, and it is a parameter because the right
+       answer depends on what came before.
+       THE FAILURE MODE THIS CATCHES, measured in the first ear_dump run: the ear is shut for
+       the whole of an answer - the question is posted, a model answers it, and piper reads
+       several sentences at length-scale 1.05 - and a long answer takes well over sixteen
+       seconds end to end. A fixed sixteen-second wait expired while the butler was still
+       talking, this threw "the ear is not listening", the sentence was NEVER PLAYED, and the
+       turn was then recorded as eleven words spoken and none heard. That is a harness
+       running out of patience wearing the exact costume of the defect the fixture was
+       written to find, and it would have been written up as one: the tell is in the dump,
+       where that arm shows an input peak of 0.043 against a floor of 0.006 and zero VAD
+       speech starts - a silent room, not a deaf ear. So a fixture that speaks after an
+       answer must say how long an answer may take. */
+    const budget = waitMs > 0 ? waitMs : 16000;
+    const polls = Math.max(1, Math.round(budget / 200));
     for (let round = 0; round < 8; round++) {
       let live = null;
-      for (let i = 0; i < 80 && !live; i++) {
+      for (let i = 0; i < polls && !live; i++) {
         const s = await page.json('({listening: !!__galaxy.ear.listening,' +
           ' analyser: !!__galaxy.ear.analyser, arms: __galaxy.ear.arms, open: !!__galaxy.ear.open})');
         if (!s.open) throw new Error('the ear closed; there is nothing to speak into');
         if (s.listening && s.analyser) live = s; else await sleep(200);
       }
-      if (!live) throw new Error('the ear is not listening; there is nothing to speak into');
+      if (!live) {
+        throw new Error('the ear is not listening after ' + Math.round(budget / 1000) +
+          's; there is nothing to speak into (if an answer was being read, the budget is ' +
+          'too short - pass waitMs)');
+      }
       await sleep(settleMs);
       const now = await page.json('({listening: !!__galaxy.ear.listening, arms: __galaxy.ear.arms})');
       if (now.listening && now.arms === live.arms) return live.arms;
@@ -271,7 +290,7 @@ export function Mouth(page, log) {
     const wav = synthesise(text, o);
     let arm = null;
     if (o.waitForEar !== false) {
-      arm = await settledArm(o.settleMs == null ? SETTLE_MS : o.settleMs);
+      arm = await settledArm(o.settleMs == null ? SETTLE_MS : o.settleMs, o.waitMs);
     }
     playSync(wav.path);
     said.push({ text: text, seconds: wav.seconds, path: wav.path, arm: arm });

@@ -2814,3 +2814,1254 @@ sweep rule: a lock sweep gets a freshly started server**, and a lock failure see
 long-running one is not evidence until it survives a restart. The route's own docstring already
 warned of this from the other end — *"a fresh interpreter passes every check while the one
 actually holding your session sits on a tick thread that died forty minutes ago."*
+
+> **CORRECTED BY §21.7.** The hypothesis in the paragraph above — a starved tick thread in a
+> long-lived server — was tested with the reading it asked for and **is wrong.** The tick thread
+> was healthy (`ticks 759->760`, `tickAgeS=1` against `TICK_S=1.0`) while the drift went
+> uncounted, because a second *headless* viewer was claiming **home base**, and home base
+> outranks every drift by design. The operational rule this section drew from it — a lock sweep
+> gets a freshly started server — is still good practice, but it was not the cause. See §21.7.
+
+## 21 · The Room Knows the Hour — the compact head, the working sky, the gaze, and a lie the instrument was telling
+
+This section is this round's own record, in §20's shape: the research for each Part written
+against what the code actually did beforehand, the numbers chosen with the reason each was
+chosen, and the measurement that settled it. It is **additive to §17–20 and replaces none of
+it**, with one exception stated plainly and early: **§20.13's closing hypothesis was wrong, and
+§21.7 disproves it with the reading it asked the next round to take.**
+
+### 21.0 · The baseline, and why it was taken the long way
+
+Every standing harness and `preflight.py`, solo and sequential, on a machine with no stray
+Chrome and one server (`pid 18140`), `port_proof.mjs` last. This is slow and it is not
+optional: §18.15 already proved that a shared debugging port or a stale `server-trace.log`
+makes a harness lie **in both directions**, so a baseline taken any other way is not a
+baseline, it is a coincidence. The table is at §21.11, baseline beside after, because a round
+that cannot show what it found is indistinguishable from a round that broke something quietly.
+
+One thing the baseline caught immediately, and it is the reason the rule exists: **`lock_proof.mjs`
+read `33 checks, 2 failed` on runs 1, 2 and 3, `2/2` on run 4, and `70 checks, 0 failed` only on
+run 5.** Run 5 is the number in §20.13's matrix. A green reached on the fifth attempt is not a
+green, it is a race that happened to land, and §21.9 names what was actually rotten.
+
+### 21.1 · Part 1, the research — a floor that refuses is not a floor, it is a cliff
+
+§17.1 measured `PRES_MIN=168` and reported, honestly, *"no room: 12px of 168"* at 1280×860. The
+honesty was never the problem. The problem is what the honesty was describing: the head that
+took a whole Part of §17 to build **does not render at all on the single most common laptop
+width**, and a single floor can only ever answer yes or no. So the governor gains a **second**
+floor and a **tier** between them, and the failure mode changes from absence to reduced
+density.
+
+The well, measured at 860px tall with the note panel open, is not a matter of opinion:
+
+| width | well side | tier |
+| --- | --- | --- |
+| 1280 | **12px** | stands down — see below |
+| 1366 | 55px | stands down |
+| 1440 | 92px | stands down |
+| 1536 | **140px** | **compact** |
+| 1600 | 172px | full |
+| 1920 | 235px | full |
+
+`PRES_MIN_COMPACT = 120`, and **120 rather than 100** because `PRES_LIP.gap = 0.013`: at 120px
+and dpr 1 the lip is 1.56 device pixels, at 100px it is 1.3, and below about 76px it is under
+one — a lip that cannot be drawn is a lip that is not there, and the head stops being the same
+head. `COMPACT_DENSITY = 0.45`, and **0.45 rather than the 0.22 that area scaling would
+suggest** (140²/300²), because constant per-pixel density at a third of the size gives a
+silhouette that reads as soft rather than as sparse; the points are dropped with
+`setDrawRange`, so it is fewer of the same vertices and not a second geometry.
+
+**And the finding Part 1 was told to report rather than hide: 1280×860 with the note panel open
+still stands down, and no floor can rescue it.** 12px of room is not a rendering problem, it is
+an absence of room; a floor of 12 would draw a head nobody could identify and would be a lie
+told to make a check pass. The repair for 1280 is a layout decision about the note panel, which
+is not this round's to make.
+
+### 21.2 · Part 1, the evidence (`deck_proof.mjs`)
+
+Measured at a width chosen to force the tier, and audited by **the mechanism that already
+exists** — the same probation that FACE-vs-RING has used since §17.3, with RING as the fallback
+if compact cannot hold the floor either:
+
+```
+ok  at 1920x860 the well is 235px, clear of the 168px full floor, and the head is at full density: 12,000 points
+    the tier ladder at 860 tall: 1600→172px full   1536→140px compact
+ok  THE COMPACT TIER ENGAGES AT 1536x860: 140px of room, under the 168px full floor and over the 120px compact one
+ok  and it AUDITIONS ITSELF on the mechanism that already exists: "kept" - 60.4fps compact against 60.3fps with the ring, floor 55, keep-ratio 90%
+ok  AND IT IS THE SAME HEAD WITH FEWER POINTS: 5,401 points at 45% density against 12,000 full - 45% of the vertices for 60% of the width
+ok  still one object, one material and a real shader at the compact tier - the density changed and nothing else did
+ok  and the tier is not a one-way door: the window comes back and so does the full density - 12,000 points again
+```
+
+So the answer to the question Part 5 asked to be answered as a finding if it went the other way:
+**compact holds the floor on this GPU comfortably — 60.4fps at 5,401 points**, and the §17.2
+claim survives the tier intact (one object, one material, `shader:true`). The audition is not
+decorative: on one earlier run the ring baseline read **39.3fps** because resize churn was still
+settling when probation started, which depresses the number the trial is compared against and
+would have kept compact for the wrong reason. It is recorded because a probation that can be
+biased by the harness's own resizing is worth knowing about even when its verdict is right.
+
+### 21.3 · Part 2, the research — the room, not the card
+
+A focus session tinted the countdown card. That is a badge, not a mood: the one element already
+telling you a session is running was the only element that changed. The session's
+`public_state()` is **already** on the wire over SSE — *"the whole session state, as booleans and
+counters"* — so nothing is added to that payload and no second channel is opened. The DEEP FIELD
+(§12) and the world materials (§2, §10) simply become **subscribers to the stream that was
+already there**, through one scalar.
+
+That scalar is `work.k`, eased by `workEase()` — which solves the `cubic-bezier(0.16,1,0.3,1)`
+already declared for entrances in §3 by twenty bisections rather than approximating it — with
+`workSet()` as the single subscriber called from `fxApply`, and `workFrame()` writing nothing
+but an opacity and a number, repainting only on 2% steps. The working sky is a **second layer**
+(`#nebula-work`, `z-index:1`, `pointer-events:none`, invisible at rest) rather than a repaint of
+the first, so §12's ink ceiling is never in question: the work layer's loudest channel peaks at
+**5% alpha**, under §12's 6%, and because the idle nebula falls to 30% at the same time the
+**total ink in the frame goes down**, not up.
+
+The five numbers, declared where they can be argued with — which is the whole argument §12 made
+once already about 6% and 0.16/0.48/1.00:
+
+| number | value | why this value |
+| --- | --- | --- |
+| `WORK.MS` | **900** | three times `--spring-ms`; long enough to read as a room changing, short enough not to be a wait |
+| `WORK.NEB_IDLE` | **1** | the room at rest is exactly the room §12 shipped — the identity, written down so it can be asserted |
+| `WORK.NEB_WORK` | **0.30** | the nebula **dims** rather than vanishing, so the cloud keeps its shape and the cooler band reads as a shift and not a swap |
+| `WORK.SWAY` | **0.45** | `DECK.STAR_SWAY`'s 34 units of lean become 15.3 — the sky stops leaning about as much as the work asks you to stop leaning |
+| `WORK.DESAT` | **0.45** | world emissive is pulled 45% toward its **own** luminance, so each world dims into its own grey rather than toward a shared one |
+
+Reduced motion gets `work.ms = 0`: the destination, never the journey. And the reversal is the
+same curve run backwards on pause, abort and end — never a cut, in either direction.
+
+### 21.4 · Part 2, the evidence
+
+The mandate asked for an intermediate frame proving a crossfade rather than an instant swap, so
+the ramp is sampled rather than described:
+
+```
+    the ramp up:   0 → 0.5378 → 0.8154 → 0.9263 → 0.9721 → 0.991 → 0.998 → 0.9998 → 1 …
+ok  THE ROOM CROSSFADES RATHER THAN CUTTING: 7 of 16 samples caught it strictly between the two ends
+ok  and it takes 935ms of wall clock to arrive, against the 900ms declared - one --spring curve, not a step
+ok  AND ALL THREE ORGANS ANSWERED: the nebula fell to 0.3 with the cooler band up at 1, the star parallax from 34 to 15.3 units, and the world emissive desaturated by 45%
+    the ramp down: 1 → 1 → 0.4988 → 0.1988 → 0.0796 → 0.0303 → 0.0099 → 0.0023 → 0.0002 → 0 …
+ok  THE ROOM WARMS BACK UP THE SAME WAY IT COOLED: 7 intermediate samples on the way home, and it settles exactly back on the room it started from - k=0, nebula 1, swing 34
+ok  two turns for one session, and not one per SSE push: turns=4
+```
+
+**935ms against 900 declared** is the curve, not a step; seven intermediate samples each way is
+the proof that no frame jumps; and `turns=4` — two per session, not one per SSE push — is what
+keeps a per-second state broadcast from restarting the crossfade sixty times.
+
+### 21.5 · Part 3, the research — aliveness as attention, on the driver that exists
+
+§18.7 gave the head idle yaw/pitch drift and a stress-nod: aliveness as **physics**. What it
+could not do is look at anything. The addition is aliveness as **attention**, and it is
+deliberately not a new animation system — it is a change to the **target** the existing sine
+driver orbits. `focus.py` already computes drift; the page **reads** that rather than
+recomputing it, so there is no second copy of the server's "counted AND running" to fall out of
+step:
+
+```
+ok  THE GAZE NAMES ITS SIGNAL EXACTLY: "focus.public_state().drifting" - one field of focus.py's own public_state, read rather than recomputed
+ok  its three numbers are bounded the way a gaze has to be: at most 0.2618 radians of turn (15°, a glance rather than a head-turn), a 260ms time constant, and a deadband of 0.02175 under the turn it measures
+ok  AND THE GPU WAS TOLD THE SAME THING: uGazeY=0, uGazeP=0, read back off the material rather than off the bookkeeping beside it - the gaze is a target on the existing idle driver, not a second animation
+```
+
+`GAZE_MAX = 0.2618` (15°) is three times the idle yaw's 5°, so a glance is legible against the
+wobble it rides on but is still a glance and not a head-turn. `GAZE_TAU = 260` is a time
+constant used as `1 - e^(-dt/tau)`: frame-rate independent and incapable of overshoot, which a
+spring would not be. `GAZE_EPS = PRES.YAW_IDLE / 4 = 0.02175` exists so that **the idle wobble
+alone cannot trip the departure frame count** — without a deadband the harness would measure the
+sine, not the gaze. The aim is taken on the drift's edges and then twice a second
+(`GAZE_AIM_EVERY = 30`), because a target recomputed every frame is a tremor.
+
+**And the deviation Part 4's assignment forced, named rather than smoothed over.** The mandate
+asked for the gaze measured on a real drift driven the way `lock_proof.mjs` already drives one
+(§18.5) rather than a synthetic state push — which is right, and is what was done. But a real
+drift **cannot be measured in a headless page**, and the reason is §21.7's finding: the drift
+detection is gated on not being at home base, and a headless page is permanently at home base.
+So the gaze assertions live in `lock_proof.mjs`, which is headed and already owns a real
+relaunch, with `focus_probe.mjs` asserting the signal name, the three bounds and the at-rest
+uniforms. No parallel harness naming scheme was created, as instructed.
+
+### 21.6 · Part 3, the evidence, on a real drift
+
+`lock_proof.mjs`, headed, with a real locked tab actually left behind:
+
+```
+ok  LEAVING THE LOCKED TAB IS NOTICED in 1316 ms (budget 1500 ms)
+ok  THE HEAD TURNS TOWARDS THE CHANGE on a real drift: the gaze left centre on frame 191 (8803ms on the page's own clock), aiming at [-0.12444,0.04446] radians because "focus.public_state().drifting" went true
+ok  AND THE HEAD COMES BACK TO CENTRE when the drift ends: frame 261 (9969ms), 70 frames and 1166ms after it left - one departure for one drift, not a head that stayed turned
+```
+
+Twice, on two runs: departure frame **169 (8698ms)** → return frame **221 (9581ms)**, 52 frames
+and 883ms; and departure frame **191 (8803ms)** → return frame **261 (9969ms)**, 70 frames and
+1166ms. The target is `[-0.12444, 0.04446]` radians — a reach of **0.1038 rad**, past the
+0.02175 deadband and well inside the 0.2618 ceiling — and `departures === 1` for one drift,
+which is the assertion that catches a head that turns and then stays turned.
+
+### 21.7 · The correction to §20.13 — the instrument was not being starved, it was standing in front of the watcher
+
+§20.13 closed on a hypothesis: `lock_proof.mjs` failing at *"noticed in 2834 ms, budget 1500 ms"*
+looked like **a starved tick thread** in a long-lived server, and the section said so while
+labelling it a hypothesis and not a finding, and named the fields `/focus/diag` publishes
+*"precisely for the next time."* This is the next time, the reading was taken, and **the
+hypothesis was wrong.**
+
+The reading is worth the space because the two candidate causes have the same symptom and
+opposite repairs — a starved watcher wants to be fed, an excused one wants its excuse taken
+away — so the rate was sampled instead of guessed. Two reads of the manager's own tick counter a
+second and a half apart, taken **after** the stopwatch so they cost the measurement nothing:
+
+```
+ticks 759->760 = 0.67/s against TICK_S=1.0, tickAgeS=1, watchPolls advancing,
+watchState=off, inGrace=false, and by now drifting=false drifts=0
+```
+
+Nothing was late. `tickAgeS=1` on a `TICK_S=1.0` loop is a heart beating on time, and
+`drifting=false` **1500ms after the budget had already been overrun** says the drift was never
+going to be counted at all. It was being **excused**.
+
+The excuse is `?nohome=1`'s whole reason for existing. Every viewer beats `fxFetch(true)` →
+`/focus?home=1` → `note_home_hint()` while a session is live and `document.hasFocus()` is true,
+and `Session.tick()` computes `at_home = self._home_hint_fresh(now) or bool(verdict["home"])`
+and only reaches `_tab_drifted()` when `not at_home`. **Home base outranks every drift by
+design** — "coming back to talk to me is never a drift" is correct behaviour and stays. But
+**under `--headless=new`, `document.hasFocus()` is permanently true**: there is no other window
+for the page to lose the keyboard to. This round opens a second, headless viewer as an observer,
+so that the head can be watched while a real drift happens in a browser that is not the
+observer's own — and that observer beat *"I am home base"* every `FOCUS_HOME_BEAT_MS` for the
+entire run. A locked-tab drift on the machine was therefore silently excused by an instrument.
+
+Measured, **twice each way**, because a claim this embarrassing should not rest on one run:
+
+| condition | drift noticed | `drifts` | watcher |
+| --- | --- | --- | --- |
+| observer open | still uncounted at **2861 ms**, and again 1500ms later | **0** | `watchState=off`, `inGrace=false`, ticks advancing |
+| observer skipped (`LOCK_AB=1`), nothing else changed | **937 ms** | **1** | callout spoken |
+
+The repair is one suppressed beat and nothing else about the page changed:
+`if (probeRunning || NOHOME) return;`. **`?focusprobe=1` was considered and rejected** for the
+job: `PROBE_ON` makes the page hermetic — no greeting, no brain read, and crucially **no session
+stream** — and the session stream is the one stream the gaze reads, so the flag that made the
+drift measurable would have made the gaze unmeasurable. `preflight.py` check 22 part (d) asserts
+both the flag and the exact guard line, so removing it fails preflight rather than quietly
+reintroducing a lying harness.
+
+`lock_proof.mjs` went **72 checks / 15 failed → 77 checks / 0 failed**, drift noticed in 778ms.
+
+### 21.8 · A repair that was measured and did nothing, kept on the record
+
+The starvation theory produced `gazeStandBack()`: PowerShell setting `PriorityClass =
+'BelowNormal'` on every `chrome.exe` whose CommandLine matches the observer's own `mkdtemp`
+leaf. With **twelve of the observer's processes confirmed at BelowNormal**, the check still read
+**2856 ms** — against 2861 without it. The priority drop is kept, on the narrower claim it can
+actually support (an observer that yields is a better neighbour than one that does not, and 778
+of 1500ms is measured with it in place), and its comment was **rewritten to stop claiming a fix
+it did not make.** A function whose docstring describes a repair it never achieved is worse than
+no function, because the next reader stops looking.
+
+### 21.9 · Two harness faults this round found that were not this round's doing
+
+**(a) The launcher profile poisons itself, and the §18 prevention did not prevent it.**
+`lock_proof.mjs` read `33 checks, 2 failed` twice consecutively — *"the relaunch restored his
+work tab: "* empty, then *"Cannot read properties of undefined (reading 'id')"*. The profile's
+`Default/Sessions/` held its newest `Session_<ts>` at **01:27** while a `Tabs_` had been written
+at **08:58**, with `exit_type: Crashed`: Chrome had stopped writing the session it is asked to
+restore. **The `SESSION_DIRS` prevention added in the previous round did not prevent
+recurrence.** The documented repair worked on the first try — confirm zero Chromes on the
+profile with the **profile-scoped** filter, then move the profile aside — and the very next run
+read `77 checks, 0 failed`. Two `devtools-profile-chrome.broken-*` folders are now on disk
+(`…-20260927` and `…-20260927-0910`) and are left there deliberately as evidence. **This 33/2
+signature is exactly what §21.0's baseline recorded for runs 1–3**, which retroactively explains
+the baseline's own flakiness: it was a poisoned profile, not a flaky lock.
+
+**(b) `layout_proof.mjs` Section 3 was asserting the graph's ordering, not the layout.** It
+focused `__galaxy.nodes[0]`, and Section 3 asserts that the spoken report's toast does not bury
+the panel's CONNECTED chips — but **a note with no links has no chips to bury.** At baseline
+`nodes[0]` was *"Customer Feedback Log"* with seven neighbours and the check passed; after a
+brain rebuild (the one preflight's own canary provokes every time it runs) `nodes[0]` was a
+loose *"Meeting 2026-09-26-2132"* of degree zero, and the same check read *"every one of the 0
+CONNECTED chips is legible"* and failed. **Nothing about the layout had moved.** The node is now
+**chosen** by the property the section needs — a degree table built from `strongLinks` falling
+back to `allLinks`, reading both the id and the object shape of `source`/`target` because
+force-graph rewrites them once it has run — and named in the assertion line, with `nodes[0]`
+still the fallback so a graph with no links at all fails on the chip count itself rather than on
+an undefined id. Now **72/72**, *"the best-connected of 32 notes, degree 11"*.
+
+### 21.10 · Preflight check 22 — "the room knows the hour, and the instrument does not lie"
+
+The next integer after the 21 the repo's HEAD ended on, read rather than guessed. It is static
+analysis plus one live read, in four parts, and it exists because every number above is only
+worth what it is worth if it cannot be silently deleted:
+
+- **(a)** the two floors read off the `LAYOUT` literal — FAIL if `PRES_MIN_COMPACT` is absent, is
+  not below `PRES_MIN`, or is declared and **never read** via `LAYOUT.PRES_MIN_COMPACT`;
+- **(b)** the `const WORK = {…}` block parsed — FAIL on a missing key, on `MS <= 0` (*a crossfade
+  of zero milliseconds is a CUT*), on `NEB_WORK >= NEB_IDLE`, or on `SWAY`/`DESAT` outside
+  `0 < x < 1`;
+- **(c)** the literal string `focus.public_state().drifting` present, `GAZE_MAX`/`GAZE_TAU`/`GAZE_EPS`
+  all declared, and **no** `presence.gaze.(want|at) =` setter — the gaze may be read from outside
+  and never driven from outside;
+- **(d)** `nohome=1` present **and** the exact guard `if (probeRunning || NOHOME) return;` present;
+- then a live `/focus` read that **FAILs if any session-payload key matches
+  `neb|gaze|presence|emissive|parallax|compact`** — the room subscribes to the session's state,
+  and the session must never learn that the room exists. WARN, not FAIL, when the server is down.
+
+It runs in **53 ms** and the fifteen original checks are untouched, as instructed.
+
+### 21.11 · The matrix at the end of the round (Part 5) — baseline beside after
+
+Baseline solo/sequential against `pid 18140`; after-column solo, foreground, `port_proof.mjs`
+last on a quiet machine.
+
+| harness | baseline | after |
+| --- | --- | --- |
+| `lock_proof.mjs` | **70 checks, 0 failed** — but green only on run 5; runs 1–3 read 33/2 | **77 checks, 0 failed** |
+| `deck_proof.mjs` | **208/208 PASS** | **224/224 PASS** |
+| `focus_probe.mjs` | **PROBE 26/26 · 78 checks, 0 failed** | **PROBE 26/26 · 85 checks, 0 failed** |
+| `layout_proof.mjs` | **72/72 PASS** | **72/72 PASS** (71/72 before §21.9b's repair) |
+| `desk_proof.mjs` | **44 checks, 0 failed** | **44 checks, 0 failed** |
+| `persona_proof.mjs` | **19/19 PASS** | **19/19 PASS** |
+| `capabilities_proof.mjs` | **16/16 PASS** | **16/16 PASS** |
+| `nudge_proof.mjs` | **21/21 PASS** | **21/21 PASS** |
+| `voice_proof.mjs` | **133/133 PASS** | **133/133 PASS** |
+| `echo_proof.mjs` | **49/49 PASS** | **49/49 PASS** |
+| `console_proof.mjs` | **30/30 PASS** | **30/30 PASS** |
+| `conversation_proof.mjs` | **RED** (ear/network) | **104/104 PASS** |
+| `scribe_proof.mjs` | **58 checks · 58 pass · 0 fail** | **58 checks · 58 pass · 0 fail** |
+| `brain_live.mjs` | **33 checks, 0 failed** | **33 checks, 0 failed** |
+| `eyes_live.mjs` | **56 checks, 0 failed** | **56 checks, 0 failed** |
+| `tools_live.mjs` | **50/50 PASS** | **50/50 PASS** |
+| `port_proof.mjs` | **24 checks, 0 failed** (last) | **24 checks, 0 failed** (last) |
+| `preflight.py` | **21 checks · 16 pass, 0 fail, 5 warn** (6,10,11,12,17) | **22 checks · 19 pass, 0 fail, 3 warn** (10,11,12) |
+| `followup_proof.mjs` | **47/47 PASS** | **42/47 FAIL** — corpus, see §21.12 |
+| `routing_proof.mjs` | **RED** (*the ear has failed 3 times in a row (network)*) | **RED** — recogniser, see §21.12 |
+| `salutation_proof.mjs` | **26/34 FAIL** (pre-existing) | **26/34 FAIL** (unchanged) |
+
+Preflight's warns went **5 → 3**, and the two that cleared are worth naming because they were
+misread once: warns 6 and 17 were **residue counts** from earlier preflight runs — *"after
+cleanup the brain holds 32 notes, not the 30 it started with"* and *"the store holds 38 files,
+not the 36 it started with"* — and not, as was previously recorded, a count of the two loose
+`notes/Meeting-*.md` files. Both passed cleanly this round with those two files still on disk.
+
+**A backgrounded sweep is not a sweep, and this round re-proved it.** `_runs/final_sweep.sh`
+run in the background produced **eight** reds — layout 71/72, followup 42/47, nudge 12/21, voice
+broken with **0 audio chunks**, echo 28/49, eyes_live 56/31, tools_live 2/3, lock_proof 17/6,
+port_proof 24/7 — and `lock_proof.mjs` diagnosed it in English without being asked: *"FAILED to
+raise chrome 576; front is 47024"* and *"front at the end of the press was Code (47024)"*.
+Windows only lets a process set the foreground if it already owns it or has just launched, so a
+harness launched from a backgrounded shell cannot raise its own Chrome, and every audio and
+click harness fails that way. Re-run one at a time as blocking foreground calls: nudge 21/21,
+voice 133/133, echo 49/49, eyes_live 56/0, tools_live 50/50. **All headed and audio harnesses
+run one at a time, blocking, never inside a backgrounded sweep.** The sweep's greens stay valid;
+its reds were about the shell.
+
+### 21.12 · Open, named
+
+**(1) `followup_proof.mjs` — 42/47, and it is the corpus, not the code.** The harness's first
+question is *"what is react"* and it now comes back `kind=notes` where the baseline had
+`kind=web`. The only file in the whole store that mentions React is
+`notes/Meeting-2026-09-26-2135.md` — a **Scribe-round test artefact** whose Raw Excerpts
+literally contain the line `> What is react?`, which scores well enough to keep the web gate
+shut on a question about React. Two remedies exist and **neither was taken**: delete the two
+test minutes, or change the harness's question. The web gate is on the DO-NOT-ALTER list, and
+the notes are the boss's data — a regression sweep does not get to delete either.
+
+**(2) `routing_proof.mjs` — the recogniser, not the funnel.** Every failing case is a *spoken*
+one and every one reads the same way: `the funnel was asked "" · 0 asks · kind=undefined`, with
+the ear's own record beside it — `{"transcript":[],"attempts":3,"wire":[]}`. The speech
+recogniser returned nothing at all, three attempts deep, so the funnel was never asked a
+question and had nothing to route; a second solo re-run on a quiet machine got further and then
+**aborted outright** at `Error: the ear closed; there is nothing to speak into`. The typed cases
+pass except one web-gate case, which is item (1)'s cause again. It was **RED at baseline too**,
+for the ear's own stated reason (*"the ear has failed 3 times in a row (network)"*), so this
+round did not cause it. The known mechanism is the cloud recogniser's silent throttle, which
+returns empty results rather than an error and which no amount of local correctness can fix from
+inside the page.
+
+**(3) 1280×860 with the note panel open still has no head**, and §21.1 explains why no floor can
+rescue 12px of room. The repair is a layout decision about the note panel.
+
+**(4) The `SESSION_DIRS` prevention does not prevent profile poisoning** (§21.9a). The repair is
+documented and fast, but it is a repair and not a prevention, and the next round should expect
+to make it again.
+
+**(5) Two `devtools-profile-chrome.broken-*` folders are on disk** (`…-20260927`,
+`…-20260927-0910`), left deliberately as evidence. They are inert and can be deleted whenever
+the profile fault stops being interesting.
+
+One thing checked and found **not** to be open: the eight-clusters-versus-palette question reads
+`8 colours across 8 folders, each folder one colour and no colour in two folders`, so no colour
+wraps and no cluster shares.
+
+---
+
+## 22 · The Road Outside the House — a real calendar, a real mailbox, and an answer that stays in the glass
+
+Two hands stopped pretending this round. `add_calendar_event` used to append a line to
+`calendar.json`, a file nobody but this project has ever opened; `send_email` used to log in to
+`smtp.gmail.com` with an app password. They now speak to Google Calendar v3 and Gmail v1 over an
+OAuth grant the employer authorises once, in his own browser, from a Command Panel row. The long
+answers that used to push the document sideways now scroll inside the glass. And the harness that
+had been quietly seeding the semantic corpus was stopped, then made incapable of doing it again.
+
+What follows is the whole round: what was read before anything was written, every number with its
+reason, what was proved, what was deliberately not proved, and what is still open.
+
+### 22.1 · What was read first
+
+**The loopback flow, RFC 8252 and Google's own installed-app guidance.** A desktop application has
+nowhere safe to keep a secret and no server to receive a redirect, so the authorisation code comes
+back to a small HTTP server the application itself runs on `127.0.0.1` — a loopback redirect, which
+RFC 8252 prefers over the older custom-scheme and out-of-band methods because the operating system
+guarantees that only a process on this machine can bind that port, and the browser will not send
+the code anywhere else. The flow is therefore: build a consent URL at
+`https://accounts.google.com/o/oauth2/v2/auth` carrying the client id, the redirect URI, the scope
+list, `response_type=code`, a PKCE challenge (`code_challenge` with `S256`), a random `state`, and
+— because this application must keep working tomorrow without asking again —
+`access_type=offline` together with `prompt=consent`, which is what makes Google return a refresh
+token rather than an access token alone. The user consents in a browser they already trust; Google
+redirects to `http://127.0.0.1:<port>/?code=…&state=…`; the loopback server reads the code, checks
+`state`, and POSTs the code with the `code_verifier` to `https://oauth2.googleapis.com/token` to
+exchange it for an access token (an hour's life) and a refresh token (no expiry of its own). The
+client secret for an installed application is, by Google's own documentation and by RFC 8252's
+reasoning, **not** treated as confidential — it cannot be kept secret in a binary a user can read —
+which is why PKCE, not the secret, is what actually protects this exchange.
+
+**Calendar v3, `events.insert`.** One authenticated `POST` to
+`https://www.googleapis.com/calendar/v3/calendars/primary/events` with a JSON body carrying
+`summary`, `start` and `end` (and `description` if there is one). The shape of `start`/`end` is the
+part worth reading twice: each is an object, not a string, and it is either
+`{"dateTime": "2026-09-28T16:00:00+05:30"}` for a timed event or `{"date": "2026-09-28"}` for an
+all-day one, and the two kinds may not be mixed within one event. For an all-day event the `end`
+date is **exclusive** — a one-day event on the 1st ends on the 2nd — which is the single most
+likely place for an off-by-one to become a meeting on the wrong day. The response is the created
+event, and `id` on it is Google's own identifier, which is what the receipt quotes back so the
+employer has something to search for. `primary` is a reserved calendar id meaning "the signed-in
+account's own calendar", so no calendar list needs reading, and `calendar.events` is a scope that
+can write events without being able to read the rest of the calendar's settings.
+
+**Gmail v1, `users.messages.send` and the draft that stands in for it.** Gmail does not take fields;
+it takes a whole RFC 822 message. The body of the request is `{"raw": "<base64url>"}` where the
+payload is the complete message — `To`, `From`, `Subject`, `Date`, `Message-ID`, the MIME headers
+and the body — encoded with the URL-safe alphabet and the padding stripped, `POST`ed to
+`https://gmail.googleapis.com/gmail/v1/users/me/messages/send`. `me` is the reserved id for the
+authenticated account, so the `From` address is the account's own and is taken from the token
+rather than from anything a caller supplied. The important discovery for a test suite is
+`users.drafts.create`: same body, wrapped one level deeper as `{"message": {"raw": …}}`, `POST`ed
+to `…/users/me/drafts`, and deletable with `DELETE …/users/me/drafts/{id}`. Gmail parses the raw
+field on the way in and rejects a malformed message, so a draft that comes back with an id is a
+message that **would** have flown — which is how the authenticated path gets proved without a
+letter leaving the building.
+
+### 22.2 · The scopes, in full
+
+    https://www.googleapis.com/auth/gmail.send
+    https://www.googleapis.com/auth/gmail.compose
+    https://www.googleapis.com/auth/calendar.events
+
+Three, all of them write scopes with no read. This grant **cannot** list a message, cannot read a
+thread, cannot see the mailbox it sends from, and cannot read a calendar it did not put an event
+into. `gmail.compose` is present for exactly one reason — `drafts.create` is the narrowest method
+that proves auth and serialization without sending, and it also permits `users.getProfile`, which is
+how the panel learns which account is connected. Deliberately absent: `gmail.readonly`,
+`gmail.modify`, `https://mail.google.com/` (total control of the mailbox), and plain `calendar`. A
+wider scope is one edit away and would never fail a test, because a broader scope never refuses —
+it only permits. That is why the list is asserted by **equality** in preflight check 23(a), from
+the source and again from the running server, and why the same check greps for the wide scopes by
+string literal.
+
+### 22.3 · Every number, and why it is that number
+
+| Number | Where | Why this one |
+|---|---|---|
+| **4731** | `LOOPBACK_PORT` | Its own port, not the server's. 4700 is the house and 9222–9254 are the harnesses' debugging ports, one of them watched by `focus.py`; a consent server landing there would fight a debugger. Fixed rather than ephemeral because a fixed port can be allowed through a firewall once, where an ephemeral one asks the question again every time. |
+| **300 s** | `CONSENT_TIMEOUT` | How long the loopback server waits for a human to choose an account and read a consent screen. Five minutes is generous for a person and short enough that a forgotten window does not leave a listening socket open all day. |
+| **120 s** | `REFRESH_SKEW` | The access token is refreshed two minutes *before* Google says it expires, not after. Refreshing on expiry means the first request after the hour is the one that fails, and the employer sees a refusal caused by arithmetic. |
+| **30 min** | `DEFAULT_MINUTES` | "Remind me to call the client at four" names a start and no end; a calendar event must have both. The brain is told never to invent a time, so the default lives in one place in code and is **rendered onto the card** as part of the duration before anybody presses Yes. An invented end nobody saw would be the same mistake as an invented address. |
+| **45 s** | both hands' `timeout_s` | Was shorter when these hands were local. A round trip to Google over a domestic connection, with one token refresh possible inside it, needs room; 45 s is long enough to survive a refresh and short enough that a wedged request does not hold the consent slot past its own TTL. |
+| **min(46vh, 560px)** | `--answermax` | The answer panel's height clamp. 46vh keeps the prose under half the glass so the Yes/No pair and the caption stay in view on a short window; the 560px ceiling stops a very tall monitor from rendering a paragraph the reader has to stand up to finish. |
+| **2 s / 310 s** | panel poll | The Google state line polls every 2 s while the sheet is open, and stops after 310 s. Two seconds is fast enough that pressing Connect and returning from the browser shows CONNECTED without a second thought; the ceiling is `CONSENT_TIMEOUT` plus ten seconds, so the poll outlives the thing it is waiting for by exactly one breath and then stops rather than running all day. |
+| **5,000 / 400 / 300** | `layout_proof` 2f | The injected answer, its unbroken token and its URL. 5,000 characters is longer than any real answer this machine has produced; 400 characters with no space in it is far wider than any viewport at any of the three widths, so nothing but `overflow-wrap` can save the layout; 300 characters of URL is a realistic hostile citation. |
+| **2099-01-01 / 2028-03-07** | probe stamps | The refusal probes use 2099 so that a stamp which somehow reached a calendar would be unmistakably a test; the live probe event uses 2028 because Google rejects some far-future recurrences and the point of that one is to be accepted, read back, and deleted. |
+| **200** | *removed* | A 200-character body preview was written into the spoken proposal and then taken out again. See §22.7. |
+
+### 22.4 · Part 0 — the corpus, and the harness that was seeding it
+
+Two files were deleted:
+
+    notes/Meeting-2026-09-26-2132.md
+    notes/Meeting-2026-09-26-2135.md
+
+They were minutes drafted by `scribe_proof.mjs` during acceptance runs that were killed before
+their cleanup could run. They were real notes in a real folder, and `build.py` embeds that folder,
+so a harness had been quietly adding documents to the corpus the retrieval tests are measured
+against. `followup_proof.mjs` was failing 42/47 because of them.
+
+The store was rebuilt with `python build.py`, and the counts moved as they should:
+
+| | before | after |
+|---|---|---|
+| notes (`.md` under `notes/`) | 32 | **30** |
+| note groups (folders) | 8 | **7** |
+| vector-store files | 38 | **36** |
+| embedded chunks | 57 | **55** |
+
+`followup_proof.mjs` then returned **47/47 PASS** and has stayed there.
+
+The repair matters less than the guard. `scribe_proof.mjs` now deletes its artefact **the moment it
+has been read** — the assertion that the minutes are on disk, and the assertion of what they say,
+both happen first, and then the file is unlinked; `cleanup()` runs on the normal exit and on the
+throwing one. The harness gained a check for exactly that, which is why its count went 58 → **59**.
+A harness may prove the Scribe writes notes; it may not leave one in the corpus it is measured
+against. `notes/` was empty of `Meeting-*` before this round's run and empty of them after it.
+
+### 22.5 · Part 1 — the connect flow
+
+`Connect Google` is the sixth row of the Command Panel, keyboard **G**, between *archive* and
+*cast*. Pressing it builds the consent URL, opens it in the employer's own browser, and starts a
+loopback server on **127.0.0.1:4731**. The code comes back to that server, is exchanged with PKCE,
+and the token and refresh token are written to `secrets/google_token.json` — a folder already
+gitignored, and already denied to me by tooling. The panel's state line reads one of:
+
+    GOOGLE: CONNECTED · <account email>          action: Disconnect
+    GOOGLE: NOT CONNECTED                        action: Connect
+    GOOGLE: RECONNECT NEEDED                     action: Reconnect
+
+Disconnect deletes the token file, asks Google to forget the grant, and says which of those two it
+managed: *"The token is deleted, sir, and Google has been told to forget it as well"*, or *"The
+token is deleted, sir. Google could not be reached to revoke it, so do that from your account page
+if it matters"*, or — with nothing to remove — *"There was nothing to disconnect, sir."* The
+telemetry rail gained no cell; the panel carries this, as instructed.
+
+`GET /google` is the only Google route the page can read, and it carries six facts: whether a client
+file exists, a truncated client id, the scope list, the port and redirect URI, the state word with
+its reason, and — when connected — the account address, a **digest** of the refresh token, and the
+seconds left on the access token. It carries no access token, no refresh token, no authorization
+code and no client secret. Preflight check 23(b) asserts that by field name **and** by searching the
+payload for the client secret's own 35 characters, because a field with an innocent name is still a
+leak; it also asks the server for `secrets/google_token.json`, `secrets/google_client.json` and one
+directory traversal at them, and requires all three to refuse. They 404.
+
+### 22.6 · Part 2 — the calendar, for real
+
+`add_calendar_event` now calls `events.insert` on `primary`. `calendar.json` is retired as a
+backend: the hand neither reads nor writes it, which preflight check 23(e) proves from the hand's
+own source with its docstrings stripped out — a hand that wrote to Google and *also* appended
+locally would let a failed send look like a success. The file is still on disk, inert, for the boss
+to delete when he likes.
+
+The card shows the human reading of the stamp, and this is where a small mechanism earned its keep.
+The registry's sentence carries two **derived blanks**, `{when}` and `{duration}`, which `hands.py`
+composes from the validated parameters using the same `event_times()` the script uses, and which
+**never enter `params`** — so the rows underneath stay verbatim, carrying the exact ISO stamp that
+will travel, while the sentence says *"Thursday 1 January at 9:00 am, 30 minutes (the default, since
+no end was given)"*. The card and the wire cannot disagree, because both are computed from the same
+validated values by the same code.
+
+Refusals: not connected → *"I have no road to your calendar yet, Addi - Connect Google, and I
+shall."* Refresh failure → the reconnect line. A Google 4xx/5xx → the failure named plainly, the
+ledger records **failed**, and nothing is retried silently. One retry exists and only one: a 401 is
+treated as a possibly-stale access token, the token is refreshed once and the request repeated
+once, because a 401 on a token that was just refreshed is a revocation and not a race.
+
+An unreadable time is now refused **at the gate**, with nothing left pending. That was a decision,
+not an accident: the first version filled the card with a literal `{when}` and asked the employer to
+approve it, and the alternative — carrying the nonsense to Google to be told no — spends a click and
+a round trip to reach a refusal that was already knowable. So `readings()` returns a refusal, the
+slot is dropped, and the answer is *"I cannot put that in the calendar, sir: that start time is not
+a date I can read - it wants 2026-09-28T16:00 or 2026-09-28."* The script keeps its own identical
+check, because it can be run by hand and defence in depth costs nothing here.
+
+### 22.7 · Part 3 — the mail, for real, and the canary that stopped a leak
+
+`send_email` builds a complete RFC 822 message with `email.message.EmailMessage` — `To`, `From`,
+`Subject`, `Date`, `Message-ID`, the body set as UTF-8 quoted-printable — and sends it with
+`users.messages.send`. The `From` is the connected account's own address, read from the token and
+never from a parameter, so this hand cannot be asked to forge a sender. Attachments are refused by
+name in v1 rather than failing: *"I cannot attach a file to an email yet - the message itself can
+go, but nothing can travel with it…"*, and the refusal is checked **first**, before the recipient is
+even validated, because the worst outcome is not an error — it is the letter going anyway, without
+the file, while the sender believes it went with it.
+
+**And then the canary caught me.** The mandate asks the proposal card to show `to · subject · first
+200 chars of body`, so I put a `{preview}` blank in the registry's proposal sentence and a
+200-character preview into `hands.py`. Preflight check 16(f) failed within the hour:
+
+    (f) THE CANARY WAS SPOKEN. The proposal template renders a parameter the employer
+        never asked to hear read out in a room
+
+That clause plants a fresh clock-derived string in `send_email`'s body and fails if it appears in
+`pending.line`. `line` is not a caption — `speakLine()` says it **out loud**. An email body is the
+one parameter in this project that can be entirely somebody else's business, and a machine that
+reads your correspondence aloud to whoever is standing in the room has taken the wrong half of a
+trade nobody offered it. The standing check wins: `{preview}` is gone, the sentence now reads *"I
+have an email ready for `<to>`, sir, under the subject '`<subject>`'. The card carries what it says.
+Shall I send it?"*, and the body is shown **on the card, in the rows, in full and verbatim** — which
+is more than a 200-character preview and is the copy that actually travels. `hands.py` carries the
+whole story as a comment where the preview used to be, so the next person to think of this reads
+why it is not there before writing it again. Check 16 now passes with the canary *"absent from every
+file under the project root and from every one of the 96 responses this run, save the parameters the
+page renders for the human to read."*
+
+The proof does not send. `google_hands_proof.mjs` exercises `users.drafts.create` and then deletes
+the draft. **The one real send remains the employer's** — the reserved Gmail round trip, now against
+the real API.
+
+### 22.8 · Part 4 — the contained page, measured
+
+`--answermax: min(46vh, 560px)` clamps the answer's prose; `overflow-y: auto` scrolls it;
+`overflow-wrap: break-word` on body text and `overflow-wrap: anywhere` on code, citation chips,
+captions and the ask-rows break the unbreakable; `pre` scrolls internally rather than widening its
+parent. The clamp went on `#answer .a` — the prose — and **not** on `#answer` itself, for three
+reasons: the Yes/No gate must never scroll out of view; `#answer.tool::after` is an
+absolutely-positioned ring at `inset:-1px` that a scroll container would clip and then scroll away
+from the buttons it surrounds; and the whole 5,000-character payload lands in `.a` anyway.
+
+`answerReach()` grants the panel a tab stop and `role="region"` **only when it actually overflows**,
+measured (`scrollHeight - clientHeight > 1`) after the text is typed, and removes both when it does
+not — a permanent tab stop on a two-line answer is a keyboard trap that announces nothing.
+
+`layout_proof.mjs` section 2f injects 5,000 characters containing one 400-character unbroken token
+and one 300-character URL, and asserts the injection is what it claims to be (both hostile tokens
+present, neither containing whitespace) before measuring anything — an earlier version padded the
+filler first and silently sliced the URL to 214 characters while a length-only self-check passed.
+Measured, at each width:
+
+| width | body text box | body scroll height / clamp | document | wrap | tab stop | PageDown |
+|---|---|---|---|---|---|---|
+| 1280 | 265 ≤ 265 | 3364 / 396 px (max 395.6) | 1280 ≤ 1280 | break-word | `"0"` | 0 → 345.3 px |
+| 1600 | 425 ≤ 425 | 2088 / 396 px | 1600 ≤ 1600 | break-word | `"0"` | 0 → 345.3 px |
+| 1920 | 585 ≤ 585 | 1531 / 396 px | 1920 ≤ 1920 | break-word | `"0"` | 0 → 345.3 px |
+
+The card around the text overflows nothing either (311 ≤ 311, 471 ≤ 471, 631 ≤ 631), the document
+never scrolls sideways at any of the three widths, the scrollbar is reachable by keyboard — a real
+`Input.dispatchKeyEvent` PageDown moves `scrollTop` — and a short answer afterwards carries **no**
+tab stop and **no** region role. `layout_proof` went 72 → **95 checks, all green**.
+
+### 22.9 · Part 5 — the regression matrix
+
+Solo, sequential, foreground, quiet, `port_proof` last. The baseline is the §21 end-of-round solo
+sweep, taken minutes before this round began with no code changed in between.
+
+| harness | baseline (§21, solo) | after | |
+|---|---|---|---|
+| `desk_proof` | 44 checks, 0 failed | 44 checks, 0 failed | ✅ |
+| `layout_proof` | 72/72 PASS | **95/95 PASS** | ✅ +23 (Part 4) |
+| `followup_proof` | 42/47 FAIL | **47/47 PASS** | ✅ Part 0 |
+| `salutation_proof` | 26/34 FAIL | 26/34 FAIL | ◽ named, pre-existing |
+| `capabilities_proof` | 16/16 PASS | 16/16 PASS | ✅ |
+| `persona_proof` | 19/19 PASS | 19/19 PASS | ✅ |
+| `nudge_proof` | 21/21 PASS | 21/21 PASS | ✅ |
+| `deck_proof` | 224/224 PASS | **224/224 PASS** | ✅ 2nd attempt, see below |
+| `focus_probe` | PROBE 26/26 · 85 checks, 0 failed | PROBE 26/26 · 85 checks, 0 failed | ✅ |
+| `voice_proof` | 133/133 PASS | 133/133 PASS | ✅ |
+| `conversation_proof` | 104/104 PASS | 104/104 PASS | ✅ |
+| `routing_proof` | 38/65 FAIL (crashed on the ear) | **64/65 FAIL** | ◽ one ear-throttle red |
+| `echo_proof` | 49/49 PASS | 49/49 PASS | ✅ |
+| `console_proof` | 30/30 PASS | 30/30 PASS | ✅ |
+| `scribe_proof` | 58 checks, 0 fail | **59 checks, 0 fail** | ✅ +1 artefact guard |
+| `brain_live` | 33 checks, 0 failed | 33 checks, 0 failed | ✅ |
+| `eyes_live` | 56 checks, 0 failed | 56 checks, 0 failed | ✅ |
+| `tools_live` | 50/50 PASS | **54/54 PASS** | ✅ +4 |
+| `lock_proof` | 77 checks, 0 failed (3rd attempt) | **77 checks, 0 failed** (4th attempt) | ✅ see below |
+| `preflight.py` | 22 checks · 19 pass, 0 fail, 3 warn | **23 checks · 20 pass, 0 fail, 3 warn** | ✅ +check 23 |
+| `port_proof` | 24 checks, 0 failed | 24 checks, 0 failed | ✅ |
+| `google_hands_proof` | — | **27/27 PASS (2 skipped)** | 🆕 |
+
+The three preflight warns are **10, 11, 12** — the same three as the baseline, with the same known
+causes. Nothing regressed.
+
+**Two reds that came and went, named rather than hidden.** `deck_proof` failed three assertions on
+its first run of the sweep: the compact tier's frame-rate audition measured 52 fps against its own
+55 fps floor, dropped to the ring as the existing law says it should, and the two density
+assertions that follow were then reading a perturbed room — the harness narrates this itself
+(*"the compact tier could not hold 55fps on this GPU"*). Re-run alone after a pause: **224/224**,
+with the audition reading 60.2 fps and the verdict *kept*. `lock_proof` needed four attempts, as its
+own baseline needed three. Attempts one and two died at 56 s on *"the relaunch restored his work
+tab"* — Chrome's `--restore-last-session` brought back the viewer but not the work tab — attempt
+three restored **two** `example.com` tabs where one was expected, which is residue from the two
+attempts before it, and attempt four was clean at 77/0. Both failures live in Chrome's session
+restore and window foreground, and nothing this round touched either; the residue sat in the
+employer's own default Chrome profile, which the standing law forbids me to close.
+
+**`routing_proof` and `salutation_proof` remain red, untouched and named.** `salutation_proof` is
+26/34, identical to baseline — the pre-existing 0.60-threshold red. `routing_proof` improved from a
+crash at 38/65 to **64/65**: its single remaining failure is the ear-throttle, one spoken utterance
+coming back as `""` because the cloud recogniser silently returns an empty transcript under load.
+Environmental, pre-existing, and deliberately not chased.
+
+**`preflight.py` check 23 — *the road to Google is narrow, and it refuses politely*** — reads from
+HEAD and has five clauses: (a) the scopes are exactly the three, by equality, from the source **and**
+from the running server, with a literal-scan for the wide ones; (b) nothing secret on the wire, the
+client secret checked by value, `secrets/` unreachable over HTTP; (c) the refusal chain end to end
+through `propose` → `execute` for both hands, requiring the English sentence, the named remedy, no
+status code quoted at a human, and exactly one **failed** ledger run each; (d) the stamps read
+before the network is; (e) `calendar.json` retired, proved from source, with the registry's four
+parameters asserted. Clause (c) does **not** run on a machine that has a grant — proving a refusal
+would mean creating a real event to be refused about — and says so rather than passing quietly. Its
+live output:
+
+    ✓  23. the road to Google is narrow, and it refuses politely    395 ms
+          three write-only scopes, declared and matched exactly: send, compose, calendar.events
+          the running server agrees, and reads state 'absent' on port 4731
+          and the client secret's 35 characters appear nowhere in the payload, checked by value
+          and secrets/ is unreachable over HTTP: the token file, the client file and one traversal
+          calendar.json is named nowhere in the hand's code, and the schema is the four it reads
+          an unparseable start is refused at the gate, naming the shape it wants, nothing pending
+          with no grant, the chain propose -> confirm -> run ends in the hand's own sentence,
+            'The tool failed, sir: I have no road to your calendar yet, Addi - Connect Google…'
+          and the mail hand refuses in the same shape, at the same door
+
+### 22.10 · The two probes, and the transcript that does not exist yet
+
+`google_hands_proof.mjs` is new: no browser, no CDP port, every claim an HTTP claim or a subprocess
+claim, so unlike the headed harnesses it is safe to run beside another. Its probes go through the
+project's own `google_api` module — the identical functions the hands call — because a harness that
+spoke to Google with its own fetch and its own token handling would be testing a second
+implementation and reporting on the first. It never opens `secrets/`. It prints no token, no code,
+no secret, and not the account address either: accounts appear as an eight-character digest.
+
+**Sections 6 and 7 SKIPPED, and the skips are counted separately from the passes.** There is no
+grant on this machine — `GET /google` reads `absent` — so Gmail and Calendar cannot be reached, and
+the two transcripts the mandate asks for do not exist. I will not invent them. What ran instead:
+
+    6. the draft that proves the send without sending
+      SKIP a draft is created from a real RFC822 message and then deleted
+           there is no grant on this machine (state "absent"), so Gmail cannot be reached.
+      ok   and the draft probe this machine would have run is valid python
+
+    7. the event that is created, seen, and taken back
+      SKIP a probe event is created, read back with events.get, deleted, and 404s
+           there is no grant on this machine (state "absent"), so Calendar cannot be reached.
+      ok   and the calendar probe this machine would have run is valid python
+
+Those two `ok` lines are the round's one genuinely new idea about testing. A section that skips is a
+section whose code is never parsed, so a typo inside it would sit unnoticed until the one run that
+finally had a token — the moment somebody was trying to prove the feature worked. So both probe
+sources are built by functions, and when a section skips, the source it *would* have run is handed
+to Python's own `compile()` and asserted to parse. Compiling is not running: no import executes, no
+request is made, and a missing comma does not need a credential to be found.
+
+What the two probes will do, on the employer's machine, after one press of Connect Google:
+
+- **The draft probe.** Build a real message with `send_email.build()`, `drafts.create` it, assert an
+  id came back and that the serialized message was more than 100 bytes of real headers, fetch it
+  back with `?format=raw`, base64url-decode it and assert the subject and recipient survived the
+  round trip, `drafts.delete` it, and assert a fetch of the same id **404s**. It also asserts that
+  nothing in the section called `messages.send`.
+- **The calendar probe.** `event_times("2028-03-07T11:00", "")` → `events.insert` → assert Google's
+  id came back → `events.get` and assert the summary is the title that was sent and that
+  `start.dateTime` still begins `2028-03-07T11:00` (a timezone dropped in transit is a meeting five
+  and a half hours out) → `events.delete` → `events.get` again and assert **404**. Created and
+  destroyed inside one run, so the diary ends the run exactly as it started it.
+
+What did run, token-free, is the half that is true on most machines: both hands refuse in their own
+English at the same door a human uses, naming the remedy, without quoting a status code or a token
+at anybody, and each refusal is recorded as one **failed** ledger run rather than swallowed; an
+unknown `POST /google` command is refused naming the two that exist; disconnect with nothing to
+disconnect says so; an unreadable stamp never reaches the network; and an attachment is refused by
+name. **27/27, two skipped.**
+
+### 22.11 · Discretion exercised, with reasons
+
+1. **The §21 sweep is this round's baseline.** Taken solo, sequential, foreground, quiet, with
+   `port_proof` last, minutes before this round began, with no code changed in between. Re-running
+   twenty-one harnesses to produce an identical table would have cost an hour and proved the same
+   thing.
+2. **The consent click is the employer's, and the skip is honest.** Everything token-free is
+   proved; the two token-only sections skip with the reason printed, are counted separately, and
+   their sources are compile-checked. I did not connect his Google account on his behalf.
+3. **The height clamp went on `#answer .a`, not `#answer`.** The gate must not scroll away, the
+   `::after` ring at `inset:-1px` would be clipped by a scroll container, and the payload lands in
+   `.a` regardless.
+4. **`tools_live`'s witness moved from `calendar.json`'s length to the ledger's `ok + failed`.** The
+   old witness was a fossil once the file was retired; the ledger is a strictly better one and
+   always was — it distinguishes ok from failed from refused, and it cannot be satisfied by a script
+   that wrote a file without being asked.
+5. **`tools_live` does not delete the events it creates on a connected machine.** Sections 3 and 4
+   each create a real event, approved by a real click. Those are the employer's. A test that reached
+   into somebody's calendar to tidy up after itself would hold a wider licence than the feature it
+   tests. The disposable probe event belongs to `google_hands_proof.mjs`, which creates and destroys
+   its own.
+6. **`deck_proof`'s panel assertion went from six ids to seven** — a sanctioned same-commit selector
+   update, with the reading rationale extended to match.
+7. **The derived-blank mechanism is keyed on parameter names and never enters the slot**, so the
+   rows stay verbatim and `tools_live`'s verbatim assertion stays true while the sentence carries a
+   human reading.
+8. **`{preview}` was removed rather than the check being weakened.** §22.7. The standing privacy
+   law outranks the mandate's phrasing of a card detail, and the body is still shown in full where
+   it belongs — on the card, not in the room.
+9. **The unreadable-stamp case became an outright refusal** rather than a card with a blank in it.
+10. **`calendar.json` was left on disk.** Retired as a backend, named nowhere in the hand's code,
+    and the mandate says the boss may delete it — so that is his to do.
+
+### 22.12 · Left open
+
+- **The consent click.** One press of `Connect Google` in the Command Panel, one account chosen, one
+  consent screen read. Everything downstream is built and proved as far as it can be without it.
+- **The two probe transcripts**, §22.10, which arrive with that click.
+- **The one real send.** The reserved Gmail round trip, now against the real API rather than an app
+  password, is still the employer's to make by hand.
+- **The two by-hand Calm Sky checks**, unchanged.
+- **The documented watch-capture gap** in `README.md`, still documented.
+- **`routing_proof`'s ear-throttle red** and **`salutation_proof`'s 0.60-threshold red**, both named
+  environmental/pre-existing and untouched by instruction.
+- **`calendar.json`** sitting inert in the project root, for deletion whenever he likes.
+- **The client secret is in this session's transcript on disk.** It was pasted into the conversation,
+  and that transcript is a file on this machine. For an installed-app client, Google's own
+  documentation and RFC 8252 both decline to treat that secret as confidential — PKCE is what
+  protects the exchange — so rotation is optional rather than urgent. It is recorded here because a
+  thing like that should be written down by whoever noticed it, not discovered later by somebody
+  else. The separate and older matter stands unchanged: **`config.json` is in the Trone git
+  history**, untracked now but never purged, and those keys want rotating before that repository is
+  ever shared.
+
+---
+
+## 23. The ear that keeps listening, the quiet tongue, and the stack that fits
+
+Four pieces of work, and they are not equal. Two of them cured something. One of them looked for
+something and did not find it, and says so. One of them is a hardening that was asked for rather
+than diagnosed, and it is labelled as such here rather than dressed up as a repair.
+
+The order below is the order the mandate set, because the mandate had the order right: the dump
+comes before the cure, and no line of the cure was written until the dump had been read.
+
+### PART 0 — The state dump: what the ear actually did
+
+**The instrument.** `ear_dump.mjs` drives one Open Ear session on a headed browser with a real
+room, one click, no refresh, while `utter.py` speaks six sentences of four to eleven words into
+the microphone. It logs, per turn: the recognition lifecycle in wall-clock offsets, the count of
+finals and interims, the VAD floor at the arm and at its highest, the acoustic gate's output-RMS
+reference at the arm and at its loudest, every gate open and shut edge, and the words spoken
+against the words heard. It also keeps one flat timeline of every event the recogniser emitted for
+the whole session, in order, which turned out to be the most useful thing in the file.
+
+**The dump.**
+
+```
+turn  said  heard     %  arms  fin  int  sentence
+ 1       4      5  125%     1    1    9  tell me about coffee
+ 2       7      7  100%     1    1   13  what do you know about the roaster
+ 3       9      9  100%     1    1   22  and what did i write about the grinder exactly
+ 4       5      5  100%     1    1    9  and who exactly am i
+ 5      11     11  100%     1    1   21  tell me everything the notes say about brewing coffee at home
+ 6       8      8  100%     1    0   14  what else is in there about the beans
+```
+
+```
+the shape        : opened 1 · turns 6 · arms 6 · rearms 4 · sealed 8 · sealExpired 0
+                   hardErrors 0 · bargeIns 1
+the floor at end : 0.00882 over 6556 frames        (VAD_OFF 0.018, VAD_ON 0.035)
+the gate at end  : open false · opens 0 · ratio 0.56 · input 0.0134 · output 0.0048
+the echo law     : dropped 0 · passed 85 · layer1 0 · layer2 0
+the browser's own: built 1 · starts 6 · stops 6 · aborts 0 · live 1 · finals 5 · interims 88
+                   errors []
+```
+
+**THE VERDICT: NOT REPRODUCED.** Six turns for six, in one session, no refresh, every turn at or
+above its whole word count. The collapse the mandate sent me to find is not in this dump, and
+there is therefore no "before and after" for it — the before is the after. That is the finding,
+and it is reported as a finding rather than converted into a repair, because a fix applied to this
+table would have been a guess with a table stapled to it as cover.
+
+The mandate named four candidate mechanisms and asked for each to be checked. Each is cleared by a
+specific line of the dump, not by the pass count:
+
+**(a) A stale output-RMS reference or a stuck `speakDraining` leaving the Echo gate half-closed —
+CLEARED.** `flags@arm` reads `draining=false queued=0 busy=false sealed=false` at all six arms; the
+gate's output reference reads `0 at the arm (from none)` at every arm, with `0 frame(s) with the
+engine speaking`; `gate edges : 0 open, 0 shut` on all six turns. The gate was neither half-closed
+nor closed. There was nothing stale to be stale, because the reference was being zeroed and
+re-provenanced at each arm.
+
+**(b) VAD noise-floor drift firing speech-end after the first word — CLEARED, and with room to
+spare.** The floor at the arm ran 0, 0.00586, 0.00408, 0.00215, 0.00161, 0.00415, and at its
+highest within a turn never exceeded 0.01221. `VAD_OFF` is 0.018 and `VAD_ON` is 0.035, so the
+measured floor stayed below the *lower* gate on every frame of every turn — a factor of roughly
+1.5 to 11 of headroom. `VAD : 1 speech start(s), 1 end(s)` per turn: one start and one end, not the
+several ends that a floor riding up into the gate would produce. The input peak on turn 1 was
+0.39338 against that floor, which is the margin the design assumes.
+
+**(c) A recognition stop/start restart race handing the new instance only the tail — CLEARED,
+decisively.** `built 1` for the whole session: one `SpeechRecognition` object served all six turns.
+`starts 6, stops 6, aborts 0`. The flat timeline shows the full cycle every time, in order and
+never overlapping — `.start()` → `start` → `audiostart` → `soundstart` → `speechstart` → interims →
+`.stop()` → `speechend` → `soundend` → `audioend` → `FINAL` → `end` → `.start()`. There is no point
+in the file where a `.start()` appears before the previous `end`. A race needs two instances or an
+overlap, and the dump has neither.
+
+**(d) Interim/final handling stopping at the first final — CLEARED, and the opposite is what
+happens.** Turn 3 shows `1 final, 22 interim · 3 late word(s) sealed off`; turn 5 shows an interim
+arriving *after* `audioend` and then the final after that, and both were kept. Turn 6 is the sharp
+case: `0 final, 14 interim`, `flushed by : the room went quiet carrying 8 word(s)` — eight words
+out of eight, with no final ever arriving. Far from stopping at the first final, the ear does not
+require a final at all. `sealed 8, sealExpired 0` across the session: eight late words sealed, none
+lost to the seal timing out.
+
+**Two corrections the instrument needed before its output could be believed.** Both were defects in
+my own measurement, and both are the kind that produce a confident wrong answer rather than an
+error:
+
+- *The 16-second patience limit in `mouth.settledArm`.* The first version waited a fixed interval
+  for the arm to settle and then reported what it found. On a turn where the answer ran long, that
+  interval expired while the page was still legitimately busy, and the dump recorded "did not
+  re-arm" for a turn that re-armed a second later. The instrument was measuring its own patience
+  and printing the result as a property of the ear.
+- *Reading `__galaxy.ear.dump` mid-session rather than after it.* The per-turn block is read after
+  the session for a reason: read mid-session, the arm being described is the one currently open, so
+  its `end`, its final and its seal have not happened yet, and every turn reports as though it had
+  been cut short. The first run produced exactly that shape — a clean session that looked like six
+  truncations — and it would have been very easy to name a mechanism from it.
+
+**Two observations left unexplained, and left visible.**
+
+- *Turn 1 heard five words for a four-word sentence — 125%.* The timeline says what happened: the
+  recogniser's cold start emitted `interim "Honey"` before the speaker had said anything, and every
+  subsequent interim carried it — `"Honey tell me about coffee"`. The **final for that turn was
+  clean**: `FINAL "Tell me about coffee"`, four words, exactly right. The page kept the longer
+  accumulated interim text, which is correct behaviour for turn 6 (where no final ever came) and
+  wrong here. It is not word loss; it is a hallucinated leading word surviving a mechanism built to
+  rescue trailing ones. It costs nothing in this dump — the vocative peel would eat a leading
+  "Honey" anyway, which is very likely why nobody has noticed — but the asymmetry is real and it is
+  written down here rather than smoothed over.
+- *`bargeIns: 1` with `gate opens: 0`.* One barge-in was counted in a session where the acoustic
+  gate never opened, and where `echo law : dropped 0, layer1 0, layer2 0` says nothing was refused.
+  Nothing was lost to it: `hardErrors 0`, every turn at 100%, no audio discarded. But the barge-in
+  counter and the gate's own ledger disagree about whether a barge-in occurred, and exactly one of
+  them is right. Not chased, because chasing it was not the mandate and it cost the session nothing;
+  named, because a counter that can disagree with its own gate is how a future dump gets misread.
+
+### PART 1 — The reset contract
+
+`armReset()` is one function, called at every re-arm path, and a comment above it names its
+callers. At each arm it zeroes the acoustic gate's reference **and its provenance**, re-reads the
+funnel's draining and queue flags and clears them if they are stale, opens a fresh 300 ms window in
+which the VAD floor is re-sampled from silence, makes the recognition lifecycle explicit, and
+leaves `arm.state` to exactly one writer, `armSet()`. Preflight check 24 holds all seven of those
+clauses, including that `armReset()` writes neither the gate's hold nor the funnel's flags
+(`echo.gateAt`, `echo.gateOpens`, `speakDraining`, `speakQueue` are read-only to the contract — the
+hold in particular must survive, because `echoGateWatch` deliberately does not clear it when TTS
+stops), and that the sampled floor stays a *measurement*: `VAD_OFF` and `VAD_ON` are read as
+literals and neither is derived from it.
+
+**This is a prescribed hardening and not a repair, and it should be recorded as one.** The dump
+cleared mechanisms (a), (b) and (c) by evidence. Nothing in PART 0 says the ear was failing to
+reset. What PART 1 buys is that the six-turn claim in PART 2 is now structural rather than lucky:
+before it, "the flags happened to be clean at all six arms" was an observation about one session;
+after it, it is a contract with a check behind it. That is worth having. It is not a cure, because
+there was no disease in evidence.
+
+**One thing in this part *is* evidence-named, and it was found in PART 2's own output.**
+`conversation_proof`'s reset-contract note printed `recogStarts: 12, recogEnds: 15` — ends leading
+starts by three. `armRead()` derived its `'stopping'` state from `recogStarts > recogEnds`, and
+section 3c of that harness drives three hard network faults; a session that never reaches `onstart`
+still fires `onend`, so the two counters drift permanently by one per fault. With ends ahead of
+starts the subtraction can never be positive again, `'stopping'` becomes unreachable for the rest
+of the tab's life, and `arm.races` is pinned at zero **by arithmetic instead of by conduct**. A
+restart race after a fault — precisely when a restart race is most likely — would have been
+invisible, and the harness would have printed "0 restart races" as though it had looked.
+
+The fix is a per-instance boolean, `ear.recogLive`, set after `recogniser.start()` returns and
+cleared in `onend`. One edge sets it, one edge clears it, neither counts, so it cannot drift.
+`recogStarts` and `recogEnds` stay in the probe as what they always were — a record, not a state
+machine. It is set *after* `start()` returns rather than before, so that the `InvalidStateError`
+throw leaves the flag reading what it already read, which in that case is `true`, because the reason
+`start()` threw is that the previous session has not ended yet.
+
+### PART 2 — The longevity proof
+
+`conversation_proof.mjs` section 9: six turns, one session, one click, no refresh.
+
+```
+turn  said  heard    %   arm  reset  why the turn ended     the sentence
+1     5     5      100%  1    1      the recogniser's own pause   what is the web gate
+2     8     8      100%  1    1      the recogniser's own pause   and what does the third door actually do
+3     7     7      100%  1    1      the recogniser's own pause   tell me about the antecedent memory again
+4     4     4      100%  1    1      the recogniser's own pause   and who am i
+5     13    13     100%  1    1      the recogniser's own pause   tell me everything you know about how the web gate scores a source
+6     8     8      100%  1    1      the recogniser's own pause   what else is worth knowing about the doors
+--------------------------------------------------------------------------
+6 turns   45 words in   45 words kept   100%
+```
+
+Against a 90% floor per turn, and a three-word floor for any sentence of four or more: the smallest
+turn arrived with four words out of four. `ONE RESET PER ARM ACROSS ALL SIX TURNS: 6 arms, 6
+resets` — the contract runs once per arm and not once per *request* to arm, which is a different
+number and the one that would betray a double-reset. `0 restart races` and `0 arms that found the
+funnel still draining after its own cancel` — and those two zeros now mean something, per PART 1.
+`armRead()` and the stored `arm.state` agree on the word `"live"`; two answers there would mean a
+second writer, which is what preflight 24 forbids.
+
+The end-of-session contract reads
+`{resets 7, races 0, staleFlags 0, floor 0, floorSamples 6, floorVoids 0, loudRoom false}`. Seven
+resets to six arms because the session's opening arm is one of them. The acoustic half of the
+longevity claim is `ear_dump.mjs` and stays there; this section is the word-count half and says so
+in its own footer, so that nobody reads a 100% here as a statement about microphones.
+
+### PART 3 — The quiet tongue
+
+One normalization function, `tongueNormalize`, on the audio bus only. Three rules:
+
+1. Markdown `*`, `_`, `#` and single backticks come out; the words behind them are untouched.
+2. An unspeakable token — a run of 12 or more letters-and-digits — is replaced in the **spoken**
+   line by the plain phrase *"the reference is in the card"*.
+3. Two such tokens in one breath collapse to one phrase rather than saying it twice.
+
+The eight strings, straight from the harness:
+
+```
+min: 12 · line: "the reference is in the card"
+bold  : "Yes sir, that is quite right."
+marks : "A heading with code and italics."
+id    : "The event is the reference is in the card, sir."
+words : "Your understanding of the extraordinary transcription."
+many  : "Ids the reference is in the card."
+digits: "The number the reference is in the card is in there."
+short : "Short ones like abc123 stay."
+```
+
+**The before and after, out loud.** The fixture is 257 characters over three sentences, deliberately
+long enough that the funnel cuts it in two and the id lands on a chunk the lookahead fetches before
+the pump reaches it:
+
+```
+queued : Yes sir, that is *quite* right, and I have put the whole of it on the card for you. The
+         reading is deliberately plain, because an identifier spelled out loud is nine seconds
+         nobody wanted. The event id is 7s0h4k9m2n3p5q6r8t1v, and it is on the card in full.
+spoken : Yes sir, that is quite right, and I have put the whole of it on the card for you. The
+         reading is deliberately plain, because an identifier spelled out loud is nine seconds
+         nobody wanted. The event id is the reference is in the card, and it is on the card in full.
+caption: Yes sir, that is *quite* right, ... 7s0h4k9m2n3p5q6r8t1v, and it is on the card in full.
+ledger : Yes sir, that is *quite* right, ... 7s0h4k9m2n3p5q6r8t1v, and it is on the card in full.
+```
+
+One string in, two different strings out, on purpose — and that is the whole claim, because either
+half alone is easy. Zero asterisks reached the engine; not one character of the twenty-character id
+is in what was spoken; the caption is the raw line character for character with `up === true`; the
+ledger (`__galaxy.speech.said`) records what the page was *asked* to say, so the brain, the scribe
+and every harness reading it still see the id.
+
+**Where the function sits, and why it is not a line in the pump.** `speakPiper` prefetches — up to
+`SPEAK_AHEAD_CAP = 3` chunks the pump has not reached. Normalizing in the pump would have left
+every prefetched chunk raw, which is exactly the chunk an id tends to land on. So it is a memoised
+accessor at the engine/fetch boundary: `spoken` is `null` until a chunk is first about to become
+audio, and the assertion "every one of the 2 chunk(s) carries a spoken form" is a statement about
+that seam and not about the text.
+
+**The discretion decision in this part, and the reason.** The mandate's literal rule is
+"alphanumeric tokens of 12+ characters". Taken literally, the butler says *"the reference is in the
+card"* in place of *understanding*, *extraordinary* and *transcription*. The implemented rule
+therefore requires a digit as well as the length, and that guard carries its **own** assertion in
+`voice_proof` rather than riding along inside rule 2 — because it is the case a future edit is most
+likely to break by "simplifying" the rule back to the mandate's words. A 12+ character English word
+is common; a 12+ character mixed-case-and-digits token is an identifier.
+
+**One reading problem this part does not solve.** The phrase reads well in the middle of a sentence
+and less well at a clause boundary — *"The event id is the reference is in the card, and it is on
+the card in full"* has two "is"es doing different jobs. It is still enormously better than nine
+seconds of spelling, and the card carries the truth, so it ships. Naming it because the next person
+to touch this will hear it too.
+
+### PART 4 — The stack that fits
+
+The Layout Governor already owned the well; now it owns vertical space on the same terms. Its
+declared numbers:
+
+```
+STRIP_H  34    the collapsed minutes strip's floor
+GATE_MAX 560   the gate card's ceiling, matching the 560 in --answermax
+GATE_MIN 180   a guard against a viewport nobody has measured
+```
+
+**Why height was never governed before.** `#brain` is anchored at the **bottom**, so the column
+grows upward. Overflow is therefore lost off the **top** of the window, behind the telemetry rail,
+where nothing scrolls and no scrollbar ever appears to admit that anything is missing. A question
+with Yes and No on it can be entirely off screen while the page looks composed. That is the defect
+this part was written for, and at 1280×860 the instrument reproduces it as a number: the column
+*wanted* 826px in a 792px budget.
+
+**The precedence order is the design contribution.** With three transient surfaces live, they yield
+in this order, and the order is the point:
+
+1. **The caption, first and unconditionally**, because it is the only surface here whose content is
+   duplicated somewhere else on screen — the gate's spoken line is already on the card. Saying it
+   twice is noise that costs a line the card needs. It goes `display:none` and not `opacity:0`,
+   because the whole point is the height.
+2. **The minutes, second, down to their head** — a transcript is a record being taken, and a record
+   can be read afterwards, whereas a gate expires. The strip *is* the panel with two children
+   hidden, so there is no second markup to drift out of step; `display:none` and not
+   `visibility:hidden`, because a scroll container that is merely invisible still takes the wheel.
+3. **The gate card, last and only then**, and it yields by **scrolling**, never by losing its
+   buttons.
+
+Capping the gate first would have been the easy implementation and it is the wrong machine: it makes
+a human scroll inside a card to read parameters they are about to approve, while a caption repeating
+a sentence they can already see holds the room the card wanted.
+
+**The existing law this was reconciled with rather than overridden.** `viewer/index.html:749-757`
+deliberately clamps the prose and *not* the card, on the grounds that "a confirmation gate you have
+to scroll down inside a panel to find is a worse defect than a tall panel." Both hold: the **card**
+takes the max-height, the **prose and `#ask-rows`** take the internal scroll, and `.pair` is
+`flex:0 0 auto` so Yes/No are the last thing in the card that can ever lose room. Every link in the
+flex chain carries `min-height:0`, because one missing one silently voids the cap.
+
+The governor measures the column **uncapped first**, so `wanted` is its true demand; reading it with
+last frame's cap still on would hand the card back its own clamp and the number would never widen
+again. And it caps when the column overflows whether or not a gate is open, because "nothing clipped
+above or below" is not a promise that only holds during a proposal.
+
+**The triple-surface plates.** Gate open (a six-parameter calendar proposal with a three-sentence
+description), minutes panel live with a rolling transcript, caption active — at three viewports.
+Plates: `layout-triple-1280x860.png`, `layout-triple-1600x900.png`, `layout-triple-1920x1080.png`.
+
+```
+viewport     budget  wanted  height  gate top  rail  gate h  cap bound  strip   transcript→strip
+1280 x  860     792     826     711       123    30     560   yes (=560)   34    146 → 34  (112px)
+1600 x  900     832     596     596       279    30     463   no           34    260 → 34  (226px)
+1920 x 1080    1012     521     521       533    30     388   no           34    251 → 34  (217px)
+```
+
+At every width: the gate's top edge is ≥ 0 and ≥ the telemetry rail's bottom; Yes and No are fully
+on screen **and hit-testable** — `elementFromPoint` at each button's own centre returns the button
+and not the vignette over it, and neither is disabled (Yes/No at [101,648], [261,706], [421,886]);
+none of the ten surfaces in the column has a top < 0 or a bottom > `innerHeight`; and the document
+does not scroll vertically — `scrollHeight` equals `clientHeight` and a real `scrollTo(0,400)` left
+it at 0. Closing the gate restores all three: strip back to 240 / 260 / 251 px of column, the
+caption regains a rectangle, and `vbudget.gateOpen === false && captionOff === false`, so the budget
+is a state and not a one-way door.
+
+**The strip is `min-height` and not `height`, and the first measurement earned that choice twice
+over.** It came back **49px** at 1280 and 1600 against 34 at 1920. A flat `height: 34px` would have
+clipped the word MINUTES. But the assertion behind it read `h > 0` against "a declared floor of 34",
+and a floor is satisfied by anything above it — so a strip that was quietly **two lines** at every
+width where the note panel narrows the column (which is every width the fixture actually cares
+about) was reported green. Nothing was wrapping at the flex level; `nowrap` is already the default.
+The *text inside* the two children was wrapping, because a flex item may shrink below its content
+width and then break, and at 312px the label and the meta together want about 350.
+
+So in strip mode both children refuse to break, and the one that gives way if something must is the
+**label** — the panel it labels is visibly the minutes panel, whereas the timer, the chunk count and
+the word count are the three things on it that cannot be got from anywhere else and are the reason
+it stays on screen at all. The letter-spacing comes off too: `.2em` over eighteen characters is
+about 38px of pure air. The numbers are never the ones that go. The strip now measures **34px at
+all three viewports**, still carrying `"0:00 · 0 chunks · 38 words"`, and the assertion reads
+`h <= STRIP_H + 1` so that a second row can never again pass as one.
+
+**Three probe seams were added, each with its limit written into its comment**, because the
+alternative — driving a real model at three viewports — is a layout proof that fails on a slow
+afternoon. `__galaxy.hands.paint` calls the real `showProposal`, so the rows, the label, the amber
+card, the vignette and the countdown are production's; but a proposal painted this way carries no
+slot the server issued, so Yes on it has nothing to execute. What is exposed is a way to draw the
+question. `__galaxy.scribe.up/append` open no stream and leave `scribe.on` false, so the Scribe's
+privacy law is untouched because there was never any audio.
+
+### PART 5 — Regression, and the two defects the round found in its own instruments
+
+Every standing harness, against `_runs/after/BASELINE_23.txt`. Sequential, solo, quiet, `port_proof`
+last.
+
+```
+harness              baseline (round start)        now                          verdict
+desk_proof           44 checks, 0 failed           44 checks, 0 failed          at baseline
+layout_proof         95/95 PASS                    150/150 PASS                 +55  (PART 4)
+followup_proof       47/47 PASS                    47/47 PASS                   at baseline
+salutation_proof     26/34 FAIL (named)            26/34 FAIL (same 8)          unchanged, named
+capabilities_proof   16/16 PASS                    16/16 PASS                   at baseline
+persona_proof        19/19 PASS                    19/19 PASS                   at baseline
+nudge_proof          21/21 PASS                    21/21 PASS                   at baseline
+deck_proof           224/224 PASS                  224/224 PASS                 at baseline
+focus_probe          PROBE 26/26 + 85, 0 failed    PROBE 26/26 + 85, 0 failed   at baseline
+voice_proof          133/133 PASS                  145/145 PASS                 +12  (PART 3)
+conversation_proof   104/104 PASS                  114/114 PASS                 +10  (PART 2)
+routing_proof        64/65 FAIL (throttle, named)  65/65 PASS                   better than baseline
+echo_proof           49/49 PASS                    49/49 PASS                   at baseline
+console_proof        30/30 PASS                    30/30 PASS                   at baseline
+scribe_proof         59 checks, 0 fail             59/59, 0 fail                at baseline
+brain_live           33 checks, 0 failed           33 checks, 0 failed          at baseline
+eyes_live            56 checks, 0 failed           56 checks, 0 failed          at baseline
+tools_live           54/54 PASS                    54/54 PASS                   at baseline
+lock_proof           77 checks, 0 failed           77 checks, 0 failed          at baseline (1st try)
+google_hands_proof   27/27 PASS, 2 skipped         24/24 PASS, 2 skipped        different branch
+preflight            20 pass, 0 fail, 3 warn       21 pass, 0 fail, 3 warn      +1  (check 24)
+port_proof           24 checks, 0 failed           24 checks, 0 failed          at baseline, last
+```
+
+`echo_proof` at 49/49 is the re-run the mandate asked for specifically: the acoustic gate changed in
+PART 1, and self-hearing must not come back with it. It did not.
+
+`routing_proof` came in **better** than baseline — 65/65 against a recorded 64/65. The baseline
+failure was the cloud recognition throttle, which is a property of the afternoon and not of the
+code. An improvement that nobody engineered is not evidence of anything and is recorded as such.
+
+**`google_hands_proof`'s counts are not comparable, and the reason matters.** The baseline row was
+recorded on a machine with no Google grant, so the harness took its refusal branch — "absent", "no
+road to the calendar yet", "nothing to disconnect". This machine now has a grant, so sections 6 and
+7 take the **real API** branch instead: insert, get and delete a real Calendar event, create, read
+and delete a real Gmail draft. Different assertions, hence 24 rather than 27. Both runs skip 2, and
+a skip is not a pass.
+
+**Defect 1, found by PART 3 and fixed: a probe getter is an interface.** The first version of
+`__galaxy.voice.chunks` returned the six fields the tongue fixture needed. That quietly took
+`start`, `end`, `source`, `silent`, `secs` and `bytes` away from every **other** reader, and sixteen
+assertions with nothing to do with normalization failed at once — reporting "0 chunks" for a read
+that had in fact played 93 seconds of correct audio, with the concatenation matching the input
+character for character and 13 `/say` requests for 13 chunks. They were not wrong; they were reading
+`undefined` off a row that used to carry the timings. `spoken` is now an **addition** to that row
+and never a substitution for it. The failure mode to keep: a probe getter has existing callers, so a
+field is added, never swapped in.
+
+**Defect 2, found by this round's regression sweep and fixed: an assertion that was wrong about
+Google rather than about the code.** `google_hands_proof` demanded a 404 from `events.get` after
+deleting the probe event. It was written beside the Gmail draft check, where a deleted draft really
+does 404, and the shape was carried across to Calendar, where it does not hold. Measured directly on
+this machine: insert 200, delete 204, and then `events.get` answers **200 with `status: "cancelled"`
+and a full body**, because a deleted event stays retrievable as a tombstone so that subscribers can
+learn it was cancelled. Demanding a 404 there asserts a promise Calendar never made — and it failed
+the first time a machine had a grant to reach the real API with, which is exactly the moment a
+harness is being trusted. The assertion now accepts 404, 410, **or** a 200 whose state word is
+`cancelled`, and it reads that word rather than inferring it from the code — because the failure
+mode the old line caught and must not lose is an event left **live** in the diary, a 200 still
+reading `confirmed`. A 200 with no state word at all is refused.
+
+`preflight.py` gained check 24, *a turn resets once, and one hand writes the arm*, with seven
+clauses: the four functions are declared; `arm.state` is assigned exactly once in the file and
+inside `armSet()`; `armRead()` assigns nothing so it stays safe to call from anywhere; there is one
+`recogniser.start()` and one `armReset()`, and the reset runs first inside `startListening()`;
+`armReset()` zeroes the gate reference and its provenance, clears the over-window and opens a fresh
+floor window; it writes neither the gate's hold nor the funnel's flags; and the floor stays a
+measurement, sampled over 300 ms, with `VAD_OFF` and `VAD_ON` read as literals. Mutation-tested in
+both directions. `21 pass, 0 fail, 3 warn`, exit 0 — the three warns are the known routine ones.
+
+### The discretion decisions of this round, with reasons
+
+- **PART 0 was reported and not repaired.** The dump cleared all four named mechanisms by evidence.
+  The mandate's own instruction — *"if none, report the dump as a finding — no guess-fixes"* —
+  covers this exactly, and it is the decision I am most confident of.
+- **The two unexplained observations were written down rather than chased or dropped.** The turn-1
+  leading "Honey" and the `bargeIns: 1` against `gate opens: 0` each cost this session nothing, and
+  neither was the mandate. Both are the kind of thing that causes a future dump to be misread, so
+  they are named above with their evidence lines.
+- **PART 1 is labelled a hardening, not a cure.** It would have been easy and flattering to present
+  the reset contract as the fix for PART 0. It is not, and the record says so.
+- **The `recogLive` change was made even though nothing asked for it**, because it came out of PART
+  2's own printed output and it meant a zero in my own instrument was arithmetic rather than
+  conduct. An instrument that cannot fail is not evidence.
+- **The id rule requires a digit as well as a length**, against the mandate's literal wording, so
+  the butler does not read "understanding" as an identifier — and that guard carries its own
+  assertion so a later simplification cannot quietly undo it.
+- **Three paint-only probe seams** rather than driving a real model at three viewports, each with
+  its limit in its comment, because a layout proof that depends on a model is a layout proof that
+  fails on a slow afternoon.
+- **The gate takes the cap and the prose takes the scroll**, honouring both the mandate's
+  max-height and the older law at `viewer/index.html:749-757`, rather than overriding one with the
+  other.
+- **The strip's assertion was tightened after it had already passed.** Reporting 49px beside "a
+  declared floor of 34" and calling it green was the round's own near-miss; the fix was to the CSS
+  *and* to the assertion, because the first without the second leaves the next regression invisible.
+- **One extra Calendar tombstone exists in the diary** from the direct probe that diagnosed Defect
+  2 — created and deleted inside that probe, and cancelled like the harness's own. Named because
+  anything that touches a real account should be said out loud.

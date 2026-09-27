@@ -95,6 +95,14 @@ import search as websearch
 # no tool outside tools/registry.json exists, and nothing runs without a human word.
 import hands
 
+# THE GOOGLE GRANT. The OAuth loopback flow, the token on disk and the two APIs the
+# hands reach through. It is imported here for exactly one purpose - the state line and
+# the two buttons in the Command Panel - and NOT to pass a credential anywhere: the
+# tools read the token themselves, server-side, and the only Google facts that ever
+# cross the wire to the browser are the ones google_api.status() is willing to say out
+# loud, which are booleans, the account's own address, and a twelve-character digest.
+import google_api
+
 
 # THE ONE WIRE BETWEEN THE TIMER AND THE HANDS, and it points this way on purpose.
 #
@@ -5638,6 +5646,24 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 "pending": state["pending"], "busy": state["busy"],
                 "ttlS": state["ttlS"], "error": state["registryError"]})
 
+        if route == "/google":
+            # THE STATE LINE, and every field in it has been chosen for what it does NOT
+            # say. `connected`, `state`, `email`, `scopes`, `port`, `tokenDigest` - no
+            # access token, no refresh token, no client secret, not even their lengths.
+            # The email is here because a state line reading CONNECTED with no account is
+            # an invitation to send mail from the wrong one; the digest is here so a
+            # harness can prove the token CHANGED across a reconnect without ever seeing
+            # a byte of it. `pending` says whether a consent window is open, which is the
+            # only way the page can know to keep asking.
+            #
+            # `consent` and not `pending`: status() already spends that name on the state
+            # WORD, and the page polls this route - a key that is a string on one read
+            # and an object on the next is how a panel starts rendering "[object
+            # Object]".
+            return self._send_json(200, dict(google_api.status(), ok=True, kind="google",
+                                             nodes=[], answer="",
+                                             consent=google_api.pending()))
+
         if route == "/brains":
             # What the chip's menu is built from. The BUTTON must not be able to
             # offer a model the voice would be refused, so the menu is this list and
@@ -6315,6 +6341,56 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             return self._send_json(200, dict(casting_state(cfg), ok=True,
                                              kind="voices", nodes=[], answer="",
                                              wrote=payload))
+
+        if route == "/google":
+            # TWO COMMANDS AND NO THIRD. {"cmd": "connect"} opens Google's consent page
+            # in the employer's own browser and starts the loopback catcher; {"cmd":
+            # "disconnect"} deletes the token and says so. There is deliberately no
+            # command that takes a code, a token or a scope from the page: everything
+            # secret arrives at the loopback port from Google directly, in a process the
+            # browser cannot address, and a route that accepted a token would be a route
+            # that could be handed a forged one.
+            #
+            # connect() returns the instant the browser is open, because consent takes as
+            # long as a human takes and a blocked request handler would wedge the panel
+            # for five minutes. The page then polls GET /google until the word changes.
+            data = self._read_json(2 * 1024)
+            if not isinstance(data, dict):
+                return self._send_json(400, {
+                    "ok": False, "kind": "google", "nodes": [], "answer": "",
+                    "error": "Send a JSON body like {\"cmd\": \"connect\"}."})
+            cmd = str(data.get("cmd") or "").strip().lower()[:16]
+            if cmd == "connect":
+                started = google_api.connect(background=True)
+                opened = bool(started.get("opened"))
+                if started.get("state") in ("no-client", "error"):
+                    return self._send_json(400, dict(google_api.status(), ok=False,
+                                                     kind="google", nodes=[],
+                                                     answer="", error=started.get("why"),
+                                                     consent=google_api.pending()))
+                return self._send_json(200, dict(
+                    google_api.status(), ok=True, kind="google", nodes=[],
+                    answer=("I have opened Google's consent page, sir. Choose the account "
+                            "you want me to work from, and I shall wait here."
+                            if opened else
+                            "I could not open a browser, sir - the consent link is in the "
+                            "server's own log."),
+                    opened=opened, consent=google_api.pending()))
+            if cmd == "disconnect":
+                gone = google_api.disconnect()
+                return self._send_json(200, dict(
+                    google_api.status(), ok=True, kind="google", nodes=[],
+                    answer=("The token is deleted, sir, and Google has been told to forget "
+                            "it as well." if gone.get("revoked") else
+                            "The token is deleted, sir. Google could not be reached to "
+                            "revoke it, so do that from your account page if it matters."
+                            if gone.get("had") else
+                            "There was nothing to disconnect, sir."),
+                    forgot=bool(gone.get("had")), revoked=bool(gone.get("revoked")),
+                    consent=google_api.pending()))
+            return self._send_json(400, {
+                "ok": False, "kind": "google", "nodes": [], "answer": "",
+                "error": "The only commands are connect and disconnect."})
 
         if route == "/model":
             # {"say": "switch to Astra"} - the spoken phrase IS the interface, so the

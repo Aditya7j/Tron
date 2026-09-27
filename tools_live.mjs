@@ -19,19 +19,22 @@
  *   1. type "remind me to call the client at four" into the box, with the keyboard
  *      -> the Yes/No pair appears, carrying the EXACT parameters, read back out of the
  *         rendered DOM rather than out of the reply
+ *      -> the ROWS carry the ISO stamp that will travel; the SENTENCE carries the human
+ *         reading of that same stamp, and its duration, out loud
  *      -> the proposal is SPOKEN, and it is the registry's sentence
  *      -> the countdown is running
  *   2. click No
- *      -> the refusal is spoken, the pair goes away, and calendar.json on disk is
- *         byte-for-byte what it was. Nothing ran.
+ *      -> the refusal is spoken, the pair goes away, and the LEDGER records no run at
+ *         all. Nothing was started.
  *   3. ask again, click Yes
- *      -> the SCRIPT'S OWN STDOUT is spoken, calendar.json has gained exactly one
- *         entry, and that entry is the one the screen showed
- *      -> the ledger's ok count for the tool moved by exactly one
+ *      -> the SCRIPT'S OWN STDOUT is spoken, and the ledger records exactly one run
+ *      -> which sentence that is depends on this machine: connected, it is Google's
+ *         receipt with Google's own event id; unconnected, it is the script's refusal
+ *         naming the missing road. Both are strings only the SCRIPT knows.
  *   4. ask by voice, confirm by voice ("yes, go ahead")
  *      -> the same again, through the door a microphone uses
  *   5. ask by voice, then change the subject
- *      -> the proposal is let go with a line, and the diary does not grow
+ *      -> the proposal is let go with a line, and the ledger records no run
  *   6. THE SPOKEN DIAL: ask by voice to be recast in the voice ALREADY IN FORCE, and
  *      confirm by voice
  *      -> the card reads current beside requested, the hand runs, and the sentence that
@@ -46,8 +49,15 @@
  * it already says. The refusals (an unknown name, a voice that is not on this disk, a
  * missing field) are HTTP-shaped and preflight check 16 clause (h) owns them.
  *
- * The diary is put back exactly as it was found at the end of the run, because a test
- * that leaves three appointments in your calendar is a test you stop running. config.json
+ * WHAT THIS HARNESS WRITES: nothing. It used to restore calendar.json at the end, because
+ * the calendar hand appended to it; that hand now calls Calendar API v3 and the file is
+ * retired, so this file reads it once and asserts it was never touched. The one thing that
+ * follows from that is worth saying plainly: on a machine WITH a Google grant, section 3
+ * and section 4 each create a real event in the employer's real calendar, approved by a
+ * real click, and this harness does not delete them - they are his, and a test that
+ * reached into somebody's calendar to tidy up after itself would be a test with a wider
+ * licence than the feature it is testing. The disposable probe event, created and deleted
+ * inside one run, belongs to google_hands_proof.mjs. config.json
  * is NOT backed up and NOT restored: this harness has no business writing to the file
  * that holds this machine's credentials, so instead of undoing a change it proves there
  * was nothing to undo. Values are never read into a claim - only the key count, and a
@@ -56,7 +66,10 @@
  * Usage:  python server.py 2> server-trace.log   then   node tools_live.mjs
  */
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+/* writeFileSync and unlinkSync are gone from this list on purpose: with calendar.json
+   retired there is nothing left for this harness to write or delete, and an import it does
+   not need is an invitation to start writing again. */
+import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -64,7 +77,17 @@ import { join } from 'node:path';
 const GALAXY = 'http://127.0.0.1:4700';
 const PORT = 9231;
 const CDP = 'http://127.0.0.1:' + PORT;
-const CALENDAR = 'calendar.json';
+/* calendar.json IS NOT HERE ANY MORE, and its absence is the point of this comment.
+   Until this round the calendar hand appended a line to that file, so the witness for
+   "the gate held" was the file's length: No left it alone, Yes made it longer. The hand
+   now calls Calendar v3 events.insert, so there is no local file to count - and a harness
+   that counted one would be counting a fossil.
+   The witness is therefore the LEDGER, which is a better one and always was: it is the
+   machine's own record of runs, it distinguishes ok from failed from refused, and it
+   cannot be satisfied by a script that wrote a file without being asked. See runs() below.
+   The one thing it does NOT witness is what the hand did to the world - so the sections
+   below read GET /google and assert the two different true outcomes: with no token, the
+   script's own refusal sentence; with one, Google's event id. */
 const LEDGER = 'tools-ledger.json';
 const CONFIG = 'config.json';
 const CHROMES = [
@@ -81,7 +104,18 @@ const ok = (c, claim, detail) => {
 const note = (m) => console.log('  note ' + m);
 /* Held out here so the cleanup below runs even if the run dies in the middle: a harness
    that crashes must not leave a browser open or an appointment in someone's diary. */
-const procs = []; const profiles = []; let diaryAtStart = null;
+const procs = []; const profiles = [];
+/* Whether this machine has a Google grant, read once from the server before the run and
+   printed, because every calendar assertion below has two true outcomes and which one is
+   correct is not this harness's choice to make. */
+let grant = { state: 'unknown' };
+/* THE RETIRED FILE, AS FOUND. Read rather than restored: this harness used to put
+   calendar.json back at the end because the hand under test wrote to it, and now it reads
+   the file only to prove that nothing did. A harness that still restored it would be
+   perfectly capable of hiding the exact regression it should be catching. '\u0000' stands
+   for absent, because absent and empty are different states and both are fine. */
+const calendarFileAtStart = existsSync('calendar.json')
+  ? readFileSync('calendar.json', 'utf8') : '\u0000';
 
 class Page {
   constructor(u) { this.u = u; this.id = 0; this.w = new Map(); }
@@ -111,11 +145,6 @@ const cdp = async (p) => { const r = await fetch(CDP + p); const t = await r.tex
   try { return JSON.parse(t); } catch { return t; } };
 
 /* ---- what is on disk, which is the only witness that cannot be stage-managed ---- */
-const diary = () => {
-  if (!existsSync(CALENDAR)) return [];
-  try { const d = JSON.parse(readFileSync(CALENDAR, 'utf8')); return Array.isArray(d) ? d : []; }
-  catch { return []; }
-};
 const ledgerRow = (id) => {
   try {
     const rows = JSON.parse(readFileSync(LEDGER, 'utf8')).tools || {};
@@ -124,6 +153,11 @@ const ledgerRow = (id) => {
              lapsed: row.lapsed | 0 };
   } catch { return { ok: 0, failed: 0, refused: 0, lapsed: 0 }; }
 };
+/* HOW MANY TIMES THE SCRIPT HAS ACTUALLY BEEN STARTED. ok + failed only: `refused` counts
+   proposals the gate threw out before a subprocess existed and `lapsed` counts ones nobody
+   answered, so including either would make "nothing ran" fail on a run where nothing ran.
+   This is the number every gate assertion below is written against. */
+const runs = (id) => { const r = ledgerRow(id); return r.ok + r.failed; };
 
 /* config.json, described rather than read. Nothing in here returns a value: the key
    count, the voice setting - which is the one thing the round below is about - and a
@@ -289,9 +323,20 @@ async function main() {
 
   await page.evaluate('document.getElementById("reset").click()', true);
   await sleep(800);
-  diaryAtStart = existsSync(CALENDAR) ? readFileSync(CALENDAR) : null;
-  note('calendar.json holds ' + diary().length + ' entr' +
-       (diary().length === 1 ? 'y' : 'ies') + ' before the run');
+  /* THE GRANT, READ BEFORE ANYTHING IS ASKED FOR. Not to decide whether to run - every
+     assertion below runs either way - but to decide which sentence is the correct one, and
+     to say so in the log so a reader of the log knows which half was exercised. */
+  try {
+    const r = await fetch(GALAXY + '/google');
+    grant = await r.json();
+  } catch (e) { grant = { state: 'unknown', why: String(e && e.message) }; }
+  const connected = grant && grant.state === 'connected';
+  note('the Google grant reads ' + JSON.stringify(grant && grant.state) +
+       (grant && grant.email ? ' as ' + grant.email : '') +
+       ' - so the calendar hand is expected to ' +
+       (connected ? 'WRITE A REAL EVENT' : 'REFUSE, naming the missing road'));
+  note('calendar.json is no longer a backend; the ledger is the witness. ' +
+       'add_calendar_event has run ' + runs('add_calendar_event') + ' times before this run');
 
   /* ---- 1. TYPED, and a proposal that shows its work ----------------------- */
   const markOne = await mark();
@@ -310,9 +355,40 @@ async function main() {
      Object.keys(params).every((k) => String(shownRows[k]) === String(params[k])),
      'THE MOMENT OF TRUST: every validated parameter is rendered on screen, verbatim',
      JSON.stringify({ shown: shownRows, validated: params }));
-  ok(/client/i.test(JSON.stringify(shownRows)) && /four/i.test(JSON.stringify(shownRows)),
+  ok(/client/i.test(JSON.stringify(shownRows)),
      'and they are what was actually asked for, not a paraphrase',
      JSON.stringify(shownRows));
+  /* THE STAMP AND THE READING, and this is the pair the round changed. The rows carry the
+     machine stamp because that is literally what will be sent to Google - a card showing
+     "four o'clock" while an ISO timestamp goes over the wire would be a card the employer
+     cannot actually check. The SENTENCE carries the human reading, derived by the same
+     function the script uses, which is why they cannot disagree.
+     Failure mode if this breaks: hands.readings() stopped being called, or the registry's
+     template lost its {when} - and the symptom would be a proposal spoken with a literal
+     "{when}" in it, or one that reads an ISO stamp out loud to a listener. */
+  const stamp = String(shownRows.start || '');
+  ok(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?/.test(stamp),
+     'the card shows the ISO stamp that will travel, not the words that were said: ' +
+     JSON.stringify(stamp), JSON.stringify(shownRows));
+  const composed = String((first.pending && first.pending.line) || '');
+  /* Re-derived here on purpose rather than imported: a proof that asked the code under
+     test what the right answer was would prove only that it is self-consistent. */
+  let reading = '';
+  const hhmm = stamp.match(/T(\d{2}):(\d{2})/);
+  if (hhmm) {
+    const h = +hhmm[1], m = hhmm[2];
+    reading = (h % 12 || 12) + ':' + m + ' ' + (h < 12 ? 'am' : 'pm');
+  }
+  ok(!!reading && composed.indexOf(reading) >= 0,
+     'and the SPOKEN line is the human reading of that same stamp - ' +
+     JSON.stringify(reading) + ' out of ' + JSON.stringify(stamp),
+     JSON.stringify({ stamp, expected: reading, line: composed }));
+  ok(composed.indexOf(stamp) < 0 && !/\{[a-z]+\}/.test(composed),
+     'the sentence reads no ISO stamp aloud and has no blank left standing in it',
+     JSON.stringify(composed));
+  ok(/\bminutes\b|\bhour|all day\b/i.test(composed),
+     'and it says how LONG, out loud, so a default half hour is never a silent one',
+     JSON.stringify(composed));
   ok(/^yes$/i.test(first.buttons.yes.trim()) && /^no$/i.test(first.buttons.no.trim()),
      'the two answers are Yes and No, and nothing else',
      JSON.stringify(first.buttons));
@@ -335,7 +411,7 @@ async function main() {
      'the countdown is running: ' + JSON.stringify(clockOne) + ' -> ' + JSON.stringify(clockTwo));
 
   /* ---- 2. NO, with a real hand ------------------------------------------- */
-  const diaryBeforeNo = diary().length;
+  const runsBeforeNo = runs('add_calendar_event');
   const markNo = await mark();
   await click('ask-no');
   const refusal = await waitSaid(/i have done nothing|nothing was done/i, 15000, markNo);
@@ -345,47 +421,67 @@ async function main() {
   ok(await page.evaluate('__galaxy.hands.pending === null'),
      'and the page holds no proposal any more');
   await sleep(500);
-  ok(diary().length === diaryBeforeNo,
-     'THE GATE HELD: calendar.json is unchanged, so nothing ran',
-     'entries ' + diaryBeforeNo + ' -> ' + diary().length);
+  /* THE GATE HELD, and the witness is the ledger rather than a file the hand no longer
+     writes. Failure mode if this breaks: the No door started running the script anyway -
+     the single worst defect this file exists to catch - and the tell would be ok+failed
+     climbing by one on a click that was supposed to stop everything. */
+  ok(runs('add_calendar_event') === runsBeforeNo,
+     'THE GATE HELD: the ledger records no run at all, so the script was never started',
+     'runs ' + runsBeforeNo + ' -> ' + runs('add_calendar_event') +
+     ' (' + JSON.stringify(ledgerRow('add_calendar_event')) + ')');
 
   /* ---- 3. YES, with a real hand ------------------------------------------ */
   const ledgerBefore = ledgerRow('add_calendar_event');
-  const diaryBeforeYes = diary().length;
   await type('remind me to call the client at four');
   ok(await waitFor(page, '__galaxy.hands.shown === true', 90000),
      'the same instruction proposes again');
   const second = await pair();
   const markYes = await mark();
   await click('ask-yes');
-  /* "that makes N entries" can only have come from the script: the server does not count
-     the diary and could not know the number. */
-  const evidence = await waitSaid(/that makes \d+ entr/i, 40000, markYes);
+  /* TWO SENTENCES, ONE OF WHICH IS TRUE ON THIS MACHINE, and either one proves the same
+     thing: that the words spoken after the click came out of the SCRIPT and not out of the
+     server. Connected, only the script can know Google's event id. Unconnected, only the
+     script knows the road-to-your-calendar refusal - the server has no such string in it.
+     Failure mode if this breaks: the server started paraphrasing a tool's outcome, which
+     is the failure that would let a machine claim a success it never observed. */
+  const receipt = /written into your google calendar/i;
+  const refusal2 = /no road to your calendar/i;
+  const evidence = await waitSaid(connected ? receipt : refusal2, 60000, markYes);
   ok(!!evidence, 'clicking Yes speaks the SCRIPT\u2019S OWN STDOUT: ' + JSON.stringify(evidence));
-  ok(/^written into your calendar/i.test(String(evidence || '').trim()),
-     'and it is the script\u2019s sentence verbatim, not a paraphrase of it',
-     JSON.stringify(evidence));
+  if (connected) {
+    ok(/google's id for it is \S+/i.test(String(evidence || '')),
+       'and the receipt carries GOOGLE\u2019S OWN EVENT ID, which this machine could not ' +
+       'have invented', JSON.stringify(evidence));
+  } else {
+    ok(/connect google/i.test(String(evidence || '')),
+       'and the refusal names its remedy in the same breath - a no that tells you what ' +
+       'would make it a yes', JSON.stringify(evidence));
+  }
   await sleep(600);
-  const grew = diary();
-  ok(grew.length === diaryBeforeYes + 1,
-     'calendar.json gained exactly one entry',
-     'entries ' + diaryBeforeYes + ' -> ' + grew.length);
-  const wrote = grew[grew.length - 1] || {};
-  ok(String(wrote.title || '') === String((second.rows || {}).title || '\u0000') &&
-     String(wrote.when || '') === String((second.rows || {}).when || '\u0000'),
-     'and the entry on disk is the one the screen showed before the click',
-     JSON.stringify({ disk: { title: wrote.title, when: wrote.when }, screen: second.rows }));
   const ledgerAfter = ledgerRow('add_calendar_event');
-  ok(ledgerAfter.ok === ledgerBefore.ok + 1 && ledgerAfter.failed === ledgerBefore.failed,
-     'the ledger moved by exactly one ok and nothing else',
+  /* THE SCRIPT RAN, EXACTLY ONCE, and which column it landed in is the connection's to
+     decide: a refusal is a FAILED run, not a refused proposal, because the subprocess
+     really did start, really did read its stdin and really did make a decision. */
+  ok(ledgerAfter.ok + ledgerAfter.failed === ledgerBefore.ok + ledgerBefore.failed + 1,
+     'the ledger records exactly one run, no more and no fewer',
      JSON.stringify({ before: ledgerBefore, after: ledgerAfter }));
+  ok(connected ? (ledgerAfter.ok === ledgerBefore.ok + 1)
+               : (ledgerAfter.failed === ledgerBefore.failed + 1),
+     'and it landed in the right column: ' + (connected ? 'ok' : 'failed') +
+     ', because an unwritten event is not a written one',
+     JSON.stringify({ before: ledgerBefore, after: ledgerAfter, connected }));
+  ok((existsSync('calendar.json') ? readFileSync('calendar.json', 'utf8') : '\u0000')
+     === calendarFileAtStart,
+     'AND THE RETIRED FILE WAS NOT TOUCHED: calendar.json is not a backend any more, so a ' +
+     'byte written to it would mean a fallback had crept back in',
+     JSON.stringify({ existed: existsSync('calendar.json') }));
   const ledgerText = existsSync(LEDGER) ? readFileSync(LEDGER, 'utf8') : '';
   ok(!/client/i.test(ledgerText) && !/four/i.test(ledgerText),
      'and it kept nothing of what the tool was given - no title, no time',
      ledgerText.slice(0, 160));
 
   /* ---- 4. BY VOICE, ANSWERED BY VOICE ----------------------------------- */
-  const diaryBeforeVoice = diary().length;
+  const runsBeforeVoice = runs('add_calendar_event');
   await say('remind me to water the plants at seven');
   ok(await waitFor(page, '__galaxy.hands.shown === true', 90000),
      'the same request spoken into the microphone proposes the same way');
@@ -398,21 +494,30 @@ async function main() {
      'the page agrees with the server about what consent sounds like');
   const markVoice = await mark();
   await say('yes, go ahead');
-  const voiceEvidence = await waitSaid(/that makes \d+ entr/i, 40000, markVoice);
+  const voiceEvidence = await waitSaid(connected ? receipt : refusal2, 60000, markVoice);
   ok(!!voiceEvidence, 'confirming by voice runs it and speaks the script\u2019s line: ' +
      JSON.stringify(voiceEvidence));
-  ok(/water the plants/i.test(String(voiceEvidence)),
-     'and the line names what was asked for out loud, not what was typed earlier',
-     JSON.stringify(voiceEvidence));
+  if (connected) {
+    ok(/water the plants/i.test(String(voiceEvidence)),
+       'and the line names what was asked for out loud, not what was typed earlier',
+       JSON.stringify(voiceEvidence));
+  } else {
+    /* Unconnected, the refusal is the same sentence whatever was asked for - so what is
+       provable here is that the SPOKEN door ran the hand at all, which is the thing this
+       section is actually about. The title is proved on the card above instead. */
+    ok(/plants/i.test(JSON.stringify(third.rows)),
+       'and the card still shows what was asked for, spoken door or not',
+       JSON.stringify(third.rows));
+  }
   await sleep(600);
-  ok(diary().length === diaryBeforeVoice + 1,
-     'and the diary gained exactly one more entry, from the spoken door alone',
-     'entries ' + diaryBeforeVoice + ' -> ' + diary().length);
+  ok(runs('add_calendar_event') === runsBeforeVoice + 1,
+     'and the ledger records exactly one more run, from the spoken door alone',
+     'runs ' + runsBeforeVoice + ' -> ' + runs('add_calendar_event'));
   ok(await page.evaluate('__galaxy.hands.shown === false'),
      'the pair is gone from the tab that asked, without a click ever reaching it');
 
   /* ---- 5. A CHANGED SUBJECT IS A WITHDRAWAL ------------------------------ */
-  const diaryBeforeDrop = diary().length;
+  const runsBeforeDrop = runs('add_calendar_event');
   await say('remind me to renew the insurance on friday');
   ok(await waitFor(page, '__galaxy.hands.shown === true', 90000),
      'one more proposal, to walk away from');
@@ -429,9 +534,9 @@ async function main() {
   ok(!!letGo, 'changing the subject lets the proposal go, and says so: ' +
      JSON.stringify(letGo));
   await sleep(500);
-  ok(diary().length === diaryBeforeDrop,
-     'silence is not consent: the diary did not grow',
-     'entries ' + diaryBeforeDrop + ' -> ' + diary().length);
+  ok(runs('add_calendar_event') === runsBeforeDrop,
+     'silence is not consent: the ledger records no run',
+     'runs ' + runsBeforeDrop + ' -> ' + runs('add_calendar_event'));
   ok(await page.evaluate('__galaxy.hands.pending === null'),
      'and nothing is pending in the page either');
 
@@ -515,11 +620,16 @@ async function main() {
 
 main().catch((e) => { bad.push('the run itself: ' + e.message); console.log('\n  ERROR ' + e.message); })
   .finally(async () => {
-    /* The diary, put back exactly as it was found - however the run ended. */
-    if (diaryAtStart !== null) writeFileSync(CALENDAR, diaryAtStart);
-    else { try { unlinkSync(CALENDAR); } catch { } }
-    note('calendar.json restored to its state before the run (' + diary().length +
-         ' entries)');
+    /* NOTHING TO PUT BACK. This block used to restore calendar.json, because the hand
+       under test wrote to it. The hand now writes to Google and this harness only READS
+       that file, to prove nothing touched it - so a restore here would be a harness
+       quietly repairing the evidence of the regression it exists to find. The events this
+       run may have created on the real calendar are not ours to delete either: they are
+       the employer's, they were approved one click at a time, and google_hands_proof owns
+       the probe event that IS cleaned up. */
+    note('calendar.json was read, never written: ' +
+         (calendarFileAtStart === '\u0000' ? 'it was absent before the run and still is'
+                                           : 'it is byte-for-byte as it was found'));
     procs.forEach(p => { try { process.kill(p.pid); } catch { } });
     await sleep(600);
     profiles.forEach(p => { try { rmSync(p, { recursive: true, force: true }); } catch { } });

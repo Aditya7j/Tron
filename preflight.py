@@ -4437,6 +4437,669 @@ def check_quiet_spawn():
     return PASS, notes
 
 
+def check_room_hour():
+    """22. The room knows the hour: a second floor for the head, a work mode that is the
+    whole room, a gaze that only ever reads, and an instrument that does not pretend to be
+    the boss.
+
+    FOUR THINGS, and each one is a way this round can rot without a single harness
+    noticing - which is the only reason a preflight check earns an integer:
+
+      (a) THE SECOND FLOOR. PRES_MIN is the side below which a full-density well stands
+          down; PRES_MIN_COMPACT is the side below which it stands down at all. Delete the
+          second number, or let somebody "tidy" it to equal the first, and the head is
+          invisible again at 1280 with every proof still green - because a governor that
+          never enters compact mode is indistinguishable from one that has no compact mode.
+          So the two numbers are read off the LAYOUT literal and compared.
+      (b) THE TUNE, WRITTEN DOWN. §12's argument, applied to work mode: numbers picked
+          without being recorded cannot be reasoned about later. WORK holds all five, and
+          all five are bounded here - a NEB_WORK above NEB_IDLE would brighten the room for
+          a focus session, and an MS of 0 would make the crossfade a cut, which is the one
+          thing the mandate forbids by name.
+      (c) THE GAZE READS AND NEVER TAKES. The head's gaze target is driven off one field of
+          focus's own state and there is no door to set it, deliberately, so that no harness
+          can make the head look at something by asking it to. The declared signal string is
+          therefore part of the contract: if it stops naming focus.public_state().drifting,
+          the instrument is reporting on a signal nobody is watching.
+      (d) AND AN INSTRUMENT IS NOT A MAN AT HIS DESK. This one is here because it cost a
+          whole round. Every viewer beats "I have the keyboard" at the server while a
+          session is live and document.hasFocus() is true, and home base outranks every
+          drift by design - so a headless SECOND viewer, where hasFocus() can never go
+          false, silently excused every locked-tab drift on the machine: measured at 2861 ms
+          against a 1500 ms budget with drifts=0, and 937 ms with drifts=1 the moment that
+          viewer was not opened. ?nohome=1 is the repair. Remove it and lock_proof's whole
+          fourth section goes red for a reason that looks like a broken watchdog, so the
+          guard is asserted here where the failure can still be read in English.
+
+    And one live read on top of them, because (a)-(d) are source and source is not
+    behaviour: the payload the room subscribes to is fetched from the running server and
+    checked for what it must NOT have grown. Work mode, the deep field and the gaze all ride
+    the session state that already existed; a `nebula` or `gaze` key on that wire would mean
+    the page had been given a private channel and the claim "nothing new is added to that
+    payload" had quietly stopped being true.
+    """
+    notes, warnings = [], []
+    try:
+        with open(os.path.join(ROOT, "viewer", "index.html"), encoding="utf-8") as fh:
+            viewer = fh.read()
+    except OSError as exc:
+        return FAIL, ["cannot read viewer/index.html: %s" % exc]
+
+    # -- (a) the two floors.
+    floors = {}
+    for name in ("PRES_MIN", "PRES_MIN_COMPACT"):
+        found = re.search(r"\b%s\s*:\s*(\d+)" % name, viewer)
+        if found:
+            floors[name] = int(found.group(1))
+    missing = [n for n in ("PRES_MIN", "PRES_MIN_COMPACT") if n not in floors]
+    if missing:
+        return FAIL, ["the LAYOUT table names no %s, so the presence has no %s floor and "
+                      "the head is back to rendering nothing at the commonest laptop width"
+                      % (" and no ".join(missing),
+                         "second" if "PRES_MIN_COMPACT" in missing else "first")]
+    if not 0 < floors["PRES_MIN_COMPACT"] < floors["PRES_MIN"]:
+        return FAIL, ["PRES_MIN_COMPACT is %d against PRES_MIN %d: a second floor that is "
+                      "not BELOW the first is not a second floor, and compact mode can "
+                      "never engage"
+                      % (floors["PRES_MIN_COMPACT"], floors["PRES_MIN"])]
+    if "LAYOUT.PRES_MIN_COMPACT" not in viewer:
+        return FAIL, ["PRES_MIN_COMPACT is declared and never read, so the governor still "
+                      "stands the well down at the full-size floor"]
+    notes.append("(a) two floors, and the second is below the first: full density at "
+                 "%dpx of glass, compact at %dpx, nothing at all below that"
+                 % (floors["PRES_MIN"], floors["PRES_MIN_COMPACT"]))
+
+    # -- (b) the tune, and its bounds.
+    block = re.search(r"const WORK\s*=\s*\{(.*?)\};", viewer, re.S)
+    if not block:
+        return FAIL, notes + ["viewer/index.html has no WORK tune block, so work mode's "
+                              "numbers are wherever they were typed and cannot be reasoned "
+                              "about - which is the one thing 12 argued against"]
+    tune = {}
+    for key, raw in re.findall(r"(\w+)\s*:\s*([0-9.]+)", block.group(1)):
+        tune[key] = float(raw)
+    want = ("MS", "NEB_IDLE", "NEB_WORK", "SWAY", "DESAT")
+    absent = [k for k in want if k not in tune]
+    if absent:
+        return FAIL, notes + ["the WORK tune is missing %s, so at least one of the room's "
+                              "four movements has an unrecorded number in it"
+                              % ", ".join(absent)]
+    if tune["MS"] <= 0:
+        return FAIL, notes + ["WORK.MS is %g: a crossfade of zero milliseconds is a CUT, "
+                              "which is the one transition the room is not allowed"
+                              % tune["MS"]]
+    if not tune["NEB_WORK"] < tune["NEB_IDLE"]:
+        return FAIL, notes + ["WORK.NEB_WORK %g is not below NEB_IDLE %g, so starting a "
+                              "focus session would brighten the deep field rather than "
+                              "narrowing it" % (tune["NEB_WORK"], tune["NEB_IDLE"])]
+    for key in ("SWAY", "DESAT"):
+        if not 0.0 < tune[key] < 1.0:
+            return FAIL, notes + ["WORK.%s is %g; it is a FRACTION of the idle value, so "
+                                  "0 would switch the thing off and 1 would leave it "
+                                  "untouched - neither is a crossfade" % (key, tune[key])]
+    notes.append("(b) all five of work mode's numbers are declared in one place and in "
+                 "range: %s" % ", ".join("%s=%g" % (k, tune[k]) for k in want))
+
+    # -- (c) the gaze reads one field, and there is no way to set it.
+    signal = "focus.public_state().drifting"
+    if signal not in viewer:
+        return FAIL, notes + ["the gaze instrument no longer names %s as its signal, so "
+                              "whatever the head is now following, nothing in this "
+                              "repository says what it is" % signal]
+    for name in ("GAZE_MAX", "GAZE_TAU", "GAZE_EPS"):
+        if not re.search(r"\b%s\s*:" % name, viewer):
+            return FAIL, notes + ["PRES has no %s, so the gaze's ceiling, its chase or its "
+                                  "deadband is an inline number again" % name]
+    setters = re.findall(r"presence\.gaze\.(?:want|at)\s*=", viewer)
+    if setters:
+        return FAIL, notes + ["%d place(s) write to the gaze through the instrument door, "
+                              "so a harness can make the head look at something by asking "
+                              "it to and the departure proves nothing" % len(setters)]
+    notes.append("(c) the gaze declares one signal - %s - has its three constants, and "
+                 "exposes no setter" % signal)
+
+    # -- (d) the instrument's own honesty, which is what this round learned the hard way.
+    if "nohome=1" not in viewer:
+        return FAIL, notes + ["the viewer has no ?nohome=1, so a second headless viewer "
+                              "claims home base for the whole of its life and every "
+                              "locked-tab drift on this machine is excused - a watchdog "
+                              "that looks broken and is only being lied to"]
+    beat = re.search(r"if \(probeRunning \|\| NOHOME\) return;", viewer)
+    if not beat:
+        return FAIL, notes + ["?nohome=1 is declared and the home beat does not honour it, "
+                              "which is worse than not having the flag: lock_proof's "
+                              "observer would ask to be ignored and be believed by nobody"]
+    notes.append("(d) the home-base beat is suppressed for an instrument as well as for a "
+                 "synthetic session, so a second viewer cannot excuse a real drift")
+
+    # -- the live read. Source is not behaviour, and this is the one claim only the
+    # running server can answer.
+    if not state["up"]:
+        warnings.append("the server is not reachable, so the wire could not be read and "
+                        "(a)-(d) are source alone")
+        return WARN, notes + warnings
+    live = _focus_now()
+    if not isinstance(live, dict) or not live:
+        warnings.append("GET /focus answered nothing session-shaped, so the payload could "
+                        "not be inspected")
+        return WARN, notes + warnings
+    private = sorted(k for k in live
+                     if re.search(r"neb|gaze|presence|emissive|parallax|compact", k, re.I))
+    if private:
+        return FAIL, notes + ["the session payload has grown %s: work mode, the deep field "
+                              "and the gaze are all supposed to ride the state that already "
+                              "existed, and a private channel for the room is exactly what "
+                              "this round promised not to add" % private]
+    notes.append("the room rides the session state that was already on the wire: %d keys, "
+                 "and not one of them is about a nebula, a gaze or a point count"
+                 % len(live))
+
+    if warnings:
+        return WARN, notes + warnings
+    return PASS, notes
+
+
+def check_google_grant():
+    """23. The road to Google is narrow, it is asked for out loud, and it refuses politely.
+
+    Two hands stopped being local this round. add_calendar_event used to append a line to
+    calendar.json and send_email used to log in to smtp.gmail.com with an app password;
+    they now call Calendar v3 events.insert and Gmail v1 users.messages.send against an
+    OAuth grant. That is a large increase in what a wrong answer can do - a guessed time
+    used to be a wrong line in a file nobody read, and is now an alarm on the employer's
+    phone at four in the morning - so five things about it earn an integer here:
+
+      (a) THE SCOPES ARE THE THREE, AND NOTHING WIDER. gmail.send, gmail.compose and
+          calendar.events. Every one of those is a WRITE scope with no read: this grant
+          cannot list a message, cannot read a thread and cannot see an event it did not
+          create the id of. Widen it to mail.google.com or calendar and both statements
+          stop being true, silently, with every harness still green - because a broader
+          scope never fails, it only permits. Read from the source AND from the running
+          server, since a constant is not a promise until the process is using it.
+      (b) NOTHING SECRET IS ON THE WIRE. GET /google is the only Google route the page can
+          read, and the panel needs six facts from it: connected or not, which account, the
+          scope list, the loopback port, a digest, and whether consent is in flight. It
+          must therefore carry no access token, no refresh token, no authorization code and
+          no client secret - and the client secret is checked BY VALUE, read out of
+          secrets/ and searched for in the payload, because a field named innocently is
+          still a leak. The token file itself must 404 from the browser: secrets/ lives
+          outside viewer/, and this is the check that notices if it ever stops.
+      (c) THE REFUSAL CHAIN, END TO END, THROUGH THE REAL GATE. With no token this machine
+          must say "I have no road to your calendar yet" and not "HTTP 401", must exit
+          non-zero, and must log the attempt as a FAILED run rather than a refused
+          proposal - the subprocess really did start. Driven over HTTP through propose and
+          execute, which is the same door the page uses, so the sentence proved here is the
+          sentence a human would hear. On a machine that IS connected this clause does not
+          run: it would create a real event to prove a refusal, which is the wrong trade,
+          and the check says so rather than passing quietly.
+      (d) THE STAMPS ARE READ BEFORE THE NETWORK IS. A time nobody can parse is refused at
+          the gate with nothing pending - not carried to Google to be rejected there, and
+          not shown on a card with a {when} still standing in it. This is the clause that
+          catches hands.readings() being dropped, because the symptom otherwise is a
+          proposal that reads an ISO timestamp aloud to a listener.
+      (e) calendar.json IS RETIRED, PROVED FROM THE SOURCE. The retirement only means
+          something if there is no fallback: a hand that wrote to Google and then also
+          appended locally, or read the file when the network failed, would let a failed
+          send look like a success. So the hand's source is read and must not name the file
+          at all, and the registry's parameters must be the new four - a `when` left in
+          that schema is a parameter the script silently drops.
+
+    Nothing here sends mail, creates an event, or writes a token. (c) runs the calendar
+    hand exactly once, on a machine with no grant, for the express purpose of being told no.
+    """
+    notes, warnings = [], []
+    want = ["https://www.googleapis.com/auth/gmail.send",
+            "https://www.googleapis.com/auth/gmail.compose",
+            "https://www.googleapis.com/auth/calendar.events"]
+
+    # -- (a) the scopes, from the source first.
+    try:
+        with open(os.path.join(ROOT, "google_api.py"), encoding="utf-8") as fh:
+            src = fh.read()
+    except OSError as exc:
+        return FAIL, ["google_api.py could not be read (%s), so the two hands that now "
+                      "reach outside this house have no module behind them" % exc]
+    found = re.search(r"SCOPES\s*=\s*\[(.*?)\]", src, re.S)
+    declared = re.findall(r"https://[^\"']+", found.group(1)) if found else []
+    if declared != want:
+        return FAIL, ["SCOPES in google_api.py is %s, and the grant this project asked "
+                      "for is exactly %s. A wider scope never fails a test - it only "
+                      "permits - so it is checked by equality and not by containment"
+                      % (declared, want)]
+    # Only QUOTED scope strings count. The module's own comment names the wide scopes in
+    # prose, to say they are deliberately absent, and a plain substring search would read
+    # that paragraph and fail the check the paragraph exists to explain. A widened scope,
+    # wherever it were written, would be a string literal - so literals are what is read.
+    literals = re.findall(r"""['"](https://[^'"\s]+)['"]""", src)
+    broad = sorted({s for s in literals
+                    if re.search(r"^https://mail\.google\.com"
+                                 r"|auth/(gmail|calendar)$"
+                                 r"|auth/gmail\.(readonly|modify|metadata|insert)"
+                                 r"|auth/calendar\.readonly", s)})
+    if broad:
+        return FAIL, notes + ["google_api.py asks for the scope(s) %s in a string literal. "
+                              "This grant is write-only by design: it must not be able to "
+                              "read a mailbox it was given to send from" % broad]
+    notes.append("three write-only scopes, declared and matched exactly: send, compose, "
+                 "calendar.events - no read scope anywhere in the module")
+
+    if not state["up"]:
+        warnings.append("the server is not reachable, so (a) is source alone and (b)-(e) "
+                        "could not be asked at all")
+        return WARN, notes + warnings
+
+    # -- (a) again, live. A constant is not a promise until the process is using it.
+    status, _, body = http_call("GET", "/google", timeout=20, label="GET /google")
+    grant = as_json(body)
+    if status != 200 or not isinstance(grant, dict):
+        return FAIL, notes + ["GET /google came back %s with %r - the Command Panel's "
+                              "state line has nothing to read"
+                              % (status, first_line(body.decode("utf-8", "replace")))]
+    if list(grant.get("scopes") or []) != want:
+        return FAIL, notes + ["the running server offers scopes %s, which is not the three "
+                              "in its own source. The process is using a different grant "
+                              "from the one this file just checked" % grant.get("scopes")]
+    where = grant.get("state")
+    notes.append("the running server agrees, and reads state %r on port %s"
+                 % (where, grant.get("port")))
+
+    # -- (b) nothing secret on the wire, and the secret is checked BY VALUE.
+    flat = json.dumps(grant)
+    named = sorted(k for k in grant
+                   if re.search(r"access_?token|refresh|secret|^code$|verifier|bearer",
+                                str(k), re.I))
+    if named:
+        return FAIL, notes + ["GET /google carries the field(s) %s. The panel needs six "
+                              "facts and a token is not one of them" % named]
+    secret = ""
+    try:
+        with open(os.path.join(ROOT, "secrets", "google_client.json"), encoding="utf-8") as fh:
+            secret = str((json.load(fh).get("installed") or {}).get("client_secret") or "")
+    except Exception:                                          # noqa: BLE001
+        warnings.append("secrets/google_client.json could not be read, so the client secret "
+                        "was not searched for by value - only by field name")
+    if secret and secret in flat:
+        return FAIL, notes + ["the client secret's own characters appear in the body of "
+                              "GET /google. A field named innocently is still a leak"]
+    if secret:
+        notes.append("and the client secret's %d characters appear nowhere in the payload, "
+                     "checked by value and not by field name" % len(secret))
+    for path in ("/secrets/google_token.json", "/secrets/google_client.json",
+                 "/../secrets/google_token.json"):
+        code, _, _ = http_call("GET", path, timeout=15, label="GET " + path)
+        if code == 200:
+            return FAIL, notes + ["%s is SERVED to the browser. secrets/ holds a refresh "
+                                  "token, which does not expire on its own" % path]
+    notes.append("and secrets/ is unreachable over HTTP: the token file, the client file "
+                 "and one traversal at it all refuse")
+
+    # -- (e) the retirement, from the source, before anything is proposed.
+    try:
+        with open(os.path.join(ROOT, "tools", "add_calendar_event.py"), encoding="utf-8") as fh:
+            hand = fh.read()
+        with open(os.path.join(ROOT, "tools", "registry.json"), encoding="utf-8") as fh:
+            registry = json.load(fh)
+    except Exception as exc:                                   # noqa: BLE001
+        return FAIL, notes + ["the calendar hand or the registry could not be read: %s" % exc]
+    body_only = re.sub(r'""".*?"""', "", hand, flags=re.S)
+    if "calendar.json" in body_only:
+        return FAIL, notes + ["tools/add_calendar_event.py still names calendar.json "
+                              "outside its docstring. A local fallback is how a failed "
+                              "send starts looking like a success"]
+    entry = next((t for t in registry.get("tools") or []
+                  if t.get("id") == "add_calendar_event"), None)
+    params = [p.get("name") for p in (entry or {}).get("params") or []]
+    if params != ["title", "start", "end", "description"]:
+        return FAIL, notes + ["the registry declares add_calendar_event params %s and the "
+                              "hand reads title/start/end/description. Anything not "
+                              "declared is dropped before the script sees it, so a stale "
+                              "`when` here is a time that silently never arrives" % params]
+    notes.append("calendar.json is named nowhere in the hand's code, and the schema is the "
+                 "four the hand actually reads")
+
+    # -- (d) a time nobody can parse is refused at the gate, with nothing pending.
+    status, _, body = post_json("/tools", {"cmd": "propose", "tool": "add_calendar_event",
+                                           "params": {"title": "a probe that goes nowhere",
+                                                      "start": "some time on thursday"}},
+                                timeout=30, label="POST /tools bad stamp")
+    said = as_json(body) or {}
+    line = str(said.get("answer") or "")
+    if status < 400 or said.get("pending") or "{when}" in line:
+        return FAIL, notes + ["an unreadable start time was answered %s with %r and "
+                              "pending=%r. It must be refused with nothing left in the "
+                              "slot: a card showing a literal {when} is a card the "
+                              "employer is being asked to approve blind"
+                              % (status, first_line(line), said.get("pending"))]
+    if not re.search(r"not a date i can read", line, re.I):
+        return FAIL, notes + ["the refusal for an unreadable time was %r, which does not "
+                              "name the shape it wanted. A refusal that does not name its "
+                              "remedy is a machine saying no" % first_line(line)]
+    notes.append("an unparseable start is refused at the gate, naming the shape it wants, "
+                 "with nothing left pending: %r" % first_line(line))
+
+    # -- (c) the refusal chain, all the way through the real door.
+    if where == "connected":
+        # The account is named by DIGEST and never in full. This file's output is pasted
+        # into reports, so the address of the mailbox this machine can send from does not
+        # belong in it - the digest is enough to tell two grants apart, which is all a
+        # check ever needs.
+        notes.append("this machine HAS a grant (account digest %s, token digest %s), so the "
+                     "no-token chain was not driven: proving a refusal would have meant "
+                     "creating a real event in a real calendar, which is a worse trade than "
+                     "leaving one clause unrun"
+                     % (hashlib.sha256(str(grant.get("email") or "")
+                                       .encode("utf-8")).hexdigest()[:8],
+                        grant.get("tokenDigest") or "none"))
+        return (WARN, notes + warnings) if warnings else (PASS, notes)
+    before = _ledger_row("add_calendar_event")
+    status, _, body = post_json("/tools", {"cmd": "propose", "tool": "add_calendar_event",
+                                           "params": {"title": "a probe that goes nowhere",
+                                                      "start": "2099-01-01T09:00"}},
+                                timeout=30, label="POST /tools calendar probe")
+    said = as_json(body) or {}
+    pending = said.get("pending") or {}
+    if status != 200 or not pending.get("id"):
+        return FAIL, notes + ["a well-formed calendar request was answered %s with %r, so "
+                              "there was nothing to confirm and the refusal chain could "
+                              "not be reached"
+                              % (status, first_line(json.dumps(said)[:200]))]
+    spoken = str(pending.get("line") or "")
+    if "{" in spoken or not re.search(r"\d{1,2}:\d{2}\s*(am|pm)", spoken, re.I):
+        return FAIL, notes + ["the proposal read %r. It should carry the human reading of "
+                              "the stamp - hands.readings() is what fills {when}, and "
+                              "without it this sentence reads a timestamp aloud"
+                              % first_line(spoken)]
+    status, _, body = post_json("/execute", {"id": pending["id"], "door": "button"},
+                                timeout=60, label="POST /execute calendar probe")
+    out = as_json(body) or {}
+    answer = str(out.get("answer") or "")
+    if not re.search(r"no road to your calendar", answer, re.I):
+        return FAIL, notes + ["with no grant on this machine the calendar hand answered "
+                              "%r. The sentence it owes is 'I have no road to your calendar "
+                              "yet' with Connect Google named as the remedy - an HTTP code "
+                              "is not an answer to a person" % first_line(answer)]
+    if not re.search(r"connect google", answer, re.I):
+        return FAIL, notes + ["the refusal was %r, which does not name the remedy"
+                              % first_line(answer)]
+    after = _ledger_row("add_calendar_event")
+    if after["failed"] != before["failed"] + 1 or after["ok"] != before["ok"]:
+        return FAIL, notes + ["the ledger went %s -> %s. A refusal by the hand is a FAILED "
+                              "run and not a refused proposal: the subprocess started, read "
+                              "its stdin and decided" % (before, after)]
+    notes.append("with no grant, the chain propose -> confirm -> run ends in the hand's own "
+                 "sentence, %r, and the ledger records one failed run and no ok"
+                 % first_line(answer))
+
+    # And the mail hand owes the same shape, refused before a byte could leave.
+    status, _, body = post_json("/tools", {"cmd": "propose", "tool": "send_email",
+                                           "params": {"to": "nobody@example.invalid",
+                                                      "subject": "a probe that goes nowhere",
+                                                      "body": "This is never sent."}},
+                                timeout=30, label="POST /tools mail probe")
+    said = as_json(body) or {}
+    pending = said.get("pending") or {}
+    if status != 200 or not pending.get("id"):
+        return FAIL, notes + ["a well-formed email proposal was answered %s, so the mail "
+                              "refusal could not be reached" % status]
+    if "nobody@example.invalid" not in str(pending.get("line") or ""):
+        warnings.append("the email proposal did not name the recipient out loud: %r"
+                        % first_line(str(pending.get("line"))))
+    status, _, body = post_json("/execute", {"id": pending["id"], "door": "button"},
+                                timeout=60, label="POST /execute mail probe")
+    answer = str((as_json(body) or {}).get("answer") or "")
+    if not re.search(r"no road to your mail", answer, re.I):
+        return FAIL, notes + ["with no grant the mail hand answered %r rather than naming "
+                              "the missing road. This is the hand whose work cannot be "
+                              "taken back; its refusals are the ones that must be plainest"
+                              % first_line(answer)]
+    notes.append("and the mail hand refuses in the same shape, at the same door: %r"
+                 % first_line(answer))
+
+    if warnings:
+        return WARN, notes + warnings
+    return PASS, notes
+
+
+def _js_source(text):
+    """viewer/index.html with its comments taken out, so a law can be asserted about the
+    CODE and not about the paragraph above it explaining the code.
+
+    This matters more here than it usually does. Check 24 below counts occurrences of
+    `arm.state =` and of `recogniser.start()`, and both of those strings appear in the
+    reset contract's own block comment - which describes the invariant in the same words the
+    invariant is written in. Counting the raw file would score two of each and fail a page
+    that is correct, which is the worst kind of check: one that punishes documentation.
+
+    Block comments go first and wholesale. Line comments are removed only where the `//`
+    opens a line, deliberately: a `//` in the middle of a line is as likely to be inside a
+    regular expression literal or a URL as it is to be a comment, and this file is full of
+    both. The consequence is that a trailing `// ...` note survives into the stripped text,
+    so no check may assert the ABSENCE of a string that a trailing comment could contain.
+    """
+    out = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
+    return "\n".join(
+        "" if line.lstrip().startswith("//") else line for line in out.splitlines()
+    )
+
+
+def _fn_body(source, name):
+    """One function's body by brace counting, or None. `source` must already be stripped of
+    comments, or an unbalanced brace inside a comment ends the body early."""
+    start = source.find("function %s(" % name)
+    if start < 0:
+        return None
+    open_at = source.find("{", start)
+    if open_at < 0:
+        return None
+    depth, i = 0, open_at
+    while i < len(source):
+        if source[i] == "{":
+            depth += 1
+        elif source[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[open_at + 1:i]
+        i += 1
+    return None
+
+
+def check_reset_contract():
+    """A TURN RESETS ONCE, AND ONE HAND WRITES THE ARM.
+
+    The contract this asserts is the answer to a question the turn dump asked and could not
+    settle: when the recogniser comes back up between two sentences, is every piece of state
+    it depends on in a known condition? The dump says it always was - six turns, six arms,
+    one recogniser, no stale flag, no drifting floor, no restart race - so this check is not
+    guarding a bug that was seen. It is guarding the SHAPE that makes those four things
+    unmeasurable-because-impossible rather than unmeasured-because-lucky, and the shape is
+    fragile in one specific way: it is one function called from one place, and both of those
+    ones are load-bearing.
+
+    Seven things, and each names what goes wrong without it:
+
+      (a) THE FOUR FUNCTIONS EXIST. armRead (the lifecycle word, computed), armSet (the one
+          writer), armReset (the contract) and armFloorFrame (the 300ms sample). Their absence
+          is not subtle, but the name is what the other six checks hang off.
+      (b) ONE WRITER. Exactly one `arm.state =` in the file, and it is inside armSet. Two
+          writers of a lifecycle word is the defect the eyes law was written to prevent and
+          the failure is the same shape here: a path that re-arms the microphone and repaints
+          only one of the two records, after which the page reports an ear that is listening
+          to a room it is not listening to.
+      (c) armRead COMPUTES AND DOES NOT WRITE. A reader that assigns is a second writer
+          wearing a reader's name, and it would be called from everywhere before anybody
+          noticed.
+      (d) ONE DOOR, ONE RESET. Exactly one call to armReset() and exactly one call to
+          recogniser.start() in the file, and the reset comes first in startListening's body.
+          If a second path ever calls .start() directly it arms a microphone with a gate
+          reference from the last turn and no floor of its own - and it does it silently,
+          because every counter this contract keeps would be untouched.
+      (e) THE FIVE TERMS ARE IN THE BODY: the gate reference zeroed, the floor window opened.
+      (f) AND THE TWO THINGS THE BODY MUST NOT DO. It must not assign echo.gateAt or
+          echo.gateOpens - the acoustic gate's HOLD is specified to outlive the answer that
+          opened it, so that a barge-in taken on the last frame of a sentence is still open
+          when the transcript of that sentence arrives ECHO_TAIL_MS later; a reset that
+          cleared the hold would drop exactly that transcript into the brain as a question
+          nobody asked, which is self-hearing coming back in through the repair. And it must
+          not assign speakDraining or speakQueue, which belong to the protected funnel: the
+          contract re-reads them and counts a disagreement, and a reset that cleared them
+          instead would hide a funnel that had stopped closing its own door.
+      (g) THE FLOOR IS STILL NOT A THRESHOLD. EAR_VAD_ON and EAR_VAD_OFF remain plain number
+          literals and neither is computed from arm.floor. The dump measured the floor at 0 to
+          0.0122 against a 0.018 lower gate for a whole session, so there is no evidence for
+          an adaptive gate; and an adaptive gate derived from a per-turn sample is a detector
+          whose sensitivity depends on how quiet the room was 300ms ago, which is a thing that
+          can only be discovered to be wrong in a room nobody tested.
+    """
+    notes = []
+    try:
+        with open(os.path.join(ROOT, "viewer", "index.html"), encoding="utf-8") as fh:
+            raw = fh.read()
+    except OSError as exc:
+        return FAIL, ["cannot read viewer/index.html: %s" % exc]
+    src = _js_source(raw)
+
+    # -- (a) the four functions.
+    wanted = ("armRead", "armSet", "armReset", "armFloorFrame")
+    absent = [n for n in wanted if "function %s(" % n not in src]
+    if absent:
+        return FAIL, ["viewer/index.html declares no %s, so there is no reset contract at "
+                      "all and every re-arm inherits whatever the last turn left behind"
+                      % " and no ".join(absent)]
+    bodies = {n: _fn_body(src, n) for n in wanted}
+    unreadable = [n for n, b in bodies.items() if b is None]
+    if unreadable:
+        return FAIL, ["could not read the body of %s by brace counting" % ", ".join(unreadable)]
+    notes.append("(a) armRead, armSet, armReset and armFloorFrame are all declared")
+
+    # -- (b) one writer, and it is armSet.
+    writes = len(re.findall(r"\barm\.state\s*=(?!=)", src))
+    if writes != 1:
+        return FAIL, notes + ["arm.state is assigned %d times in viewer/index.html; the "
+                              "single-writer discipline says exactly once, in armSet(), for "
+                              "the same reason sight.state is assigned only in sightSet(): "
+                              "two records of whether the microphone is live will disagree, "
+                              "and the disagreement is silent" % writes]
+    if not re.search(r"\barm\.state\s*=(?!=)", bodies["armSet"]):
+        return FAIL, notes + ["the one assignment to arm.state is not inside armSet(), so "
+                              "the function named as the single writer is not the one writing"]
+    notes.append("(b) arm.state is assigned exactly once in the file, inside armSet()")
+
+    # -- (c) the reader reads.
+    if re.search(r"\barm\.\w+\s*=(?!=)", bodies["armRead"]):
+        return FAIL, notes + ["armRead() assigns to arm.*, so the reader is a second writer "
+                              "under a reader's name and may be called from anywhere"]
+    notes.append("(c) armRead() assigns nothing, so it stays safe to call from anywhere")
+
+    # -- (d) one door, one reset, in that order.
+    starts = len(re.findall(r"recogniser\.start\(\)", src))
+    resets = len(re.findall(r"(?<!function )\barmReset\(", src))
+    if starts != 1:
+        return FAIL, notes + ["recogniser.start() is called %d times in viewer/index.html; a "
+                              "second arming path does not go through the contract, so it "
+                              "arms with the last turn's gate reference and no floor of its "
+                              "own, and none of the contract's counters would say so" % starts]
+    if resets != 1:
+        return FAIL, notes + ["armReset() is called %d times; the contract is specified to "
+                              "run once per ARM, and it is behind startListening()'s "
+                              "already-listening guard so that a request to arm which does "
+                              "not arm - bargeTake()'s `if (!listening)` is the live one - "
+                              "cannot zero the gate reference mid-answer" % resets]
+    listen = _fn_body(src, "startListening")
+    if listen is None:
+        return FAIL, notes + ["could not read startListening()'s body"]
+    at_reset = listen.find("armReset(")
+    at_start = listen.find("recogniser.start()")
+    if at_reset < 0 or at_start < 0 or at_reset > at_start:
+        return FAIL, notes + ["startListening() does not call armReset() before "
+                              "recogniser.start(), so the first frames of a new session are "
+                              "measured against the previous turn's state"]
+    notes.append("(d) one call to recogniser.start() in the file, one call to armReset(), "
+                 "and the reset runs first inside startListening()")
+
+    # -- (e) the terms that must be in the body.
+    body = bodies["armReset"]
+    terms = {
+        "the gate reference zeroed": r"\becho\.ref\s*=(?!=)",
+        "the reference's provenance zeroed": r"\becho\.refFrom\s*=(?!=)",
+        "the over-window zeroed": r"\becho\.overSince\s*=(?!=)",
+        "the floor window opened": r"\barm\.floorAt\s*=(?!=)",
+    }
+    thin = [name for name, pattern in terms.items() if not re.search(pattern, body)]
+    if thin:
+        return FAIL, notes + ["armReset() does not do %s, so that term of the contract is "
+                              "named in the mandate and absent from the code"
+                              % " or ".join(thin)]
+    notes.append("(e) armReset() zeroes the gate reference and its provenance, clears the "
+                 "over-window, and opens a fresh floor window")
+
+    # -- (f) and the two it must not do.
+    forbidden = {
+        "echo.gateAt": "the acoustic gate's HOLD, which is specified to outlive the answer "
+                       "that opened it - clearing it at the re-arm after a barge-in drops "
+                       "the transcript of the interrupted sentence into the brain as a "
+                       "question nobody asked, which is self-hearing returning through "
+                       "the repair",
+        "echo.gateOpens": "the gate's own tally, which echoGateWatch() owns",
+        "speakDraining": "the protected funnel's drain flag - the contract re-reads it and "
+                         "counts a disagreement; clearing it would hide a funnel that had "
+                         "stopped closing its own door",
+        "speakQueue": "the protected funnel's queue",
+    }
+    for name, why in forbidden.items():
+        if re.search(r"\b%s\s*=(?!=)" % re.escape(name), body) or \
+           re.search(r"\b%s\.(?:length\s*=|splice\(|pop\(|shift\()" % re.escape(name), body):
+            return FAIL, notes + ["armReset() writes %s, which is %s" % (name, why)]
+    notes.append("(f) and it writes neither the gate's hold nor the funnel's flags: "
+                 "echo.gateAt, echo.gateOpens, speakDraining and speakQueue are read-only "
+                 "to the contract")
+
+    # -- (g) the floor is a measurement.
+    gates = {}
+    for name in ("EAR_VAD_ON", "EAR_VAD_OFF"):
+        found = re.search(r"\bconst %s\s*=\s*([0-9.]+)\s*;" % name, src)
+        if found:
+            gates[name] = float(found.group(1))
+    if len(gates) != 2:
+        return FAIL, notes + ["EAR_VAD_ON and EAR_VAD_OFF are no longer plain number "
+                              "literals, so the voice gates are computed from something - "
+                              "and the only new number in reach is the per-turn floor, which "
+                              "the dump gives no evidence for and which would make the "
+                              "detector's sensitivity depend on how quiet the room was "
+                              "300ms ago"]
+    if not 0 < gates["EAR_VAD_OFF"] < gates["EAR_VAD_ON"]:
+        return FAIL, notes + ["the voice gates read OFF %s / ON %s, which is not hysteresis"
+                              % (gates["EAR_VAD_OFF"], gates["EAR_VAD_ON"])]
+    for name in ("EAR_VAD_ON", "EAR_VAD_OFF"):
+        if re.search(r"\b%s\s*=(?!=)\s*[^;]*arm\.floor" % name, src):
+            return FAIL, notes + ["%s is computed from arm.floor: the 300ms sample is a "
+                                  "MEASUREMENT and never a threshold" % name]
+    sample = re.search(r"\bconst ARM_FLOOR_MS\s*=\s*(\d+)\s*;", src)
+    if not sample or int(sample.group(1)) != 300:
+        return FAIL, notes + ["ARM_FLOOR_MS is %s and the contract specifies 300ms of "
+                              "silence" % (sample.group(1) if sample else "absent")]
+    if "arm.floorVoids" not in bodies["armFloorFrame"]:
+        return FAIL, notes + ["armFloorFrame() does not count a voided window, so a frame "
+                              "above the lower gate is either averaged into the floor - "
+                              "which makes the floor climb toward the gate turn after turn, "
+                              "the exact drift the dump ruled out - or discarded in silence"]
+    notes.append("(g) the floor is sampled over %dms and stays a measurement: the gates read "
+                 "OFF %s / ON %s as literals, neither is derived from it, and a frame above "
+                 "the lower gate voids the window and is counted"
+                 % (int(sample.group(1)), gates["EAR_VAD_OFF"], gates["EAR_VAD_ON"]))
+    return PASS, notes
+
+
+def _ledger_row(tool_id):
+    """One tool's four counts, or four zeros. Read off disk, because the ledger is the
+    machine's own record of what it ran and the point is not to take the server's word."""
+    try:
+        with open(os.path.join(ROOT, "tools-ledger.json"), encoding="utf-8") as fh:
+            row = (json.load(fh).get("tools") or {}).get(tool_id) or {}
+    except Exception:                                          # noqa: BLE001
+        row = {}
+    return {k: int(row.get(k) or 0) for k in ("ok", "failed", "refused", "lapsed")}
+
+
 CHECKS = [
     ("the server is up and serving the viewer", check_server),
     ("the graph data loads and has nodes", check_graph),
@@ -4459,6 +5122,9 @@ CHECKS = [
     ("the tab lock explains itself and asks in one voice", check_lock),
     ("a meeting is heard, minuted, and written only on a yes", check_scribe),
     ("nothing the server starts shows a console window", check_quiet_spawn),
+    ("the room knows the hour, and the instrument does not lie", check_room_hour),
+    ("the road to Google is narrow, and it refuses politely", check_google_grant),
+    ("a turn resets once, and one hand writes the arm", check_reset_contract),
 ]
 
 

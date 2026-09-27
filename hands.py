@@ -275,13 +275,32 @@ def prompt_block():
                           for p in tool["params"]) or "no details needed"
         lines.append("  * %s - %s. Details: %s"
                      % (tool["id"], "; ".join(tool["capabilities"]), shape))
+    # THE CLOCK, and it is here for exactly one reason: a calendar hand that takes ISO
+    # stamps cannot be filled in by a model that does not know what day it is. "Tuesday"
+    # is not a date; "tomorrow at four" is not a date; both are things an employer says
+    # every day. Without this line the model must either guess a year or refuse, and
+    # guessing a year puts a meeting in the wrong one on the employer's real phone.
+    now = time.localtime()
+    lines.append(
+        "  RIGHT NOW IT IS %s, and your timezone offset is %s. Times you are given as "
+        "\"start\" or \"end\" must be written as ISO-8601 - 2026-09-28T16:00 for an hour, "
+        "or 2026-09-28 on its own for a whole day - and worked out from that clock: "
+        "\"tomorrow\", \"Tuesday\" and \"in an hour\" are all resolvable from it, so "
+        "resolve them rather than passing the words through. If they name an hour with no "
+        "day, it is today unless that hour has already gone, in which case it is "
+        "tomorrow. Leave \"end\" out when they did not give one; the server says half an "
+        "hour out loud rather than inventing a length quietly."
+        % (time.strftime("%A %d %B %Y at %H:%M", now), time.strftime("%z", now) or "local"))
     lines.append(
         "  If, and ONLY if, they have just asked you to do one of those things, do not "
         "answer in prose. Reply with nothing but a control tag naming the tool and the "
         "details you were given, as JSON: "
-        "[[tool: add_calendar_event | {\"title\": \"call the client\", \"when\": "
-        "\"four o'clock\"}]]. Use the id exactly as written above; the server checks it "
-        "against the tools it really has and refuses rather than guessing, so never "
+        "[[tool: add_calendar_event | {\"title\": \"call the client\", \"start\": "
+        "\"%s\"}]]. Use the id exactly as written above; the server checks it "
+        % time.strftime("%Y-%m-%dT16:00", now)
+        # One element, not two: lines are joined with newlines, and a newline dropped in
+        # here would cut the sentence in half in the middle of a clause.
+        + "against the tools it really has and refuses rather than guessing, so never "
         "invent one and never reach for a near neighbour. Fill in only what they told "
         "you - never invent an address, a time or a recipient, and if a required detail "
         "is genuinely missing, ask for that one thing in prose instead.\n"
@@ -325,13 +344,62 @@ def tool_tag(answer):
     return found.group(1).strip(), found.group(2), stripped
 
 
+def readings(params):
+    """The DERIVED blanks: a human sentence for values that are machine stamps.
+
+    Keyed on parameter NAMES, not on tool ids, and computed from the validated
+    parameters by the very function the script will use - google_api.event_times - so the
+    sentence the employer approves and the body that goes to Google cannot disagree about
+    what time the thing is. That is the whole reason this exists rather than a second
+    formatter living in the registry.
+
+    These never enter params, which means they never reach the script, never reach the
+    rows the page renders verbatim, and never reach the ledger. They are sentence
+    furniture. A failure to derive one is silent on purpose: the blank is then left
+    standing in the proposal, visible, and the proposal still happens - losing the whole
+    question because a date was odd would be worse than showing a human a stray {when},
+    and the script re-checks the stamps itself before anything is sent.
+    """
+    out = {}
+    if "start" in params:
+        try:
+            import google_api
+            _s, _e, when, duration, err = google_api.event_times(params.get("start", ""),
+                                                                 params.get("end", ""))
+            if err:
+                out["_refusal"] = err
+            else:
+                out["when"] = when
+                out["duration"] = duration
+        except Exception:
+            # The reading is furniture; losing it must not lose the proposal. An import
+            # that failed here leaves the blanks standing rather than refusing, because a
+            # broken module is not the employer's mistake and the script checks again.
+            pass
+    # THERE IS NO {preview} HERE, AND THAT IS A DELIBERATE OMISSION WITH A TEST BEHIND IT.
+    # A 200-character preview of the email body was written here first, and the registry's
+    # proposal sentence read it out: "...and it reads: 'Dear Tom, about the numbers...'".
+    # Preflight check 16 clause (f) caught it within the hour. That clause plants a fresh
+    # canary string in send_email's BODY and fails if the canary turns up in the spoken
+    # line, because `line` is not a caption - speakLine() says it out loud, and an email
+    # body is the one parameter here that can be nobody else's business. A machine that
+    # reads your correspondence aloud to whoever is standing in the room has picked the
+    # wrong half of a trade nobody offered it.
+    # The body is still shown - on the CARD, in the rows, in full and verbatim, which is
+    # more than a truncated preview and is the copy that actually travels. So the employer
+    # reads what they are approving with their eyes, and the room hears only who it is to
+    # and what it is about.
+    return out
+
+
 def _fill(template, params):
     """The registry's sentence with {blanks} filled from validated parameters only.
 
     Not str.format: a parameter whose value contains a brace would raise, an unknown
     blank would raise, and neither of those is a reason to lose a proposal. Only the
-    names the schema declared are substituted; anything else is left standing, visible,
-    where a human will notice the template is wrong.
+    names the schema declared are substituted - plus the derived readings above;
+    anything else is left standing, visible, where a human will notice the template is
+    wrong.
     """
     def swap(match):
         key = match.group(1)
@@ -481,7 +549,26 @@ def propose(tool_id, params_text, door="tag"):
         return _reply(400, False, refusal["line"], refused=refusal["key"],
                       field=refusal.get("field"), tool=tool["id"], pending=None)
 
-    line = _fill(tool["proposal"], params)
+    derived = readings(params)
+    if derived.get("_refusal"):
+        # A TIME THAT CANNOT BE READ IS A REFUSAL, NOT A CARD. The alternative was a
+        # proposal reading "That would be 'nonsense', {when}, {duration}" which the
+        # employer would approve and the script would then reject - one wasted click and
+        # one confusing sentence to reach a refusal we could already see coming. The
+        # script keeps its own check regardless: it can be run by hand.
+        _drop_for_refusal()
+        _log("proposal refused: %s unreadable time, nothing pending", tool["id"])
+        _record(tool["id"], "refused")
+        # A colon and not a dash: two of the reasons contain a dash of their own, and
+        # "the calendar, sir - the start and the end are not the same kind of time - one
+        # is a whole day" is a sentence a listener has to re-read.
+        return _reply(400, False, "I cannot put that in the calendar, sir: %s."
+                      % derived["_refusal"], refused="badtime", field="start",
+                      tool=tool["id"], pending=None)
+    # dict(params, **derived) and not params.update(derived): the derived blanks must not
+    # be in the dict that goes into the slot, because that dict is what the script
+    # receives on stdin and what the page renders as rows.
+    line = _fill(tool["proposal"], dict(params, **derived))
     with _lock:
         superseded = _pending
         _seq += 1

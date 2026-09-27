@@ -41,7 +41,8 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, copyFileSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, copyFileSync, readdirSync,
+         rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -65,7 +66,21 @@ const PROFILE = join(process.env.LOCALAPPDATA || '', 'Jarvis', 'devtools-profile
    this harness ever has to force a browser that would not close, the boss's real tabs go with
    it and both lines still print. Match on the pattern, and keep the legacy names for an older
    Chrome that might still write them. */
-const SESSION_DIRS = [join('Default', 'Sessions'), 'Default', ''];
+/* AND THERE ARE TWO SESSION FOLDERS NOW, NOT ONE. Chrome/153 writes the session twice:
+   Default/Sessions holds it in the clear and Default/Sessions_Encrypted holds it wrapped
+   with the OSCrypt key. Backing up one of them and not the other is worse than backing up
+   neither, because teardown then DELETES the files this run wrote in the folder it knows
+   about and leaves this run's files standing in the folder it does not - so the profile is
+   put back half in one era and half in another. Measured on this machine after exactly that:
+   the profile stopped writing Session_<ts> files altogether, in either folder, and its
+   exit_type stayed "Crashed" through a clean WM_CLOSE; --restore-last-session then had no
+   last session to hand back and section 3 failed on an empty tab list, three runs running.
+   A brand-new profile written the same way in the same minute wrote its Session file within
+   twelve seconds and flipped exit_type to "Normal" on a polite close, which is what proved
+   it was the profile and not the close. The repair was to move the profile aside and let
+   Chrome make a new one; this line is so that the repair is not needed a second time. */
+const SESSION_DIRS = [join('Default', 'Sessions'), join('Default', 'Sessions_Encrypted'),
+                      'Default', ''];
 const LEGACY_SESSION_FILES = ['Last Session', 'Last Tabs', 'Current Session', 'Current Tabs'];
 function isSessionFile(f) {
   return /^(Session|Tabs)_\d+$/.test(f) || LEGACY_SESSION_FILES.includes(f);
@@ -106,6 +121,139 @@ const CHROMES = [
   'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
   process.env.LOCALAPPDATA + '/Google/Chrome/Application/chrome.exe',
 ];
+
+/* ---- THE OBSERVER, AND WHY IT IS IN THIS FILE OF ALL FILES -----------------
+ * The head's gaze shifts towards the organ rail when a focus session starts to DRIFT, and
+ * returns to centre when the drift ends. There is no setter for it: it reads `drifting` off
+ * focus.py's own SSE push and nothing else, deliberately, so that a harness cannot make the
+ * head look at something by asking it to. Which leaves exactly one way to prove it moves -
+ * a real drift, computed by the real watcher - and this is the only file in the suite that
+ * can produce one. Everything else either starts no session (focus_probe) or runs on a port
+ * focus.py never looks at (deck_proof, 9236).
+ *
+ * MEASURED, AND IT IS WHY THE VIEWER IS A SECOND BROWSER: a `--headless=new` Chrome has no
+ * Windows foreground window, so it can never be the front tab, so it can never be locked -
+ * /focus/diag answered frontIsBrowser=false, tabRead="notbrowser", and retarget replied with
+ * the re-arm sentence. A headless browser therefore cannot host the drift. It is a perfect
+ * OBSERVER for the same reason: with no window, it cannot steal the foreground from the
+ * locked tab, so watching the room costs the measurement nothing. The SSE is server-wide, so
+ * the viewer does not need to be the browser that drifted.
+ *
+ * On 9254, which is not one of the three ports focus.py probes and not one any other harness
+ * uses - the premise check in section 1 would otherwise be checking this file's own browser.
+ * ?presence=face is asked for outright: the gaze uniforms are read inside the shader's FACE
+ * branch, and an audition that stood the head down for frame rate would leave the section
+ * measuring a ring.
+ *
+ * AND ?nohome=1, WHICH COST THREE HOURS TO FIND. "With no window it cannot steal the
+ * foreground, so watching the room costs the measurement nothing" is true and was not
+ * enough: the observer did not take the foreground, it took HOME BASE. Every viewer beats
+ * "I have the keyboard" at the server while a session is live and document.hasFocus() is
+ * true - and under --headless=new hasFocus() is permanently true, because there is no other
+ * window to lose it to. Home base outranks every drift by design, so focus.py's tick took
+ * the at_home branch and the locked-tab drift was never reached: measured at 2861 ms and
+ * again 1500 ms later, drifts=0, watchState=off, inGrace=false, ticks still advancing. With
+ * the observer skipped entirely (LOCK_AB=1) and nothing else changed: 937 ms, drifts=1,
+ * callout spoken. Twice each way. ?focusprobe=1 is the wrong flag for this - it makes the
+ * page hermetic and a hermetic page never opens the session stream, which is the stream the
+ * gaze reads - so the viewer gained the narrower one instead. */
+const GAZE_PORT = 9254;
+const GAZE_VIEW = GALAXY + '/?mute=1&nohome=1&presence=face';
+let gazeProc = null, gazeProfile = '', gazeSock = null, gazeWhy = 'not opened';
+
+async function gazeOpen() {
+  const exe = CHROMES.find(existsSync);
+  if (!exe) { gazeWhy = 'no chrome.exe'; return false; }
+  if (await portAlive(GAZE_PORT)) { gazeWhy = 'something already answers on ' + GAZE_PORT;
+    return false; }
+  gazeProfile = mkdtempSync(join(tmpdir(), 'lockgaze-'));
+  gazeProc = spawn(exe, ['--headless=new', '--remote-debugging-port=' + GAZE_PORT,
+    '--user-data-dir=' + gazeProfile, '--no-first-run', '--no-default-browser-check',
+    '--window-size=1400,940', GAZE_VIEW], { detached: true, stdio: 'ignore' });
+  for (let i = 0; i < 80; i++) {
+    if (await portAlive(GAZE_PORT)) break;
+    await sleep(250);
+  }
+  let target = null;
+  for (let i = 0; i < 40; i++) {
+    const list = await cdp('/json/list', 'GET', GAZE_PORT);
+    target = (Array.isArray(list) ? list : []).filter((t) => t.type === 'page')
+      .find((t) => t.url.includes('presence=face'));
+    if (target) break;
+    await sleep(300);
+  }
+  if (!target) { gazeWhy = 'the observer page never appeared'; return false; }
+  gazeSock = sock(target.webSocketDebuggerUrl);
+  await gazeSock.ready;
+  await gazeSock.send('Runtime.enable');
+  for (let i = 0; i < 120; i++) {
+    const built = await gazeEval('!!(window.__galaxy && __galaxy.presence &&' +
+                                ' __galaxy.presence.built && __galaxy.presence.mode)');
+    if (built) break;
+    await sleep(500);
+  }
+  const mode = await gazeEval('__galaxy.presence.mode');
+  gazeWhy = 'open on ' + GAZE_PORT + ', mode ' + mode + ', ' + gazeStandBack();
+  return mode === 'face';
+}
+/* AND THEN IT GETS OUT OF THE WAY, which is the whole of what this function is for.
+ *
+ * ON THE RECORD, BECAUSE THIS FUNCTION WAS WRITTEN FOR THE WRONG REASON. The observer did
+ * break the budget check - 2858, 2856 and 2861 ms against a budget of 1500, with drifts=0,
+ * against 937 ms and drifts=1 with the observer skipped, twice each way - and the first
+ * explanation was CPU: a headless Chrome painting a WebGL galaxy at sixty frames a second
+ * starving the watcher's poll and the one-second tick. This function was that explanation's
+ * repair, and it FAILED to repair it: with twelve of the observer's processes confirmed at
+ * BelowNormal the check still read 2856 ms. The measurement that settled it was the tick
+ * counter, sampled 1500 ms AFTER the failure: ticks were advancing, watchState was "off",
+ * inGrace was false, and drifting was STILL false. Nothing was late. The drift was being
+ * EXCUSED - the observer was claiming home base, because under --headless=new
+ * document.hasFocus() never goes false. ?nohome=1 is the actual fix and it reads 778 ms.
+ *
+ * The priority drop stays, on the narrower claim it can support: a second browser painting
+ * a galaxy beside a timed watcher is contention worth removing even when it is not the
+ * fault, and 778 of 1500 ms is measured with it in place. BelowNormal rather than Idle: the
+ * observer still has to paint, because the gaze is computed per frame and the departure is
+ * counted in frames - a head that never gets a frame proves nothing either. Every process
+ * of the observer's own temporary profile, which is a directory name no other Chrome on
+ * this machine carries, so neither the boss's browsing nor the locked browser is touched. */
+function gazeStandBack() {
+  const leaf = gazeProfile.split(/[\\/]/).pop();
+  if (!leaf) return 'not moved: no profile';
+  const moved = ps("@(Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | " +
+    "Where-Object { $_.CommandLine -and $_.CommandLine -like '*" + leaf + "*' } | " +
+    'ForEach-Object { $p = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue; ' +
+    "if ($p) { try { $p.PriorityClass = 'BelowNormal'; $_.ProcessId } catch { } } }).Count");
+  return Number(moved || '0') + ' of its processes stood back to BelowNormal';
+}
+async function gazeEval(expression) {
+  if (!gazeSock) return undefined;
+  const r = await gazeSock.send('Runtime.evaluate',
+    { expression, returnByValue: true, awaitPromise: true });
+  return r.result && r.result.result ? r.result.result.value : undefined;
+}
+async function gazeRead() {
+  const raw = await gazeEval('JSON.stringify(__galaxy.presence.gaze)');
+  try { return JSON.parse(raw); } catch { return null; }
+}
+/* A DEADLINE ON THE PAGE'S OWN COUNTERS, not a fixed sleep: the departure is an eased chase
+   on a 260ms time constant and the return is the same chase backwards, so how many frames
+   either takes depends on the frame rate this renderer happens to be getting. */
+async function gazeUntil(pred, ms) {
+  const until = Date.now() + ms;
+  let last = null;
+  while (Date.now() < until) {
+    last = await gazeRead();
+    if (last && pred(last)) return { hit: true, g: last };
+    await sleep(100);
+  }
+  return { hit: false, g: last };
+}
+function gazeClose() {
+  try { if (gazeSock) gazeSock.close(); } catch { /* already gone */ }
+  try { if (gazeProc) gazeProc.kill(); } catch { /* already gone */ }
+  gazeSock = null; gazeProc = null;
+}
 
 const t0 = Date.now();
 const failures = [];
@@ -648,6 +796,25 @@ async function consent() {
      'only works on a browser that was closed, not shot.');
   const A = restored[0];
   await cdp('/json/activate/' + A.id);
+  /* AND HE LOOKS AT IT, which /json/activate cannot do for him.
+     Measured, after the section above finally started restoring tabs again: with the work
+     tab activated and the browser genuinely showing it, the window reader still said
+     tabRead="notbrowser", frontIsBrowser=false, tabLane="n/a" and lockedTab="" for fourteen
+     seconds - and an enumeration of every Chrome window on the machine showed fg=false for
+     ALL of them. /json/activate selects a tab inside a window; it does not give that window
+     the foreground, and a relaunch driven from a hand's own PowerShell has no foreground
+     rights to pass on, so after the polite close the foreground fell to the editor. The
+     scenario this section claims - "and now he goes to his work" - is a man clicking his
+     browser, and clicking a browser DOES make it the front window. So raise it the same way
+     section 2 raises it, through the one helper that checks its own work: a raise that
+     silently failed would leave this passing the feature where nothing of ours is in front.
+     This is why baseline run5 was green and runs 1-3 were not: after a polite close there is
+     a moment when no window owns the foreground, and a new process may take it then. That is
+     a race, not a mechanism, and it is the last thing in this file that was still one. */
+  const raised = bringChromeForward();
+  ok(/^front is chrome/.test(raised), 'and he is looking at the browser he got back: ' +
+     raised, 'front is ' + frontProcess() + '; /json/activate switches a tab, it does not ' +
+     'raise a window, and the window reader can only read the FRONT one');
   const lock = await until((s) => !!s.lockedTab, 14000);
   const s = lock.state;
   ok(lock.hit, 'THE LOCK COMPLETED ITSELF on the tab he went to, with no second press: ' +
@@ -709,12 +876,42 @@ async function teeth(A) {
   ok(!!B, 'a second tab of the same host opens beside it');
   const drift = await until((s) => s.drifting === true, DRIFT_BUDGET_MS + 1200);
   const took = Date.now() - t;
+  /* READ AFTER THE CLOCK, NEVER BEFORE IT. frontProcess() is a PowerShell round trip and
+     costs about four hundred milliseconds, which is a quarter of the budget being measured;
+     it is gathered here, once the stopwatch has stopped, purely so that a failure says which
+     window the reader was looking at instead of only that it saw nothing. */
+  const lanes = drift.hit ? null : await diag();
+  /* AND HOW FAST IS THE HEART, which is the only question that separates the two ways this
+     check can fail. Either the tick thread is running at one hertz and the drift was not
+     counted - a logic fault, in the reader's verdict or the watcher's grace - or the tick
+     thread is being starved and the count is merely late. Those two have the same symptom
+     and opposite repairs, so the rate is sampled rather than guessed: two reads of the
+     manager's own tick counter, a second apart, taken AFTER the stopwatch so they cost the
+     measurement nothing. */
+  let beat = '';
+  if (!drift.hit) {
+    const a = await diag();
+    await sleep(1500);
+    const b = await diag();
+    const per = (Number(b.ticks) - Number(a.ticks)) / 1.5;
+    const late = await state();
+    beat = '; ticks ' + a.ticks + '->' + b.ticks + ' = ' + per.toFixed(2) +
+           '/s against TICK_S=1.0, tickAgeS=' + b.tickAgeS + ', watchPolls ' +
+           a.watchPolls + '->' + b.watchPolls + ', watchState=' + b.watchState +
+           ', and by now drifting=' + late.drifting + ' drifts=' + late.drifts;
+  }
   ok(drift.hit && took <= DRIFT_BUDGET_MS,
      'LEAVING THE LOCKED TAB IS NOTICED in ' + took + ' ms (budget ' +
      DRIFT_BUDGET_MS + ' ms)',
      'FAILURE MODE: the whole feature. Same host, same window, same application - ' +
      'nothing but the watcher can see this, so a watcher that is not polling passes ' +
-     'every other check in this file and this one only.');
+     'every other check in this file and this one only. front is ' + frontProcess() +
+     '; ' + JSON.stringify(lanes && {
+       tabRead: lanes.tabRead, frontIsBrowser: lanes.frontIsBrowser,
+       frontIsHome: lanes.frontIsHome, appLane: lanes.appLane, tabLane: lanes.tabLane,
+       watchers: lanes.watchers, watchPolls: lanes.watchPolls, watchState: lanes.watchState,
+       inGrace: lanes.inGrace, excused: lanes.excused, readerOnTarget: lanes.readerOnTarget })
+     + beat);
   ok(drift.state.drifts === 1, 'and it counts as exactly one drift: ' + drift.state.drifts);
   const bitsA = await bits(A);
   ok(bitsA === 0, 'the locked tab really is behind: bits=' + bitsA +
@@ -730,6 +927,29 @@ async function teeth(A) {
      'and it names no site: the locked pool is nameless, whatever the naming switch says',
      JSON.stringify(calls));
 
+  /* ---- THE HEAD IS DOING SOMETHING, AND IT IS NOT IDLING ------------------
+     ALIVENESS AS ATTENTION rather than as physics. The idle yaw and pitch drift is already
+     there and is not touched: what changes is the POINT that motion orbits, which moves from
+     centre towards the organ rail - #focusbtn, the element fxPaint writes `organ on drift`
+     onto, so the head looks at the thing that just changed rather than at a decorative spot.
+     Two frame numbers are asked for and two frame numbers are read, off the page's own
+     counter: the frame the centre first crossed the deadband on the way out, and the frame it
+     was back inside it. Both latched by the page, so a slow poll cannot miss them. */
+  const gd = await gazeUntil((g) => g.on === true && g.left > 0, 5000);
+  const gdg = gd.g || {};
+  ok(gd.hit && gdg.why === 'focus.public_state().drifting' && gdg.departures === 1,
+     'THE HEAD TURNS TOWARDS THE CHANGE on a real drift: the gaze left centre on frame ' +
+     gdg.left + ' (' + gdg.leftAt + 'ms on the page\'s own clock), aiming at ' +
+     JSON.stringify(gdg.want) + ' radians because "' + gdg.why + '" went true',
+     'FAILURE MODE: a head that looks lively and is not listening. ' +
+     JSON.stringify({ gaze: gdg, observer: gazeWhy }));
+  const reach = Math.hypot(gdg.at ? gdg.at[0] : 0, gdg.at ? gdg.at[1] : 0);
+  ok(gd.hit && reach > gdg.eps && reach <= gdg.max * Math.SQRT2 + 1e-6,
+     'and it is a GLANCE and not a head-turn: ' + reach.toFixed(4) +
+     ' radians off centre, past its own ' + gdg.eps + ' deadband and inside the ' +
+     gdg.max + ' ceiling - the same idle sine, a different point to orbit',
+     JSON.stringify({ at: gdg.at, want: gdg.want, eps: gdg.eps, max: gdg.max }));
+
   /* COMING BACK, said once. A watchdog that only ever tells you off is a watchdog you
      turn off. */
   await cdp('/json/activate/' + A.id);
@@ -740,6 +960,22 @@ async function teeth(A) {
      'and says so ONCE: "' + SAY.back + '"', JSON.stringify(backLines));
   ok(back.state.drifts === 1,
      'the drift is not refunded by coming back: drifts=' + back.state.drifts);
+  /* AND IT LOOKS BACK. A head that stays turned is not attending, it is distracted - so the
+     return is measured as hard as the departure, and from the same counter. */
+  const gb = await gazeUntil((g) => g.on === false && g.back > 0, 6000);
+  const gbg = gb.g || {};
+  ok(gb.hit && gbg.back > gbg.left && gbg.why === 'centre' && gbg.departures === 1,
+     'AND THE HEAD COMES BACK TO CENTRE when the drift ends: frame ' + gbg.back + ' (' +
+     gbg.backAt + 'ms), ' + (gbg.back - gbg.left) + ' frames and ' +
+     (gbg.backAt - gbg.leftAt) + 'ms after it left - one departure for one drift, not a ' +
+     'head that stayed turned',
+     JSON.stringify({ gaze: gbg, observer: gazeWhy }));
+  const rest = Math.hypot(gbg.at ? gbg.at[0] : 1, gbg.at ? gbg.at[1] : 1);
+  ok(gb.hit && rest <= gbg.eps && gbg.want[0] === 0 && gbg.want[1] === 0,
+     'aiming at centre again and actually there: want ' + JSON.stringify(gbg.want) +
+     ', at ' + JSON.stringify(gbg.at) + ' - inside the deadband, on the same eased chase ' +
+     'that carried it out',
+     JSON.stringify({ at: gbg.at, want: gbg.want, eps: gbg.eps }));
 
   /* THE SECOND DRIFT, inside thirty seconds. The narrating stops and something is
      offered instead - through the same gate as every other hand. */
@@ -836,6 +1072,16 @@ async function unlock(A, B) {
 
 async function tidy() {
   console.log('\n  6. TEARDOWN\n');
+  /* THE OBSERVER GOES FIRST, and its port is checked clear afterwards: 9254 answering
+     after this file exits would be a leftover the next run of anything trips over, which is
+     the failure mode section 1 exists to catch. */
+  gazeClose();
+  await sleep(1200);
+  try { rmSync(gazeProfile, { recursive: true, force: true }); } catch { /* locked */ }
+  if (gazeProfile) {
+    ok(!(await portAlive(GAZE_PORT)),
+       'the observer is closed and nothing answers on ' + GAZE_PORT + ' any more');
+  }
   try {
     const { work } = await findWork();
     for (const t of work) { await cdp('/json/close/' + t.id); }
@@ -880,6 +1126,15 @@ async function main() {
   backupProfileSession();
   await portlessPress();
   const locked = await consent();
+  /* AFTER THE LOCK AND BEFORE THE TEETH. Not earlier: section 1's premise is that no
+     debugging port is answering anywhere, and section 2's whole subject is a press made with
+     no port to press into - a second browser standing open through either of those would be
+     a harness proving something about its own leftovers. */
+  const watching = await gazeOpen();
+  log('the observer: ' + gazeWhy);
+  ok(watching, 'THE OBSERVER IS WATCHING THE ROOM: a headless viewer on ' + GAZE_PORT +
+     ' with the head in FACE mode, which is the only mode the gaze uniforms are read in',
+     'FAILURE MODE: the two gaze checks below measuring a ring. ' + gazeWhy);
   const { A, B } = await teeth(locked);
   await unlock(A, B);
 }

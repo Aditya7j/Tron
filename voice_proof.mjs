@@ -1676,6 +1676,131 @@ async function main() {
 
   await page.evaluate('__galaxy.cmd.view_("list"); __galaxy.cmd.open_(false)');
 
+  /* ---- 11. THE QUIET TONGUE ---------------------------------------------- */
+  /* WHAT THE BOSS HEARD, which is where this section came from: a model answer with
+     *emphasis* in it was read as "asterisk quite asterisk", and a calendar hand that
+     succeeded had its event id spelled out one character at a time in a human voice for the
+     better part of ten seconds. The text was right both times. The reading was not.
+
+     TWO HALVES, AND THE SECOND IS THE ONE THAT MATTERS. The rules can be asserted on strings
+     with no engine, no bus and no sound - that is (a), and it includes the case that would be
+     the worst possible regression here: an ordinary English word of twelve letters or more
+     must survive, because a normalizer that replaced "understanding" with "the reference is
+     in the card" would be a much worse machine than the one that spells ids.
+     Then (b) reads a real sentence out loud through the real funnel and asserts the SPLIT:
+     zero asterisks and no id in what the engine was handed, both of them still there, raw, in
+     the caption and in the page's own ledger. One string in, two different strings out, on
+     purpose - and that is the whole claim, because either half alone is easy. */
+  const rules = JSON.parse(await page.evaluate(`JSON.stringify({
+    min: __galaxy.voice.ID_MIN, line: __galaxy.voice.ID_LINE,
+    bold: __galaxy.voice.normalize('Yes sir, that is *quite* right.'),
+    marks: __galaxy.voice.normalize('# A heading with \\\`code\\\` and _italics_.'),
+    id: __galaxy.voice.normalize('The event is 7s0h4k9m2n3p5q6r8t1v, sir.'),
+    words: __galaxy.voice.normalize('Your understanding of the extraordinary transcription.'),
+    many: __galaxy.voice.normalize('Ids 7s0h4k9m2n3p5q6r8t1v and 9a8b7c6d5e4f3g2h1i0j.'),
+    digits: __galaxy.voice.normalize('The number 123456789012 is in there.'),
+    short: __galaxy.voice.normalize('Short ones like abc123 stay.')
+  })`));
+  note('the tongue on eight strings: ' + JSON.stringify(rules));
+  ok(rules.bold === 'Yes sir, that is quite right.' && rules.marks.indexOf('#') < 0 &&
+     rules.marks.indexOf('`') < 0 && rules.marks.indexOf('_') < 0 &&
+     rules.marks === 'A heading with code and italics.',
+     'RULE 1 - THE MARKDOWN COMES OUT: * _ # and backticks are stripped and the words behind ' +
+     'them are left alone: "' + rules.marks + '"', JSON.stringify(rules));
+  ok(rules.id === 'The event is ' + rules.line + ', sir.' &&
+     rules.digits === 'The number ' + rules.line + ' is in there.',
+     'RULE 2 - AN UNSPEAKABLE TOKEN BECOMES A SENTENCE: a ' + rules.min +
+     '+ character run of letters and digits is read as "' + rules.line + '" instead of being ' +
+     'spelled out: "' + rules.id + '"', JSON.stringify(rules));
+  /* THE ONE THAT WOULD BE A DISASTER. Tested as its own assertion rather than folded into the
+     one above, because it is the case a future edit is most likely to break by "simplifying"
+     the rule to the mandate's literal words. */
+  ok(rules.words === 'Your understanding of the extraordinary transcription.' &&
+     rules.short === 'Short ones like abc123 stay.',
+     'AND AN ENGLISH WORD IS NOT AN ID: "understanding", "extraordinary" and ' +
+     '"transcription" are all over ' + rules.min + ' characters and all survive, because the ' +
+     'rule asks for a digit as well as the length - and a short token is left alone either way',
+     JSON.stringify(rules));
+  ok(rules.many === 'Ids ' + rules.line + '.',
+     'RULE 3 - AND THE PHRASE IS SAID ONCE: two ids joined by "and" collapse to one "' +
+     rules.line + '" rather than saying it twice in one breath: "' + rules.many + '"',
+     JSON.stringify(rules));
+
+  /* ---- (b) AND NOW OUT LOUD, THROUGH THE REAL FUNNEL ---- */
+  /* LONG ENOUGH TO CUT, AND CUT SO THAT THE ID IS NOT IN THE FIRST CHUNK. SPEAK_MAX is 180
+     and the splitter glues short sentences back together up to that ceiling, so a one-sentence
+     fixture would be a single chunk - and a single chunk is the one case that cannot tell a
+     read-time normalization from a queue-time one, because the pump reaches chunk zero before
+     the lookahead has anything to run ahead of. With the asterisks in the first sentence and
+     the id in the last, the id is carried by a chunk sayFetch() ordered from /say while the
+     first was still playing: the exact seam the accessor was put at. */
+  const TONGUE_ID = '7s0h4k9m2n3p5q6r8t1v';              // twenty characters, letters and digits
+  const TONGUE_LINE = 'Yes sir, that is *quite* right, and I have put the whole of it on the ' +
+                      'card for you. The reading is deliberately plain, because an identifier ' +
+                      'spelled out loud is nine seconds nobody wanted. The event id is ' +
+                      TONGUE_ID + ', and it is on the card in full.';
+  const cut = await page.json('__galaxy.voice.split(' + JSON.stringify(TONGUE_LINE) + ')');
+  ok(TONGUE_ID.length === 20 && cut.length >= 2 && cut[0].indexOf('*') >= 0 &&
+     cut[0].indexOf(TONGUE_ID) < 0 && cut.some((c) => c.indexOf(TONGUE_ID) >= 0),
+     'the line about to be read carries a ' + TONGUE_ID.length + '-character id and a pair of ' +
+     'asterisks, and it cuts into ' + cut.length + ' chunks with the asterisks in the first and ' +
+     'the id in a LATER one - so the id travels on a prefetched chunk',
+     JSON.stringify(cut));
+  /* IT GOES IN THROUGH THE FUNNEL and not through the engine: speakLine() is the one door,
+     so the split being asserted below is the split the butler actually performs when a model
+     answer arrives - the caption, the ledger and the chunk log are all raised by this call.
+
+     AND THE CAPTION AND THE LEDGER ARE READ IN THE SAME BREATH AS THE CALL, before a single
+     chunk has played, for two different reasons that happen to point the same way. The caption
+     fades CAPTION_HOLD_MS after the voice ends, so a read taken after the drain would find an
+     empty string and "the caption kept it raw" would pass on a blank. The ledger is worse:
+     SAID_TTL_MS is six seconds and this sentence takes longer than that to read, so the raw
+     line is PRUNED OUT of __galaxy.speech.said while it is still being spoken - a slice taken
+     after the drain would find the line gone and report a tongue that never recorded anything.
+     Both surfaces are live-only. Reading them late would have been a harness measuring its own
+     patience again, which is the mistake that already cost this round a misdiagnosis. */
+  const onScreen = await page.json('(function(){' +
+    ' __galaxy.speech.speakLine(' + JSON.stringify(TONGUE_LINE) + ');' +
+    ' return {text: __galaxy.caption.text, up: __galaxy.caption.up,' +
+    '         said: __galaxy.speech.said.slice(-1)}; })()');
+  const ledger = (onScreen.said[0] && onScreen.said[0].text) || '';
+  ok(await waitFor(page, '__galaxy.voice.draining === false && __galaxy.voice.queue === 0',
+                   90000),
+     'the sentence was read to its last word, out loud, on the engine this run cast');
+  const tongue = await page.json('__galaxy.voice.chunks');
+  const queued = tongue.map((c) => c.text).join(' ');
+  const aloud = tongue.map((c) => c.spoken == null ? '<never read>' : c.spoken).join(' ');
+  console.log('');
+  console.log('  ---- one sentence, two strings ' + '-'.repeat(42));
+  console.log('  queued : ' + queued);
+  console.log('  spoken : ' + aloud);
+  console.log('  caption: ' + collapse(onScreen.text || ''));
+  console.log('  ledger : ' + ledger);
+  console.log('  ' + '-'.repeat(73));
+  console.log('');
+  ok(tongue.length > 0 && tongue.every((c) => c.spoken != null),
+     'every one of the ' + tongue.length + ' chunk(s) carries a spoken form, so the ' +
+     'normalization ran at READ time for all of them - including the ones the lookahead ' +
+     'fetched before the pump reached them, which is the seam it had to sit on',
+     JSON.stringify(tongue));
+  ok(aloud.indexOf('*') < 0,
+     'ZERO ASTERISKS REACHED THE ENGINE: "' + aloud + '"', JSON.stringify(aloud));
+  ok(aloud.indexOf(TONGUE_ID) < 0 && aloud.indexOf(rules.line) >= 0,
+     'AND ZERO SPELLED CHARACTERS: not one character of the twenty-character id is in what was ' +
+     'spoken, and "' + rules.line + '" stands in its place', JSON.stringify(aloud));
+  ok(queued.indexOf('*') >= 0 && queued.indexOf(TONGUE_ID) >= 0,
+     'WHILE THE CHUNK LOG KEPT BOTH RAW: the record of what the queue was asked to read still ' +
+     'carries the asterisks and the id, so nothing was normalised on the way IN and the ' +
+     'evidence of what was asked for survives the reading of it', JSON.stringify(queued));
+  ok(onScreen.up === true && collapse(onScreen.text || '') === collapse(TONGUE_LINE),
+     'AND THE CAPTION SHOWS BOTH, VERBATIM: the subtitle is up and is the raw line character ' +
+     'for character, asterisks and id included, while the speakers carry neither - an id you ' +
+     'cannot read off the screen is an id you cannot use', JSON.stringify(onScreen));
+  ok(ledger === TONGUE_LINE,
+     'AND THE LEDGER KEPT THE RAW LINE TOO: __galaxy.speech.said records what the page was ' +
+     'asked to say and not what came out of the speakers, so the brain, the scribe and every ' +
+     'harness reading it still see the id', JSON.stringify(onScreen.said));
+
   /* AND THE FILE IS AS IT WAS. The last word of the run, and the one that matters most:
      three auditions, two sabotaged reads and four minutes of speech later, config.json holds
      the same voice, the same number of keys, and the same digest of everything else. */

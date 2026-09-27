@@ -41,6 +41,15 @@
        instead of averaging it into mud. */
     --glass:rgba(15,15,20,.6);
     --blur:blur(12px) saturate(150%);
+    /* HOW TALL A SPOKEN ANSWER MAY GET BEFORE IT SCROLLS INSIDE ITSELF. 46vh, and the
+       number is arithmetic rather than taste: this deck's left column also has to hold the
+       question line, the citation chips, a possible Yes/No gate, the caption and the ask
+       bar, and 46vh is what is left for the prose once those have what they need at the
+       shortest window this project supports. min() with a pixel ceiling because on a tall
+       4K screen 46vh is 900px of text, which is no longer a card - it is a page, and the
+       point of the glass is that an answer looks like something said rather than
+       something published. */
+    --answermax:min(46vh,560px);
     --accent:#7cc4ff;
     /* The web's colour, and nothing else's. Kept in step with WEB_CYAN in the script
        below, which washes the galaxy with the same value. */
@@ -115,7 +124,10 @@
      one. Read it top to bottom and you know what covers what:
 
          0   #stars      \
-         1   #nebula      |  THE GALAXY. Painted, never interactive.
+         1   #nebula      |  THE GALAXY. Painted, never interactive. #nebula-work shares
+                          |  this layer and sits after it in the document: work mode's cold
+                          |  band is the same field at a different temperature, not a new
+                          |  thing in the room, so it does not get a number of its own.
          2   #graph       |
          3   #sunglow     |  THE DISTANT SUN and its anamorphic streak. ABOVE the graph on
                           |  purpose: a flare is an artefact of the LENS, not an object in
@@ -253,6 +265,27 @@
       radial-gradient(52% 46% at 21% 27%, rgba(139,92,246,.06), transparent 72%),
       radial-gradient(46% 40% at 81% 68%, rgba(45,212,191,.05), transparent 72%),
       radial-gradient(64% 52% at 55% 98%, rgba(124,88,230,.035), transparent 74%);
+    filter:blur(40px)}
+
+  /* ---------- AND THE SAME FIELD, IN WORK MODE ----------
+     THE COLD BAND. One element, opacity 0 at rest, brought up over #nebula while the layer
+     under it is pulled down to 30% - see WORK in the script, which owns both numbers and
+     eases them on one scalar so they cannot come apart.
+     NARROWER, AND COOLER. Two ellipses instead of three and both of them at the cold end:
+     sky-blue on the left shoulder where the violet was, indigo on the right where the teal
+     was. The violet-to-teal pair of the idle field spans most of the visible hue circle,
+     which is what makes the idle room feel like somewhere to look around; blue-to-indigo
+     spans about forty degrees of it, which is what makes the work room feel like one
+     temperature. The third ellipse - the wash rising off the bottom edge - is deliberately
+     absent: it is the one that lights the floor, and a floor is scenery.
+     UNDER §12'S CEILING, NOT OVER IT. .05 and .045 against the idle field's .06/.05/.035,
+     so work mode subtracts ink from the glass and never adds any.
+     Same z-index as #nebula and after it in the document, which is the whole of why it
+     paints above: the stack list stays eight entries long. */
+  #nebula-work{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:0;
+    background:
+      radial-gradient(48% 42% at 24% 30%, rgba(56,189,248,.05), transparent 72%),
+      radial-gradient(44% 38% at 78% 64%, rgba(99,102,241,.045), transparent 72%);
     filter:blur(40px)}
 
   /* THE DISTANT SUN, which is the same claim as the light on the worlds.
@@ -696,7 +729,53 @@
     to{opacity:1;transform:none}}
   #answer .q{font-size:11px;letter-spacing:.14em;text-transform:uppercase;
     color:var(--muted);margin-bottom:9px}
-  #answer .a{font-size:14.5px;line-height:1.6;color:#f2f6ff;white-space:pre-wrap}
+  /* ---------- THE CONTAINED PAGE ----------
+     THE DOCUMENT NEVER SCROLLS SIDEWAYS. That is the whole law, and everything in this
+     block exists to keep it against one specific enemy: a single token with no space in
+     it. `white-space:pre-wrap` above honours the model's own line breaks, which is right,
+     and it also means a 400-character identifier is ONE unbreakable word - so without the
+     rule below the paragraph is 400 characters wide, #brain is 400 characters wide, and
+     the whole deck slides right while the galaxy behind it goes off the edge of the world.
+     A horizontal scrollbar on a cinematic deck is not a cosmetic fault; it is the frame
+     coming loose.
+
+     overflow-wrap:break-word here and `anywhere` on the links below, and the difference is
+     deliberate - it is the lesson already written out at #focus-intent. `break-word` will
+     not break a long word if the overflow could be avoided some other way, which is right
+     for prose, where breaking mid-word is a last resort. `anywhere` breaks unconditionally,
+     which is right for a URL, because a URL is not prose and a reader losing the tail of
+     one is worse off than a reader seeing it wrapped in an ugly place.
+
+     THE HEIGHT IS CLAMPED ON THE PROSE AND NOT ON THE CARD, and that is a decision worth
+     the sentence: the Yes/No pair of a pending proposal lives at the bottom of this card,
+     and a confirmation gate you have to scroll down inside a panel to find is a worse
+     defect than a tall panel. The same goes for the citation chips. So the 5,000-character
+     answer scrolls INSIDE its own paragraph, with the question above it and the gate below
+     it both nailed where the eye expects them. It also leaves #answer free of `overflow`,
+     which the urgent ring needs: that ring is an absolutely positioned ::after at
+     inset:-1px, and a scroll container would both clip it and scroll it away from the two
+     buttons it exists to surround. */
+  #answer{max-width:100%;min-width:0}
+  #answer .a{font-size:14.5px;line-height:1.6;color:#f2f6ff;white-space:pre-wrap;
+    overflow-wrap:break-word;min-width:0;max-width:100%;
+    max-height:var(--answermax);overflow-y:auto;
+    /* The wheel stops at the edge of the paragraph instead of carrying on into the page
+       behind it, which on this deck means the galaxy's own zoom. */
+    overscroll-behavior:contain;scrollbar-width:thin}
+  /* Code and keys break anywhere, and a block of code scrolls on its own axis rather than
+     being broken - a wrapped line of code is a line of code that has been edited. */
+  #answer .a code,#answer .a kbd,#answer .a samp,#answer .a tt{overflow-wrap:anywhere}
+  #answer .a pre{margin:10px 0;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;
+    white-space:pre;scrollbar-width:thin}
+  /* THE CITATION CHIPS, both worlds. A cited passage's title comes out of a document and a
+     web result's chip out of somebody else's <title>, so neither length is ours to trust. */
+  .chip{max-width:100%;min-width:0;overflow-wrap:anywhere}
+  /* AND THE ROWS OF THE MOMENT OF TRUST. These carry a recipient, a subject and an ISO
+     stamp - exactly the three kinds of string that arrive with no spaces in them. */
+  #a-ask .rows span{overflow-wrap:anywhere}
+  /* THE CAPTION KEEPS ITS WIDTH. It is centred text over the deck with no box of its own,
+     so nothing else would stop one long token from widening the column that holds it. */
+  #caption{max-width:100%;overflow-wrap:anywhere}
   /* THE TYPEWRITER, and the one thing about it worth reading twice: it hides CHARACTERS,
      never text. Every letter of a long answer is in the DOM from the first frame, wrapped
      in a span at opacity 0, so the line's textContent is complete and correct before a
@@ -851,6 +930,86 @@
   #scribepanel .foot button:disabled{opacity:.45;cursor:default;transform:none}
   #scribepanel .foot .said{margin-left:auto;font-size:11px;color:var(--muted);
     font-family:var(--mono)}
+
+  /* ---------- THE MINUTES, COLLAPSED TO ONE LINE ----------
+     A confirmation gate and a rolling transcript both want the same column, and only one of
+     them has a deadline on it. So while a gate is open the transcript stops rolling and the
+     panel keeps its HEAD and nothing else - and the head already reads
+     TAKING THE MINUTES · timer · chunks · words, which is exactly the strip that was asked
+     for, assembled from the label and the meta line that were there before this rule. No
+     second piece of markup, therefore no second thing to keep in step with the first: the
+     strip cannot drift from the panel because it IS the panel with two children hidden.
+
+     display:none on .lines and .foot, and not visibility:hidden or a height of zero. A scroll
+     container that is merely invisible still takes the wheel, and a strip you could scroll
+     would swallow the gesture meant for the parameter list directly above it - which is the
+     one list on this screen that is likely to need scrolling while a gate is open.
+
+     min-height AND overflow:hidden, rather than a flat height. The governor declares
+     LAYOUT.STRIP_H so that a published vertical budget knows the number it assigned, but a
+     declared height that turned out to be one pixel short of its own label would clip the
+     word MINUTES - so the number is a floor the strip normally sits exactly on and may exceed
+     if a font ever makes it, and the harness reports the declared number and the measured one
+     side by side rather than assuming they agree. */
+  #scribepanel.strip{padding:7px 15px;overflow:hidden}
+  #scribepanel.strip .head{margin-bottom:0;flex-wrap:nowrap}
+  #scribepanel.strip .lines,#scribepanel.strip .foot{display:none}
+  /* ONE LINE MEANS ONE LINE, and the first measurement of this strip said otherwise: 49px at
+     1280 and at 1600 against 34px at 1920. Nothing was wrapping at the FLEX level - nowrap is
+     already the default - the TEXT inside the two children was wrapping, because a flex item is
+     allowed to shrink below its content width and then break. With the note panel open the
+     toast column is 312px wide and the label and the meta together want about 350.
+
+     So in strip mode both children refuse to break, and the one that gives way if something
+     must is the LABEL - because the panel it labels is visibly the minutes panel, whereas the
+     timer, the chunk count and the word count are the three things on it that cannot be got
+     from anywhere else and are the reason it stays on screen at all. The letter-spacing comes
+     off too: .2em over eighteen characters is about 38px of pure air, which at 312px is the
+     difference between abbreviating and not. The numbers are never the ones that go. */
+  #scribepanel.strip .head .lbl{white-space:nowrap;letter-spacing:.11em;
+    min-width:0;overflow:hidden;text-overflow:ellipsis}
+  #scribepanel.strip .head .meta{white-space:nowrap;flex:0 0 auto}
+
+  /* THE CAPTION STANDS DOWN WHILE A GATE IS OPEN. The line the butler speaks when he offers a
+     hand is already on the card, verbatim, with the parameters he is asking about underneath
+     it. A subtitle repeating that same sentence two inches below is the same words twice in
+     one glance - and it costs the column a line of vertical room at the exact moment the
+     column has none to give. display:none and not opacity:0, because the whole point is the
+     HEIGHT: a transparent caption still holds its place in the stack and still pushes the
+     gate's top edge towards the telemetry rail. It comes back the moment the gate closes,
+     which is also the moment there is something new to read along with. */
+  #brain.gated #caption{display:none}
+
+  /* ---------- THE GATE CARD'S CEILING ----------
+     A parameter list is as long as the hand being offered, and a calendar proposal with a
+     description carries more rows than an email with three. Uncapped, the card grows upward
+     out of a bottom-anchored column until its top edge passes under the telemetry rail and
+     the question at the head of it is unreadable - which is the screenshot this part came
+     from, and note WHICH end goes: the card is anchored at the bottom, so overflow is lost
+     off the TOP, silently, where no scrollbar ever appears to admit it.
+
+     The cap is a max-height the governor assigns, and the internal scroll is put on the two
+     children that can afford it - the prose and the rows - never on the card. That is the
+     same decision already written out at #answer .a and for the same reason: a Yes/No pair
+     you have to scroll down inside a panel to find is a worse defect than a tall panel, so
+     .pair is flex:0 0 auto and is therefore the last thing in the card that can ever lose
+     room. Under a cap the buttons are pinned and the rows scroll; there is no arrangement
+     here in which the consent is off-screen.
+
+     min-height:0 on every link in the chain because a flex item's default minimum is its
+     content, and one missing min-height:0 anywhere between the card and the rows means the
+     rows refuse to shrink and the cap is silently ignored - the failure being a card that
+     overflows exactly as before while every class and every declared number says it should
+     not. THE RING IS UNAFFECTED: #answer.tool::after is position:absolute, so it is out of
+     flow and is not made a flex item by the display change. */
+  #answer.capped{display:flex;flex-direction:column;min-height:0}
+  #answer.capped>.q,#answer.capped>.src,#answer.capped>.saw{flex:0 0 auto}
+  #answer.capped>.a{flex:0 1 auto;min-height:0}
+  #answer.capped #a-ask{display:flex;flex-direction:column;min-height:0;flex:1 1 auto}
+  #answer.capped #ask-lbl{flex:0 0 auto}
+  #answer.capped #ask-rows{flex:1 1 auto;min-height:0;overflow-y:auto;
+    overscroll-behavior:contain;scrollbar-width:thin}
+  #answer.capped .pair{flex:0 0 auto}
 
   /* THE DECK DIMS. A full-window vignette that darkens the corners while a hand is
      offered, so the card carrying the two buttons is the only lit thing on screen.
@@ -1861,6 +2020,7 @@
 
 <canvas id="stars"></canvas>
 <div id="nebula"></div>
+<div id="nebula-work"></div>
 <div id="sunglow" aria-hidden="true"><i class="score"></i><i class="sstreak"></i></div>
 <div id="graph"></div>
 <div id="grain"></div>
@@ -2360,14 +2520,27 @@ const STAR_BANDS = [
 })();
 
 /* ============================================================== helpers ==== */
-/* THE DECANDIED JEWELS. Seven colours, and the count is deliberate: ten pastels meant
+/* THE DECANDIED JEWELS. Eight colours, and the count is deliberate: ten pastels meant
    that two adjacent clusters could differ by a shade nobody could name, and a palette
    nobody can name is decoration rather than information. These are jewels rather than
-   sweets - steel blue, old gold, deep violet, jade, rosewood, olive gold, copper - each
-   one darker and less saturated than the pastel it replaces, which is what lets a lit
-   sphere read as a body of that colour instead of a lamp with that colour inside it.
-   An eighth cluster wraps round to steel blue, exactly as an eleventh used to. */
-const PALETTE = ['#5B8DB8','#C9A227','#7E6BAE','#4FA08A','#C46A6A','#B5A642','#C77B4F'];
+   sweets - steel blue, old gold, deep violet, jade, rosewood, olive gold, copper,
+   mulberry - each one darker and less saturated than the pastel it replaces, which is
+   what lets a lit sphere read as a body of that colour instead of a lamp with that
+   colour inside it. A ninth cluster wraps round to steel blue, exactly as an eleventh
+   used to.
+   WHY THERE ARE EIGHT AND NOT SEVEN. There were seven until build.py's eighth group
+   arrived and was not a folder at all: a note saved at the ROOT of notes/ is filed as
+   "unfiled" (build.py:232), so the very first meeting the scribe writes without being
+   told where to put it makes an eighth cluster - eight is an ORDINARY corpus, not an
+   exotic one. With seven colours that cluster wrapped to steel blue and shared its
+   colour with customers, which is the one thing the legend promises never happens
+   ("a colour in the corner and a colour in the sky are the same claim", planetJewel).
+   #A9609D is hue 309.9, and 309.9 was chosen by measurement rather than by taste: the
+   seven hues already present are 0, 22, 45.6, 52.2, 163.7, 207.7 and 257, whose one
+   wide gap is the 103 degrees between violet and rosewood, and 310 sits in it 53 from
+   one neighbour and 50 from the other - the most separated hue the wheel still had. */
+const PALETTE = ['#5B8DB8','#C9A227','#7E6BAE','#4FA08A','#C46A6A','#B5A642','#C77B4F',
+                 '#A9609D'];
 /* THE SECOND HOME, and the one line in this file that knows about it.
    The countdown card does not get rebuilt on the desktop - it is MOVED there, into a
    Document Picture-in-Picture window, so that every listener, every button handler and
@@ -2445,8 +2618,44 @@ const LAYOUT = {
      window - which is most of the laptops this will ever run on - leaves the well 172px
      once the toast has taken its column, and standing the machine's face down over four
      pixels is the governor being fussy rather than protective. 168 is still a floor with
-     teeth: 1280 leaves 12px and is refused, as layout_proof asserts at all three widths. */
-  PRES_W: 300, PRES_MIN: 168, PRES_X: 0.68,
+     teeth: 1280 leaves 12px and is refused, as layout_proof asserts at all three widths.
+
+     AND PRES_MIN_COMPACT IS THE SECOND FLOOR, which exists because the first one was
+     making the wrong decision in the wrong direction. A floor is a promise not to draw a
+     cropped or illegible face; it is NOT a promise to draw nothing rather than a smaller
+     one. Measured on this machine at 860px tall, with the note panel open and a session
+     card in the top-right lane, the square the governor has left runs 12px at 1280, 55px
+     at 1366, 92px at 1440, 140px at 1536 and 172px at 1600 - so between 1440 and 1600
+     there is a band where the old arrangement showed the machine's face not at all while
+     having 92-140px of clean glass to show it in.
+     120 AND NOT 100, and the reason is the mouth. The lip parting is PRES_LIP.gap = 0.013
+     of the head's half-height, so at a 120px well it is 0.013 * 120 = 1.56 device pixels
+     at dpr 1 - still a line of unlit glass between two lips, which is the whole claim
+     §17.4 makes about the mouth. At 100px it is 1.3px and at 76px it is under one, and a
+     head whose mouth cannot be shut is worse than a head that stood down honestly.
+     Below 120 the well still stands down, and at 1280 with the panel open it still will:
+     12px of room is not a rendering problem, it is an absence of room. */
+  PRES_W: 300, PRES_MIN: 168, PRES_MIN_COMPACT: 120, PRES_X: 0.68,
+  /* ---- THE VERTICAL BUDGET ----
+     The governor has owned the WIDTH of the toast column since it was written, and the
+     horizontal arrangement is a set of lanes that cannot overlap by construction. Height was
+     never governed at all: every surface in #brain took the height its content wanted and the
+     column was assumed to be shorter than the window. With one surface live that assumption
+     held. With three - a proposal gate carrying a description line, a rolling transcript, and
+     a caption under both - it does not, and it fails in the worst available direction: #brain
+     is anchored at the BOTTOM, so the column grows upward and the overflow is lost off the top
+     of the window, behind the telemetry rail, where nothing scrolls and no scrollbar appears
+     to admit that anything is missing.
+
+     STRIP_H is the collapsed minutes strip's declared height, a floor rather than a clamp -
+     see #scribepanel.strip. GATE_MAX is the gate card's ceiling and is 560 to match the 560 in
+     --answermax: the prose inside the card has been allowed 560px since it was written, and a
+     card whose ceiling was lower than its own paragraph's would be a card that scrolled
+     internally at every length. GATE_MIN is the floor below which the cap stops tightening and
+     the card is simply given what there is - at 1280x720 with the strip collapsed the sum
+     works out near 446, so this floor is a guard against a viewport nobody has measured and
+     not a number that is expected to bind. */
+  STRIP_H: 34, GATE_MAX: 560, GATE_MIN: 180,
 };
 let layoutLast = null;    // the last set of rectangles, for the probe and __galaxy
 /* THE ONE THING THE GOVERNOR SAYS TO THE HOLOGRAM. A canvas has two sizes - the CSS box
@@ -2540,10 +2749,91 @@ function layout(vwOverride) {
      full width. The two are never in the same column at the same time. */
   const toast = layoutMine('brain');
   let toastBox = null, cardBox = null, cleared = false;
+  /* THE PUBLISHED BUDGET. Declared out here rather than inside the block that computes it
+     because it is part of what the governor SAYS, and a report that only exists when #brain
+     happens to be in this document is a report a harness cannot assert the absence of. */
+  let vbudget = null;
   if (toast) {
     let w = Math.max(LAYOUT.TOAST_MIN,
                      Math.min(LAYOUT.TOAST_MAX, canvasW - LAYOUT.EDGE * 2));
     const left = Math.max(LAYOUT.EDGE / 2, (canvasW - w) / 2);
+
+    /* ---- 3a. THE VERTICAL BUDGET, AND WHO GIVES UP ROOM FIRST ----
+       The column has a ceiling it never knew about: topFloor, the telemetry rail's own floor,
+       computed above and already the ceiling of both top lanes. Below, the column is anchored
+       at EDGE and #bar - the organ rail - is its last child, so "between the telemetry rail
+       and the organ rail" is the same span as "what is left of #brain's own height". One
+       number, published, and three surfaces that yield to it in a fixed order of precedence:
+
+         1. THE CAPTION, first and unconditionally, because it is the only surface here whose
+            content is duplicated somewhere else on screen - the gate's spoken line is already
+            on the card. Suppressing it costs nothing that is not still readable.
+         2. THE MINUTES, second, down to their head - because a transcript is a record being
+            taken and a record can be read afterwards, whereas a gate expires. The strip keeps
+            the four things that say the recording did not stop: the label, the timer, the
+            chunk count and the word count.
+         3. THE GATE CARD, last and only then, and it yields by SCROLLING and never by losing
+            its buttons.
+
+       The order is the point. Capping the gate first would have been the easy implementation
+       and it is the wrong machine: it makes the human scroll inside a card to read parameters
+       they are about to approve while a caption repeating a sentence they can already see sits
+       underneath it, holding the room the card wanted.
+
+       MEASURED AND NOT ESTIMATED. The two heights are read back after the caption and the
+       strip have been decided, so `others` is the room the rest of the column ACTUALLY takes
+       rather than a sum of constants that would go stale the first time a chip grew a line.
+       That costs two synchronous reflows, which is what the clearance test at 3b already
+       costs, and it is the difference between a budget and a guess. */
+    const answer = layoutMine('answer');
+    const scribe = layoutMine('scribepanel');
+    const gateOpen = !!(answer && layoutShown(answer) &&
+                        answer.classList.contains('tool') &&
+                        layoutShown(layoutMine('a-ask')));
+    const budget = Math.max(0, vh - LAYOUT.EDGE - topFloor);
+    toast.classList.toggle('gated', gateOpen);          // precedence 1: the caption
+    let stripped = false, stripH = 0;
+    if (scribe) {                                       // precedence 2: the minutes
+      stripped = gateOpen && layoutShown(scribe);
+      scribe.classList.toggle('strip', stripped);
+      scribe.style.minHeight = stripped ? LAYOUT.STRIP_H + 'px' : '';
+      if (stripped) stripH = scribe.offsetHeight;
+    }
+    let gateMax = 0, capped = false, wanted = 0;
+    if (answer) {                                       // precedence 3: the gate card
+      /* Uncapped first, so the measurement below is of the column at the height it WANTS.
+         Reading it with last frame's cap still on would hand the card back its own clamp and
+         the number would never widen again once a long answer had narrowed it once. */
+      answer.classList.remove('capped');
+      answer.style.maxHeight = '';
+      wanted = toast.offsetHeight;
+      /* A cap while the gate is open, and a cap whenever the column overflows even without
+         one - "nothing clipped above or below" is not a promise that only holds during a
+         proposal, and a five-thousand-character answer over a live transcript overflows the
+         same column in the same direction. */
+      if (gateOpen || wanted > budget) {
+        const others = Math.max(0, wanted - answer.offsetHeight);
+        gateMax = Math.max(LAYOUT.GATE_MIN,
+                           Math.min(LAYOUT.GATE_MAX, budget - others - LAYOUT.GAP));
+        answer.classList.add('capped');
+        answer.style.maxHeight = gateMax + 'px';
+        capped = true;
+      }
+    }
+    /* AND THE GOVERNOR SAYS WHAT IT DID, in the terms it decided it in: the span it had, what
+       the column asked for, what it takes now, and which of the three surfaces yielded. `fits`
+       is re-measured AFTER the caps are on, so it is a verdict about the browser rather than a
+       restatement of the arithmetic - the same discipline `overlaps` keeps at 3b. */
+    vbudget = {
+      top: topFloor, bottom: vh - LAYOUT.EDGE, budget: budget,
+      wanted: wanted, height: toast.offsetHeight,
+      fits: toast.offsetHeight <= budget,
+      over: Math.max(0, toast.offsetHeight - budget),
+      gateOpen: gateOpen, captionOff: gateOpen,
+      stripped: stripped, stripH: stripH, STRIP_H: LAYOUT.STRIP_H,
+      capped: capped, gateMax: capped ? gateMax : 0,
+      GATE_MAX: LAYOUT.GATE_MAX, GATE_MIN: LAYOUT.GATE_MIN
+    };
 
     /* ---- 3b. THE MEASURED CLEARANCE: the toast and the card may never overlap ----
        This is the one pair in the lane system that is not kept apart by construction. The
@@ -2660,7 +2950,16 @@ function layout(vwOverride) {
       floor = bandBot;
       left = tRight + LAYOUT.GAP;
     }
-    const fits = side >= LAYOUT.PRES_MIN;
+    /* TWO FLOORS AND THEREFORE THREE OUTCOMES. `full` is the old verdict, unchanged.
+       `compact` is the band between the two floors: the well is drawn, at the side it
+       actually has, and the renderer is told which tier it is in so it can build the head
+       at the reduced point density that tier is for. `fits` stays the one boolean the rest
+       of this function and every harness reads, and it now means "there is a head on the
+       glass" rather than "there is a full-size head on the glass" - which is what every
+       caller of it wanted in the first place. */
+    const full = side >= LAYOUT.PRES_MIN;
+    const fits = side >= LAYOUT.PRES_MIN_COMPACT;
+    const tier = full ? 'full' : fits ? 'compact' : 'none';
     /* Floated in whatever band it ended up in rather than jammed against its top edge: the
        well is the only surface here that is not in a stack, so centring it is free. */
     top = Math.round(bandTop + Math.max(0, (floor - bandTop - side) / 2));
@@ -2673,13 +2972,18 @@ function layout(vwOverride) {
       /* The renderer is told the number, not asked to measure the element: measuring a box
          that is 3ms into a transition is how a canvas ends up one frame behind its own
          width for ever. There is no transition on these two, but the discipline is the
-         same one every other rectangle in this function keeps. */
-      if (presResize) { try { presResize(side); } catch (e) { presResize = null; } }
+         same one every other rectangle in this function keeps.
+         AND IT IS TOLD THE TIER IN THE SAME CALL, because the side and the tier are one
+         decision: a renderer that measured the side and drew its own conclusion about the
+         density would be a second opinion about a question the governor has already
+         answered, and the two would disagree on exactly the pixel the floor is at. */
+      if (presResize) { try { presResize(side, tier); } catch (e) { presResize = null; } }
     }
     wellBox = fits
-      ? { fits: true, why: why, side: side, left: left, right: left + side,
+      ? { fits: true, tier: tier, why: why, side: side, left: left, right: left + side,
           top: top, bottom: top + side }
-      : { fits: false, why: 'no room: ' + Math.round(side) + 'px of ' + LAYOUT.PRES_MIN,
+      : { fits: false, tier: 'none',
+          why: 'no room: ' + Math.round(side) + 'px of ' + LAYOUT.PRES_MIN_COMPACT,
           side: Math.round(side) };
   }
 
@@ -2697,6 +3001,11 @@ function layout(vwOverride) {
        layout_proof reads it and then measures the same two boxes off the page to check that
        the governor and the browser agree. */
     cardBox: cardBox, toastBox: toastBox,
+    /* THE VERTICAL BUDGET, published beside the two rectangles for the same reason they are:
+       it is a decision this function made and nobody else can see. null when #brain has left
+       for the picture-in-picture window, which is the one case in which the column's height is
+       not this document's problem at all. */
+    vbudget: vbudget,
     /* AND THE WELL, with the reason it is where it is. `fits` false is the well standing
        down, which is a legitimate outcome and not a failure: a canvas with no PRES_MIN square
        left in it after the card, the chips and the toast have been served has nowhere to put
@@ -3350,6 +3659,111 @@ async function loadLib() {
     }, { passive: true });
   });
 
+  /* ====================== WORK MODE IS THE ROOM ==============================
+     A SESSION IS NOT A CARD THAT CHANGED COLOUR. Until today a focus session tinted the
+     countdown card and nothing else: the room you were working in looked exactly like the
+     room you were browsing in. This is the other half - the DEEP FIELD (§12) and the
+     WORLDS (§2, §10) subscribed to the same session state the card reads, so that starting
+     a session changes the light in the room rather than the trim on one panel.
+
+     IT IS ONE SCALAR. `work.k` runs 0 -> 1 on a session starting and 1 -> 0 on it pausing,
+     aborting or ending, and three things read it: the nebula's opacity pair, the deep
+     field's sway multiplier, and the worlds' emissive desaturation. One scalar rather than
+     three CSS transitions because they must not come apart - a nebula that finished cooling
+     400ms before the stars stopped swaying is two effects, not one change of light.
+
+     THE CURVE IS --spring, LITERALLY. cubic-bezier(0.16, 1, 0.3, 1) is declared at the top
+     of this file for entrances; workEase() is that same control polygon solved in JS, so
+     there is one curve in the room and not a JS approximation of a CSS one.
+
+     THE NUMBERS, AND WHY THESE NUMBERS. Written down for the reason §12 wrote down 6% and
+     0.16/0.48/1.00: a mood picked by eye and never recorded is a mood nobody can argue
+     with later.
+       MS 900        Three times --spring-ms. 300ms is the duration of a card getting out of
+                     the way; a room changing temperature at that speed reads as a UI state
+                     flip. 900ms is slow enough to be seen as a dimming and short enough to
+                     be finished before the first minute of work is underway.
+       NEB_WORK .30  The idle nebula is not switched off, it is pulled down to 30% and a
+                     second, cooler layer is brought up over it. Fading it to zero would
+                     change the cloud's SHAPE - the violet shoulder at 21% 27% would leave
+                     the frame - and the claim is a change of temperature, not of weather.
+                     The work layer's own peak channel alpha is .05, which is under §12's 6%
+                     ceiling, so the deep field is never brighter in work mode than out of
+                     it: the total ink on the glass goes DOWN.
+       SWAY .45      DECK.STAR_SWAY is 34 units of lean; under a session the sky leans 15.3.
+                     Not zero: a deep field that stops responding to the pointer entirely
+                     reads as a frozen page, which is alarming rather than calming. Less
+                     than half is enough that the room stops inviting you to look around it.
+       DESAT .45     A world's emissive is pulled 45% of the way to its OWN luminance, which
+                     holds brightness and removes hue: the galaxy greys towards slate
+                     without any world going dark, so nothing on the glass becomes harder to
+                     read while a session is running. See paintPlanets, where this is folded
+                     into the tone cache key exactly as the law there requires. */
+  const WORK = { MS: 900, NEB_IDLE: 1, NEB_WORK: 0.30, SWAY: 0.45, DESAT: 0.45 };
+  const work = { on: false, k: 0, from: 0, to: 0, t0: 0, ms: WORK.MS,
+                 sway: 1, key: 0, turns: 0, why: 'no session' };
+
+  /* cubic-bezier(0.16, 1, 0.3, 1) at x. Bisection rather than Newton: twenty halvings of
+     [0,1] settle to under a millionth, it cannot diverge on a curve this steep near t=0,
+     and it runs once per frame of a 900ms ramp and never again. */
+  function workEase(x) {
+    if (!(x > 0)) return 0;
+    if (x >= 1) return 1;
+    const bez = function (a, b, t) {
+      const u = 1 - t;
+      return 3 * u * u * t * a + 3 * u * t * t * b + t * t * t;
+    };
+    let lo = 0, hi = 1, t = x;
+    for (let i = 0; i < 20; i++) {
+      t = (lo + hi) / 2;
+      if (bez(0.16, 0.3, t) < x) lo = t; else hi = t;
+    }
+    return bez(1, 1, t);
+  }
+
+  /* THE ONE SUBSCRIBER. Called from fxApply with the session's own `state` field and from
+     nowhere else, so there is no second opinion about whether work mode is on. Re-entrant:
+     starting from the middle of a reversal ramps from wherever k currently stands, which is
+     what stops a pause-then-resume from snapping. */
+  function workSet(on, why) {
+    const want = !!on;
+    if (want === work.on) return work.on;
+    work.on = want;
+    work.why = why || (want ? 'a session is running' : 'no session');
+    work.from = work.k;
+    work.to = want ? 1 : 0;
+    work.t0 = performance.now();
+    /* REDUCED MOTION GETS THE DESTINATION AND NOT THE JOURNEY. The cinematic law lets an
+       animation on a harness-tested element either respect this query or finish under
+       100ms; a 900ms crossfade cannot do the second, so it does the first. */
+    work.ms = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : WORK.MS;
+    work.turns++;
+    return work.on;
+  }
+
+  /* Once a frame, and it does nothing at all once the ramp has landed - which is all but
+     900ms of a session. The two writes are opacity (compositor-only, per the deck's law)
+     and a number the sky's own frame hook reads; the third consumer, the worlds' emissive,
+     is a repaint and is therefore asked for rather than done here. */
+  function workFrame(now) {
+    if (work.k === work.to) return;
+    const x = work.ms > 0 ? Math.min(1, (now - work.t0) / work.ms) : 1;
+    const e = workEase(x);
+    work.k = +(work.from + (work.to - work.from) * e).toFixed(4);
+    if (x >= 1) work.k = work.to;
+    work.sway = 1 - (1 - WORK.SWAY) * work.k;
+    const a = $('nebula'), b = $('nebula-work');
+    if (a) a.style.opacity = String(WORK.NEB_IDLE + (WORK.NEB_WORK - WORK.NEB_IDLE) * work.k);
+    if (b) b.style.opacity = String(work.k);
+    /* 2% steps, so a 900ms ramp asks for at most fifty repaints rather than one per frame
+       at whatever rate this screen runs, and a settled session asks for none. */
+    const key = Math.round(work.k * 50);
+    if (key !== work.key) {
+      work.key = key;
+      try { paintPlanets(); } catch (e2) { /* a mood never costs the worlds their colour */ }
+    }
+  }
+
   /* THE DECK'S ONE FRAME HOOK. The deck does not start a second animation loop - it
      borrows this one, which already runs every frame the graph does. Two rAF loops
      asking the same clock the same question is how a 60fps page becomes a 55fps page
@@ -3376,7 +3790,11 @@ async function loadLib() {
 
   (function orbit(now) {
     const dt = Math.min(now - last, 60); last = now;
-    /* First, before the camera work: the deck measures the frame it is IN, and it has to
+    /* THE ROOM'S MOOD FIRST, and before the deck on purpose: deckSkyFrame reads work.sway
+       in the same frame this writes it, and running the two the other way round would lean
+       the sky by the previous frame's amount for the whole of every ramp. */
+    try { workFrame(now); } catch (e) { /* the room keeps its last light */ }
+    /* Then, before the camera work: the deck measures the frame it is IN, and it has to
        see a stall whether or not the camera is moving - which, now that the sky rests, is
        most of the time. Guarded because a throw in here would take the whole loop down,
        and the loop is what the planets and the dots ride on. */
@@ -3845,6 +4263,31 @@ async function loadLib() {
     return used.length >= CLUSTER_MIN ? 'cluster' : 'fly';
   }
 
+  /* A SCROLLBAR NOBODY CAN REACH IS NOT A SCROLLBAR. A div that scrolls is not focusable
+     by default, so on a keyboard - and to a screen reader - the bottom half of a long
+     answer simply does not exist. tabindex and the region role are therefore set when the
+     paragraph OVERFLOWS and removed when it does not: a permanent tab stop on every
+     two-line answer would be a stop that does nothing, which teaches a keyboard user to
+     tab past the one case where it matters.
+
+     Called after typeOut, which puts every character in the DOM on the first frame, so
+     scrollHeight here is the finished height and not a height mid-reveal. */
+  function answerReach() {
+    const el = $('a-text');
+    if (!el) return false;
+    const over = el.scrollHeight - el.clientHeight > 1;
+    if (over) {
+      el.setAttribute('tabindex', '0');
+      el.setAttribute('role', 'region');
+      el.setAttribute('aria-label', 'The answer, which is longer than the card - scrollable');
+    } else {
+      el.removeAttribute('tabindex');
+      el.removeAttribute('role');
+      el.removeAttribute('aria-label');
+    }
+    return over;
+  }
+
   function renderAnswer(question, text, isError, ids, sources, cites) {
     /* Every answer starts by clearing the frame thumbnail. A picture left sitting
        beside the next answer would read as the evidence for it, which it is not. */
@@ -3858,6 +4301,7 @@ async function loadLib() {
        is in the DOM before this line returns, so #a-text.textContent is the whole answer
        from the first frame and nothing that reads this page has to wait for a show. */
     typeOut($('a-text'), text);
+    answerReach();
     $('answer').classList.toggle('err', !!isError);
     const src = $('a-src'), box = $('a-chips');
     box.innerHTML = '';
@@ -4458,10 +4902,54 @@ async function loadLib() {
        after seeing the cube is usually to see the face. */
     { id: 'presence', key: 'P' },
     { id: 'archive', key: 'A' },
+    /* THE GRANT, and it lives HERE rather than on the telemetry rail on purpose. The rail
+       is for things that are true continuously and cost nothing to read - a dot, a count,
+       a word. This is a decision with two buttons behind it, it costs a round trip to
+       Google to answer honestly, and the one thing it must never become is a cell that
+       reads CONNECTED out of a cache while the token is dead. So it is asked when the
+       sheet opens, and while consent is in flight, and at no other time. */
+    { id: 'google',  key: 'G' },
     { id: 'cast',    key: 'V' }
   ];
   const cmd = { opens: 0, paints: 0, view: 'list', ran: '' };
   let cmdBuilt = false;
+
+  /* WHAT THE PAGE IS ALLOWED TO KNOW ABOUT THE GRANT: whatever GET /google answered, and
+     that route answers in booleans, an account address and a digest. There is no branch
+     anywhere below that reads a token, because no token is ever in this object - see the
+     route's own comment. `null` means not asked yet, which is a different row from
+     "asked, and the answer was no". */
+  let goog = null;
+  let googPoll = 0;
+
+  async function googRead() {
+    try {
+      const r = await fetch('/google', { cache: 'no-store' });
+      const j = await r.json();
+      if (j && typeof j === 'object') goog = j;
+    } catch (e) {
+      /* A failed read must not paint CONNECTED and must not paint NOT CONNECTED either:
+         both are claims about Google, and this is a claim about the server. */
+      goog = { state: 'unknown', why: 'the server did not answer' };
+    }
+    cmdPaint();
+    return goog;
+  }
+
+  /* THE WAIT, and it is bounded. Consent happens in another window, on a human's own
+     time, so the only way this row can tell the truth afterwards is to keep asking - but
+     a page that polled for ever would still be polling tomorrow over a window that was
+     closed in the first ten seconds. It stops when the word changes or after the
+     server's own consent timeout, whichever comes first. */
+  function googWatch() {
+    if (googPoll) clearInterval(googPoll);
+    const until = Date.now() + 310000;
+    googPoll = setInterval(async function () {
+      const g = await googRead();
+      const waiting = g && g.consent && g.consent.state === 'waiting';
+      if (!waiting || Date.now() > until) { clearInterval(googPoll); googPoll = 0; }
+    }, 2000);
+  }
 
   /* One order's label, one line of state, and a colour that means what it means
      everywhere else on this deck. `off` is a refusal with a reason attached - a row that
@@ -4556,6 +5044,47 @@ async function loadLib() {
           : files + ' file' + (files === 1 ? '' : 's') + ' · nothing cited yet'
       };
     }
+    /* THE GRANT, and the row's LABEL is the action while its LINE is the state, because
+       those are two different facts and a row that merged them would have to choose which
+       one to lie about. Six readings, and the state word in each is upper case and in the
+       mandate's own words so that a harness can assert on the sentence a human reads. */
+    if (id === 'google') {
+      if (!goog) {
+        return { label: 'Connect Google', tone: '', off: true,
+                 line: 'GOOGLE: asking the server…' };
+      }
+      const mail = String(goog.email || '');
+      if (goog.state === 'unknown') {
+        return { label: 'Connect Google', tone: 'bad', off: true,
+                 line: 'GOOGLE: UNKNOWN · ' + (goog.why || 'the server did not answer') };
+      }
+      /* NO CLIENT FILE is its own row and it is OFF, because pressing Connect would open
+         a consent page for an application Google has never heard of. The remedy named is
+         the file, since that is the only thing that fixes it. */
+      if (goog.state === 'no-client' || goog.clientPresent === false) {
+        return { label: 'Connect Google', tone: 'bad', off: true,
+                 line: 'GOOGLE: NO CLIENT FILE · secrets/google_client.json is missing' };
+      }
+      if (goog.consent && goog.consent.state === 'waiting') {
+        return { label: 'Connect Google', tone: '', off: true,
+                 line: 'GOOGLE: WAITING FOR YOUR CONSENT · finish it in the browser' };
+      }
+      if (goog.consent && goog.consent.state === 'refused') {
+        return { label: 'Connect Google', tone: 'bad',
+                 line: 'GOOGLE: CONSENT REFUSED · ' + (goog.consent.why || 'try again') };
+      }
+      if (goog.state === 'connected') {
+        return { label: 'Disconnect Google', tone: 'live',
+                 line: 'GOOGLE: CONNECTED' + (mail ? ' · ' + mail : '') };
+      }
+      if (goog.state === 'reconnect') {
+        return { label: 'Reconnect Google', tone: 'bad',
+                 line: 'GOOGLE: RECONNECT NEEDED · ' +
+                       (goog.why || 'Google will not renew the connection') };
+      }
+      return { label: 'Connect Google', tone: '',
+               line: 'GOOGLE: NOT CONNECTED · the calendar and the mail are closed' };
+    }
     /* THE VOICE, as it IS and not as config.json asks for it: speakEngine is what the
        chunks are actually going through, so a half-downloaded model reads as the web
        fallback here exactly as it does on the rail. */
@@ -4626,11 +5155,23 @@ async function loadLib() {
       /* The parallax is asked every frame whether it should be running, so opening this
          suspends it within one frame without this function knowing that it does.
          See parallaxSuspended(). */
+      /* AND THE GRANT IS RE-READ, every single open. It is the one row whose truth can
+         change without this page doing anything - a refresh token revoked from a phone,
+         an expiry passed overnight - so a cached CONNECTED is the one reading that could
+         send the employer to a dead calendar. The paint above has already happened, so
+         this arrives a moment later and repaints; it does not hold the sheet shut. */
+      googRead();
     } else {
       el.classList.remove('open');
       el.setAttribute('aria-hidden', 'true');
       cmdView('list');
       castStop();                 // an audition does not outlive the panel that started it
+      /* The watch does not outlive the panel either - except while consent is genuinely
+         in flight, which is the one case where the answer is still worth having when the
+         sheet is next opened. */
+      if (googPoll && !(goog && goog.consent && goog.consent.state === 'waiting')) {
+        clearInterval(googPoll); googPoll = 0;
+      }
     }
     return want;
   }
@@ -4666,11 +5207,53 @@ async function loadLib() {
       cmdPaint();
       return true;
     }
+    if (id === 'google') {
+      /* THE SHEET STAYS OPEN, and that is the whole difference between this row and an
+         order: Connect hands the next move to another window, and the only place the
+         employer can watch it arrive is this line. Closing the sheet on him would leave
+         him with a browser tab and no idea what the machine thought had happened. */
+      googRun();
+      cmdPaint();
+      return true;
+    }
     if (id === 'focus') { const b = $('focusbtn'); if (b) b.click(); }
     if (id === 'lock') { const p = $('focus-lock'); if (p) p.click(); }
     if (id === 'archive') cmdArchive();
     cmdOpen(false);
     return true;
+  }
+
+  /* CONNECT, RECONNECT AND DISCONNECT ARE ONE ROW AND TWO COMMANDS. Reconnect is Connect:
+     the same consent page, and the refresh token it comes back with replaces the dead one.
+     Disconnect is the only destructive thing this panel can do and it is deliberately not
+     confirmed twice - it takes a capability AWAY, it is undone by pressing the row again,
+     and a second dialogue in front of "make yourself less able to act" would be theatre.
+     What it does get is a spoken sentence, because a token deleted in silence is a machine
+     that has quietly stopped being able to do what you asked it for yesterday. */
+  async function googRun() {
+    const was = goog && goog.state;
+    const cmdWord = was === 'connected' ? 'disconnect' : 'connect';
+    try {
+      const r = await fetch('/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cmd: cmdWord })
+      });
+      const j = await r.json();
+      if (j && typeof j === 'object' && j.state) goog = j;
+      cmdPaint();
+      /* The SERVER's sentence and never one composed here: it is the side that knows
+         whether the browser opened, whether a token was there to delete and whether
+         Google accepted the revoke, and a page that guessed at any of the three would
+         eventually reassure somebody about a token that is still live. */
+      const line = String((j && (j.answer || j.error)) || '');
+      if (line) speakLine(line);
+      if (cmdWord === 'connect') googWatch();
+      return !!(j && j.ok !== false);
+    } catch (e) {
+      speakLine('I could not reach the server to do that, sir.');
+      return false;
+    }
   }
 
   /* OPEN ARCHIVE, and it has two honest answers. If something has been cited in this
@@ -5349,6 +5932,21 @@ async function loadLib() {
        the other half: once answered anywhere, no tab asks again. */
     if (state.awaitingIntent && FOCUS_ASKED_RE.test(said)) fxAnswerOpen();
     else if (!state.awaitingIntent) fxAnswerClose();
+    /* AND THE ROOM IS TOLD, from the same push and the same field the card reads. Nothing is
+       added to public_state for this - `state` is the whole session as booleans and counters
+       already. Before fxPaint rather than after, so that the frame which first shows a live
+       card is also the first frame of the room cooling: a card that went green half a second
+       before the sky moved would read as two events.
+       ARMING COUNTS, AND THIS WAS MEASURED RATHER THAN ASSUMED. `POST /focus {cmd:start}`
+       answers with state 'arming', not 'running' - focus.py only promotes a session to
+       'running' once its reader has LOCKED ON to your work (focus.py:3150), which on a
+       machine whose front window is not a readable browser may be never. A first cut of
+       this line tested for 'running' alone and the room never cooled at all: nine minutes
+       of a live session with turns=0 on the door. So the test is the session being LIVE and
+       not paused, which is the same pair of words the mandate used - start cools it, pause,
+       abort and end warm it back up - and 'idle', 'paused' and 'ended' are all none of it. */
+    workSet(state.state === 'arming' || state.state === 'running',
+            'session state: ' + state.state);
     fxPaint();
     /* The telemetry columns ride the PUSH and not the local repaint, because they are a
        record of what the server said and the repaint between pushes is an interpolation.
@@ -6296,8 +6894,26 @@ async function loadLib() {
     catch (e) { return false; }        // a window mid-close answers nothing
   }
 
+  /* AND AN INSTRUMENT MUST NOT CLAIM IT EITHER. ?nohome=1 turns this one beat off, and
+     it is here because of a lie that was measured rather than suspected. This round opens
+     a SECOND viewer - lock_proof's observer - headless, so that the head can be watched
+     while a real drift happens in a browser that is not this one. Under --headless=new
+     document.hasFocus() is true: there is no other window for the page to lose the
+     keyboard to. So that observer beat "I am home base" every FOCUS_HOME_BEAT_MS for the
+     whole run, and home base outranks every drift by design - "coming back to talk to me
+     is never a drift" - so tick() took the at_home branch and the locked-tab drift was
+     never reached at all. Measured, twice each way: with the observer open the drift was
+     still uncounted 4.4 seconds after the tab went behind (drifts=0, watchState=off,
+     inGrace=false, ticks advancing); with the observer not opened and nothing else
+     changed, 937 ms and drifts=1. The instrument was not slowing the watcher down, it
+     was standing in front of it - which is worth the distinction, because a starved
+     watcher and an excused one want opposite repairs.
+     ?focusprobe=1 cannot do this job: it makes the page HERMETIC, and a hermetic page
+     never opens the session stream, which is the one stream the gaze reads. So this is
+     the narrower flag - one beat suppressed, nothing else about the page changed. */
+  const NOHOME = /(^|[?&])nohome=1(&|$)/.test(location.search);
   setInterval(function () {
-    if (probeRunning) return;          // a synthetic session is not a man at his desk
+    if (probeRunning || NOHOME) return;  // a synthetic session is not a man at his desk
     if (fxLive() && fxHomeFocus()) fxFetch(true);
   }, FOCUS_HOME_BEAT_MS);
 
@@ -8754,6 +9370,12 @@ async function loadLib() {
      them are written above the ear. One object, so there is one answer. */
   const ear = {
     open: false, opened: 0, turns: 0, arms: 0, rearms: 0, bargeIns: 0,
+    /* THE RECOGNISER'S OWN LIFECYCLE, counted separately from arms/ends above, which count
+       the VAD's speech runs and not the instance's sessions. These two are a RECORD and not a
+       state machine: they drift apart by one every time a session fires onend without ever
+       having fired onstart, which is what a network fault does. recogLive is the state - set
+       on the one .start() that succeeds, cleared on onend - and it is what armRead() reads. */
+    recogStarts: 0, recogEnds: 0, recogLive: false,
     speeches: 0, ends: 0, frames: 0, level: 0, peak: 0, speech: false,
     over: 0, under: 0, underAt: 0, speechAt: 0, openedAt: 0,
     why: '', closedBy: '', rearmWhy: '', parting: '',
@@ -9360,6 +9982,98 @@ async function loadLib() {
     return true;
   }
 
+  /* ======================= THE QUIET TONGUE =======================
+     WHAT THE BOSS ACTUALLY HEARD, which is the complaint. A model answer comes back with
+     *emphasis* in it and the butler says "asterisk emphasis asterisk". A calendar hand
+     succeeds and the answer carries the event id, so the butler spells out
+     "7s0h4k9m2n3p5q6r8t1v2w3x" one character at a time, for nine seconds, in a human voice.
+     Neither is a bug in the brain - the text is correct - and neither can be fixed in the
+     brain either, because the card and the caption WANT the raw string: an id you cannot
+     read off the screen is an id you cannot use.
+
+     SO THE FIX IS AT READ TIME AND NOWHERE ELSE. One function, applied to the text on its way
+     to an engine and to nothing else in this page. What keeps its raw text, and each of these
+     is a deliberate exclusion rather than an omission:
+        the caption      - captionShow() is called in speakLine() with the raw line;
+        the card         - the gate's parameter rows are the registry's, never this;
+        the ledger       - noteSaid() records the raw line, so __galaxy.speech.said and every
+                           harness reading it still sees exactly what the page was asked to say;
+        the brain        - the memory of the turn is the raw text, because a conversation whose
+                           record said "the reference is in the card" could never be asked
+                           about the reference again;
+        the face         - faceChunk() takes the raw text, and this is the one that looks like
+                           an oversight. It is not: the visage derives a period and an
+                           amplitude from the chunk's shape, the mandate says the audio bus is
+                           what carries normalized text, and a mouth that moves for nine
+                           seconds while the speakers say twenty-eight characters would be a
+                           face telling the truth about the wrong string.
+
+     THE THREE RULES.
+       1. MARKDOWN COMES OUT: * _ # and backticks. Stripped rather than translated - there is
+          no way to say "bold" out loud that is not worse than saying nothing.
+       2. AN UNSPEAKABLE TOKEN BECOMES A SENTENCE. Twelve or more characters, letters and
+          digits only, AND containing at least one digit - and that last condition is the
+          whole of the care in this function. "Alphanumeric tokens of 12+ characters" read
+          literally also catches `understanding`, `extraordinary`, `transcription` and several
+          hundred other ordinary English words, and a butler who answered "the reference is in
+          the card" instead of "understanding" would be a far worse machine than the one that
+          spells ids. A Google calendar or Gmail id has digits in it; an English word does
+          not. Pure digits of twelve or more are caught too, because a twelve-digit number is
+          no more speakable than a hex string.
+       3. AND THE PHRASE IS SAID ONCE. An answer carrying three ids would otherwise say "the
+          reference is in the card" three times in one breath, which is a new way of being
+          unlistenable. Consecutive replacements collapse to one.
+
+     IT IS PURE AND IT IS EXPORTED, so the rules can be asserted without a room, an engine or
+     a sound - see __galaxy.voice.normalize(). */
+  const TONGUE_ID_MIN = 12;
+  const TONGUE_ID_LINE = 'the reference is in the card';
+
+  function tongueNormalize(text) {
+    let s = String(text == null ? '' : text);
+    /* rule 1. The character class is exactly the mandate's: asterisk, underscore, hash and
+       the backtick. Nothing else is touched - an apostrophe, a dash and a full stop are all
+       things a voice needs. */
+    s = s.replace(/[*_#`]/g, '');
+    /* rule 2. \b would not do here: it treats the boundary between a letter and a hyphen as a
+       word edge, so a hyphenated id would be judged in pieces and pass. The token is taken
+       between whitespace-or-punctuation edges instead, and tested whole. */
+    s = s.replace(/[A-Za-z0-9]{12,}/g, function (token) {
+      if (token.length < TONGUE_ID_MIN) return token;             // belt, and the brace above
+      if (!/[0-9]/.test(token)) return token;                     // an English word. See rule 2.
+      return TONGUE_ID_LINE;
+    });
+    /* rule 3, and then the whitespace the strips left behind.
+       THE JOINING WORD HAS TO BE IN THE PATTERN. Measured on the obvious case: "ids A and B
+       and C" replaced to three phrases separated by " and ", which a collapse that only knew
+       about whitespace and commas left exactly as it found them - "the reference is in the
+       card and the reference is in the card and the reference is in the card", which is the
+       defect rule 3 exists to prevent, said three times. A model listing ids joins them with
+       a word, because that is how a sentence works. */
+    const once = TONGUE_ID_LINE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const join = '[\\s,;:]+(?:and|or|then|plus)?[\\s,;:]*';
+    s = s.replace(new RegExp('(?:' + once + ')(?:' + join + '(?:' + once + '))+', 'g'),
+                  TONGUE_ID_LINE);
+    return s.replace(/[ \t]{2,}/g, ' ').trim();
+  }
+
+  /* THE ONE ACCESSOR, AND WHY IT IS AN ACCESSOR RATHER THAN A LINE IN THE PUMP.
+     THE FAILURE MODE THIS CATCHES, and it is the reason the obvious place is the wrong one:
+     the piper path PREFETCHES. speakPiper() calls sayFetch() on up to SPEAK_AHEAD_CAP chunks
+     that the pump has not reached yet, to cover a cold /say with the playing time of the
+     chunks in front of it - so by the time the pump "reads" chunk four, chunk four's WAV was
+     ordered several seconds ago. Normalising in the pump would have left every prefetched
+     chunk carrying raw text to piper, and the defect would have appeared only in answers long
+     enough to prefetch: the first sentence clean, the fourth spelling the id. Computed here,
+     once per chunk, at whichever moment that chunk is first about to become audio.
+     Memoised on the chunk so the estimate, the deadline and the engine cannot disagree about
+     what is being spoken. */
+  function tongueSpoken(item) {
+    if (!item) return '';
+    if (item.spoken == null) item.spoken = tongueNormalize(item.text);
+    return item.spoken;
+  }
+
   /* ---- the web path: one utterance per chunk, chained both ways ----
      onend AND onerror both advance, and that is the whole point: a dropped utterance
      reports itself as an error on a good day and says nothing at all on a bad one, and
@@ -9367,7 +10081,7 @@ async function loadLib() {
      deadline below. */
   function speakWeb(item) {
     let u = null;
-    try { u = new SpeechSynthesisUtterance(item.text); }
+    try { u = new SpeechSynthesisUtterance(tongueSpoken(item)); }
     catch (e) { u = null; }
     if (!u) {
       item.error = 'utterance refused';
@@ -9402,7 +10116,7 @@ async function loadLib() {
       speakNote('chunk ' + item.i + ' errored (' + item.error + '); the queue goes on');
       speakAdvance(item);
     };
-    speakDeadlineUp(item, speakEstimateMs(item.text));
+    speakDeadlineUp(item, speakEstimateMs(tongueSpoken(item)));
     try { speechSynthesis.speak(u); speakKeepAliveUp(); }
     catch (e) {
       item.error = 'speak() threw';
@@ -9491,7 +10205,7 @@ async function loadLib() {
     const p = fetch('/say', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: item.text })
+      body: JSON.stringify({ text: tongueSpoken(item) })
     }).then(function (r) {
       if (r.ok) return r.arrayBuffer();
       return r.json().then(
@@ -9624,12 +10338,12 @@ async function loadLib() {
     let ahead = 0;
     for (let k = 0; k < speakQueue.length && k < SPEAK_AHEAD_CAP; k++) {
       sayFetch(speakQueue[k]);
-      ahead += speakEstimateMs(speakQueue[k].text);
+      ahead += speakEstimateMs(tongueSpoken(speakQueue[k]));
       if (ahead >= SPEAK_AHEAD_MS) break;
     }
     // The deadline is armed BEFORE the fetch resolves, not after: a /say that never
     // answers is exactly as fatal to the tail as an utterance that never ends.
-    speakDeadlineUp(item, speakEstimateMs(item.text));
+    speakDeadlineUp(item, speakEstimateMs(tongueSpoken(item)));
     mine.then(function (buffer) {
       if (run !== speakRun || speakNow !== item) return;
       if (!buffer) {
@@ -10106,6 +10820,11 @@ async function loadLib() {
                     engine: speakEngine, input: +Number(echo.input).toFixed(4),
                     output: +Number(echo.ref).toFixed(4), reference: echo.refFrom });
     while (echo.log.length > ECHO_LOG_MAX) echo.log.shift();
+    /* AND THE SAME DROP AGAINST THE TURN IT HAPPENED IN. echo.log is a session-wide ring of
+       twenty-four and says nothing about which turn lost its words; "turn four's only final
+       was refused by the echo law" is the sentence a diagnosis needs, and it cannot be
+       reconstructed from a flat log by timestamp without guessing. */
+    earDumpDrop(v, text);
     return true;
   }
 
@@ -10116,7 +10835,7 @@ async function loadLib() {
        before the interrupts too, deliberately: a "stop" in that tail is the end of the
        sentence he already finished saying, and honouring it would cancel the answer to his
        own question. ear.sealed counts them, so the drop is visible rather than silent. */
-    if (thoughtIsSealed()) { ear.sealed++; return; }
+    if (thoughtIsSealed()) { ear.sealed++; earDumpSealed(); return; }
     /* THE ECHO LAW, AND IT IS AHEAD OF THE INTERRUPTS ON PURPOSE. "Stop" is a barked word
        that skips the buffer and empties the queue, so an answer containing "...I'll stop
        there, sir" leaked into the microphone and transcribed as "stop" would cancel itself
@@ -10142,7 +10861,7 @@ async function loadLib() {
   }
 
   function heardInterim(text) {
-    if (thoughtIsSealed()) { ear.sealed++; return; }
+    if (thoughtIsSealed()) { ear.sealed++; earDumpSealed(); return; }
     /* AND THE INTERIMS TOO, because they are not harmless. An interim does not reach the
        brain by itself, but it re-arms the finish timer and it lands in lastInterim, where
        flushThought() appends it to the thought - so a leaked interim is a sentence of his
@@ -10180,7 +10899,15 @@ async function loadLib() {
     let thought = (phraseBuffer + ' ' + lastInterim).trim().replace(/\s+/g, ' ');
     phraseBuffer = '';
     lastInterim = '';
-    if (!thought) { idleStatus(); return; }
+    if (!thought) {
+      /* AN EMPTY FLUSH IS NOT A TURN and must not close the dump's record: the recogniser is
+         still armed, earTurnHold() below is never reached, and marking the turn ended here
+         would stop the frame columns mid-arm and manufacture a short turn. */
+      earDumpLife('flush("' + String(why || '') + '") carried nothing');
+      idleStatus();
+      return;
+    }
+    earDumpFlush(why, thought);
     thoughtSealed = true;                // see THE SEAL ON A THOUGHT ALREADY SENT
     thoughtSealedAt = Date.now();        // ...and the clock it expires on
     /* THE TURN ENDS; THE CONVERSATION DOES NOT. What has to stop here is the RECOGNISER -
@@ -10466,6 +11193,153 @@ async function loadLib() {
     earLoopUp();
   }
 
+  /* ======================= THE TURN DUMP, AND IT ONLY WATCHES =======================
+     WHY A DUMP BEFORE A CURE. The complaint is that the ear stops hearing whole sentences
+     partway through a conversation - and there are at least four mechanisms that produce
+     exactly that symptom and nothing else: a stale output reference leaving the acoustic
+     gate half-shut, a noise floor that has drifted up under the VAD, a stop/start race that
+     hands a new recogniser only the tail of a sentence, and result handling that stops at
+     the first final. They are indistinguishable from outside and their repairs are
+     opposite, so guessing costs a day and a wrong edit. This block guesses nothing: it
+     records, per ARM of the recogniser, everything a person would need to tell the four
+     apart, and the fixture prints it as a table.
+
+     IT IS AN OBSERVER AND THE COMPILER CANNOT PROVE THAT, SO READ IT HERE: nothing in this
+     block writes a single variable outside `earDump`, nothing it returns is used in a
+     decision, and every one of its callers calls it for effect and ignores the value. The
+     floor it keeps is a MEASUREMENT of the quiet frames, not a threshold - EAR_VAD_ON and
+     EAR_VAD_OFF are untouched constants and remain the only gates the detector uses. That
+     is the whole point: a diagnostic that changed the thing it measured would be a way of
+     not finding out.
+
+     WORDS, NOT CHARACTERS, AND THE FULL LENGTH OF THEM. ear.thoughts caps its text at
+     eighty characters for a log a person reads; a twelve-word sentence can exceed that, and
+     a word count taken off a truncated string would manufacture the exact collapse this is
+     looking for. So the count is taken from the whole thought before anything is sliced. */
+  const EAR_DUMP_MAX = 32;
+  /* The quiet-frame average, and it moves slowly on purpose. A floor that chased the signal
+     would read a pause between two words as the room getting quieter and the words
+     themselves as the room getting louder, which is a number with no meaning. One in twenty
+     is about a second and a half of quiet frames to settle - slower than any pause inside a
+     sentence and faster than the session. */
+  const EAR_FLOOR_ALPHA = 0.05;
+  const earDump = { turns: [], live: null, floor: 0, floorFrames: 0, gateWas: false };
+
+  function earFloorFrame(lvl) {
+    /* ONLY THE QUIET FRAMES. Averaging everything would measure the speech, not the floor
+       under it, and the whole question is whether that floor is climbing. */
+    if (lvl > EAR_VAD_OFF) return earDump.floor;
+    earDump.floorFrames++;
+    earDump.floor = earDump.floor > 0
+      ? earDump.floor + (lvl - earDump.floor) * EAR_FLOOR_ALPHA
+      : lvl;
+    return earDump.floor;
+  }
+
+  /* ONE RECORD PER ARM, opened by r.onstart, which is the browser saying the microphone is
+     actually live - not by startListening(), which is us saying we asked. The difference
+     between those two is one of the four mechanisms. */
+  function earDumpArm(why) {
+    const t = {
+      n: earDump.turns.length + 1, armedAt: Date.now(), why: String(why || ''),
+      arms: ear.arms, life: [], finals: 0, interims: 0, finalChars: 0,
+      /* THE FLAGS AS THEY STOOD AT THE ARM. A re-arm that happened with speakDraining still
+         true, or with a chunk still in the queue, is the stuck-flag mechanism caught in the
+         act - and the guards at earRearm and earWatchUp are supposed to make this
+         impossible, so a `true` in this column is evidence and not colour. */
+      draining: !!speakDraining, queued: speakQueue.length, busy: !!busy,
+      sealed: thoughtSealed, floorAtArm: +earDump.floor.toFixed(5),
+      refAtArm: +Number(echo.ref).toFixed(5), refFromAtArm: echo.refFrom,
+      floorMax: +earDump.floor.toFixed(5), refMax: 0, inputMax: 0,
+      gateOpened: 0, gateShut: 0, ttsLiveFrames: 0, frames: 0,
+      speeches0: ear.speeches, ends0: ear.ends, dropped0: echo.dropped,
+      speeches: 0, ends: 0, dropped: 0, drops: [],
+      heard: '', words: 0, flushWhy: '', endedAt: 0, sealedLate: 0
+    };
+    earDump.live = t;
+    earDump.turns.push(t);
+    while (earDump.turns.length > EAR_DUMP_MAX) earDump.turns.shift();
+    return t;
+  }
+
+  /* THE LIFECYCLE, IN THE ORDER IT HAPPENED. Page-side this is the four handlers plus the
+     two calls we make ourselves, which is enough to see a restart race: `.stop()` followed
+     by `.start()` with no `end` between them is that race, written down. */
+  function earDumpLife(what) {
+    const t = earDump.live;
+    if (!t) return false;
+    t.life.push(Math.round(Date.now() - t.armedAt) + 'ms ' + what);
+    while (t.life.length > 40) t.life.shift();
+    return true;
+  }
+
+  function earDumpResult(isFinal, text) {
+    const t = earDump.live;
+    if (!t) return false;
+    if (isFinal) { t.finals++; t.finalChars += String(text || '').length; }
+    else t.interims++;
+    return true;
+  }
+
+  /* Per analyser frame, off the same level the VAD and both gates read. */
+  function earDumpFrame(lvl, now) {
+    const floor = earFloorFrame(lvl);
+    const t = earDump.live;
+    /* THE GATE'S EDGES ARE COUNTED EVEN BETWEEN TURNS, because a gate that was left open by
+       the previous answer is a property of the gap, not of the arm. */
+    const gate = echoGateOpen();
+    if (gate !== earDump.gateWas) {
+      earDump.gateWas = gate;
+      if (t) { if (gate) t.gateOpened++; else t.gateShut++; }
+    }
+    if (!t || t.endedAt) return false;
+    t.frames++;
+    if (floor > t.floorMax) t.floorMax = +floor.toFixed(5);
+    if (lvl > t.inputMax) t.inputMax = +lvl.toFixed(5);
+    if (echoTtsLive()) {
+      t.ttsLiveFrames++;
+      if (echo.ref > t.refMax) t.refMax = +Number(echo.ref).toFixed(5);
+    }
+    return true;
+  }
+
+  /* AND THE TURN'S END, from flushThought, with the words it carried. */
+  function earDumpFlush(why, thought) {
+    const t = earDump.live;
+    if (!t) return false;
+    const words = String(thought || '').trim();
+    t.heard = words.slice(0, 200);
+    t.words = words ? words.split(/\s+/).length : 0;
+    t.flushWhy = String(why || '');
+    t.endedAt = Date.now();
+    t.speeches = ear.speeches - t.speeches0;
+    t.ends = ear.ends - t.ends0;
+    t.dropped = echo.dropped - t.dropped0;
+    return true;
+  }
+
+  /* A word that arrived after its thought had gone belongs to the turn that was open when
+     it landed, not to the next one - so it is counted here rather than at the arm. */
+  function earDumpSealed() {
+    const t = earDump.live;
+    if (t) t.sealedLate++;
+    return !!t;
+  }
+
+  /* EVERY WORD THE ECHO LAW REFUSED, AGAINST ITS TURN. The layer and the score come with it,
+     because "the acoustic gate was shut" and "0.71 similar to the line he had just finished"
+     are two different mechanisms with two different repairs. */
+  function earDumpDrop(verdict, text) {
+    const t = earDump.live;
+    if (!t) return false;
+    if (!t.drops) t.drops = [];
+    t.drops.push({ layer: verdict.layer, similarity: +Number(verdict.similarity).toFixed(3),
+                   gate: !!verdict.gate, why: verdict.why,
+                   text: String(text || '').slice(0, 60) });
+    while (t.drops.length > 8) t.drops.shift();
+    return true;
+  }
+
   /* ---- THE VOICE ACTIVITY DETECTOR ----
      A gate with hysteresis and a hang time, which is all a VAD needs to be when the thing
      downstream of it is a recogniser rather than a codec. Two gates rather than one so that
@@ -10494,6 +11368,14 @@ async function loadLib() {
        reference, and decides something else entirely: not "interrupt him" but "may these
        words reach the brain at all". See THE ECHO LAW. */
     echoGateWatch(lvl, now);
+    /* AND THE DUMP WATCHES ALL THREE without touching any of them - see THE TURN DUMP. It
+       is last on purpose: everything above it has already decided, so a diagnostic that
+       somehow threw could not change a verdict that had not been reached yet. */
+    earDumpFrame(lvl, now);
+    /* AND THE RESET CONTRACT'S 300ms OF SILENCE IS MEASURED HERE, on the same frames. It is
+       above the gates rather than below them because a frame loud enough to void the window
+       must void it whether or not it goes on to start a speech run. See THE RESET CONTRACT. */
+    armFloorFrame(lvl, now);
     if (lvl >= EAR_VAD_ON) {
       ear.over++;
       ear.under = 0;
@@ -10744,6 +11626,20 @@ async function loadLib() {
     ear.why = '';
     ear.hardErrors = 0;
     ear.rearmIn = 0;
+    /* AND THE RESET CONTRACT'S TALLY STARTS OVER WITH THE CONVERSATION - but ear.recogStarts
+       and ear.recogEnds DO NOT. Those two count the life of the recogniser INSTANCE, which is
+       built once and reused across sessions on purpose, and zeroing them here would leave
+       armRead() deriving the restart race from a difference that no longer describes the
+       instance it is about. The measured floor is kept for the same kind of reason: the room
+       did not change because a new conversation began, and the first arm below is the arm
+       that has always had no floor of its own. */
+    arm.resets = 0;
+    arm.races = 0;
+    arm.staleFlags = 0;
+    arm.loudRooms = 0;
+    arm.floorSamples = 0;
+    arm.floorVoids = 0;
+    arm.noted = false;
     earFaultPaint(0, '');              // a new conversation does not inherit the last one's fault
     /* THE CLASS FIRST, and the stream second. The seal, the organ dot and the status row
        all read this class, and the permission prompt can stand open for as long as he
@@ -10799,6 +11695,199 @@ async function loadLib() {
       speakLine(line);
     } else {
       idleStatus();
+    }
+    return true;
+  }
+
+  /* ======================= THE RESET CONTRACT, AND IT HAS ONE WRITER =======================
+     WHAT THIS IS, SAID HONESTLY FIRST. The turn dump was written to find the turn where the
+     heard words collapse, and IT DID NOT FIND ONE: six sentences of four to eleven words in
+     one session, no refresh, scored 4/4, 7/7, 9/9, 5/5, 11/11 and 8/8 on the words, one arm
+     per turn, one recogniser, six starts, six stops, no aborts, no refused start, zero echo
+     refusals of eighty-five judgements, and a gate that never opened. Each of the four
+     candidate mechanisms is cleared by a column in that dump rather than by an opinion. So
+     this block is NOT the repair of a measured defect, and nothing below it should be read
+     as one. It is a prescribed hardening, and it is worth having for two reasons that ARE
+     evidence:
+
+       - THE FIRST ARM OF A SESSION HAS NO MEASURED FLOOR AT ALL. In both dump runs arm #1
+         shows `floor 0` - the exponential floor has seen no quiet frames yet - and arm #1 is
+         also the only arm in either run that heard MORE than was said: "Honey tell me about
+         coffee" for four words spoken, and "Do you have any experience tell me about coffee"
+         in the run before. Later arms, carrying a measured floor of 0.002 to 0.006, are
+         exact. That is one sample of one and not a proof, but it is the one place in the dump
+         where a missing measurement lines up with a wrong transcript, and a per-turn
+         re-sample is exactly the thing that closes it.
+       - A GATE REFERENCE THAT IS ZEROED AT A TURN BOUNDARY CANNOT BE STALE AT THE NEXT ONE.
+         The dump says it never was. Making it structurally impossible costs six assignments.
+
+     THE FIVE TERMS, and each one names what it does and does not touch:
+
+       1. THE GATE REFERENCE IS ZEROED - echo.ref, refFrom, ratio, input and the over-window.
+          NOT echo.gateAt AND NOT echo.gateOpens. That is deliberate and it is the one line
+          here that could resurrect self-hearing if it were written the obvious way: the
+          acoustic gate's HOLD is specified to outlive the answer that opened it, because a
+          barge-in accepted on the last frame of a sentence must still be open when the
+          transcript of that sentence lands ECHO_TAIL_MS later. Zeroing the hold at the re-arm
+          that immediately follows a barge-in would drop exactly that transcript through the
+          door. echoGateWatch() remains the only writer of the gate's verdict; this zeroes
+          only its reference. echo_proof is the assertion that this stayed true.
+       2. THE FUNNEL'S FLAGS ARE RE-READ AND NEVER WRITTEN. speakDraining and speakQueue
+          belong to the funnel, which is protected, and a reset that assigned them would make
+          this the second writer of the exact state the single-writer discipline exists to
+          keep singular. It does not need to: startListening() already goes through
+          speakCancel(), which is the funnel's OWN door for emptying the queue and standing
+          the drain down, and this reset runs immediately after it. So the honest act here is
+          to re-read them and count a disagreement - if either is still set after the funnel's
+          own cancel, that is a real defect in the funnel and arm.staleFlags is the number
+          that says so out loud instead of a flag quietly cleared behind its back.
+       3. THE VAD FLOOR IS RE-SAMPLED FROM 300ms OF SILENCE, and a frame above EAR_VAD_OFF
+          VOIDS the window rather than joining it. That refusal is the whole difference
+          between a floor and a drift: a sampler that averaged in the first syllable of an
+          early speaker would climb toward the gate turn after turn, which is candidate
+          mechanism (b) manufactured by the code written to rule it out. A voided window
+          leaves the previous measurement standing and is counted.
+          AND THE FLOOR IS STILL NOT A THRESHOLD. EAR_VAD_ON and EAR_VAD_OFF are untouched
+          and are not computed from it. The dump measured the floor at 0 to 0.0122 against a
+          0.018 lower gate across a whole session, so there is no evidence for an adaptive
+          gate and an adaptive gate is the kind of change that can only be discovered to be
+          wrong in a room nobody tested. The sample feeds exactly one decision: if the
+          measured floor reaches EAR_VAD_OFF the fixed gates cannot tell a voice from the
+          room, and the page SAYS SO - arm.loudRoom, counted and noted on the heartbeat -
+          rather than listening into noise and reporting silence.
+       4. THE RECOGNITION LIFECYCLE IS EXPLICIT. armRead() returns 'never', 'live',
+          'stopping' or 'ended' from three things already written elsewhere, and 'stopping' is
+          the restart race with a name: .stop() has been called and onend has not arrived, so
+          the instance is not free and .start() will throw InvalidStateError. The page's
+          answer to that is UNCHANGED - the try/catch in startListening() says so in the
+          status row and lets the next re-arm have it - and all this adds is that the race is
+          now counted (arm.races) instead of being indistinguishable from a turn nobody spoke
+          into. The dump counted zero of them, which is why counting is the right response and
+          refusing to arm is not.
+       5. ONE SINGLE WRITER FOR ARM STATE. arm.state is assigned in armSet() and nowhere else
+          in this file, exactly as sight.state is assigned in sightSet() and nowhere else, and
+          for the same reason: two places that each keep a private idea of whether the
+          microphone is live would eventually disagree, and the disagreement would be silent.
+          armRead() computes and writes nothing, so it can be called from anywhere.
+
+     WHO CALLS IT, and it is deliberately ONE PLACE. armReset() is called only from
+     startListening(), which is the single door every arm in this file already goes through -
+     the same shape as sightSet() being called only from paintEyes(). The re-arm paths the
+     mandate lists all reach it through that door: earRearm()'s timer body, earWatchUp()'s
+     interval (through earRearm), the speakDone listener (through earRearm), r.onerror's
+     no-speech/aborted path and its backoff path (through earRearm), r.onend's self-heal
+     (through earRearm), bargeTake()'s immediate arm, and earOpen()'s first arm.
+     IT IS ONE CALL SITE AND NOT SEVEN ON PURPOSE, and this is a correctness argument rather
+     than a tidiness one: startListening() returns without arming if the recogniser is
+     already listening, and bargeTake() calls it exactly that way - `if (!listening)`. Seven
+     callers each resetting before the call would therefore zero the gate reference and open a
+     floor window on a barge-in that did NOT arm anything, mid-answer, with the old session
+     still holding the microphone. Behind the guard, "a reset happened" and "an arm happened"
+     are the same event and cannot come apart. preflight check 24 asserts both halves: one
+     assignment to arm.state, and one call to recogniser.start() in the file. */
+  const ARM_FLOOR_MS = 300;
+  const ARM_LOG_MAX = 24;
+
+  const arm = {
+    state: 'never', was: '', changes: 0, at: 0,
+    resets: 0, why: '', races: 0, staleFlags: 0, loudRooms: 0, noted: false,
+    floor: 0, floorAt: 0, floorSum: 0, floorFrames: 0, floorSamples: 0,
+    floorVoids: 0, voided: false, loudRoom: false, log: []
+  };
+
+  /* The recogniser's truth, in one word. Reads the three things that decide it and writes
+     nothing at all - so it cannot become a second place where the state is set.
+
+     'stopping' IS READ FROM A FLAG AND NOT FROM THE ARITHMETIC OF TWO COUNTERS, and that is a
+     correction of a real blindness rather than a preference. The first version asked whether
+     ear.recogStarts > ear.recogEnds. The six-turn longevity run ended with recogStarts 12
+     against recogEnds 15, because section 3c drives three hard network faults and a session
+     that never reaches onstart still fires onend - so the counters DRIFT, permanently, by one
+     per fault. With ends leading starts the subtraction can never be positive again, 'stopping'
+     becomes unreachable for the rest of the tab's life, and arm.races is pinned at zero by
+     arithmetic instead of by conduct. A restart race after a fault - which is precisely when a
+     restart race is most likely - would have been invisible, and the harness would have printed
+     "0 restart races" as though it had looked. The flag cannot drift: one edge sets it, one edge
+     clears it, and neither counts. */
+  function armRead() {
+    if (!recogniser) return 'never';
+    if (listening) return 'live';
+    return ear.recogLive ? 'stopping' : 'ended';
+  }
+
+  /* THE ONLY ASSIGNMENT TO arm.state IN THIS FILE. Called from the three edges that already
+     write `listening`: r.onstart, r.onend, and armReset() below. */
+  function armSet() {
+    const want = armRead();
+    if (want === arm.state) return arm.state;
+    arm.was = arm.state;
+    arm.state = want;
+    arm.changes++;
+    arm.at = Date.now();
+    return want;
+  }
+
+  /* ---- AND THE CONTRACT ITSELF ----
+     Runs once per arm, immediately after the funnel's own cancel and before .start(). */
+  function armReset(why) {
+    const from = armSet();                       // term 5: the lifecycle word, written once
+    arm.resets++;
+    arm.why = String(why || '');
+    if (from === 'stopping') arm.races++;        // term 4: the race, named and counted
+
+    /* term 1: the reference, and NOT the hold. See the block comment above. */
+    echo.ref = 0;
+    echo.refFrom = 'none';
+    echo.ratio = 0;
+    echo.input = 0;
+    echo.overSince = 0;
+    echo.overFor = 0;
+
+    /* term 2: re-read, never written. */
+    const draining = !!speakDraining;
+    const queued = speakQueue.length;
+    if (draining || queued) arm.staleFlags++;
+
+    /* term 3: open a fresh 300ms window. The previous measurement stands until this one
+       completes, so a voided window never leaves the floor unmeasured. */
+    arm.floorAt = Date.now();
+    arm.floorSum = 0;
+    arm.floorFrames = 0;
+    arm.voided = false;
+
+    arm.log.push({ at: arm.floorAt, why: arm.why, from: from,
+                   draining: draining, queued: queued,
+                   floorWas: +Number(arm.floor).toFixed(5) });
+    while (arm.log.length > ARM_LOG_MAX) arm.log.shift();
+    return from;
+  }
+
+  /* THE FLOOR'S ONLY CONTRIBUTOR, called from earVad() on every frame. Writes arm.floor and
+     the accumulator beneath it and nothing else in this page. */
+  function armFloorFrame(lvl, now) {
+    if (!arm.floorAt) return false;
+    if (lvl > EAR_VAD_OFF) {                     // not silence: the window is void
+      if (!arm.voided) { arm.voided = true; arm.floorVoids++; }
+      arm.floorAt = 0;
+      return false;
+    }
+    arm.floorSum += lvl;
+    arm.floorFrames++;
+    if (now - arm.floorAt < ARM_FLOOR_MS) return false;
+    arm.floor = arm.floorFrames ? arm.floorSum / arm.floorFrames : 0;
+    arm.floorSamples++;
+    arm.floorAt = 0;
+    /* THE ONE DECISION THE SAMPLE FEEDS, and it changes no threshold. */
+    arm.loudRoom = arm.floor >= EAR_VAD_OFF;
+    if (arm.loudRoom) {
+      arm.loudRooms++;
+      if (!arm.noted) {
+        arm.noted = true;
+        heartNote('the room noise floor measured ' + arm.floor.toFixed(4) +
+                  ' over 300ms of what should have been silence, which is at or above the ' +
+                  'lower voice gate (' + EAR_VAD_OFF + ') · the fixed gates cannot tell ' +
+                  'a voice from this room and the transcript should be read with that in mind');
+      }
     }
     return true;
   }
@@ -11005,6 +12094,13 @@ async function loadLib() {
          walkie-talkie sound THE OPEN EAR exists to remove. */
       if (!ear.open || ear.arms === 0) chime('wake');
       ear.arms++;
+      ear.recogStarts++;                 // the lifecycle's own count - see armRead()
+      armSet();                          // 'live', written in exactly one place
+      /* THE DUMP'S TURN BEGINS HERE AND NOT IN startListening(), because this callback is
+         the browser saying the microphone is live, which is the only edge a turn can
+         honestly be measured from. */
+      earDumpArm(ear.rearmWhy || 'the first arm of the session');
+      earDumpLife('onstart');
     };
     r.onresult = function (e) {
       ear.hardErrors = 0;              // the service answered; the backoff below stands down
@@ -11013,6 +12109,7 @@ async function loadLib() {
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const res = e.results[i];
         const text = (res[0] && res[0].transcript) || '';
+        earDumpResult(res.isFinal, text);
         if (res.isFinal) heardFinal(text); else interim += text;
       }
       if (interim.trim()) heardInterim(interim);
@@ -11022,6 +12119,7 @@ async function loadLib() {
       $('mic').classList.remove('on');
       paintEars();
       const why = (e && e.error) || 'error';
+      earDumpLife('onerror:' + why);
       /* A CONVERSATION IS ALLOWED TO CONTAIN A SILENCE. The recogniser treats one as a
          failure and hands back "no-speech"; a session treats it as a pause and arms again,
          and the courtesy clock - not this - is the thing that ends an empty room. Telling
@@ -11068,6 +12166,14 @@ async function loadLib() {
     };
     r.onend = function () {
       listening = false;
+      /* THE INSTANCE IS FREE AGAIN, and this is the edge that says so: between the .stop()
+         above and this callback armRead() reads 'stopping', which is the restart race. The
+         counter is the record; recogLive is the state, and clearing it here is what makes
+         'stopping' a window with two ends rather than a subtraction that drifts. */
+      ear.recogEnds++;
+      ear.recogLive = false;
+      armSet();
+      earDumpLife('onend');
       $('mic').classList.remove('on');
       paintEars();
       // The service can cut out mid-thought; do not lose what was already said.
@@ -11107,6 +12213,12 @@ async function loadLib() {
        hands a chunk to an engine, and the pump's first edge is where it comes back up. */
     phraseBuffer = '';
     lastInterim = '';
+    /* THE RESET CONTRACT, AND THIS IS ITS ONLY CALL SITE. It is here rather than in the seven
+       paths that re-arm because it must run once per ARM and not once per request to arm: the
+       guard at the top of this function is what makes those two the same event. It is after
+       speakCancel() on purpose - the funnel's flags are re-read, and reading them before the
+       funnel's own door had closed would measure the wrong moment. See THE RESET CONTRACT. */
+    armReset(ear.rearmWhy || 'the first arm of the session');
     /* ONE RECOGNISER, RESTARTED, AND THAT IS MEASURED RATHER THAN ASSUMED. A spike built to
        replace this with a fresh instance per arm - on the theory that a spent recogniser
        goes deaf - found that reuse failed and fresh worked, twice. It was wrong, and it was
@@ -11117,14 +12229,34 @@ async function loadLib() {
        instance all transcribe. So this line stays as it is, and the lesson is in the
        lookbook: a platform finding taken during a throttle is not a finding. */
     if (!recogniser) recogniser = buildRecogniser();
-    try { recogniser.start(); }
-    catch (e) { setStatus('', 'microphone busy · click again'); }
+    earDumpLife('.start()');
+    try {
+      recogniser.start();
+      /* THE INSTANCE IS OURS FROM HERE UNTIL onend, and this is the edge that says so. Set
+         AFTER start() returns rather than before, so that the throw below leaves the flag
+         reading what it already read - which, in the InvalidStateError case, is true, because
+         the reason start() threw is that the previous session has not ended yet. */
+      ear.recogLive = true;
+      armSet();
+    }
+    catch (e) {
+      /* THE RESTART RACE, WRITTEN DOWN WHERE IT HAPPENS. stop() is asynchronous: listening
+         goes false in the same tick but the instance is not free until r.onend, and a
+         start() inside that window throws InvalidStateError. The page's answer to that is
+         unchanged - say so in the status row and let the next re-arm try - but a turn that
+         was lost this way used to be indistinguishable from a turn nobody spoke into. */
+      earDumpLife('.start() REFUSED: ' + ((e && e.name) || 'error'));
+      setStatus('', 'microphone busy · click again');
+    }
   }
 
   function stopListening() {
     clearTimeout(finishTimer);
     finishTimer = null;
-    if (recogniser && listening) { try { recogniser.stop(); } catch (e) { /* ignore */ } }
+    if (recogniser && listening) {
+      earDumpLife('.stop()');
+      try { recogniser.stop(); } catch (e) { /* ignore */ }
+    }
     listening = false;
     $('mic').classList.remove('on');
     paintEars();
@@ -12463,7 +13595,13 @@ async function loadLib() {
     if (!m) return;
     deckSun.right.set(m[0], m[1], m[2]);
     deckSun.up.set(m[4], m[5], m[6]);
-    const ox = -skyPointer.x * DECK.STAR_SWAY, oy = -skyPointer.y * DECK.STAR_SWAY;
+    /* AND THE SWING IS SMALLER WHILE YOU ARE WORKING. work.sway is 1 at rest and WORK.SWAY
+       under a session, eased on the same scalar as the nebula's temperature - see WORK. The
+       multiply is here rather than on STAR_SWAY itself because STAR_SWAY is the deck's
+       declared amplitude and this is a mood applied to it; a mood must not overwrite a
+       constant, or the readout at __galaxy.deck.sky would stop describing the deck. */
+    const swing = DECK.STAR_SWAY * work.sway;
+    const ox = -skyPointer.x * swing, oy = -skyPointer.y * swing;
     for (let i = 0; i < deckSkyLayers.length; i++) {
       const L = deckSkyLayers[i], k = L.par;
       L.obj.position.set(deckSun.right.x * ox * k + deckSun.up.x * oy * k,
@@ -12766,6 +13904,29 @@ async function loadLib() {
     YAW_IDLE: 0.087,          // +/- 5 degrees, the mandate's figure, in radians
     PITCH_IDLE: 0.035,        // +/- 2 degrees
     NOD_MAX: 0.055, NOD_MS: 240, NOD_GAP_MS: 700, NOD_RISE: 0.16,
+    /* ---- THE GAZE: ALIVENESS AS ATTENTION ----
+       §18.7 gave the head idle drift and a stress-nod, which is aliveness as PHYSICS - it
+       moves because it is a body. This is the other kind: it moves because it NOTICED. The
+       two sines above are untouched; what changes is the point they orbit. A head that
+       swings its idle wobble around a new centre is looking at something, and it is one
+       addition per axis in the vertex shader rather than a second animation system.
+       GAZE_MAX 0.2618 is fifteen degrees - three times the idle yaw's five, so the departure
+       is unmistakably a look and not a wobble, and well short of the ninety that would show
+       the head's ear to the room. Clamped to it rather than aimed at the true angle, because
+       the organ rail is nearly a screen-width away from the well and the true angle would be
+       most of a right turn.
+       GAZE_TAU 260 is the parallax's idiom and not the --spring curve: a chase toward a
+       moving target has to be frame-rate independent and must not overshoot, which is what
+       1 - e^(-dt/tau) gives and what a fixed-duration bezier does not. 260ms puts the head
+       most of the way there in a third of a second - the speed of noticing, not of turning
+       to face.
+       GAZE_EPS is the threshold the departure and return FRAMES are counted at, and it is
+       PRES.YAW_IDLE / 4: any smaller and the idle wobble alone would trip it, which would
+       make "the frame it departed" a number about the sine and not about the drift.
+       GAZE_AIM_EVERY: the aim is two getBoundingClientRect calls, so it is taken on the
+       drift's edges and then twice a second while the drift lasts - enough that a window
+       resized mid-drift retargets, cheap enough that it is not a per-frame reflow. */
+    GAZE_MAX: 0.2618, GAZE_TAU: 260, GAZE_EPS: 0.087 / 4, GAZE_AIM_EVERY: 30,
     /* RING: three gimbal circles, MIND_SPOKES waveform spokes, one core. The circles'
        radii and their periods are the CSS Mind's, so the two faces of this machine are
        the same instrument at two sizes. */
@@ -12779,6 +13940,16 @@ async function loadLib() {
     SIZE: 2.0, DPR_MAX: 1.75, TINT: 0x7cc4ff,
     FPS_FLOOR: 55, GRACE_MS: 3000, PROBE_MS: 2200, KEEP_RATIO: 0.9,
     RMS_FULL: 0.22,           // the analyser RMS the mouth reads as fully open
+    /* THE COMPACT TIER'S DENSITY, and it is a fraction of the POINTS and not of the
+       geometry: the same three modes, the same one shader, the same one material and the
+       same one allocation - setDrawRange simply stops sooner. 0.45 and not 0.22 (which is
+       what scaling by area, 140^2/300^2, would give) because the head is not a texture: a
+       point cloud that thins in proportion to its own area holds its per-pixel density
+       constant, and constant per-pixel density at a third of the size is a head whose
+       silhouette has gone soft. 0.45 over ~0.22 of the area leaves the compact head about
+       twice as dense per pixel as the full one, which is what keeps a 140px face reading as
+       a face, while still handing the GPU less than half the vertices to shade. */
+    COMPACT_DENSITY: 0.45,
     BLINK_MS: 420,            // the slow blink, on waking and on closing, and nowhere else
     ORG_MS: 200,              // how often the organs and the camera's truth are re-read
     MIRROR_EVERY: 4           // frames between paints of the card's miniature
@@ -12797,6 +13968,17 @@ async function loadLib() {
                  level: 0, from: 'rest', eye: 0, lid: 0, blink: 0,
                  jaw: 0, nod: 0, nods: 0, yawHold: null,
                  fps: 0, worst: 0, lowSince: 0, mirrors: 0, side: 0, dpr: 1,
+                 /* THE TIER THE BUFFER IS ACTUALLY BUILT AT, and the fraction it was built
+                    with. 'full' until a governor with less than PRES_MIN of glass says
+                    otherwise; `compactAudit` holds that tier's own verdict once it has
+                    auditioned, and stays '' on every page that never reaches it. */
+                 tier: 'full', density: 1, compactAudit: '',
+                 /* THE GAZE: where the idle sines ORBIT, in radians, and the two frame
+                    numbers that say when it left the middle of the room and when it came
+                    back. `at` is what the shader is being given this frame, `want` is where
+                    it is heading, and the distance between them is the ease. */
+                 gaze: { on: false, why: 'centre', want: [0, 0], at: [0, 0],
+                         left: 0, back: 0, leftAt: 0, backAt: 0, departures: 0 },
                  revision: '' };
   const presNotes = [];
   function presNote(msg) {
@@ -12827,6 +14009,15 @@ async function loadLib() {
              profile so the wave has a shape the shader does not have to know about
        cell  the gimbal index in RING, the organ index in CUBE, the anatomy tag in FACE
              (PRES_CELL) - read by the harness, never by the shader */
+  /* THE ONE PLACE THE DENSITY IS APPLIED. Every count in every fill goes through this, so
+     the compact tier is one multiplication in one function rather than a fraction sprinkled
+     through six loops where a future edit could add a seventh and miss it. The floor of 8
+     is there because a part of the face is either present or it is not: four points of lower
+     lip is not a thinner mouth, it is four dots where a mouth was. */
+  function presN(n) {
+    return pres.density >= 1 ? n : Math.max(8, Math.round(n * pres.density));
+  }
+
   function presPen() {
     let n = 0;
     return {
@@ -12854,9 +14045,14 @@ async function loadLib() {
   }
 
   function presRingFill(pen, rnd) {
+    /* THE ARC AND THE SPOKE ARE SCALED AS ONE NUMBER EACH, because each of them is both
+       a count and a divisor: thinning the loop without thinning the step would leave the
+       gimbals as arcs with a bite out of them and the spokes standing short of the rim. */
+    const ARC = presN(PRES.RING_ARC), SPOKE_PTS = Math.max(3, presN(PRES.SPOKE_PTS));
+    const CORE_PTS = presN(PRES.CORE_PTS);
     PRES.RING_R.forEach(function (R, k) {
-      for (let i = 0; i < PRES.RING_ARC; i++) {
-        const th = (i / PRES.RING_ARC) * Math.PI * 2;
+      for (let i = 0; i < ARC; i++) {
+        const th = (i / ARC) * Math.PI * 2;
         /* A BAND OF LIGHT AND NOT A WIRE. A circle of points at one exact radius reads as
            a drawn line; a hair of scatter reads as a ring of light, which is what the CSS
            Mind's gimbals are with their blur and their gradient. */
@@ -12872,13 +14068,13 @@ async function loadLib() {
       const profile = 0.55 * Math.sin(3 * th) + 0.3 * Math.sin(7 * th + 1.1) +
                       0.15 * Math.sin(11 * th + 2.3);
       const w = 0.42 + 0.58 * (0.5 + 0.5 * profile);
-      for (let j = 0; j < PRES.SPOKE_PTS; j++) {
-        const f = j / (PRES.SPOKE_PTS - 1);
+      for (let j = 0; j < SPOKE_PTS; j++) {
+        const f = j / (SPOKE_PTS - 1);
         const r = PRES.WAVE_R + f * 0.11 * w;
         pen.put(Math.cos(th) * r, Math.sin(th) * r, (rnd() - 0.5) * 0.01, 5, w, 0);
       }
     }
-    for (let i = 0; i < PRES.CORE_PTS; i++) {
+    for (let i = 0; i < CORE_PTS; i++) {
       /* A SOLID-ISH CORE: cube-rooted radius, so the points are spread through the
          volume instead of piling up at the centre of it. */
       const u = rnd() * 2 - 1, th = rnd() * Math.PI * 2;
@@ -12891,6 +14087,7 @@ async function loadLib() {
 
   function presCubeFill(pen, rnd) {
     const N = PRES.CUBE_N, H = PRES.CUBE_HALF, J = PRES.CUBE_JITTER;
+    const CUBE_PTS = Math.max(2, presN(PRES.CUBE_PTS));
     for (let ix = 0; ix < N; ix++) {
       for (let iy = 0; iy < N; iy++) {
         for (let iz = 0; iz < N; iz++) {
@@ -12898,7 +14095,11 @@ async function loadLib() {
           const cy = -H + (iy / (N - 1)) * 2 * H;
           const cz = -H + (iz / (N - 1)) * 2 * H;
           const cell = (ix + iy + iz) % ORGANS.length;
-          for (let j = 0; j < PRES.CUBE_PTS; j++) {
+          /* The LATTICE keeps its 9x9x9 - a cube with eight cells to a side is a different
+             object, and the five organs read as diagonal shells only at this N. What thins
+             is the points inside each cell, which is the same trade the other two modes
+             make: the same shape, fewer grains of it. */
+          for (let j = 0; j < CUBE_PTS; j++) {
             pen.put(cx + (rnd() - 0.5) * J, cy + (rnd() - 0.5) * J,
                     cz + (rnd() - 0.5) * J, 0, rnd(), cell);
           }
@@ -13131,8 +14332,11 @@ async function loadLib() {
   }
 
   function presFaceFill(pen, rnd) {
-    const shell = PRES.CAP - PRES.NOSE_PTS - PRES.LIP_PTS * 2 -
-                  PRES.IRIS_PTS * 2 - PRES.LID_PTS * 2 - PRES.NECK_PTS;
+    const shell = presN(PRES.CAP - PRES.NOSE_PTS - PRES.LIP_PTS * 2 -
+                        PRES.IRIS_PTS * 2 - PRES.LID_PTS * 2 - PRES.NECK_PTS);
+    const NOSE_PTS = presN(PRES.NOSE_PTS), LIP_PTS = presN(PRES.LIP_PTS);
+    const IRIS_PTS = presN(PRES.IRIS_PTS), LID_PTS = presN(PRES.LID_PTS);
+    const NECK_PTS = presN(PRES.NECK_PTS);
     /* REJECTION SAMPLING, with a ceiling on the tries. The weight field's mean acceptance
        is 0.28 measured over 300k draws, so a point costs three and a half; the cap is
        there so that a future edit which accidentally returns a very small weight
@@ -13159,7 +14363,7 @@ async function loadLib() {
        gather on the ridge and thin toward the flanks, which is what makes a wedge read as
        an edge. The flank falls from the ridge to the face by a 0.7 power: a straight
        linear fall makes a pyramid, and noses are not pyramids. */
-    for (let i = 0; i < PRES.NOSE_PTS; i++) {
+    for (let i = 0; i < NOSE_PTS; i++) {
       const y = PRES_NOSE.tip + rnd() * (PRES_NOSE.top - PRES_NOSE.tip);
       const u = rnd() + rnd() - 1;
       const x = presNoseHW(y) * u;
@@ -13172,7 +14376,7 @@ async function loadLib() {
        shuts - the LID does the closing now, which is why they can stay where an eye is
        and be measured against the thing in front of them. */
     [-1, 1].forEach(function (sx, k) {
-      for (let i = 0; i < PRES.IRIS_PTS; i++) {
+      for (let i = 0; i < IRIS_PTS; i++) {
         const th = rnd() * Math.PI * 2;
         const r = 0.055 * Math.sqrt(rnd());
         const x = sx * PRES_EYE.x + Math.cos(th) * r;
@@ -13187,7 +14391,7 @@ async function loadLib() {
        the interpolation. The patch covers the socket ellipse and stands 0.038 in front of
        the surface, which puts it 0.060 in front of the iris behind it. */
     [-1, 1].forEach(function (sx, k) {
-      for (let i = 0; i < PRES.LID_PTS; i++) {
+      for (let i = 0; i < LID_PTS; i++) {
         const th = rnd() * Math.PI * 2;
         const rr = Math.sqrt(rnd());
         const x = sx * PRES_EYE.x + Math.cos(th) * PRES_EYE.rx * rr;
@@ -13201,7 +14405,7 @@ async function loadLib() {
        a shut mouth is two lips and not one stripe. The lower arc carries role LIP_LOW and
        rides the jaw; the upper stays with the skull. */
     [true, false].forEach(function (up) {
-      for (let i = 0; i < PRES.LIP_PTS; i++) {
+      for (let i = 0; i < LIP_PTS; i++) {
         const x = (rnd() * 2 - 1) * PRES_LIP.hw;
         const inner = PRES_LIP.y + (up ? PRES_LIP.gap : -PRES_LIP.gap);
         const outer = presLipY(x, up);
@@ -13213,7 +14417,7 @@ async function loadLib() {
     /* THE NECK AND THE SHOULDER HINT. Sixty-two parts neck to thirty-eight shoulder; both
        role NECK so the shader can fade them out together at the base. A head floating with
        nothing under it is a prop; a head on a neck is somebody in the room. */
-    const neckN = Math.round(PRES.NECK_PTS * 0.62);
+    const neckN = Math.round(NECK_PTS * 0.62);
     let np = 0, nt = 0;
     while (np < neckN && nt < neckN * 40) {
       nt++;
@@ -13227,7 +14431,7 @@ async function loadLib() {
               PRES_ROLE.NECK, rnd(), PRES_CELL.NECK);
       np++;
     }
-    for (let i = np; i < PRES.NECK_PTS; i++) {
+    for (let i = np; i < NECK_PTS; i++) {
       const sx = rnd() < 0.5 ? -1 : 1;
       const u = Math.pow(rnd(), 0.75);        // denser where it leaves the neck
       const inner = PRES_NECK.r * 0.7;
@@ -13293,6 +14497,9 @@ async function loadLib() {
     'uniform float uNod;',
     'uniform float uYaw;',
     'uniform float uYawHold;',
+    /* THE CENTRE THE IDLE MOTION ORBITS, not a second rotation. See PRES.GAZE_MAX. */
+    'uniform float uGazeY;',
+    'uniform float uGazeP;',
     'uniform float uOrgan[5];',
     'varying float vA;',
     'mat3 rotX(float a){ float s=sin(a),c=cos(a); return mat3(1.,0.,0., 0.,c,-s, 0.,s,c); }',
@@ -13387,9 +14594,14 @@ async function loadLib() {
        the relief used, because a relief had to swing to prove it had a side and a head
        does not. uYawHold is the plate door: it pins the yaw and stops the pitch, because
        a plate taken mid-wobble is a plate of the wobble. Plus a breath. */
-    '    float yaw = uYawHold > 0.5 ? uYaw : sin(t * 0.29) * ' +
+    /* AND uGazeY/uGazeP MOVE THE CENTRE, which is the whole of PART 3: the same two sines
+       with the same two amplitudes and the same two periods, added to an offset instead of
+       to zero. Inside the uYawHold guard on the same side as the idle motion, because a
+       plate is a plate of the head facing front - the gaze is aliveness and a plate is
+       evidence, and evidence must not be caught mid-glance. */
+    '    float yaw = uYawHold > 0.5 ? uYaw : uGazeY + sin(t * 0.29) * ' +
       PRES.YAW_IDLE.toFixed(4) + ';',
-    '    float pitch = uYawHold > 0.5 ? 0.0 : sin(t * 0.19) * ' +
+    '    float pitch = uYawHold > 0.5 ? 0.0 : uGazeP + sin(t * 0.19) * ' +
       PRES.PITCH_IDLE.toFixed(4) + ' + uNod;',
     '    p = rotY(yaw) * rotX(pitch) * p;',
     '    p *= 1.0 + 0.006 * sin(t * 0.8);',
@@ -13527,6 +14739,77 @@ async function loadLib() {
     return PRES.NOD_MAX * Math.sin((dt / span) * Math.PI);
   }
 
+  /* ---- THE GAZE, on the session's own drift ----
+     WHAT IT READS, NAMED. focus.py's public_state() field `drifting`, which that file sets
+     to `session._counted and session.state == "running"`. Read, never recomputed: the grace
+     period, the posture rules, the excusals and the app lock all live on the server and the
+     one thing this page is entitled to know is the verdict. `fx` is the last SSE push - see
+     fxApply - so this is the same boolean the card's 'off target' line reads, and the two
+     cannot disagree about whether you are drifting.
+     WHERE IT LOOKS. #focusbtn in the organ rail, because that is the element that SHOWS the
+     drift: fxPaint writes `organ on drift` onto it, which is what turns its state dot amber.
+     The head looks at the thing that just changed, which is the only aim that means anything
+     - a gaze at a fixed decorative point would be a second idle animation.
+     WHY IT RETURNS. A head that stays turned is not attending, it is distracted. The want
+     goes back to [0, 0] the moment `drifting` goes false, and the same chase brings it home
+     on the same time constant, so the return is as measurable as the departure. */
+  let presAimAt = -1;
+  function presGazeAim() {
+    /* Two rects, and the ONLY two reads of layout in the presence's frame - which is why
+       this is called on the drift's edges and twice a second, not every frame. */
+    const el = $('focusbtn');
+    if (!presHost || !el) return null;
+    const h = presHost.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    if (!(h.width > 0) || !(r.width > 0)) return null;
+    const dx = (r.left + r.width / 2) - (h.left + h.width / 2);
+    const dy = (r.top + r.height / 2) - (h.top + h.height / 2);
+    const cl = function (v) { return Math.max(-1, Math.min(1, v)); };
+    /* SIGNS, DERIVED FROM THE SHADER AND NOT GUESSED. rotY(y) sends the nose at +z to
+       x = z*sin(y), so a positive yaw looks towards +x, which is screen RIGHT: the yaw wants
+       the sign of dx. rotX(p) sends it to y = -z*sin(p), so a positive pitch looks DOWN,
+       which is the direction screen dy grows in: the pitch wants the sign of dy too. */
+    return [cl(dx / (innerWidth / 2)) * PRES.GAZE_MAX,
+            cl(dy / (innerHeight / 2)) * PRES.GAZE_MAX];
+  }
+
+  function presGaze(now, dt) {
+    const g = pres.gaze;
+    /* Not while a plate is being taken, and not in RING or CUBE: the uniforms are read
+       inside the FACE branch of the shader, so writing them in another mode would be a
+       number with nowhere to land. */
+    /* ONE FIELD, AND NOT A CONJUNCTION OF ITS PARTS. focus.py already writes
+       `drifting = _counted and state == "running"`, so re-testing the state here would be
+       this page keeping a second copy of the server's own AND - and a copy is a thing that
+       can fall out of step. The mode test is not part of the signal: it is the fact that
+       these two uniforms are read inside the shader's FACE branch and nowhere else. */
+    const on = !!(fx && fx.drifting) && pres.mode === 'face';
+    if (on !== g.on) {
+      g.on = on;
+      g.why = on ? 'focus.public_state().drifting' : 'centre';
+      presAimAt = -1;                            // re-aim on the edge, in both directions
+      if (on) { g.departures++; g.left = 0; g.back = 0; g.leftAt = 0; g.backAt = 0; }
+    }
+    if (on && (presAimAt < 0 || pres.frames - presAimAt >= PRES.GAZE_AIM_EVERY)) {
+      const aim = presGazeAim();
+      presAimAt = pres.frames;
+      if (aim) g.want = aim;
+    } else if (!on) g.want = [0, 0];
+    /* The parallax's ease, for the parallax's reason: the same fraction of the remaining
+       distance per millisecond at any frame rate. */
+    const k = dt > 0 && dt < 2000 ? 1 - Math.exp(-dt / PRES.GAZE_TAU) : 0;
+    g.at = [g.at[0] + (g.want[0] - g.at[0]) * k,
+            g.at[1] + (g.want[1] - g.at[1]) * k];
+    /* THE TWO FRAMES THE MANDATE ASKS FOR, recorded here and nowhere else. `left` is the
+       first frame on which the centre was further from origin than the idle wobble could
+       account for; `back` is the first frame after a return on which it was not. Both are
+       pres.frames, so they are comparable with everything else this object counts. */
+    const far = Math.hypot(g.at[0], g.at[1]) > PRES.GAZE_EPS;
+    if (far && !g.left) { g.left = pres.frames; g.leftAt = Math.round(now); }
+    if (!far && g.left && !g.back && !on) { g.back = pres.frames; g.backAt = Math.round(now); }
+    return g.at;
+  }
+
   /* ---- THE MINIATURE ----
      drawImage from the one canvas rather than a second Points object, which is the whole
      argument: a miniature that was its own scene would be a second hologram that could
@@ -13598,6 +14881,12 @@ async function loadLib() {
     pres.jaw = lvl * PRES.JAW_MAX;
     u.uJaw.value = pres.jaw;
     u.uNod.value = pres.nod = presNod(now, lvl);
+    /* AND THE CENTRE THE IDLE MOTION ORBITS. After the nod on purpose: the nod is added to
+       the pitch inside the shader, so both are offsets on the same axis and the one that is
+       a reflex to speech must not be able to be cancelled by the one that is attention. */
+    const gz = presGaze(now, dt);
+    u.uGazeY.value = gz[0];
+    u.uGazeP.value = gz[1];
     for (let i = 0; i < presOrg.length; i++) u.uOrgan.value[i] = presOrg[i];
     presR.render(presScene, presCam);
     pres.frames++;
@@ -13658,6 +14947,70 @@ async function loadLib() {
     presDegrade('audition: ' + pres.trial + 'fps with the face against ' +
                 pres.baseline + 'fps with the ring (floor ' + PRES.FPS_FLOOR +
                 ', keep ' + Math.round(PRES.KEEP_RATIO * 100) + '% of baseline)');
+  }
+
+  /* ---- THE SECOND TIER ----
+     THE HEAD GETS SMALLER BEFORE IT GETS ABSENT. The governor has two floors now (see
+     LAYOUT.PRES_MIN_COMPACT); this is the renderer's half of that, and it is deliberately
+     the smallest possible half. Nothing about the hologram changes except how many points
+     are written into the one buffer: same three modes, same one shader program, same one
+     material, same one allocation at PRES.CAP, and setDrawRange stops sooner. The claim
+     §17.2 makes - "shader true, one material" - is not weakened by this, it is re-used.
+     THE REFILL IS UNCONDITIONAL ON A TIER CHANGE and skipped on everything else, because
+     the buffer's contents are a function of (mode, density) and of nothing else. */
+  function presTier(tier) {
+    const want = tier === 'compact' ? 'compact' : 'full';
+    if (want === pres.tier) return pres.tier;
+    pres.tier = want;
+    pres.density = want === 'compact' ? PRES.COMPACT_DENSITY : 1;
+    if (presGeo && pres.mode) presFill(pres.mode);
+    presNote(want === 'compact'
+      ? 'the well is ' + pres.side + 'px, under the ' + LAYOUT.PRES_MIN +
+        'px full floor: the compact tier at ' + Math.round(pres.density * 100) +
+        '% density, ' + pres.points.toLocaleString() + ' points'
+      : 'the well is ' + pres.side + 'px, clear of the ' + LAYOUT.PRES_MIN +
+        'px full floor: full density again, ' + pres.points.toLocaleString() + ' points');
+    /* AND IT AUDITIONS, with the boot's own audition and not a second one. Fire and forget
+       for the same reason presBoot's is awaited and this one is not: a resize handler that
+       blocked for 4.4 seconds of fps sampling would be a resize handler that dropped the
+       resize. */
+    if (want === 'compact') presCompactAudition();
+    return pres.tier;
+  }
+
+  /* ZERO NEW AUDITION MECHANISM. presAudition() samples the cheap mode, switches to the
+     face and samples again, and keeps it only if it clears PRES.FPS_FLOOR and 90% of what
+     the ring managed. The compact tier asks exactly that question about a different point
+     count, so it asks it with exactly that function - ring for the baseline, the compact
+     face for the trial, and RING as the fallback if even this density cannot hold the floor.
+     ONCE PER PAGE, because an audition costs 4.4 seconds of the face standing still, and a
+     window dragged across the compact boundary six times must not cost twenty-six.
+     AND NEVER UNDER ?presence=..., which is the flag that means "a harness has pinned this
+     mode, do not hold opinions about it" - the same condition presBoot uses. */
+  async function presCompactAudition() {
+    if (pres.compactAudit || PRES_ASKED) return pres.compactAudit;
+    if (pres.mode !== 'face' || pres.degraded) return pres.compactAudit;
+    pres.compactAudit = 'running';
+    presMode('ring');
+    await presAudition();
+    /* AND THE VERDICT ONLY COUNTS IF IT IS STILL ABOUT THE COMPACT TIER. An audition is
+       PRES.PROBE_MS twice; a window dragged back across the boundary inside those seconds
+       calls presTier('full'), which refills at full density, and the trial fps then
+       describes the FULL face while claiming to describe the compact one. MEASURED: this
+       is how "auditioned kept: 59.4fps at 12,000 points" appeared in the notes during
+       PART 1's measurement pass, and 12,000 is the full count. Clearing the verdict rather
+       than keeping it means the next genuine compact episode re-asks the question. */
+    if (pres.tier !== 'compact') {
+      pres.compactAudit = '';
+      presNote('the compact audition was abandoned: the well went back to the full tier ' +
+               'while the sample was still running');
+      return pres.compactAudit;
+    }
+    pres.compactAudit = pres.probation === 'kept' ? 'kept' : 'dropped';
+    presNote('the compact tier auditioned ' + pres.compactAudit + ': ' + pres.trial +
+             'fps at ' + pres.points.toLocaleString() + ' points against ' + pres.baseline +
+             'fps with the ring (floor ' + PRES.FPS_FLOOR + ')');
+    return pres.compactAudit;
   }
 
   /* byHand is the Command Panel, and it is the one caller allowed to clear a degrade:
@@ -13730,6 +15083,7 @@ async function loadLib() {
           uJaw: { value: 0 }, uNod: { value: 0 },
           uJawP: { value: new THREE.Vector2(PRES_JAW.y, PRES_JAW.z) },
           uYaw: { value: 0 }, uYawHold: { value: 0 },
+          uGazeY: { value: 0 }, uGazeP: { value: 0 },
           uTint: { value: new THREE.Color(PRES.TINT) },
           uOrgan: { value: [0, 0, 0, 0, 0] }
         },
@@ -13751,7 +15105,7 @@ async function loadLib() {
        has already decided how many pixels of the glass the well may have, and nothing
        here is allowed to argue with it. setSize's third argument is false for exactly
        that reason - the renderer must not write width/height into the style attribute. */
-    presResize = function (side) {
+    presResize = function (side, tier) {
       if (!presR || !(side > 0)) return;
       const dpr = Math.min(PRES.DPR_MAX, window.devicePixelRatio || 1);
       pres.side = Math.round(side);
@@ -13761,9 +15115,16 @@ async function loadLib() {
       presCam.aspect = 1;
       presCam.updateProjectionMatrix();
       presMat.uniforms.uDpr.value = dpr;
+      /* THE TIER, AND THE REBUILD ONLY WHEN IT CHANGED. A resize happens on every panel
+         toggle and every drag of a window edge; a refill walks twelve thousand points
+         through rejection sampling. Gating on the tier rather than on the side means the
+         expensive half runs on the two frames of a page's life where the density actually
+         changes, and the cheap half runs whenever the box does. */
+      presTier(tier === 'compact' ? 'compact' : 'full');
     };
     const box = layoutLast && layoutLast.wellBox;
-    presResize(box && box.fits ? box.side : LAYOUT.PRES_W);
+    presResize(box && box.fits ? box.side : LAYOUT.PRES_W,
+               box && box.tier ? box.tier : 'full');
 
     pres.on = true;
     pres.built = true;
@@ -13773,8 +15134,19 @@ async function loadLib() {
     presMode('ring');
     presFpsLast = performance.now();
     presTick = presFrame;
-    if (PRES_WANT === 'face' && !PRES_ASKED) await presAudition();
-    else { presMode(PRES_WANT); pres.probation = PRES_ASKED ? 'asked' : 'off'; }
+    if (PRES_WANT === 'face' && !PRES_ASKED) {
+      await presAudition();
+      /* AND IF THE PAGE OPENED NARROW, THAT WAS THE COMPACT AUDITION. presResize ran above
+         with the governor's tier before any mode existed, so a boot at a compact width
+         builds the ring and then the face at compact density - the audition that just
+         finished is the one presCompactAudition would have run, and running a second one
+         would cost another 4.4 seconds to ask the same question twice. */
+      if (pres.tier === 'compact') {
+        pres.compactAudit = pres.probation === 'kept' ? 'kept' : 'dropped';
+        presNote('the page opened in the compact tier: auditioned ' + pres.compactAudit +
+                 ' at ' + pres.points.toLocaleString() + ' points');
+      }
+    } else { presMode(PRES_WANT); pres.probation = PRES_ASKED ? 'asked' : 'off'; }
   }
 
   /* ============================== THE STILL FRAME ============================
@@ -13949,9 +15321,9 @@ async function loadLib() {
        saturation 0.36), and scaling that down produced a ring the colour of wet slate -
        #7491a9, measured, on the first run of this code. A jewel is a hue at gem richness,
        so the hue is kept exactly and the other two channels are PINNED: 0.55 saturation
-       and 0.47 lightness turn the same seven identities into sapphire, topaz, amethyst,
-       emerald, garnet, citrine and carnelian. Desaturated next to #0080FF; a gemstone next
-       to the dot it replaced. */
+       and 0.47 lightness turn the same eight identities into sapphire, topaz, amethyst,
+       emerald, garnet, citrine, carnelian and rhodolite. Desaturated next to #0080FF; a
+       gemstone next to the dot it replaced. */
     RING_SAT: 0.55, RING_LIGHT: 0.47,
     SPIN: 0.0015,                     // radians per frame, as specified
     SCAN_MS: 600, SCAN_IN: 0.8, SCAN_OUT: 1.0, SCAN_ALPHA: 0.85, SCAN_LIFT: 1.06,
@@ -14730,7 +16102,7 @@ async function loadLib() {
      THE HUE IS THE FOLDER and it is carried through untouched - shifting it would break
      the legend's promise, which is that a colour in the corner and a colour in the sky are
      the same claim. Saturation and lightness are PINNED rather than scaled: see RING_SAT
-     above for the measurement that settled it. The same seven identities, in stone rather
+     above for the measurement that settled it. The same eight identities, in stone rather
      than in dust.
      Accepts '#rrggbb' or 'rgb(a)(...)' because that is what everything in this file
      produces, and returns 'rgb(...)' because that is what a THREE.Color will take. */
@@ -14974,6 +16346,26 @@ async function loadLib() {
            Math.round(b * k) + ')';
   }
 
+  /* Pull a colour towards its OWN luminance, keeping that luminance. This is work mode's
+     desaturation and it is deliberately not planetDim: dimming a world would make the note
+     text on its crust harder to read, and the point of the cold room is that nothing in it
+     is harder to read - only less insistent. Rec.709 weights, because the eye's green is
+     not the sensor's green and a flat (r+g+b)/3 grey turns teal notes noticeably darker
+     than violet ones at the same nominal fraction. */
+  function workDesat(css, k) {
+    if (!(k > 0)) return css;
+    const m = /^rgba?\(([^)]+)\)$/.exec(String(css));
+    let r, g, b;
+    if (m) { const p = m[1].split(',').map(Number); r = p[0]; g = p[1]; b = p[2]; }
+    else {
+      const n = parseInt(String(css).slice(1), 16);
+      r = (n >> 16) & 255; g = (n >> 8) & 255; b = n & 255;
+    }
+    const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const mix = function (c) { return Math.round(c + (l - c) * k); };
+    return 'rgb(' + mix(r) + ',' + mix(g) + ',' + mix(b) + ')';
+  }
+
   function planetRadius(n) {
     let val = 1;
     try { val = Number(Graph.nodeVal()(n)) || 1; } catch (e) { /* unit sphere */ }
@@ -15003,7 +16395,12 @@ async function loadLib() {
       }
 
       const tone = planetTone(n);
-      const key = tone.css + '|' + tone.alpha + '|' + (tone.hot ? 1 : 0);
+      /* WORK MODE IS IN THE KEY, because the law above is not a suggestion: the emissive
+         below is now a function of (tone, work.k), and a key that named only the tone would
+         let a session start and never reach the material. work.key is k quantised to 2%
+         steps, which is what keeps a 900ms ramp to fifty uploads per world rather than one
+         per frame - see workFrame, which owns the quantisation and the repaint call. */
+      const key = tone.css + '|' + tone.alpha + '|' + (tone.hot ? 1 : 0) + '|' + work.key;
       // Nothing changed, so nothing is parsed, allocated or uploaded. See the law above.
       if (key === p.tone) {
         if (planetScan.of !== p) p.core.material.emissiveIntensity = p.rest;
@@ -15022,7 +16419,11 @@ async function loadLib() {
       p.core.material.color.set(p.core.material.map
         ? planetDim(washTo(tone.css, '#ffffff', PLANET.SKIN_WASH), PLANET.SKIN_LEVEL)
         : planetDim(tone.css, PLANET.BODY));
-      p.core.material.emissive.set(tone.css);
+      /* THE ONE SURFACE WORK MODE TOUCHES. Not the crust, not the atmosphere, not the ring:
+         the emissive is the part of a world that is LIT FROM INSIDE, which is the part that
+         makes the galaxy feel like it wants attention. WORK.DESAT of the way to its own
+         luminance takes the wanting out and leaves the world. */
+      p.core.material.emissive.set(workDesat(tone.css, WORK.DESAT * work.k));
       p.core.material.transparent = dim < 1;
       p.core.material.opacity = dim;
       if (planetScan.of !== p) p.core.material.emissiveIntensity = p.rest;
@@ -16607,7 +18008,30 @@ async function loadLib() {
                  disabled: $('ask-yes').disabled };
       },
       saidYes: function (s) { return SAID_YES_RE.test(String(s)); },
-      saidNo: function (s) { return SAID_NO_RE.test(String(s)); }
+      saidNo: function (s) { return SAID_NO_RE.test(String(s)); },
+      /* A GATE, PAINTED, AND NOTHING MORE. The vertical budget is a claim about three live
+         surfaces in the same frame - a proposal, a rolling transcript and a caption - at three
+         viewports, and reaching a proposal through the model costs a round trip to a language
+         model for each of them. A layout proof that fails on a slow afternoon is a layout proof
+         nobody trusts, so the PAINT is reachable from here and the CONSENT is not.
+
+         It calls the same showProposal() the server's reply calls, which is the whole reason it
+         exists rather than the harness writing classes and rows itself: the rows, the label,
+         the amber card, the vignette and the countdown are production's, so what layout_proof
+         measures is the surface the boss saw and not a mock-up of it that could be the right
+         height for the wrong reasons.
+
+         AND IT CANNOT GET ANYTHING DONE. A proposal painted this way carries no slot the server
+         issued, so Yes on it has nothing to execute: the gate has never lived in this tab. It
+         lives in the server's slot table, which this door cannot write, and /execute refuses an
+         id it did not mint. The failure mode worth naming is the one this is NOT: exposing a
+         way to run a hand without consent. What is exposed is a way to draw the question. */
+      paint: function (pending) {
+        showProposal(pending || {});
+        layout();                               // the budget is re-derived, as on any reply
+        return $('a-ask').classList.contains('show');
+      },
+      close: function () { hideProposal(); layout(); }
     },
     brain: {
       isSwap: isSwap, send: swapBrain, refresh: refreshBrain,
@@ -16979,6 +18403,10 @@ async function loadLib() {
           open: el.classList.contains('show'),
           live: el.classList.contains('live'),
           done: el.classList.contains('done'),
+          /* THE COLLAPSED STRIP, read off the class the governor set rather than off a height,
+             because "is it a strip" and "is it 34px tall" are two different questions and the
+             second one is the harness's to ask against the first. */
+          strip: el.classList.contains('strip'),
           rows: rows.length,
           meta: (document.getElementById('scribe-meta') || {}).textContent || '',
           said: (document.getElementById('scribe-said') || {}).textContent || '',
@@ -16994,6 +18422,18 @@ async function loadLib() {
       stop: function (why) { return scribeStop(why || 'the harness'); },
       draft: scribeDraft,
       health: scribeHealthFrom,
+      /* THE PANEL, PAINTED, for the same reason __galaxy.hands.paint exists and with the same
+         limit: the vertical budget has to be measured with a transcript rolling under a gate at
+         three viewports, and scribeStart() wants a real capture stream, a real model and a real
+         minute of speech for each one. These two are the panel's own paint functions - the ones
+         the capture path itself calls - so the classes, the head, the meta line and the row
+         markup are production's. What they do NOT do is record anything: no stream is opened,
+         scribe.on stays false, and the privacy law above is untouched because there was never
+         any audio. A line put in this way is a line this tab was handed, which is exactly what
+         a line put in the other way is too. */
+      up: function (live) { scribePanelUp(live !== false); },
+      down: scribePanelDown,
+      append: function (text, kind) { scribeAppend(text, kind || ''); scribeMetaPaint(); },
     },
     /* THE COMMAND PANEL, and everything a harness needs to prove it without a keyboard:
        open() is what Ctrl+K does, run(id) is what a click on a row does, and rows is what
@@ -17033,6 +18473,13 @@ async function loadLib() {
       view_: cmdView,
       run: cmdRun,
       paint: cmdPaint,
+      /* THE GRANT, for google_hands_proof: `google` is the last answer GET /google gave -
+         which carries no token, so exposing it here exposes nothing - and read() forces a
+         fresh one so a harness can connect, disconnect and watch the row's sentence change
+         without waiting for a poll or reopening the sheet. */
+      get google() { return goog; },
+      googleRead: googRead,
+      googleRun: googRun,
       cast: {
         get state() { return cast.data; },
         get offline() {
@@ -17063,8 +18510,16 @@ async function loadLib() {
          claim is that they do not overlap, not that they are at any particular place. */
       get rects() {
         const out = {};
+        /* THE SECOND ROW IS THE COLUMN'S OWN CHILDREN, and they are here because the vertical
+           budget is a claim about them: "nothing clipped above or below" cannot be measured
+           from #brain's rectangle alone, since #brain is exactly as tall as its contents and
+           would report that it fits while the gate card inside it sat under the telemetry rail.
+           The surfaces have to be asked one at a time. #bar last, because it is the organ rail
+           and therefore the floor the budget is measured down to. */
         ['panel', 'focuscard', 'facecard', 'brain', 'legend', 'presence',
-         'sharing', 'watching', 'eyeing', 'brainchip', 'toprail', 'title'].forEach(function (id) {
+         'sharing', 'watching', 'eyeing', 'brainchip', 'toprail', 'title',
+         'answer', 'a-ask', 'ask-rows', 'ask-yes', 'ask-no',
+         'scribepanel', 'caption', 'typeline', 'status', 'bar'].forEach(function (id) {
           const el = document.getElementById(id);
           if (!el) { out[id] = null; return; }
           const r = el.getBoundingClientRect();
@@ -17226,6 +18681,38 @@ async function loadLib() {
       /* EVERY THOUGHT WITH THE CALLER THAT ENDED IT - see earThoughtNote(). One utterance
          must appear here exactly once; a second entry names which of the three flushed it. */
       get thoughts() { return ear.thoughts.slice(); },
+      /* ---- THE TURN DUMP ----
+         ONE ROW PER ARM OF THE RECOGNISER, with the lifecycle, the counts, the measured
+         floor, the output reference at the arm and at its loudest, the acoustic gate's edges,
+         every word the echo law refused, and the words that actually reached the brain. A
+         session's worth of it is what tells a stale reference from a drifting floor from a
+         restart race from a first-final stop - four mechanisms with the same symptom and
+         four different repairs. The floor here is a MEASUREMENT of the quiet frames and
+         never a threshold: VAD_ON and VAD_OFF above are the only gates the detector uses. */
+      get dump() { return earDump.turns.map(function (t) { return Object.assign({}, t); }); },
+      get floor() { return +Number(earDump.floor).toFixed(5); },
+      get floorFrames() { return earDump.floorFrames; },
+      DUMP_MAX: EAR_DUMP_MAX, FLOOR_ALPHA: EAR_FLOOR_ALPHA,
+      /* THE RESET CONTRACT, READ-ONLY AND DERIVED WHERE IT CAN BE. `state` is computed by
+         armRead() at the moment of the read rather than served from the stored word, so a
+         probe can never be handed a lifecycle that went stale between the transition and the
+         question; `stored` is the written one, and a harness that finds the two disagreeing
+         has found a second writer of arm.state, which is the thing check 24 forbids.
+         `floor` here is the contract's own 300ms sample and is NOT ear.floor above - that one
+         is the dump's exponential average over every quiet frame of the session. Two floors
+         on purpose: one says what the room has been, the other says what it was at this
+         turn's arm, and only the second is re-sampled per turn. */
+      get arm() {
+        return { state: armRead(), stored: arm.state, was: arm.was, changes: arm.changes,
+                 resets: arm.resets, why: arm.why, races: arm.races,
+                 staleFlags: arm.staleFlags, loudRoom: arm.loudRoom,
+                 loudRooms: arm.loudRooms, floor: +Number(arm.floor).toFixed(5),
+                 floorSamples: arm.floorSamples, floorVoids: arm.floorVoids,
+                 sampling: !!arm.floorAt, recogStarts: ear.recogStarts,
+                 recogEnds: ear.recogEnds, recogLive: !!ear.recogLive,
+                 log: arm.log.slice(),
+                 FLOOR_MS: ARM_FLOOR_MS, VAD_OFF: EAR_VAD_OFF };
+      },
       /* How many words arrived after the thought they belonged to had already gone - the
          count is the seal's own evidence that it is doing something. */
       get sealed() { return ear.sealed; },
@@ -17533,6 +19020,34 @@ async function loadLib() {
       split: speakSplit,
       say: speakLine,
       estimate: speakEstimateMs,
+      /* THE QUIET TONGUE, PURE AND READABLE. The function itself, so the three rules can be
+         asserted on a string with no engine, no bus and no sound anywhere near them; and
+         `chunks` so a fixture can prove the OTHER half - that the normalized text is what the
+         engine was handed while the raw text is what the log kept. `text` on each row is the
+         chunk as it was queued and `spoken` is what was read out loud, and a row where those
+         are equal is a chunk that needed nothing doing to it. `spoken` is null until the chunk
+         is first about to become audio, which is the read-time contract made visible.
+
+         `spoken` IS AN ADDITION TO THIS ROW AND NOT A NEW SHAPE FOR IT. The first version of
+         this getter returned the six fields the tongue fixture happened to need, which quietly
+         took start, end, source, silent, secs and bytes away from every other reader - and
+         sixteen assertions that had nothing to do with normalization failed at once, reporting
+         "0 chunks" for a read that had in fact played ninety-three seconds of correct audio.
+         They were not wrong; they were reading undefined off a row that used to carry the
+         timings. The failure mode to hold onto: a probe getter is an interface with existing
+         callers, so a field is added to the row, never substituted for it. */
+      normalize: tongueNormalize,
+      ID_MIN: TONGUE_ID_MIN,
+      ID_LINE: TONGUE_ID_LINE,
+      get chunks() {
+        return speakChunkLog.map(function (c) {
+          return { i: c.i, chars: c.chars, text: c.text,
+                   spoken: c.spoken == null ? null : c.spoken,
+                   start: c.start, end: c.end, error: c.error, skipped: c.skipped,
+                   source: c.source, silent: !!c.silent,
+                   secs: c.secs || 0, bytes: c.bytes || 0 };
+        });
+      },
       /* THE PIN, settable from here for one reason: the real pin arrives from /health,
          which reads config.json - a file a harness has no business writing to, and which on
          this machine holds credentials. So the only way to prove that a pin OUTRANKS the
@@ -17837,6 +19352,34 @@ async function loadLib() {
       sweep: planetSweep,
       paint: paintPlanets
     },
+    /* WORK MODE, AS THE ROOM SEES IT. A door of its own rather than one inside `deck`,
+       because the three things it moves do not live in one place: the nebula is the deep
+       field's, the sway is the deck's and the emissive is the planetarium's. Read the whole
+       thing in one go and it is impossible to catch the three consumers disagreeing.
+       `k` is the one scalar everything reads. `sway` and `swing` are what the shells are
+       actually leaning by this frame. `neb`/`nebWork` are the two opacities read back OFF
+       the elements rather than recomputed, so a door that agreed with the glass is the only
+       way they can agree. `desat` is the fraction the worlds' emissive is pulled by, `key`
+       is what the tone cache is keyed on, and `turns` counts crossfades so a reversal can be
+       told from a repeat. A ramp in flight has k strictly between `from` and `to`; a settled
+       room has k === to. No setter: work mode is a function of the session and a test that
+       could push it by hand could pass on a page where the session never reached it. */
+    get work() {
+      const a = $('nebula'), b = $('nebula-work');
+      const rd = function (el, dflt) {
+        if (!el) return null;
+        const v = el.style.opacity;
+        return v === '' ? dflt : +(+v).toFixed(4);
+      };
+      return { on: work.on, why: work.why, k: work.k, from: work.from, to: work.to,
+               ms: work.ms, turns: work.turns, key: work.key,
+               sway: +work.sway.toFixed(4),
+               swing: +(DECK.STAR_SWAY * work.sway).toFixed(3),
+               desat: +(WORK.DESAT * work.k).toFixed(4),
+               neb: rd(a, WORK.NEB_IDLE), nebWork: rd(b, 0),
+               tune: { MS: WORK.MS, NEB_IDLE: WORK.NEB_IDLE, NEB_WORK: WORK.NEB_WORK,
+                       SWAY: WORK.SWAY, DESAT: WORK.DESAT } };
+    },
     /* THE DECK, for a harness that wants the frame rate rather than a screenshot of a
        frame rate. Read-only on purpose except drop(): there is no way to TURN the bloom
        on from here, because a test that could switch it on could also hide the fact that
@@ -18011,9 +19554,20 @@ async function loadLib() {
         const box = layoutLast && layoutLast.wellBox;
         return { side: pres.side, dpr: pres.dpr,
                  fits: !!(box && box.fits), why: box ? box.why : '',
+                 /* THE TIER THE GOVERNOR ASSIGNED and the tier the renderer is actually
+                    built at, separately: they agree in every ordinary frame, and the one
+                    interesting case is the frame between a resize and the refill, where a
+                    single merged field would have to pick one of them and be wrong. */
+                 tier: box ? (box.tier || (box.fits ? 'full' : 'none')) : '',
+                 builtTier: pres.tier, density: pres.density,
+                 min: LAYOUT.PRES_MIN, minCompact: LAYOUT.PRES_MIN_COMPACT,
                  lit: !!(presHost && presHost.classList.contains('lit')),
                  nofit: !!(presHost && presHost.classList.contains('nofit')) };
       },
+      /* THE COMPACT TIER'S OWN AUDITION, reported the way the boot audition is: the verdict
+         word, and the two fps numbers it was reached from. '' means the compact tier has
+         not been reached on this page, which is the ordinary case on a wide window. */
+      get compactAudit() { return pres.compactAudit; },
       get mirrors() { return pres.mirrors; },
       /* THE JAW AND THE NOD, as numbers rather than as an impression. `jaw` is the angle
          the mandible is actually at this frame and `nods` counts the stresses that fired,
@@ -18022,6 +19576,23 @@ async function loadLib() {
       get jaw() { return +pres.jaw.toFixed(5); },
       get nod() { return +pres.nod.toFixed(5); },
       get nods() { return pres.nods; },
+      /* THE GAZE. `signal` names the exact field of focus's public_state this reads, spelled
+         out rather than summarised, because "it reads the state" is the claim a harness has
+         to be able to check. `want` is where the head is aiming in radians and `at` is where
+         it has got to; `left` and `back` are the pres.frames numbers at which the centre
+         crossed PRES.GAZE_EPS on the way out and on the way home, and `leftAt`/`backAt` are
+         the same two moments on performance.now() for anybody who wants milliseconds instead
+         of frames. `departures` counts drifts noticed, so a gaze that never came back and a
+         gaze that went twice are different readings. */
+      get gaze() {
+        const g = pres.gaze;
+        return { on: g.on, why: g.why, signal: 'focus.public_state().drifting',
+                 want: [+g.want[0].toFixed(5), +g.want[1].toFixed(5)],
+                 at: [+g.at[0].toFixed(5), +g.at[1].toFixed(5)],
+                 left: g.left, back: g.back, leftAt: g.leftAt, backAt: g.backAt,
+                 departures: g.departures, frames: pres.frames,
+                 max: PRES.GAZE_MAX, tau: PRES.GAZE_TAU, eps: +PRES.GAZE_EPS.toFixed(5) };
+      },
       /* WHAT THE GPU WAS ACTUALLY TOLD, read back off the material rather than off the
          bookkeeping beside it. pres.jaw is this file's note to itself; uJaw is the number
          the vertex shader ran with, and the distance between those two is exactly where a
@@ -18033,6 +19604,7 @@ async function loadLib() {
         return { level: +u.uLevel.value.toFixed(4), eye: +u.uEye.value.toFixed(4),
                  jaw: +u.uJaw.value.toFixed(5), nod: +u.uNod.value.toFixed(5),
                  yaw: +u.uYaw.value.toFixed(5), yawHold: u.uYawHold.value,
+                 gazeY: +u.uGazeY.value.toFixed(5), gazeP: +u.uGazeP.value.toFixed(5),
                  lidY: +u.uLidY.value.toFixed(4),
                  jawPivot: [+u.uJawP.value.x.toFixed(4), +u.uJawP.value.y.toFixed(4)],
                  mode: u.uMode.value, size: u.uSize.value, dpr: +u.uDpr.value.toFixed(2) };
@@ -18178,6 +19750,38 @@ async function loadLib() {
       get total() { return typeTotal; },
       get typing() { return typeLit < typeTotal; },
       get text() { return $('a-text').textContent; }
+    },
+    /* THE CONTAINED PAGE, for layout_proof: everything the overflow injection needs to
+       measure, read from the live boxes rather than from the stylesheet - a rule that is
+       declared and then beaten by a more specific one would still read correctly out of
+       the CSS and wrongly off the glass. `render` is the injection itself, so the test
+       does not have to fake an answer through the whole chat path to prove the geometry. */
+    page: {
+      render: function (q, t) { renderAnswer(String(q || ''), String(t || ''), false, [], [], []); },
+      reach: answerReach,
+      get answer() {
+        const el = document.getElementById('a-text'), card = document.getElementById('answer');
+        if (!el || !card) return null;
+        const cs = getComputedStyle(el);
+        return {
+          scrollWidth: el.scrollWidth, clientWidth: el.clientWidth,
+          scrollHeight: el.scrollHeight, clientHeight: el.clientHeight,
+          cardScrollWidth: card.scrollWidth, cardClientWidth: card.clientWidth,
+          wrap: cs.overflowWrap, overflowY: cs.overflowX + '/' + cs.overflowY,
+          maxHeight: cs.maxHeight,
+          tabindex: el.getAttribute('tabindex'), role: el.getAttribute('role'),
+          focusable: el.getAttribute('tabindex') === '0',
+          scrollTop: el.scrollTop,
+        };
+      },
+      /* THE DOCUMENT ITSELF, which is the assertion that actually matters: every rule in
+         the containment block is a means, and this is the end. */
+      get doc() {
+        const d = document.documentElement;
+        return { scrollWidth: d.scrollWidth, clientWidth: d.clientWidth,
+                 innerWidth: window.innerWidth, bodyScrollWidth: document.body.scrollWidth,
+                 overflowX: getComputedStyle(d).overflowX };
+      },
     }
   };
 })();

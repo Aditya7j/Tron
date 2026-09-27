@@ -521,6 +521,102 @@ async function main() {
   log('');
   for (const line of text.split('\n').filter(Boolean)) log('  | ' + line);
 
+  /* ---- 4b. THE ROOM AT REST, AND WHAT IT SAYS IT WILL DO ----------------
+     WHY THIS IS ON THE OVERLAY PAGE AND NOT ON THE PROBE PAGE, MEASURED. It was written
+     against ?focusprobe=1 and the three resting reads came back on=true, k=0.9845,
+     why="session state: running" while the server said state=ended - which is not a bug in
+     either place. The battery pushes synthetic session states through the same fxApply the
+     SSE lands in, so a page that has just run it has legitimately been told a session is
+     running, and work mode believed it. That is the subscription working. It is also a page
+     that can no longer answer "what does the room look like when nothing is happening", so
+     the question is asked of the freshly-navigated overlay page instead, where the only
+     state the page has ever been told is the server's own.
+     WHY THE STATIC HALF IS HERE AND THE MOVING HALF IS NOT. Work mode and the drift gaze
+     are both subscriptions to focus.py's own SSE push, so proving they MOVE needs a real
+     session and a real drift - and this file starts no session and finishes none, for the
+     reason in its header. What it can prove, and what nothing else in the suite proves, is
+     the half that is true before anything happens: that the second sky layer exists and is
+     inert, that the room is measurably the ordinary room while no session is running, and
+     that the gaze names the exact field of public_state it reads rather than "the state".
+     The moving halves are in deck_proof.mjs (the crossfade, against a real session) and in
+     lock_proof.mjs (the departure and the return, against a real drift).
+     A SESSION RUNNING WHILE THIS RUNS would make the three resting reads below fail, which
+     is why the server's own answer is printed beside them: a red line here that names
+     state=running is a dirty machine, not a broken page. */
+  log('');
+  log('-- the room at rest: the working sky, and the gaze that has nothing to look at');
+  const restState = (await galaxy('/focus')).focus || {};
+  log('  the server says state=' + restState.state + ', drifting=' + restState.drifting);
+  const nebWork = await page.json(
+    '(function () { var e = document.getElementById("nebula-work");' +
+    ' if (!e) return null; var c = getComputedStyle(e);' +
+    ' return {z: c.zIndex, pe: c.pointerEvents, pos: c.position, op: c.opacity,' +
+    ' stops: (c.backgroundImage.match(/rgba?\\(/g) || []).length,' +
+    ' after: (function (n) { var s = document.getElementById("nebula");' +
+    '   return !!(s && s.compareDocumentPosition(n) & 4); })(e)};})()');
+  ok(!!nebWork && nebWork.z === '1' && nebWork.pe === 'none' && nebWork.pos === 'fixed' &&
+     +nebWork.op === 0 && nebWork.stops >= 2 && nebWork.after === true,
+     'THE WORKING SKY IS A SECOND LAYER AND IT IS INERT: #nebula-work shares the nebula\'s ' +
+     'layer 1, follows it in the document, carries ' + (nebWork && nebWork.stops) +
+     ' gradients, never takes a pointer, and is at zero opacity with no session',
+     JSON.stringify(nebWork));
+  const rest = await page.json('__galaxy.work');
+  ok(!!rest && rest.on === false && rest.k === 0 && rest.neb === 1 && rest.nebWork === 0 &&
+     rest.sway === 1 && rest.desat === 0,
+     'and the room is the ordinary room: k=0, the nebula at full, the cool band at zero, ' +
+     'the star parallax unattenuated and the worlds undesaturated',
+     JSON.stringify({ work: rest, server: restState.state }));
+  ok(!!rest && rest.tune && rest.tune.MS === 900 && rest.tune.NEB_IDLE === 1 &&
+     rest.tune.NEB_WORK === 0.3 && rest.tune.SWAY === 0.45 && rest.tune.DESAT === 0.45,
+     'the five numbers a session will move are DECLARED rather than buried: ' +
+     JSON.stringify(rest.tune) + ' - so what the room did can be argued with afterwards',
+     JSON.stringify(rest && rest.tune));
+  const gz = await page.json('__galaxy.presence.gaze');
+  ok(!!gz && gz.signal === 'focus.public_state().drifting',
+     'THE GAZE NAMES ITS SIGNAL EXACTLY: "' + (gz && gz.signal) + '" - one field of ' +
+     'focus.py\'s own public_state, read rather than recomputed, so the page keeps no ' +
+     'second copy of the server\'s "counted AND running"',
+     JSON.stringify(gz));
+  ok(!!gz && gz.on === false && gz.why === 'centre' && gz.want[0] === 0 && gz.want[1] === 0 &&
+     Math.abs(gz.at[0]) <= gz.eps && Math.abs(gz.at[1]) <= gz.eps && gz.departures === 0,
+     'and with nothing to look at it looks straight ahead: want ' + JSON.stringify(gz.want) +
+     ', at ' + JSON.stringify(gz.at) + ', inside its own ' + gz.eps +
+     '-radian deadband, and no departure has been recorded',
+     JSON.stringify(gz));
+  ok(!!gz && gz.max > 0 && gz.max < Math.PI / 6 + 1e-9 && gz.tau > 0 && gz.eps > 0 &&
+     gz.eps < gz.max,
+     'its three numbers are bounded the way a gaze has to be: at most ' + gz.max +
+     ' radians of turn (15°, a glance rather than a head-turn), a ' + gz.tau +
+     'ms time constant, and a deadband of ' + gz.eps + ' under the turn it measures',
+     JSON.stringify({ max: gz.max, tau: gz.tau, eps: gz.eps }));
+  /* AND THE SAME THING OFF THE MATERIAL - or an honest null. A renderer with no WebGL
+     builds no presence and therefore has no uniforms to read, and that is not a failure of
+     the gaze: it is the reason the assertion is on the PAIR. What would be wrong is a
+     material that exists and does not carry the two numbers the shader reads. */
+  /* WAITED FOR, BECAUSE THE FIRST VERSION OF THIS CHECK TOOK THE ESCAPE HATCH. The
+     hologram's boot runs its own fps audition and is several seconds behind the overlay, so
+     reading the material the moment the overlay appears found built=false and passed on the
+     null branch - a green line that had measured nothing. Section 5 waits for the same
+     thing a few lines further down; this borrows that wait rather than adding a second one. */
+  for (let i = 0; i < 40 && !(await page.evaluate('!!__galaxy.presence.built')); i++) {
+    await sleep(250);
+  }
+  const gu = await page.json('({built: __galaxy.presence.built,' +
+    ' u: __galaxy.presence.uniforms})');
+  const uOK = gu && gu.built
+    ? !!(gu.u && 'gazeY' in gu.u && 'gazeP' in gu.u &&
+         Math.abs(gu.u.gazeY) <= gz.eps && Math.abs(gu.u.gazeP) <= gz.eps)
+    : !!gu && gu.u === null;
+  ok(uOK,
+     gu && gu.built
+       ? 'AND THE GPU WAS TOLD THE SAME THING: uGazeY=' + gu.u.gazeY + ', uGazeP=' +
+         gu.u.gazeP + ', read back off the material rather than off the bookkeeping beside ' +
+         'it - the gaze is a target on the existing idle driver, not a second animation'
+       : 'the presence did not build in this renderer, so there is no material to read the ' +
+         'two uniforms off - and it says so rather than reporting zeros',
+     JSON.stringify(gu));
+
+
   /* ---- 5. THE EYES LAW, BOTH WAYS ROUND -------------------------------
      THE METAPHOR NEVER LIES, and there is exactly one way to prove that: open a camera and
      watch the face open its eyes, then close the camera and watch them shut. The `eyeslaw`
