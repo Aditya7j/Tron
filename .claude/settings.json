@@ -32,6 +32,10 @@
       "Bash(node brain_live.mjs)",
       "Bash(curl -s http://127.0.0.1:4700/brains)",
       "Bash(\"C:/Users/Fullstack Developer/AppData/Local/Programs/Python/Python313/python.exe\" -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d['pinned'],indent=1\\)\\)\")"
+    ],
+    "deny": [
+      "Read(./secrets/**)",
+      "Read(./speaker-store/**)"
     ]
   }
 }

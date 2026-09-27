@@ -46,6 +46,16 @@ sys.dont_write_bytecode = True          # this file leaves nothing behind, __pyc
 # somebody changes FRAME_MEDIA_TYPE in one place and not the other.
 import server                                                  # noqa: E402
 import focus                                                   # noqa: E402
+# The doorman's own module, for the same reason: check 25 asks voiceprint.hygiene() rather
+# than re-implementing the store's house rules, so the rules cannot drift apart from the
+# code that enforces them. Imported softly - a machine without onnxruntime should still be
+# able to run the other 25 checks.
+try:
+    import voiceprint                                          # noqa: E402
+except Exception as _vp_exc:                                   # noqa: BLE001
+    voiceprint, VOICEPRINT_WHY = None, "%s: %s" % (type(_vp_exc).__name__, _vp_exc)
+else:
+    VOICEPRINT_WHY = ""
 
 PASS, FAIL, WARN = "pass", "fail", "warn"
 QUIET = "--quiet" in sys.argv[1:]
@@ -743,6 +753,16 @@ def check_config_unreachable():
         "/notes-index.json",
         "/server.py",
         "/preflight.py",
+        # THE VOICEPRINTS. A face is a secret of a different kind from a key: nobody can
+        # rotate it. The store is gitignored and Read-denied, and the browser must not be
+        # able to ask for a row either - the ear's own page is the last place that should
+        # be able to read who else this house knows.
+        "/speaker-store/",
+        "/speaker-store/addi.json",
+        "/../speaker-store/addi.json",
+        "/viewer/../speaker-store/addi.json",
+        "/%2e%2e/speaker-store/addi.json",
+        "/..%5cspeaker-store%5caddi.json",
     ]
     # A status code is not an answer. The backslash probes earn a 301 into viewer/
     # and then a perfectly innocent 200 of index.html, so follow the redirect and
@@ -796,6 +816,30 @@ def check_config_unreachable():
                                   % (sig[:24].decode("utf-8", "replace"), label))
                     break
 
+    # THE SAME QUESTION ASKED OF EVERY VOICEPRINT ON DISK. Not the whole row - a scan for
+    # the whole file would pass the moment the server pretty-printed it differently. The
+    # first eight numbers of an embedding are enough to name the row and short enough to
+    # survive reformatting, and they are never printed here either.
+    store_dir = os.path.join(ROOT, "speaker-store")
+    if os.path.isdir(store_dir):
+        for entry in sorted(os.listdir(store_dir)):
+            if not entry.endswith(".json"):
+                continue
+            try:
+                with open(os.path.join(store_dir, entry), "r", encoding="utf-8") as fh:
+                    row = json.load(fh)
+                head = [repr(round(float(v), 6)).encode() for v in
+                        (row.get("embedding") or [])[:8]]
+            except Exception:                                      # noqa: BLE001
+                continue
+            if len(head) < 8:
+                continue
+            for label, body in bodies:
+                if all(piece in body for piece in head):
+                    leaked.append("a voiceprint from speaker-store/ came back from %s"
+                                  % label)
+                    break
+
     cfg = state.get("cfg") or server.load_config()[0]
     secrets = []
     for key in ("openai_api_key", "aws_access_key_id", "aws_secret_access_key",
@@ -825,8 +869,8 @@ def check_config_unreachable():
               "and backslashes" % (len(refused), len(probes)),
               "; ".join(refused[:6]) + ("; ..." if len(refused) > 6 else "")]
     detail += benign
-    detail.append("no credential and no part of config.json appears in any of the %d "
-                  "responses this run collected" % len(bodies))
+    detail.append("no credential, no part of config.json and no voiceprint appears in any "
+                  "of the %d responses this run collected" % len(bodies))
     return PASS, detail
 
 
@@ -4903,6 +4947,23 @@ def _fn_body(source, name):
     return None
 
 
+def _py_block(source, name):
+    """One top-level Python def's text, or None.
+
+    NOT _fn_body: that one counts braces and looks for `function name(`, which finds nothing
+    in a .py file. And not "the next \\ndef " either - answer_question() is followed by a
+    class whose methods are indented, so that bound runs a hundred thousand characters past
+    the end of the function and would happily read the http layer's calls as if they were
+    inside it.
+    """
+    head = re.search(r"^def %s\(" % re.escape(name), source, re.M)
+    if not head:
+        return None
+    rest = source[head.start():]
+    end = re.search(r"\n(?=(?:def |class |@)\S)", rest[1:])
+    return rest if not end else rest[:end.start() + 1]
+
+
 def check_reset_contract():
     """A TURN RESETS ONCE, AND ONE HAND WRITES THE ARM.
 
@@ -5100,6 +5161,205 @@ def _ledger_row(tool_id):
     return {k: int(row.get(k) or 0) for k in ("ok", "failed", "refused", "lapsed")}
 
 
+def check_speaker_store():
+    """25. The voiceprint store keeps embeddings, and keeps them to itself.
+
+    WHY THIS IS A PREFLIGHT CHECK AND NOT A HARNESS ASSERTION. Every other secret in this
+    house can be rotated. A voice cannot. If 192 floats describing a named person's larynx
+    leave this folder there is no remedy at all, so the four rules that keep them in it are
+    checked on every run, from disk, before anything else is believed:
+
+      (a) THE FOUR HOUSE RULES, asked of voiceprint.hygiene() rather than re-implemented
+          here - gitignored, Read-denied, no audio of any kind inside, and every row exactly
+          EMB_DIM floats with no long opaque string that could be a wav wearing a json coat.
+          A second copy of those rules in this file would be a second thing to forget.
+      (b) AND THE STORE IS NOT REACHABLE OVER HTTP. Check 9 probes the paths; this step
+          asks the narrower question the ear's own page raises - /speaker must answer about
+          the roster in counts and names and never in numbers. An embedding on the wire is
+          the one leak the page could cause on its own, because the page is the only client
+          that legitimately talks to /speaker at all.
+      (c) A STORE THAT DOES NOT EXIST IS A PASS, not a skip. Zero enrolments is the state
+          this machine ships in and the state in which the whole doorman stands down; a
+          check that went yellow over it would be yellow forever and therefore unread.
+    """
+    if voiceprint is None:
+        return WARN, ["voiceprint.py could not be imported, so the store's rules are "
+                      "unchecked: %s" % VOICEPRINT_WHY,
+                      "with no module there is also no enrolment path, so nothing can have "
+                      "been written - but this check is blind rather than satisfied"]
+
+    ok, problems, notes = voiceprint.hygiene()
+    detail = list(notes)
+    if not ok:
+        return FAIL, ["THE VOICEPRINT STORE BREAKS ITS OWN LAW"] + \
+            ["!! " + line for line in problems] + detail
+
+    # -- (b) the roster over the wire, in counts and names and nothing else.
+    if state["up"]:
+        status, _, data = post_json("/speaker", {"cmd": "state",
+                                                "session": "preflight-speaker"},
+                                    timeout=30, label="speaker state")
+        got = as_json(data) or {}
+        if status != 200:
+            return FAIL, detail + ["POST /speaker cmd=state answered %d, so the doorman "
+                                   "cannot be asked about itself" % status]
+        blob = json.dumps(got)
+        numbers = re.findall(r"-?0\.\d{4,}", blob)
+        if numbers:
+            return FAIL, detail + ["!! /speaker cmd=state returned %d long decimals: an "
+                                   "embedding is being served to the page, and the page is "
+                                   "the browser" % len(numbers)]
+        if "embedding" in blob:
+            return FAIL, detail + ["!! /speaker cmd=state returned a field called "
+                                   "\"embedding\""]
+        roster = got.get("enrolled") or ()
+        if any("embedding" in (row or {}) for row in roster):
+            return FAIL, detail + ["!! a roster row carries an \"embedding\" key"]
+        detail.append("/speaker cmd=state answers with count %s, hasHands %s and %d roster "
+                      "row(s) of who/how-addressed/hands/when, and carries no vector at all"
+                      % (got.get("count"), got.get("hasHands"), len(roster)))
+
+    # -- and the one number that is a threshold rather than a measurement, named out loud so
+    # a silent loosening of it shows up in the preflight print rather than in a stranger's
+    # spoken yes.
+    detail.append("the match threshold is %.2f and the duplicate threshold %.2f against a "
+                  "measured same-voice floor of 0.83 and a different-voice ceiling of 0.30"
+                  % (voiceprint.MATCH_THRESHOLD, voiceprint.DUPLICATE_THRESHOLD))
+    return PASS, detail
+
+
+def check_citation_honesty():
+    """26. A chip is a claim about the sentence above it.
+
+    WHAT WENT WRONG, and it was live for months: chips were rendered out of the RETRIEVAL,
+    which runs before the answer exists. So an error card said "the brain could not be
+    reached" with four planets lit under "Drawn from"; and a refusal - "your notes say
+    nothing about that", which is the correct answer when the passages clear the dial and
+    still do not cover the question - was shown four notes as its evidence, with the camera
+    flying to one of them. The employer was shown provenance for a sentence denying there
+    was any.
+
+    THREE STEPS, and the live one is the only one that cannot be faked by a passing build:
+
+      (a) THE ONE GATE IS STILL IN THE SOURCE, read off disk: consumed_sources() exists, its
+          two thresholds are plain literals, strip_citations() is the single place the keys
+          come off, and answer_question() calls the test AFTER the answer is in hand. A
+          version of this file that moved the test above call_model() would pass every
+          assertion about chip counts and be measuring the retrieval again.
+      (b) THE CONVERSATIONAL CLASSES CARRY NO CHIPS, live: acknowledgements, identity,
+          capabilities and the connection-state questions answer at nought nodes and no
+          citations. These are answered from fixed strings and the manifest, so the step
+          costs no brain call.
+      (c) AND THE GATE IS NOT SIMPLY SHUT. A refusal that lost its chips and a real reading
+          that kept them are the same code path with different text, so a check that only
+          proved absence would pass a build that stripped every chip in the house. The
+          strip's reason string travels in the payload as `uncited`, and the presence of
+          that key on a stripped turn is what tells a judged strip from a retrieval that
+          found nothing in the first place.
+
+    routing_proof.mjs is the deep instrument here - the conversational fixture set asserts
+    chip count 0 on each, in the rendered card, which is the thing the employer sees. This
+    is the chain either side of it, in seconds.
+    """
+    notes, warnings = [], []
+
+    # -- (a) THE GATE, ON DISK.
+    try:
+        with open(os.path.join(ROOT, "server.py"), encoding="utf-8") as fh:
+            src = fh.read()
+    except OSError as exc:
+        return FAIL, ["cannot read server.py: %s" % exc]
+    for name in ("consumed_sources", "strip_citations"):
+        if "def %s(" % name not in src:
+            return FAIL, ["server.py declares no %s(), so there is no citation gate and the "
+                          "chips are the retrieval's account of the turn again" % name]
+    for const, want in (("_CONSUMED_MIN_LEN", 4), ("_CONSUMED_MIN_TOKENS", 1)):
+        found = re.search(r"^%s\s*=\s*(\d+)\s*$" % re.escape(const), src, re.M)
+        if not found:
+            return FAIL, ["%s is no longer a plain integer literal, so the threshold that "
+                          "decides whether a sentence read its evidence is computed from "
+                          "something this check cannot see" % const]
+        if int(found.group(1)) != want:
+            return FAIL, ["%s reads %s and the documented threshold is %d - as permissive "
+                          "as it can be while still catching a sentence that shares nothing "
+                          "with its evidence" % (const, found.group(1), want)]
+    body = _py_block(src, "answer_question")
+    if body is None:
+        return FAIL, ["server.py has no top-level answer_question(), so the answering path "
+                      "is somewhere this check cannot read"]
+    at_call = body.find("call_model(")
+    at_test = body.find("consumed_sources(")
+    if at_test < 0:
+        return FAIL, ["answer_question() never calls consumed_sources(): the gate exists "
+                      "and nothing on the answering path goes through it"]
+    if 0 <= at_call and at_test < at_call:
+        return FAIL, ["answer_question() tests consumed_sources() BEFORE call_model(), so "
+                      "it is judging the retrieval and not the answer - which is the whole "
+                      "of the bug this gate was written for"]
+    strips = len(re.findall(r"\bstrip_citations\(", src)) - 1      # minus the definition
+    notes.append("the gate is one function called after the answer exists, and the chips "
+                 "come off in %d place%s, all of them strip_citations()"
+                 % (strips, "" if strips == 1 else "s"))
+
+    # -- (b) THE CONVERSATIONAL CLASSES, LIVE AND FREE.
+    if not state["up"]:
+        return WARN, notes + ["skipped the live half: the server is not reachable"]
+    quiet = [
+        ("thanks, that's great", "an acknowledgement"),
+        ("who are you", "who he is"),
+        ("what can you do", "the manifest"),
+        ("how do i connect google", "the Command Panel's Google row"),
+        ("is my calendar connected", "the live connection state"),
+    ]
+    for question, about in quiet:
+        status, _, data = post_json("/chat", {"question": question,
+                                             "session": "preflight-chips"},
+                                    timeout=60, label="chat %s" % question)
+        got = as_json(data) or {}
+        if status != 200:
+            return FAIL, notes + ["POST /chat %r answered %d, so the chip count cannot be "
+                                  "read" % (question, status)]
+        chips = len(got.get("nodes") or ()) + len(got.get("citations") or ())
+        if chips:
+            return FAIL, notes + ["%r is answered from %s and came back wearing %d chip(s): "
+                                  "the card shows the employer evidence for a sentence that "
+                                  "used none" % (question, about, chips)]
+        if not str(got.get("answer") or "").strip():
+            return FAIL, notes + ["%r came back with no answer at all" % question]
+    notes.append("%d conversational, identity, capability and connection-state sentences "
+                 "answer with nought nodes and nought citations" % len(quiet))
+
+    # -- (c) AND THE GATE IS NOT SIMPLY SHUT. One real question at the notes, which either
+    # lights chips or says in `uncited` why it did not. Both are honest; a turn that lit
+    # nothing and gave no reason is the state this step exists to catch, because it is what
+    # a build that strips everything looks like from the outside.
+    status, _, data = post_json("/chat", {"question": "what do my notes say about the "
+                                                      "invoice importer",
+                                         "session": "preflight-chips"},
+                                timeout=120, label="chat a notes question")
+    got = as_json(data) or {}
+    if status != 200:
+        warnings.append("the notes question answered %d, so the other side of the gate is "
+                        "unmeasured this run" % status)
+    else:
+        chips = len(got.get("nodes") or ()) + len(got.get("citations") or ())
+        why = str(got.get("uncited") or "").strip()
+        if chips:
+            notes.append("a real notes question still lights %d chip(s), so the gate is a "
+                         "judgement and not a blanket" % chips)
+        elif why:
+            notes.append("a real notes question lit nothing and said why: %r"
+                         % first_line(why, 70))
+        else:
+            return FAIL, notes + ["a notes question came back with no chips and no "
+                                  "`uncited` reason: chips are being dropped somewhere "
+                                  "that does not account for dropping them"]
+
+    if warnings:
+        return WARN, notes + warnings
+    return PASS, notes
+
+
 CHECKS = [
     ("the server is up and serving the viewer", check_server),
     ("the graph data loads and has nodes", check_graph),
@@ -5125,6 +5385,8 @@ CHECKS = [
     ("the room knows the hour, and the instrument does not lie", check_room_hour),
     ("the road to Google is narrow, and it refuses politely", check_google_grant),
     ("a turn resets once, and one hand writes the arm", check_reset_contract),
+    ("the voiceprints stay in their folder, embeddings only", check_speaker_store),
+    ("a chip is a claim about the sentence above it", check_citation_honesty),
 ]
 
 

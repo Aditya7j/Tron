@@ -4065,3 +4065,425 @@ both directions. `21 pass, 0 fail, 3 warn`, exit 0 — the three warns are the k
 - **One extra Calendar tombstone exists in the diary** from the direct probe that diagnosed Defect
   2 — created and deleted inside that probe, and cancelled like the harness's own. Named because
   anything that touches a real account should be said out loud.
+
+## 24 · The doorman at the door, worlds that travel, and a mouth that only cites what it read
+
+Three pieces of work and one sweep. The doorman is new law: the house learns a voice and then
+declines to take orders from any other. The orrery is motion that had to be made *visible without
+being busy*, and its story is mostly the story of a number that was wrong in the declaration and
+wrong again in the first calibration, in opposite directions. The plain mouth is two queued nits.
+The sweep found two reds that were not flakes, and both of them were the new law meeting an old
+instrument.
+
+The order below is the mandate's. Research first, because the mandate asked for research first and
+because two of the three paragraphs changed what got built.
+
+### The research, before the code
+
+**Speaker verification on this machine.** The question was whether a voiceprint is affordable per
+turn without a new dependency, and the answer is yes by a wide margin. `onnxruntime` 1.30.0 was
+already installed; the model is an ECAPA-TDNN-class embedder run on CPU, producing a **192-float**
+embedding. A downloaded `.onnx` file is an asset, not a pip dependency, which is the only reason
+this was reachable under the standing no-new-dependencies rule. Cost, measured over twelve
+fixture clips of 4.2–6.6 seconds: **46–162 ms per utterance**, which is 24×–93× realtime — the
+first call pays 218 ms of warm-up and every call after it pays about 60. Separation, measured over
+all pairs of three voices: same voice **0.8182 min, 0.9382 max, mean 0.8880 (n=18)**; different
+voices **0.0244 min, 0.2954 max, mean 0.1659 (n=48)**; five seconds of generated noise against
+each voice centre **−0.0216 to 0.0430**. The gap between the worst same-voice pair and the best
+different-voice pair is **0.5228**, and its midpoint is 0.557. The threshold shipped at **0.50** —
+below the midpoint on purpose, because the two errors are not the same size: a boss refused on a
+hoarse morning costs one keystroke, and a stranger admitted costs a sent email. Cosine on
+length-normalised embeddings, one embedding per turn, in RAM, discarded.
+
+**Whisper fidelity.** Measured on `faster_whisper` 1.2.1 against 180 words of known script:
+**3 errors, WER 1.67%**, and all three were numeral rendering — "four" for "4" and the like — so
+the **semantic error rate was 0%**. Throughput **9.9× realtime**. The conclusion that mattered for
+this round is negative and worth writing down: Whisper is accurate enough that it is *not* the
+weak link in the spoken column. The weak link is the browser's own recogniser, and PART 4 below
+had to be built around that rather than around transcription quality.
+
+**Orbital motion that keeps links and hover glued.** Worlds travel on per-world ellipses, each
+world given its own period seeded from its id, with the offset written as a *displacement from a
+fixed base* rather than integrated into the position. That distinction is the whole of the
+correctness argument: an accumulated offset drifts without bound and the still-frame law and the
+root pin both die with it, whereas a displacement is bounded by its own amplitude every frame and
+the base never moves. Links follow for free because the graph library samples its own endpoints'
+live coordinates each frame — measured, twelve sampled link midpoints sit on the segment between
+their endpoints' live coordinates to within **0.001 units** on links 112+ units long. Hover
+annotations do *not* follow for free; the annotation anchors to a projection, so the projection has
+to be recomputed per frame rather than latched at hover time. The collision question is arithmetic:
+worst-case closure between two worlds is both at full excursion straight at each other, which for
+the shipped per-axis envelope is **1.4456 × (A₁ + A₂)**, and that has to stay under the tightest
+base gap minus both radii.
+
+### PART 1 — THE DOORMAN
+
+**Enrolment.** Three spoken sentences through the ear that is already open, from the Command
+Panel's *Learn a voice* row, which is the keyboard's row and unreachable from the funnel. It
+refuses rather than opening a microphone itself, because a control that starts recording from a
+list of orders inverts the transparency law — the seal must be lit *before* anything is heard. The
+transcript of a successful enrolment and the four refusals, from `speaker_proof`:
+
+```
+ok   a hands-privileged voiceprint enrolled from three recorded sentences: 3 sentences,
+     14.93s of speech, 321ms
+ok   and the route says it kept none of the 14.93 seconds it was given - the samples arrive
+     as an argument, are read once by embed(), and the only thing that leaves is 192 floats
+ok   a second voice enrolled WITHOUT the hands, so the seal has a third reading to give:
+     a name, for somebody this house knows and takes no orders from
+ok   the store went from 1 row(s) to 3 - two enrolments, two rows, and no row invented
+ok   the same larynx under a second name is refused AS A DUPLICATE and the refusal names the
+     row it already has: "That is already enrolled, as Proof Hands. One voice, one row, sir."
+ok   three sentences totalling four and a half seconds are refused with the SECONDS still
+     missing named: "That was 4.5 seconds of speech and I need 8.0 - another 3.5 seconds, sir."
+ok   and one long clip is refused for the SENTENCES rather than the seconds: "I have 1 usable
+     sentence and I need 3 - say another 2, each a full breath long."
+ok   an enrolment that admits it came in through the ear is refused by name: "Enrolling a
+     voice is done from the Command Panel, not by asking out loud."
+ok   and a re-learning that succeeds comes back WITH the hands it had, though the body never
+     asked for them - a boss re-enrolling after a cold must not return as a hands-less row
+```
+
+The first enrolment on this machine is the boss, with `hands: true`, taken from three sentences —
+the transcript above is the fixture pair, which is why the names in it are `Proof Hands` and
+`Proof Plain` rather than anybody's. `speaker-store/` is gitignored and Read-denied
+like `secrets/`, holds JSON rows only, and the leak-scan battery and the preflight store-hygiene
+check both name it.
+
+**The match table**, one embedding per turn, discarded after:
+
+```
+utterance                  | cosine | seal            | hands | ms
+---------------------------+--------+-----------------+-------+-----
+the hands voice (joe-3)    | 0.9069 | BOSS            | yes   | 92
+the plain voice (ryan-3)   | 0.8989 | Proof Plain     | no    | 87
+a third voice (alan-3)     | 0.1961 | GUEST           | no    | 122
+the noise floor            | 0.0390 | GUEST           | no    | 100
+the threshold is 0.50; measured same-voice floor 0.8182 (n=18),
+different-voice ceiling 0.2954 (n=48)
+```
+
+The seal has **three** readings, not two, and the middle one is the one worth defending: an
+enrolled person without the hands reads as *their own name*, because a house that knows who you are
+and will not take your orders owes you the first fact even while it declines the second. Through
+the page's own microphone graph — echo cancellation, noise suppression and automatic gain all on —
+the same recordings read **BOSS at 0.7617** and **GUEST at 0.1686**, and the glass says so: the
+seal cell reads `speaker: BOSS` while the ear is open, live only, never written to ledger, lookbook
+or log beyond counts. The server's own tally: **133.96 seconds of audio through RAM cumulatively,
+none of it kept**, and 33 audio files under the project root before the run and the same 33 after.
+
+**The guest's refusal, spoken, and the law's shape.** One function at three doors — `/chat`,
+`/execute`, and `/tools cmd=cancel` — because a law written at one of them is a law with two ways
+round it.
+
+```
+ok   a spoken yes carrying a hands-privileged turn EXECUTES: "Self test passed, token SPEAKER"
+ok   the same turn, used once, executed once
+ok   and the SAME turn number a second time is refused: an honoured word spends its slot, so
+     one measured utterance cannot consent twice
+ok   a spoken yes from an ENROLLED voice without the hands is refused with the mandate's line,
+     verbatim: "I take orders from one voice in this house, and it is not speaking just now."
+ok   and the refusal names NO NAME - neither the privileged row nor the refused one
+ok   a yes carrying a GUEST turn is refused the same way, and the seal reads "GUEST"
+ok   turn 0 - a number this process never issued - is refused exactly as a guest is
+ok   turn 99999 - likewise, so a spoken yes whose speaker could not be established fails CLOSED
+ok   a spoken NO from a voice without the hands is refused at /tools cmd=cancel as well
+ok   and the keyboard executes THAT SAME proposal with no speaker block at all
+```
+
+Four properties of that block are worth naming because each closes a specific hole. The page
+carries **a number and nothing else** — no name, no privilege, no score — so the worst a stale or
+hostile tab can do is quote a verdict this process already reached from real audio. A turn is
+**spent** when honoured, which closes the barked interrupt that reaches the page before the
+detector has ended the utterance and therefore travels with the *previous* turn's number. It
+**fails closed**, and the page sends `turn 0` rather than omitting the block, because an omitted
+block reads as a keystroke and a hung identification would otherwise be a promotion. And the **no**
+is guarded as well as the yes: a stranger who can say no can cancel the email the boss asked for
+three seconds before it goes, which is the same hole pointed the other way.
+
+With zero enrolments the law stands down silently — no sentence, no seal, no mention — and the ring
+is never even built, because there is nobody to recognise and taking a recording to discover that
+would be a cost with no answer at the end of it.
+
+### PART 2 — THE ORRERY
+
+**The declared numbers, old and new**, in the form §12 used:
+
+```
+amplitude multiplier   0      ->  1.25 x the world's own radius, with a floor of 8.80
+                                  world units   (drafted at 0.55, then 1.00)
+period, per world      none   ->  60 s .. 100 s, one period each, seeded by id
+                                  (drafted at 70 .. 190, then 60 .. 120)
+screen-space speed     0      ->  6 .. 30 px/minute at the default camera
+                                  (declared 9.99 .. 41.03 in the draft; see below)
+```
+
+**And the number in that draft was wrong twice, in opposite directions.** The declaration said
+"1.064 px per world unit". It was read off a projection of the *layout span*, which is not the
+scale. The true figure, taken by projecting `(0,0,0)` and `(100,0,0)` and dividing, is **0.3919 px
+per world unit** at the camera that settles at z ≈ 2304 with a 50° vertical field. Then the first
+calibration made the matching mistake in the other direction and reported "9.99 .. 41.03
+px/minute", which is 11.27 .. 41.08 **world units** per minute — the same measurement with the
+wrong unit on it. Two reproducible reds in `deck_proof` are what forced the arithmetic to be done
+properly, and the argument that had licensed AMP 1.00 turned out to be the argument that rejected
+it.
+
+The fix was not the one I had planned. I had intended a per-world minimum amplitude as *the* cure;
+measurement showed the px/min spread is driven mostly by period and projection phase rather than by
+radius spread — the amplitude range across 31 worlds is only 2× — so a floor alone could not have
+worked. It was still needed, but for exactly **one** world. `AMP_MIN` is **8.80** rather than a
+rounder number because one relation buys r 7.15 → amp 8.94, making 8.80 the highest floor that
+binds only on degree-0 worlds; 8.00 was discarded because the single unlinked world travels 36
+world units a minute at that amplitude and projects only 7.9 pixels of them, its ellipse happening
+to lie along the view axis. This deck's slowest world on the glass is not its slowest world in
+space.
+
+**The collision bound was re-derived and the page's own comment was stale.** It named worlds 4/15
+at 49.1 units as the closest pair; recomputing over all 465 pairs from live bases gives **16/29 at
+47.2 units** surface-to-surface. The pair the comment named stopped being the closest pair when the
+layout last moved and nothing said so — which is why `deck_proof` now recomputes the guarantee
+every run instead of carrying a hard-coded bar that would have been wrong in the safe direction
+today and wrong in the unsafe direction eventually.
+
+**Measured, at 1400×940 (1378×842 css):**
+
+```
+orrery: travelling · 31 worlds · 3152 frames · amp 1.25 x radius, floor 8.8u
+        periods 60-100s · declared 6-30 px/minute
+slowest world "0" (period 85s)  7.9 px/minute
+fastest world "1" (period 73s) 19.6 px/minute   = 0.33 px in a second
+the amplitude floor lifted 1 of 31 worlds, and it is of the smallest radius on the deck (4.54u)
+mesh against coordinate, 21 samples x 31 worlds: worst gap 0.00000 units
+offsets never left the per-axis envelope A x [1, 0.62, 0.84]: worst 1.0000 of the allowance
+tightest clearance guarantee over all pairs: 18.7 world units (16/29)
+twelve link midpoints against live endpoints: worst perpendicular offset 0.001 units
+hover glue over 30s: world ran 7.8px, annotation ran 8.1px, worst slip 1.14px/s,
+        against a 2.0px bar DERIVED from the declared 6 px/minute
+```
+
+The hover-glue bar deserves its own line because it was the round's second near-miss. It used to
+be `annRan > 2 && worldRan > 2` over twelve seconds — and the declared 6 px/minute only guarantees
+1.2 px in twelve seconds, so a bar of 2 px was quietly asserting 10 px/minute, a number nothing
+declared. It duly failed the run the real pixel scale came to light in. It is now 30 seconds, which
+costs nothing because that sleep was already owed before the second plate, and the bar is computed
+from `ORRERY.PX_MIN`.
+
+**The plates.** `orrery-wide-A.png` and `orrery-wide-B.png`, **60.3 s apart**, and they were
+checked numerically rather than merely asserted. With no PIL on this machine the diff was done with
+a hand-rolled stdlib decoder over `zlib` and `struct` handling all five PNG filter types:
+**8584 pixels changed by more than 12/255** (0.79% of the frame), **3688 by more than 48/255**, and
+**27.2% of every lit pixel changed**. The worlds are elsewhere and nothing else is.
+
+The root stays pinned at dPos 0 · dQuat 0, there is no global spin, parallax and the still-frame
+law are untouched, and a reader who asks for less motion gets today's amplitudes exactly as before.
+
+### PART 3 — THE PLAIN MOUTH
+
+Connection-state questions joined the identity/capabilities class, answered from live `/google`
+state with zero lookups, naming the Command Panel row and its current reading. From the fixture
+table, typed and spoken:
+
+```
+how do i connect google              | 200 chat/identity/0
+is my calendar connected             | 200 chat/identity/0  · spoken, same
+why is it not connected (noun pos.)  | 200 chat/identity/0
+why is it not connected (with offer) | 200 chat/proposal/0
+```
+
+The last row is the one that makes the class honest: the same sentence with a proposal standing is
+a *question about the proposal*, not about Google, and it routes differently.
+
+**Citation honesty.** `DRAWN FROM` / `CITED` chips render only where the answer text actually
+consumed those sources, and the gate is one function called after the answer exists, with the chips
+coming off in three places all of which are `strip_citations()`:
+
+```
+sentence                                   | chips | row      | label
+-------------------------------------------+-------+----------+-----------
+who are you                                | 0     | hidden   | Drawn from
+galaxy what can you do                     | 0     | hidden   | Drawn from
+is my calendar connected                   | 0     | hidden   | Drawn from
+ok got it                                  | 0     | hidden   | Drawn from
+good morning galaxy                        | 0     | hidden   | Drawn from
+what do my notes say about coffee churn    | 2     | shown    | Drawn from   <- THE CONTROL
+```
+
+The control is the only thing that makes the five zeros mean anything. A blanket that hid every
+chip would score five out of five above and be a regression, not a fix.
+
+### PART 4 — THE SWEEP, AND THE TWO REDS THAT WERE NOT FLAKES
+
+**The spoken column learned a third outcome.** Four runs of `routing_proof`'s thirteen-sentence
+spoken column failed once each, on a *different* sentence every run: `switch your voice to joe`,
+then `no no cancel that`, then `what is the web gate`, with mishearings including "Is my phone",
+"My calendar connected", "Sorry pap", "Hey can you take a video for me", and three empty
+transcripts in a row. The per-attempt hit rate of the on-device recogniser is about 0.6, so three
+attempts leave a thirteen-sentence column red better than half the time and five attempts put it
+near 1% per sentence. The retry budget went to five and the file gained **UNPROVEN** beside pass
+and fail: a sentence the room never delivered produced no routing decision to judge, so blaming the
+funnel for it would be a lie in the other direction. Unproven is not a pass — it is counted,
+printed on its own line, named in the verdict, and **budgeted at two of thirteen**, with a
+`heardRows` floor besides, so a muted microphone or a dead recogniser still fails, once, with a
+count instead of thirteen times. The closing run delivered **14 of 14 with 0 unproven**.
+
+**A red the old test had been hiding.** Confirmation fixtures compared the heard sentence to the
+spoken one by *containment*, and containment has a hole the comment above it did not cover: a
+recogniser that adds a word has all the same letters and some more. Measured — `no no cancel that`
+came back as **"No no cancel that Why"**, which routed `kind=web lookups=2`. The room stapled a
+word on the end, containment waved it through as the boss's sentence, and the fixture was passing a
+confirmation class for answering a question he never asked. It is now compared by **equality**,
+which keeps every accident the paragraph was written for — a swallowed space, "okay" for "ok" — and
+refuses the one it was not.
+
+**RED 1: `tools_live`, 54/54 → 46/54.** Not a flake and not a regression in the code: the doorman
+correctly refusing an instrument that has no larynx. `tools_live`'s `say()` is `__galaxy.ask()`,
+which is marked `via: voice` exactly as a dictated sentence is, but no audio was ever measured, so
+the turn number is 0 and the gate fails closed on it. That is the law working. The harness now
+**forks on the one switch the law itself uses**: with an empty store the spoken yes runs the hand
+and every assertion is the one it made before the doorman existed; with a guarded store the spoken
+yes is refused in the mandate's words, the ledger is asserted to have stood still, the card is
+asserted to have **survived** — the refusal carries the pending proposal back, so a guest saying
+yes cannot take the employer's question off his screen, which is the quiet denial of service a
+refusal that merely hid the card would be — and the same proposal is then confirmed at the
+keyboard, where the hand runs. Both branches require the hand to have run exactly once by the end
+of the round. `tools_live` is now **62/62**, eight assertions above its baseline, and it proves the
+tool door in both worlds instead of one.
+
+**RED 2: `lock_proof`, 77/0 → 33 checks with 2 failed, four times identically.** Four identical
+failures is not a flake, and the file's own comment named a failure mode that turned out not to be
+the one. Section 3's chain is: a portless Chrome on the launcher's profile, a hand that closes it
+politely and relaunches it with the port, and `--restore-last-session` handing the work tab back.
+It came back with nothing. Running the launcher by hand without `-Quiet` showed the close was
+genuinely polite — *"the profile is free and its session was written"*, no WM_CLOSE warning, no
+force kill — and yet **no `Session_<ts>` file appeared in either `Sessions/` or
+`Sessions_Encrypted/`**; the newest was hours old, from the morning this harness was last green.
+
+The mechanism: Chrome writes `profile.exit_type = "Crashed"` when it opens a profile and flips it to
+`"Normal"` on a clean shutdown. Read `"Crashed"` at startup and it offers the **restore bubble**
+instead of restoring, and while it is in that state it commits no session file at all — so the next
+clean close has nothing to write and **the mark never clears itself**. A wedge that holds. And the
+thing that put this profile in it is `lock_proof`'s own teardown, which force-kills whatever is left
+so the next run starts from nothing. A force kill is the right teardown — a run that leaves a
+browser behind poisons the next harness, not just the next lock run — but it is also, precisely, a
+crash. Every red run of section 3 was caused by the previous run of the same file, which is exactly
+why re-running it four times produced four identical failures rather than one eventual pass.
+
+Proved by the one field and nothing else: `exit_type: "Crashed"` → clean close, **no** session
+file, relaunch returns only the launcher's own `--new-window` tab. The same cycle with the field set
+to `"Normal"` first → `Session_13434987390668745` written within the cycle, and the relaunch hands
+back **both** tabs, the viewer and `https://example.com/`. Section 1a — which already borrows the
+profile's session files and puts them back — now clears the crash mark before the chain begins and
+prints what it found. Two consecutive runs afterwards: **78/0 and 78/0, first attempt each**, where
+this file previously wanted up to four. The extra check is a new assertion that asks for the session
+file **by name**, because "no tabs came back" has two causes wanting different repairs, and a bar on
+the tab count alone reports the symptom both times.
+
+What was deliberately *not* done: teaching `launch-chrome.ps1` to clear the mark. For a browser that
+really did crash the mark is true and the bubble is Chrome's own answer, and a launcher that quietly
+rewrote it would hide a real crash from the person it happened to. So the gap stays open and stays
+named — ask for the port after a genuine Chrome crash and the relaunch restores nothing, because
+there is nothing committed to restore. That is Chrome's behaviour for everybody and it is not this
+hand's to fake.
+
+**Baseline and after.** Solo, sequential, quiet, `port_proof` last, both times.
+
+```
+harness              | baseline (round start)       | after
+---------------------+------------------------------+------------------------------
+desk_proof           | 44 checks, 0 failed          | 44 checks, 0 failed
+layout_proof         | 150/150 PASS                 | 150/150 PASS
+followup_proof       | 47/47 PASS                   | 47/47 PASS
+salutation_proof     | 26/34 FAIL (pre-existing)    | 26/34 FAIL (identical)
+capabilities_proof   | 16/16 PASS                   | 16/16 PASS
+persona_proof        | 19/19 PASS                   | 19/19 PASS
+nudge_proof          | 21/21 PASS                   | 21/21 PASS
+deck_proof           | 224/224 PASS                 | 238/238 PASS      (+14)
+focus_probe          | PROBE 26/26 + 85 checks 0 f  | PROBE 26/26 + 85 checks 0 f
+voice_proof          | 145/145 PASS                 | 145/145 PASS
+conversation_proof   | 114/114 PASS                 | 114/114 PASS
+routing_proof        | 65/65 PASS                   | 91/91 PASS        (+26)
+echo_proof           | 49/49 PASS                   | 49/49 PASS        (re-run)
+console_proof        | 30/30 PASS                   | 30/30 PASS
+scribe_proof         | 59 checks, 0 fail            | 59 checks, 0 fail
+brain_live           | 33 checks, 0 failed          | 33 checks, 0 failed
+eyes_live            | 56 checks, 0 failed          | 56 checks, 0 failed
+tools_live           | 54/54 PASS                   | 62/62 PASS        (+8, RED 1)
+lock_proof           | 77 checks, 0 failed          | 78 checks, 0 failed (+1, RED 2)
+google_hands_proof   | 24/24 PASS, 2 skipped        | 24/24 PASS, 2 skipped
+speaker_proof        | did not exist                | 61/61 PASS        (new)
+preflight            | 21 pass, 0 fail, 3 warn (24) | 23 pass, 0 fail, 3 warn (26)
+port_proof           | 24 checks, 0 failed (last)   | 24 checks, 0 failed (last)
+```
+
+`salutation_proof` is the named pre-existing FAIL, byte-identical to baseline. The three preflight
+warns are checks 10, 11 and 12, the routine ones with known causes. Preflight's two new integers —
+**25, speaker-store hygiene** (gitignored, denied, embeddings-only, no wav/mp3/ogg inside) and
+**26, citation honesty** (five conversational, identity, capability and connection-state sentences
+answer with nought nodes and nought citations; a real notes question still lights its chips) —
+are both green, read from HEAD. Zero unexplained reds.
+
+### What is left open
+
+- **A guest asking "who am I" is still told the boss's name.** The identity class answers from the
+  persona block, which is DO-NOT-ALTER, and the vocative peel takes addresses *off* rather than
+  changing what a sentence knows.
+- **`deaddress()` cannot peel an uncommaed terminal call-name.** Asserted in both directions; the
+  limit is named where it lives.
+- **The *Learn a voice* row enrols the boss only**, and refuses rather than opening a microphone,
+  for the transparency reason above.
+- **A bark sliced across two voices scores as neither** and fails closed, which is the right
+  direction and still a gap.
+- **`speaker_proof`'s third-larynx assertion is adaptive**, because the harness will not empty the
+  boss's store to arrange a cleaner fixture.
+- **A ~5% model flake at the tool/compose boundary on `switch your voice to joe`.** Isolated rather
+  than assumed: 8/8 typed with no speaker block gave `tool`; 3/3 each with a bogus voice turn and
+  with a keyboard speaker gave `tool`; 5/5 with the column's own session history gave `tool`. So
+  19/20. Left alone because the fixture's own note says that registry-hand layer is out of scope.
+- **`"no no cancel that Why"` routes to web** — a confirmation does not survive a stapled-on word.
+  Left alone because the funnel's protected classes are DO-NOT-ALTER.
+- **The spoken column's irreducible ~1-sentence-per-run recognition loss**, now reported as
+  UNPROVEN under a budget of two rather than as a failure of the funnel.
+- **`routing_proof`'s spoken confirmations are now 403'd by the doorman**, because the harness
+  speaks through speakers as an unenrolled voice. They pass because they assert the door and the
+  price — `kind`, `route`, `lookups` — rather than the outcome. The same fact broke `tools_live`,
+  which *did* assert the outcome; see RED 1.
+- **A genuine Chrome crash leaves the relaunch with nothing to restore**, deliberately. See RED 2.
+- **Reserved for the employer:** the Gmail real-API send, the single OAuth consent click, the two
+  by-hand Calm Sky checks, and the documented watch-capture gap in `README.md`.
+
+### The discretion decisions of this round, with reasons
+
+- **The threshold is 0.50 and not the 0.557 midpoint**, because the two errors are not the same
+  size and the cheap one should be the one that happens.
+- **The seal has three readings rather than two.** An enrolled person without the hands is owed
+  their name even while they are refused the gate; only a stranger gets no name at all.
+- **The refusal names no name — not the boss's, not the guest's.** A refusal is not the place to
+  tell a stranger who is allowed to give this house orders.
+- **The `no` is guarded as well as the `yes`**, which looks like caution and is not: a stranger who
+  can veto is the same hole as one who can consent, pointed the other way.
+- **A turn is spent when honoured.** A verdict is worth 45 seconds to `/chat`, which only uses it to
+  decide what to call somebody; at the gate it authorises an action, and a number that authorises
+  twice is a number worth stealing.
+- **`T_MAX` came down to 100 rather than `PX_MIN` coming down to 5.** Both would have bought the
+  same green; lowering the declared floor would have bought it by moving the declaration to
+  wherever the code happened to land, which is how a declared number becomes decoration.
+- **The old px ceiling of 70 was decoration** and is now 30. Nothing on the deck came within a
+  factor of three of 70, so it could not have failed and therefore was not an assertion.
+- **`deck_proof` recomputes the collision guarantee from live bases every run** rather than reading
+  it out of the page's comment — which is the whole point, because the pair that comment named
+  stopped being the closest pair and nothing would have said so.
+- **The hover-glue bar is derived from the declared floor, with one judgement named**: two-thirds,
+  because net displacement over 30 s is not path length averaged over 20 s, and the factor is
+  written down as a judgement rather than dressed up as a derivation.
+- **The spoken column got a third outcome instead of a wider assertion.** The budget buys more
+  chances at the microphone and no latitude at all in what counts as heard.
+- **Equality replaced containment**, which is a correction of that paragraph rather than an addition
+  to it.
+- **`tools_live` forks rather than skipping.** The lazy version — skip the spoken round when the
+  store is guarded — would have gone green by asserting less, and a machine with an enrolled boss
+  would have quietly stopped proving that consent ever runs a hand at all.
+- **The crash mark is cleared in the harness and not in the launcher**, because the harness is
+  clearing its own litter and the launcher would be hiding somebody's real crash.
+- **`lock_proof` now names its own abort.** Without it the chain died on `Cannot read properties of
+  undefined (reading 'id')` and stopped at 33 checks of 78 — two reds and forty-five assertions that
+  were never asked, which reads like a far smaller failure than it is.

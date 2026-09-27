@@ -181,6 +181,26 @@ except Exception as _scribe_exc:                               # noqa: BLE001
     scribe = None
     sys.stderr.write("scribe: unavailable - %s\n" % _scribe_exc)
 
+# THE DOORMAN. A few seconds of speech in, a name or GUEST out - never a word of what was
+# said, which is the whole difference between this module and the one above it. Its own
+# file for the third time for the same three reasons: it owns a model, a store and the
+# numbers it is judged by.
+#
+# WHY THE SERVER AND NOT THE PAGE. The page could be given the embedding and the roster and
+# asked to compare them, and it must not be, for a reason that has nothing to do with speed:
+# the Hands gate takes a spoken yes, and if the page decided who was speaking then a stale
+# tab - or a page reloaded out of a cache - could assert a privilege instead of measuring
+# one. So the audio is embedded here, the verdict is made here, and the page is told the
+# answer rather than asked for it. See _speaker_turn() and _hands_gate().
+#
+# Imported in a try for the same reason scribe is: onnxruntime or the model file being
+# absent must leave a working server working, with the doorman simply standing down.
+try:
+    import voiceprint
+except Exception as _voiceprint_exc:                           # noqa: BLE001
+    voiceprint = None
+    sys.stderr.write("voiceprint: unavailable - %s\n" % _voiceprint_exc)
+
 # =============================================================================
 #  THE PERSONA - everything the character is, lives in this one block.
 #
@@ -2146,6 +2166,133 @@ CAPABILITY_RE = re.compile(r"""^(?:
     | (?:what|which)\s+(?:things|tools|hands)\s+(?:can|do)\s+you\s+(?:do|have)
   )$""", re.IGNORECASE | re.VERBOSE)
 
+# CLASS 3, CONTINUED: THE CONNECTION. "How do I connect google", "why is it not connected",
+# "is my calendar connected". These are the same KIND of question as "what can you do" - they
+# ask about the state of this machine, and the answer is sitting in memory - and until now
+# every one of them fell all the way through the funnel to "the notes are thin", which is the
+# web gate, which sent the boss's own question about his own laptop to a search engine and
+# came back with somebody's help article about connecting Google Calendar to Outlook.
+#
+# ANSWERED FROM THE LIVE STATE AND FROM NOWHERE ELSE, and the sentence NAMES THE ROW. A
+# spoken answer that says "you are not connected" and stops has told him a fact and left him
+# hunting for the switch; the Command Panel has a row whose button is the switch and whose
+# line is the state, so the answer quotes both. The failure mode that keeps this honest is
+# drift: if the row's wording changes and this function's does not, the two voices in the
+# house disagree about the same fact. Hence _google_row() below mirrors the panel's own
+# six-reading ladder in the same order, and routing_proof asserts the sentence contains the
+# row's reading verbatim rather than a paraphrase of it.
+_CONNECT_THING = r"""(?:(?:my|the|your)\s+)?(?:
+      google(?:\s+(?:account|calendar|mail|inbox))? | g-?mail
+    | calendar | (?:e-?)?mail(?:box)? | inbox | account
+  )"""
+_CONNECT_STATE = r"(?:connected|linked|hooked\s+up|set\s+up|signed\s+in|logged\s+in|authorised|authorized)"
+CONNECTION_RE = re.compile(r"""^(?:
+      (?:how|what)\s+(?:do|can|should|would|must)\s+(?:i|we)\s+
+        (?:get\s+|go\s+about\s+)?(?:re)?connect(?:ing|ed)?\s*(?:to\s+|with\s+)?%(thing)s\b.*
+    | (?:how\s+do\s+i\s+)?(?:re)?connect\s+(?:to\s+|with\s+)?%(thing)s\b.*
+    | (?:is|are|was)\s+%(thing)s\s+(?:already\s+|still\s+|even\s+)?(?:not\s+)?%(state)s\b.*
+    | (?:are|is)\s+you\s+(?:already\s+|still\s+)?(?:not\s+)?%(state)s(?:\s+to\s+%(thing)s)?\b.*
+    | (?:do|did|have|has)\s+(?:i|we|you)\s+(?:ever\s+|already\s+)?%(state)s\s+%(thing)s\b.*
+    | why\s+(?:is|isn'?t|are|aren'?t|wo\s*n'?t|won'?t|can'?t|cannot)\s+
+        %(thing)s\s+(?:not\s+)?(?:%(state)s|connect(?:ing)?)\b.*
+    | what'?s?\s+(?:the\s+|my\s+)?%(thing)s\s+(?:connection\s+)?(?:state|status)\b.*
+    | what\s+is\s+(?:the\s+|my\s+)?%(thing)s\s+(?:connection\s+)?(?:state|status)\b.*
+    | (?:is|are)\s+(?:the\s+|my\s+)?%(thing)s\s+(?:connection\s+)?(?:up|live|open|working|ready|there)\b.*
+  )$""" % {"thing": _CONNECT_THING, "state": _CONNECT_STATE}, re.IGNORECASE | re.VERBOSE)
+# THE SAME QUESTION WITH THE NOUN POINTED AT RATHER THAN SAID, which is how it is actually
+# asked out loud - "why is it not connected" arrives a beat after "is my calendar connected"
+# and means the same thing. It is a SEPARATE pattern for one reason: "it" is also how a
+# standing offer is referred to, and _hands_gate consults this funnel before it consults
+# about_the_proposal(). So this rung is suppressed while an offer is on the card, where "why
+# is it not connected" is far more likely to be about the invitation he is looking at than
+# about the grant that composed it. With nothing pending there is no other antecedent.
+CONNECTION_DEICTIC_RE = re.compile(r"""^(?:
+      why\s+(?:is|isn'?t|was|wasn'?t|wo\s*n'?t|won'?t|can'?t|cannot|does\s*n'?t)\s+
+        (?:it|that|this)\s+(?:not\s+)?(?:%(state)s|connect(?:ing)?)\b.*
+    | (?:is|was)\s+(?:it|that|this)\s+(?:even\s+|still\s+|already\s+)?(?:not\s+)?%(state)s\??
+    | are\s+we\s+(?:even\s+|still\s+|already\s+)?(?:not\s+)?%(state)s\??
+  )$""" % {"state": _CONNECT_STATE}, re.IGNORECASE | re.VERBOSE)
+
+
+def _google_row():
+    """(label, line, state) for the Command Panel's Google row, computed server-side.
+
+    THE PANEL'S OWN LADDER, in the panel's own order - see the `id === 'google'` branch of
+    rowRead() in viewer/index.html, which is the authority and which this mirrors clause for
+    clause. Mirroring rather than importing because the panel is JavaScript in a browser and
+    this is Python in a server, and the two can only be kept honest by a harness that asserts
+    the same sentence out of both. That harness is routing_proof.
+
+    FAILURE MODE IF THIS THROWS: google_api.status() reaches the network to resolve whether a
+    stored grant is still live, and a flat network is not a reason to leave a question about
+    the machine unanswered. The except clause gives the truthful answer instead of a guess.
+    """
+    try:
+        state = google_api.status()
+        consent = google_api.pending()
+    except Exception as exc:                                  # noqa: BLE001
+        return ("Connect Google", "GOOGLE: UNKNOWN · %s" % (exc or "the server did not answer"),
+                "unknown")
+    mail = str(state.get("email") or "")
+    word = str(state.get("state") or "")
+    if word == "no-client" or state.get("clientPresent") is False:
+        return ("Connect Google",
+                "GOOGLE: NO CLIENT FILE · secrets/google_client.json is missing", "no-client")
+    if str(consent.get("state") or "") == "waiting":
+        return ("Connect Google",
+                "GOOGLE: WAITING FOR YOUR CONSENT · finish it in the browser", "waiting")
+    if str(consent.get("state") or "") == "refused":
+        return ("Connect Google",
+                "GOOGLE: CONSENT REFUSED · %s" % (consent.get("why") or "try again"), "refused")
+    if word == "connected":
+        return ("Disconnect Google",
+                "GOOGLE: CONNECTED" + (" · " + mail if mail else ""), "connected")
+    if word == "reconnect":
+        return ("Reconnect Google",
+                "GOOGLE: RECONNECT NEEDED · %s"
+                % (state.get("why") or "Google will not renew the connection"), "reconnect")
+    return ("Connect Google",
+            "GOOGLE: NOT CONNECTED · the calendar and the mail are closed", "absent")
+
+
+def spoken_connection(cfg=None):
+    """(sentence, state-word) for the connection, naming the row and quoting its reading.
+
+    ONE SENTENCE PER READING and each one ends with the next physical act, because "you are
+    not connected" is a diagnosis and he asked a question that wants a remedy. The row's line
+    is quoted verbatim - not summarised - so that what he hears and what he reads on the panel
+    are the same string.
+    """
+    who = persona(cfg)
+    call = who["boss_call"]
+    label, line, state = _google_row()
+    if state == "connected":
+        said = ("Google is connected, %s. The Command Panel's Google row reads %s, and its "
+                "button now says %s - the calendar and the mail are open to me."
+                % (call, line, label))
+    elif state == "absent":
+        said = ("Not connected, %s. The Command Panel's Google row reads %s. Press %s on "
+                "that row and allow the one consent screen in the browser; that is the whole "
+                "of it, and I cannot press it for you." % (call, line, label))
+    elif state == "no-client":
+        said = ("I cannot even ask yet, %s. The Command Panel's Google row reads %s, and the "
+                "button stays dead until that file is in place." % (call, line))
+    elif state == "waiting":
+        said = ("Half of the way, %s. The Command Panel's Google row reads %s - the consent "
+                "page is already open and waiting on you; the row turns the moment you "
+                "allow it." % (call, line))
+    elif state == "refused":
+        said = ("Consent was refused, %s. The Command Panel's Google row reads %s. Press %s "
+                "again whenever you are ready." % (call, line, label))
+    elif state == "reconnect":
+        said = ("The grant has lapsed, %s. The Command Panel's Google row reads %s, and its "
+                "button now says %s." % (call, line, label))
+    else:
+        said = ("I cannot read the connection just now, %s. The Command Panel's Google row "
+                "reads %s, which is the server declining to answer rather than a verdict "
+                "about Google." % (call, line))
+    return said, state
+
 
 # SPOKEN TO HIM, NOT ABOUT THE WORLD. The last clause of the funnel: after all four
 # protected classes have missed, the notes and the web decide - and the web needs one thing
@@ -2187,13 +2334,17 @@ def spoken_capabilities(cfg=None):
     return _MANIFEST["spoken"]
 
 
-def protected_answer(question, cfg=None, ear_open=False):
+def protected_answer(question, cfg=None, ear_open=False, offer_standing=False):
     """(class, payload) for a message that is about this machine, else (None, None).
 
     Classes 2 and 3 only. Class 1 lives above this in _hands_gate(), where the pending
     offer is, and class 4 is the Third Door and the registry, which answer_question()
     already owns. Zero retrieval either way: this function reaches the notes, the archive
     and the web exactly never, which is asserted rather than asserted-to in routing_proof.
+
+    `offer_standing` is the caller saying that something is on the card awaiting a word. It
+    changes exactly one thing: the deictic connection rung, where "it" has a second and
+    likelier antecedent. See CONNECTION_DEICTIC_RE.
     """
     forms = _addressless_forms(question)
     if not forms:
@@ -2207,6 +2358,7 @@ def protected_answer(question, cfg=None, ear_open=False):
     who = persona(cfg)
     line = ""
     name = ""
+    gstate = ""
     if said_it(META_RE):
         name = "meta"
         # FROM LIVE STATE, not from a hopeful fixed string. He is asking whether the ear
@@ -2226,10 +2378,24 @@ def protected_answer(question, cfg=None, ear_open=False):
     elif said_it(CAPABILITY_RE):
         name = "identity"
         line = spoken_capabilities(cfg)
+    elif said_it(CONNECTION_RE) or (not offer_standing and said_it(CONNECTION_DEICTIC_RE)):
+        # THE CONNECTION IS AN IDENTITY QUESTION, and it carries the class name "identity"
+        # rather than a fifth one of its own because PROTECTED_CLASSES is fixed by the
+        # mandate at four. What it adds instead is `googleState`, which is the one word a
+        # harness needs to know WHICH reading it got without parsing the sentence back.
+        name = "identity"
+        # ONE READ OF THE STATE PER TURN. _google_row() resolves a stored grant against
+        # Google, so calling it once for the sentence and once again for the label would
+        # make two network trips for one question - and could answer the two from different
+        # readings if the grant expired between them.
+        line, gstate = spoken_connection(cfg)
     if not name:
         return None, None
-    return name, {"ok": True, "kind": "chat", "nodes": [], "answer": line,
-                  "route": name, "lookups": 0, "protected": name}
+    said = {"ok": True, "kind": "chat", "nodes": [], "answer": line,
+            "route": name, "lookups": 0, "protected": name}
+    if gstate:
+        said["googleState"] = gstate
+    return name, said
 
 
 # ================== PART B: TALKING ABOUT THE OFFER ==========================
@@ -3520,6 +3686,275 @@ def voice_state(cfg):
         "cacheFiles": files,
         "cacheBytes": size,
     }
+
+
+# ================== THE DOORMAN'S STATE, AND THE ONE SLOT IT REMEMBERS =======================
+#
+# THE SLOT IS WHY THE PAGE CANNOT LIE. POST /speaker {cmd:"identify"} embeds an utterance and
+# writes its verdict in here under a turn number that THIS process issued. /chat's Hands gate
+# then reads the verdict out of here by that number. The page carries the number and nothing
+# else - no name, no privilege, no score - so the most a stale or hostile tab can do is quote a
+# verdict the server itself reached from real audio, which is precisely the thing a voiceprint
+# is for. Forging a yes would require forging the boss's larynx.
+#
+# IT HOLDS ONE TURN PER SESSION AND IT EXPIRES. A verdict is a statement about who was in the
+# room a moment ago, and a moment is all it is allowed to be worth: SPEAKER_TURN_TTL_S is
+# deliberately shorter than the Hands proposal's own lifetime, so a yes must be spoken by
+# somebody who is still there rather than inherited from whoever last used the room.
+#
+# AND NOTHING IN HERE IS A WORD. The slot carries a name, a privilege, a score and a time. No
+# transcript, no audio, no embedding - an embedding in RAM per turn is the mandate's law, and
+# the law is kept by the embedding dying inside identify() with the samples that made it.
+SPEAKER_TURN_TTL_S = 45.0
+# Three sentences of 16 kHz 16-bit mono - which is what scribeWav() builds - run about 200 KB
+# for a whole enrolment. 8 MB is the Scribe's own ceiling and the same reasoning: large enough
+# that nothing a cooperative page sends is ever refused, small enough that a runaway recorder
+# is refused in one sentence rather than filling this process's memory.
+SPEAKER_MAX_BYTES = 8 * 1024 * 1024
+_SPEAKER_SLOTS = {}
+_SPEAKER_LOCK = threading.Lock()
+_SPEAKER_SEQ = [0]
+# COUNTS ONLY, and this is the Scribe's privacy law applied to the ear: the ledger, the
+# lookbook and the logs may know HOW MANY turns were the boss and how many were guests, and
+# may never know which sentence was which. Nothing below this line ever holds a name.
+_SPEAKER_SEEN = {"turns": 0, "boss": 0, "known": 0, "guests": 0, "refused": 0,
+                 "embedMs": 0, "audioSeconds": 0.0}
+
+
+def speaker_state():
+    """The doorman, described in booleans, names and counts - never in names of what was said.
+
+    Published on /health for the same reason scribe_state() is: the page has to know before it
+    offers Learn a voice, because a machine with no model must say so in a sentence rather than
+    take three spoken sentences off somebody and then discover there is nowhere to put them.
+
+    `hasHands` IS THE WHOLE OF THE LAW'S SWITCH. With it false the doorman stands down
+    silently and the gate behaves exactly as it did before this section existed.
+    """
+    if voiceprint is None:
+        return {"installed": False, "ready": False, "enrolled": [], "count": 0,
+                "hasHands": False, "keepsAudio": False, "dim": 0, "threshold": 0,
+                "why": "voiceprint is not importable in this server process",
+                "seen": dict(_SPEAKER_SEEN)}
+    try:
+        ready = voiceprint.model_ready()
+        rows = voiceprint.enrolled()
+    except Exception as exc:                                   # noqa: BLE001
+        return {"installed": True, "ready": False, "enrolled": [], "count": 0,
+                "hasHands": False, "keepsAudio": False, "dim": voiceprint.EMB_DIM,
+                "threshold": voiceprint.MATCH_THRESHOLD,
+                "why": "the store could not be read: %s" % type(exc).__name__,
+                "seen": dict(_SPEAKER_SEEN)}
+    return {
+        "installed": True, "ready": ready,
+        # THE ROSTER CARRIES NO EMBEDDING. The page needs four facts to draw the row - who,
+        # how they are addressed, whether they may use the hands, and when they enrolled - and
+        # the 192 floats are not one of them. Sending them would put biometric data on a wire
+        # that has no reason to carry it, and would let a page do the comparing.
+        "enrolled": [{"name": r["name"], "addressForm": r["address_form"],
+                      "hands": r["hands"], "at": r["at"], "seconds": r["seconds"],
+                      "sentences": r["sentences"]} for r in rows],
+        "count": len(rows),
+        "hasHands": any(r["hands"] for r in rows),
+        "keepsAudio": False,
+        "dim": voiceprint.EMB_DIM,
+        "threshold": voiceprint.MATCH_THRESHOLD,
+        "minSeconds": voiceprint.ENROL_MIN_SECONDS,
+        "minSentences": voiceprint.ENROL_MIN_SENTENCES,
+        # THE NAME THE FIRST ROW GETS, and it is sent because the alternative is worse. The
+        # Command Panel has no text field - this deck has one input and it is the summoned
+        # question line - so a page asked to enrol the boss has to get his name from the one
+        # place it is written down, which is the persona block in config.json. It is a form of
+        # address and not a credential: it is already in every greeting this server composes
+        # and in the fallback greeting inside the page itself.
+        "bossCall": persona(load_config()[0])["boss_call"],
+        "why": "" if ready else ("the model file is not on disk at %s"
+                                 % voiceprint.MODEL_PATH.name),
+        "seen": dict(_SPEAKER_SEEN),
+    }
+
+
+def _speaker_remember(session, verdict):
+    """Write a verdict into the session's one slot and return its turn number."""
+    with _SPEAKER_LOCK:
+        _SPEAKER_SEQ[0] += 1
+        turn = _SPEAKER_SEQ[0]
+        _SPEAKER_SLOTS[str(session)] = {"turn": turn, "at": time.time(), "verdict": verdict}
+        _SPEAKER_SEEN["turns"] += 1
+        if verdict.get("who") in (None, "", "GUEST"):
+            _SPEAKER_SEEN["guests"] += 1
+        elif verdict.get("hands"):
+            _SPEAKER_SEEN["boss"] += 1
+        else:
+            _SPEAKER_SEEN["known"] += 1
+    return turn
+
+
+def _speaker_spend(session):
+    """Empty a session's slot: the verdict in it has just authorised something.
+
+    THE SEAL DOES NOT GO DARK WHEN THIS RUNS. The live label the page shows comes from the
+    page's own copy of the reply it already received - this only removes the server's
+    willingness to ACT on that turn number a second time.
+    """
+    with _SPEAKER_LOCK:
+        _SPEAKER_SLOTS.pop(str(session), None)
+
+
+def _speaker_turn(data, session):
+    """Who said THIS message. Returns (verdict, spoken, why).
+
+    `spoken` IS THE HALF THAT MATTERS AT THE GATE, and it is separate from the verdict on
+    purpose. A message that arrived through the ear is spoken whether or not the doorman
+    managed to put a name to it, and the law has to be able to tell those two apart from a
+    message that was typed:
+
+      typed                   no `speaker` block at all. spoken False, verdict None. The law
+                              does not apply, because the keyboard is the boss's other door.
+      spoken and identified   spoken True, verdict the one THIS process made from real audio.
+      spoken, not identified  spoken True, verdict None - a stale turn number, one this server
+                              never issued, or a page that asked nothing. The gate FAILS
+                              CLOSED on this, which is the whole reason the flag exists: a
+                              spoken yes with no established speaker must not be honoured just
+                              because the identification step went missing.
+
+    THE PAGE CARRIES A NUMBER AND NOTHING ELSE - no name, no privilege, no score - so the most
+    a stale or hostile tab can do is quote a verdict this process already reached from audio.
+    """
+    block = data.get("speaker") if isinstance(data, dict) else None
+    if not isinstance(block, dict) or str(block.get("via") or "") != "voice":
+        return None, False, "typed"
+    try:
+        turn = int(block.get("turn") or 0)
+    except (TypeError, ValueError):
+        return None, True, "the speaker turn was not a number"
+    with _SPEAKER_LOCK:
+        slot = _SPEAKER_SLOTS.get(str(session))
+    if not slot or not turn or slot["turn"] != turn:
+        return None, True, ("speaker turn %s is not the one this server issued" % turn)
+    if time.time() - slot["at"] > SPEAKER_TURN_TTL_S:
+        return None, True, ("speaker turn %d is %.0fs old, past the %.0fs it is worth"
+                            % (turn, time.time() - slot["at"], SPEAKER_TURN_TTL_S))
+    return slot["verdict"], True, ""
+
+
+def doorman_refusal(data, session, word):
+    """The law, in one place: (payload, seal) to refuse with, or (None, seal).
+
+    WITH AT LEAST ONE HANDS-PRIVILEGED VOICEPRINT ENROLLED, a spoken Yes or No at the Hands
+    gate is accepted from that voice and from no other. Not because a guest is assumed
+    hostile, but because that gate is the only place in this house where a sentence becomes an
+    email leaving it or an entry in somebody's calendar, and "somebody in the room said yes"
+    is not consent from the person whose account it is.
+
+    THE NO IS REFUSED TOO, and the mandate names both words. A guest's no is also a decision
+    about the boss's business - it cancels a proposal he made and is waiting on - so a stranger
+    who can say no can quietly stop everything this house is asked to do. Neither word is an
+    opinion at this gate; both are instructions.
+
+    WITH ZERO ENROLMENTS THE LAW STANDS DOWN SILENTLY. No sentence, no seal, no mention: a
+    house where nobody has taught it a voice behaves exactly as it did before this section was
+    written. has_hands_voice() is the whole of the switch.
+
+    THE KEYBOARD IS ALWAYS OPEN. A body with no `speaker` block is a typed message, and a
+    typed Yes never reaches this function - see _speaker_turn(). That is deliberate and it is
+    the escape hatch: the cost of the doorman refusing the boss on a bad morning is one
+    keystroke, and the cost of admitting a stranger is a sent email. The two are not the same
+    size, so the law is strict and the other door stays unlocked.
+
+    AND IT FAILS CLOSED. A spoken yes whose speaker could not be established - a stale turn
+    number, one this server never issued, an identification that never happened - is refused
+    rather than waved through.
+
+    IT IS ONE FUNCTION BECAUSE THERE ARE THREE DOORS. /chat's gate takes a spoken yes when the
+    page routes the sentence to the server, and the page's own card posts /execute and
+    /tools cmd=cancel with door "voice" when it recognises the word itself. A law written at
+    one of those three is a law with two ways round it.
+    """
+    verdict, spoken, why = _speaker_turn(data, session)
+    seal = (voiceprint.seal_for(verdict) if (voiceprint is not None and spoken) else "")
+    if not spoken or voiceprint is None:
+        return None, seal
+    if why:
+        sys.stderr.write("  speaker: %s\n" % why)
+    try:
+        guarded = voiceprint.has_hands_voice()
+    except Exception:                                          # noqa: BLE001
+        # A store that will not read is not a reason to open the gate. It is also not a reason
+        # to refuse a house that has never enrolled anybody, which is why this sits inside the
+        # `spoken` branch rather than above it.
+        guarded = False
+    if not guarded or (isinstance(verdict, dict) and verdict.get("hands")):
+        # ONE TURN, ONE ORDER. A verdict is worth 45 seconds to /chat, which only uses it to
+        # decide what to call somebody - but at THIS gate it authorises an action, and a number
+        # that authorises twice is a number worth stealing. So an honoured word spends it: the
+        # slot is emptied and the next spoken yes needs a sentence of its own to be measured
+        # from. The case this closes is the barked interrupt, which reaches the page before the
+        # detector has ended the utterance and therefore travels with the PREVIOUS turn's
+        # number; spent once, that number stops being a second consent.
+        if spoken and isinstance(verdict, dict):
+            _speaker_spend(session)
+        return None, seal
+    sys.stderr.write("  route: confirmation - a spoken %s from a voice without hands, "
+                     "refused at the doorman\n" % (word or "word"))
+    return {
+        "ok": False, "kind": "tool", "nodes": [],
+        # THE LINE IS THE MANDATE'S, VERBATIM, and it is courteous on purpose: the guest has
+        # done nothing wrong and is not accused of anything. It also names NO NAME - not the
+        # boss's, not theirs - because a refusal is not the place to tell a stranger who is
+        # allowed to give this house orders.
+        "answer": "I take orders from one voice in this house, and it is not speaking just now.",
+        "refused": "not-the-boss", "route": "confirmation", "lookups": 0, "seal": seal,
+    }, seal
+
+
+# THE ADDRESS FORMS, TAKEN OFF. A guest gets no address form at all rather than a guessed one,
+# and the cheapest way to make that true of every sentence in this server - the ones written
+# here AND the ones a model writes - is one pass over the finished text.
+#
+# WHAT COUNTS AS AN ADDRESS, and the distinction is the whole of the function: a VOCATIVE is a
+# name used to speak TO somebody, and it is the one the guest must not receive. A name used to
+# speak ABOUT somebody is a fact, and a guest asking "whose assistant are you" is owed it. So
+# "Not connected, Addi." loses its address and "the personal assistant of Sir Aditya Singh"
+# keeps every word, because the first is set off by a comma or ends the clause and the second
+# is the object of a preposition.
+#
+# FAILURE MODE IF THIS OVERREACHES: an identity answer to a guest reads "I am Galaxy, the
+# personal assistant of" and stops. That is why the formal name is never touched here and only
+# the comma-and-terminal positions are, and why deaddress() is asserted in both directions -
+# the address gone, the fact still there.
+_ADDRESS_WORDS = ("sir", "madam", "boss")
+
+
+def deaddress(text, cfg=None):
+    """A finished sentence with its vocatives removed. Idempotent, and safe on any string."""
+    out = str(text or "")
+    if not out:
+        return out
+    who = persona(cfg)
+    words = [w for w in ([who["boss_call"]] + list(_ADDRESS_WORDS)) if w]
+    alts = "|".join(re.escape(w) for w in dict.fromkeys(words))
+    # ", Addi." / ", Addi," / ", Addi and" -> the comma and the name go together, because a
+    # comma that introduced nothing is worse punctuation than no comma at all.
+    out = re.sub(r"\s*,\s*(?:%s)\b(?=[\s,.;:!?)]|$)" % alts, "", out, flags=re.IGNORECASE)
+    # "Addi, the notes say..." at the head of a sentence. The capital goes back on afterwards:
+    # a stripped head leaves "the notes say nothing", and a sentence that starts in lower case
+    # is how a reader can tell something was cut out of it.
+    out = re.sub(r"(^|(?<=[.!?])\s+)(?:%s)\s*,\s*" % alts, r"\1", out, flags=re.IGNORECASE)
+    # "...I shall not, sir." with no comma - "Very good sir." - and note that this rung reaches
+    # for the PURE VOCATIVES ONLY and never for the boss's call-name.
+    #
+    # THE REASON IS A SENTENCE THIS SERVER ACTUALLY WRITES: "He is Sir Aditya Singh, and I call
+    # him Addi." A name in terminal position with no comma is genuinely ambiguous - vocative in
+    # "That is connected Addi", object in "I call him Addi" - and this function cannot tell them
+    # apart without a parser. "sir" in terminal position has no such second reading. So the
+    # ambiguous case is left alone and the known limit is written here rather than discovered
+    # later: an uncommaed terminal call-name survives deaddress. The prompt line for a guest
+    # turn asks the model for no address form at all, which is the other half of the guard.
+    bare = "|".join(re.escape(w) for w in _ADDRESS_WORDS)
+    out = re.sub(r"\s+(?:%s)(?=[.!?]|$)" % bare, "", out, flags=re.IGNORECASE)
+    out = re.sub(r"[ \t]{2,}", " ", out).strip()
+    return (out[0].upper() + out[1:]) if out[:1].islower() else out
 
 
 def scribe_state():
@@ -4887,7 +5322,114 @@ def nudge_for_stuck(frame, declared, width, height, age_ms, still_s):
     }
 
 
-def answer_question(question, session):
+# ================== CITATION HONESTY =========================================
+#
+# A CHIP IS A CLAIM ABOUT THE SENTENCE ABOVE IT, not about the search that happened before
+# the sentence was written. "Drawn from" over a row of planets says: this answer came out of
+# these notes. "Cited" over a filename says: this answer used that page. Both are claims the
+# retrieval cannot make, because retrieval runs before the answer exists - and this server
+# was making them out of the retrieval anyway.
+#
+# THE THREE WAYS IT WAS WRONG, all of them live and all of them fixed below.
+#   1 AN ERROR WITH CHIPS. call_model() fails, the 502 goes back carrying `nodes` and
+#     `citations`, and the card renders "the brain could not be reached" with four planets
+#     lit under "Drawn from" and a PDF chip beside them. Nothing was drawn from anything;
+#     there is no answer at all.
+#   2 A REFUSAL WITH CHIPS. The scorer calls a question a notes question, the passages clear
+#     the dial, the brain reads them and says - correctly, as instructed - that the notes do
+#     not cover it. The chips then say the refusal was drawn from the notes it is refusing
+#     on, and the camera flies to one of them. The employer is shown evidence for a sentence
+#     that says there is no evidence.
+#   3 A CONFIGURATION ERROR WITH CHIPS, the 400 above, same shape as 1.
+#
+# WHAT IS DELIBERATELY NOT CHANGED. The credentials-missing 400 keeps its nodes, because
+# that sentence NAMES them out loud - "the 3 notes below are the ones that matched" - and a
+# chip row under a sentence that points at it is honest. The distinction throughout is
+# whether the TEXT accounts for the chips, not whether a lookup ran.
+#
+# HOW "CONSUMED" IS DECIDED, and the honest account of its limits. There is no way to ask a
+# language model what it read. What there is, is this: an answer that used the material
+# shares distinctive words with it. So the test is overlap - at least one token four
+# characters or longer that appears in the evidence, is not a stopword, and is NOT one of the
+# words the question itself supplied. That last exclusion is the whole of the mechanism: a
+# refusal echoes the question ("your notes say nothing about the Q3 contract") and nothing
+# else, so a test that counted the question's own words would pass every refusal ever
+# written.
+#
+# THE ERROR IT CAN MAKE, named rather than hidden: an answer that genuinely came from the
+# notes but restates them entirely in the question's own vocabulary loses its chips. That
+# costs a row of provenance the employer could have clicked. The error in the other
+# direction - a refusal wearing four citations - costs him a false belief about where a
+# sentence came from, and a camera flight to a note that has nothing to do with it. The two
+# are not equally bad, so the threshold sits at one token: as permissive as it can be while
+# still catching a sentence that shares nothing.
+_CONSUMED_MIN_LEN = 4
+_CONSUMED_MIN_TOKENS = 1
+_CONSUMED_SUFFIXES = ("ing", "ed", "es", "s")
+
+
+def _consumed_stem(token):
+    """A crude stem, and it is load-bearing rather than tidy.
+
+    FAILURE MODE IT CATCHES, measured on the first draft of this section: the question asked
+    when the contract would "renew", the evidence said it "renews", and the refusal - "your
+    notes say nothing about when the contract renews" - echoed the EVIDENCE's inflection. One
+    token, not in the question by exact string, and the refusal kept its four chips. Two
+    letters of difference defeated the whole test. Comparing stems rather than strings puts
+    "renew" and "renews" in the same bucket, which is the bucket the question already owns.
+
+    Deliberately not a real stemmer: no dictionary, no vowel rules, no pip install. One suffix
+    off when at least three letters remain, which is enough for plurals and gerunds and is the
+    entire class of collision that was observed.
+    """
+    word = str(token)
+    if word.endswith("'s"):
+        word = word[:-2]
+    for suffix in _CONSUMED_SUFFIXES:
+        if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+            return word[:-len(suffix)]
+    return word
+
+
+def consumed_sources(answer, evidence, question):
+    """(True/False, why) - does this answer's text account for a chip row?
+
+    FAILURE MODE IF THIS IS WRONG IN THE PERMISSIVE DIRECTION: a refusal keeps its chips, and
+    the card shows evidence for a sentence denying there is any. In the strict direction: a
+    real answer loses a clickable row. Hence the one-token threshold - see above.
+    """
+    text = str(answer or "")
+    if not text.strip():
+        return False, "there is no answer text"
+    if not str(evidence or "").strip():
+        return False, "nothing was supplied to consume"
+    asked = set(_consumed_stem(t) for t in tokenize(question))
+    have = set(_consumed_stem(t) for t in tokenize(evidence))
+    hits = set(s for s in (_consumed_stem(t) for t in tokenize(text))
+               if len(s) >= _CONSUMED_MIN_LEN and s in have and s not in asked)
+    if len(hits) >= _CONSUMED_MIN_TOKENS:
+        return True, ("the answer carries %d word%s out of the evidence that the question did "
+                      "not supply" % (len(hits), "" if len(hits) == 1 else "s"))
+    return False, ("the answer shares no distinctive word with the evidence - it is a "
+                   "refusal or an aside, not a reading")
+
+
+def strip_citations(payload, why):
+    """Take the chips off a payload whose text does not account for them.
+
+    ONE FUNCTION so there is one place to read and one string to grep for in the trace. The
+    keys are removed rather than emptied where the page treats absence and emptiness alike,
+    and `nodes` is emptied rather than removed because the page reads data.nodes directly.
+    """
+    payload["nodes"] = []
+    payload.pop("citations", None)
+    payload.pop("scanNotes", None)
+    payload["uncited"] = why
+    sys.stderr.write("  chips: none - %s\n" % why)
+    return payload
+
+
+def answer_question(question, session, guest=False):
     """One question in, one of five worlds out, and the reply always says which.
 
         kind "notes"   - answered from the retrieved notes. Nodes light, camera flies.
@@ -5045,7 +5587,11 @@ def answer_question(question, session):
     node_ids = node_ids[:TOP_K]
 
     if cfg_error:
-        return 400, {"error": cfg_error, "nodes": node_ids, "kind": kind}
+        # NO CHIPS UNDER A CONFIGURATION ERROR. The sentence is about config.json and says
+        # nothing about the collection; a row of planets under it would be provenance for a
+        # sentence that has none. See CITATION HONESTY above.
+        return 400, strip_citations({"error": cfg_error, "nodes": node_ids, "kind": kind},
+                                    "the answer is a configuration error, not a reading")
 
     # Retrieval has already run, so even with no credentials at all the viewer can
     # still light the notes that matched. Only the wording is missing.
@@ -5312,6 +5858,34 @@ def answer_question(question, session):
     offer_hands = substantial_question(question, prior) and not address_only(question)
     block = hands.prompt_block() if offer_hands else ""
 
+    # THE GUEST'S PROMPT LINE, and it is the SOURCE half of a law whose enforcement half is
+    # deaddress() on the way out of /chat. Both halves exist because they fail differently: a
+    # prompt line asks a model for something and cannot make it comply, while the strip pass
+    # complies absolutely and cannot read a sentence. Asking first is what keeps the voice
+    # natural - a model told to use no name writes "Not connected." and a model that wrote
+    # "Not connected, Addi." and had it cut writes a sentence with a seam in it. It also closes
+    # the one case deaddress() deliberately leaves alone: an uncommaed terminal call-name.
+    #
+    # COURTEOUS AND CONVERSATIONAL, which is the mandate's phrasing and not a softening. The
+    # guest is not being handled; they are being spoken to by a butler who has not been
+    # introduced to them.
+    if guest:
+        who = persona(cfg)
+        block += ("\n\nWHO YOU ARE SPEAKING TO JUST NOW\n"
+                  "- The person who asked this is NOT %s. You do not know who they "
+                  "are, and you do not guess.\n"
+                  "- So use NO form of address at all in your reply: no name, no "
+                  "\"sir\", no \"madam\". Not the wrong one and not a neutral one - "
+                  "none. Write the sentence as though it had never occurred to you "
+                  "to name anybody.\n"
+                  "- Stay entirely courteous and conversational. A guest is a guest, "
+                  "not an intruder, and nothing about your manner changes except the "
+                  "name you do not use.\n" % who["boss_call"])
+
+    # THE EVIDENCE, KEPT BY NAME so the citation-honesty test below can be asked about the
+    # exact text the brain was shown rather than about a reconstruction of it. Empty on a
+    # chat turn, which is correct: nothing was shown, so nothing can have been consumed.
+    evidence = ""
     if kind == "chat":
         messages = ([{"role": "system", "content": SMALLTALK_PROMPT + block}] + history +
                     [{"role": "user", "content": question.strip()}])
@@ -5331,6 +5905,7 @@ def answer_question(question, session):
         passages = build_semantic_context(cited)
         context = build_context(picked)
         both = "\n\n".join(b for b in (passages, context) if b)
+        evidence = both
         user_msg = ("Question: %s\n\nNotes and documents you may use, and nothing else:"
                     "\n\n%s" % (question.strip(), both))
         messages = ([{"role": "system", "content": SYSTEM_PROMPT + block}] + history +
@@ -5338,8 +5913,11 @@ def answer_question(question, session):
 
     answer, error = call_model(cfg, messages)
     if error:
-        return 502, {"error": error, "nodes": node_ids, "kind": kind,
-                     "citations": cites}
+        # NO CHIPS UNDER A BRAIN THAT DID NOT ANSWER. There is no answer text at all here,
+        # so there is nothing for a chip to be a claim about. See CITATION HONESTY above.
+        return 502, strip_citations({"error": error, "nodes": node_ids, "kind": kind,
+                                     "citations": cites},
+                                    "the brain returned no answer, so nothing read anything")
 
     # THE CONTROL TAG. An answer may ask to change the brain instead of replying, and
     # if it does, the swap is performed by the one function every other door uses and
@@ -5386,6 +5964,16 @@ def answer_question(question, session):
         notes = scan_lines(sem)
         if notes:
             payload["scanNotes"] = notes
+    # AND THE LAST WORD BELONGS TO THE ANSWER. Everything above this line is the retrieval's
+    # account of the turn; this is the only test that reads what was actually said. A notes
+    # turn that came back as a refusal - which the prompt explicitly instructs, and which is
+    # the right answer when the passages cleared the dial and still did not cover it - loses
+    # its chips here, and the reason goes in the payload as `uncited` so the card, the trace
+    # and routing_proof all read the same sentence. See CITATION HONESTY above.
+    if node_ids or cites:
+        used, why = consumed_sources(answer, evidence, question)
+        if not used:
+            strip_citations(payload, why)
     return 200, payload
 
 
@@ -5664,6 +6252,15 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                                              nodes=[], answer="",
                                              consent=google_api.pending()))
 
+        if route == "/speaker":
+            # THE DOORMAN'S ROSTER, and what it withholds is the point of it. Four facts per
+            # enrolled voice - who, how they are addressed, whether they may use the hands,
+            # when they enrolled - and no embedding, because the page has no reason to hold
+            # 192 floats about a person's larynx and no business doing the comparing. See
+            # speaker_state().
+            return self._send_json(200, dict(speaker_state(), ok=True, kind="speaker",
+                                             nodes=[], answer=""))
+
         if route == "/brains":
             # What the chip's menu is built from. The BUTTON must not be able to
             # offer a model the voice would be refused, so the menu is this list and
@@ -5763,6 +6360,12 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 # send it. `keepsAudio: false` is the privacy law, published where a
                 # harness can assert it instead of only in a comment.
                 "scribe": scribe_state(),
+                # AND WHETHER THIS HOUSE KNOWS ANY VOICES. Published on the same trip and
+                # for the same reason as the Scribe's: the Command Panel has to know whether
+                # there is a model to embed with and whether anybody is enrolled BEFORE it
+                # offers Learn a voice, and `count` is what decides whether the row's word is
+                # "learn" or "learn again". No embedding is in here - see speaker_state().
+                "speaker": speaker_state(),
                 # AND WHETHER THE SKY TURNS. A preference about the camera, published
                 # for the same reason the voice pin is: the browser owns the camera and
                 # cannot be told by any other route. Absent or false means the galaxy
@@ -5807,7 +6410,7 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                                          or payload.get("error")))
         return status, payload
 
-    def _hands_gate(self, question, session="default", ear_open=False):
+    def _hands_gate(self, question, session="default", ear_open=False, body=None):
         """THE CONFIRMATION, above every other door in /chat.
 
         Returns (status, payload) when the message was ABOUT a proposal - a yes, a no, or
@@ -5829,6 +6432,15 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
         # galaxy" is the whole of a yes once his name is out of it. See confirmation_in().
         word = confirmation_in(question)
         yes, no = word == "yes", word == "no"
+
+        # THE DOORMAN'S LAW, above the yes and the no rather than beside them. It is one
+        # function and three doors - this one, /execute and /tools cmd=cancel - because a law
+        # written at one of them is a law with two ways round it. See doorman_refusal().
+        if yes or no:
+            refusal, _seal = doorman_refusal(body or {}, session, word)
+            if refusal is not None:
+                refusal["pending"] = pending
+                return 403, refusal
 
         if lapsed is not None and (yes or no):
             # They answered a question that had already expired. The truthful reply is
@@ -5857,7 +6469,8 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             # about the proposal - it went to the brain, which happened to be wearing the
             # persona and happened to answer correctly. A right answer for the wrong reason
             # is one prompt edit away from a wrong one, and it costs a model call to get.
-            klass, said = protected_answer(question, load_config()[0], ear_open)
+            klass, said = protected_answer(question, load_config()[0], ear_open,
+                                           offer_standing=True)
             if klass is not None:
                 said["pending"] = pending
                 sys.stderr.write("  route: %s - answered from state with an offer still "
@@ -6006,6 +6619,194 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 "language": out["language"],
                 "tookMs": out["tookMs"], "durationS": out["durationS"]})
 
+        # THE DOORMAN, and it is third because it arrives at the same rate as the Scribe's
+        # chunks and for the same reason must not queue behind a model call.
+        #
+        # THE AUDIO NEVER TOUCHES DISK AND NEVER OUTLIVES THE CALL. It arrives as bytes in a
+        # multipart part, is decoded out of a BytesIO by voiceprint.read_wav, is turned into
+        # 192 floats, and the part's reference is dropped before this function returns. There
+        # is no temp file, no cache, no enrolment folder full of wavs - and the embedding
+        # itself only survives an `identify` for as long as the comparison takes. What is left
+        # behind is a name, a privilege, a score and a time, in one slot, for 45 seconds.
+        #
+        # AND NOT ONE WORD OF WHAT WAS SAID passes through here in either direction. This
+        # route has no transcript to leak because it never had one: the Scribe reads words and
+        # the doorman reads a larynx, and they are two modules for exactly that reason.
+        if route == "/speaker":
+            state = speaker_state()
+            ctype = (self.headers.get("Content-Type") or "").lower()
+            # THE REFUSAL IS FIRST, before a byte is read, for the same reason the Scribe's
+            # is: a machine with no model must say so in a sentence rather than take three
+            # spoken sentences off somebody and then discover there is nowhere to put them.
+            if not state["installed"] or not state["ready"]:
+                self._read_bytes(SPEAKER_MAX_BYTES)
+                return self._send_json(503, {
+                    "ok": False, "kind": "speaker", "speaker": state, "nodes": [],
+                    "answer": "", "error": "The doorman is not ready: %s."
+                                           % (state["why"] or "the voiceprint model is absent")})
+            if "multipart/form-data" in ctype:
+                fields, why = self._read_multipart(SPEAKER_MAX_BYTES)
+                if fields is None:
+                    return self._send_json(400, {
+                        "ok": False, "kind": "speaker", "speaker": state, "nodes": [],
+                        "answer": "", "error": "That audio could not be read: %s" % why})
+                data = {k: (v["data"] or b"").decode("utf-8", "replace")
+                        for k, v in fields.items() if not v["filename"]}
+            else:
+                fields = {}
+                data = self._read_json(64 * 1024)
+                if not isinstance(data, dict):
+                    return self._send_json(400, {
+                        "ok": False, "kind": "speaker", "speaker": state, "nodes": [],
+                        "answer": "",
+                        "error": "Send a JSON body like {\"cmd\": \"forget\", "
+                                 "\"name\": \"...\"}."})
+            cmd = str(data.get("cmd") or "").strip().lower()
+            session = str(data.get("session") or "default")[:120]
+
+            def refuse(status, sentence):
+                _SPEAKER_SEEN["refused"] += 1
+                return self._send_json(status, {
+                    "ok": False, "kind": "speaker", "speaker": speaker_state(),
+                    "nodes": [], "answer": "", "error": sentence, "keptAudio": False})
+
+            def clips_from(prefix):
+                """Every audio part named prefix0, prefix1, ... in order, decoded.
+
+                Numbered rather than repeated because _read_multipart returns a dict keyed by
+                part name, and three parts all called "audio" would silently become one -
+                which is an enrolment on a third of the speech it was given, and one that
+                would then refuse itself for being too short and blame the speaker.
+                """
+                out, bad = [], []
+                for index in range(16):
+                    part = fields.get("%s%d" % (prefix, index))
+                    if part is None:
+                        continue
+                    samples, rate, oops = voiceprint.read_wav(part["data"])
+                    part["data"] = None              # the only copy, dropped here
+                    if samples is None:
+                        bad.append("%s%d: %s" % (prefix, index, oops))
+                        continue
+                    out.append((samples, rate))
+                return out, bad
+
+            if cmd in ("", "state"):
+                return self._send_json(200, dict(speaker_state(), ok=True, kind="speaker",
+                                                 nodes=[], answer=""))
+
+            if cmd == "forget":
+                name = str(data.get("name") or "").strip()[:120]
+                if not name:
+                    return refuse(400, "Name the voice to forget.")
+                gone = voiceprint.forget(name)
+                sys.stderr.write("speaker: forget %s -> %s\n" % (voiceprint.slug(name), gone))
+                return self._send_json(200 if gone else 404, {
+                    "ok": bool(gone), "kind": "speaker", "speaker": speaker_state(),
+                    "nodes": [], "answer": "", "keptAudio": False,
+                    "error": "" if gone else "I have no voiceprint under that name."})
+
+            if cmd == "enrol":
+                # BOSS-ONLY, AND THE KEYBOARD IS THE DOOR. The real guard is structural: no
+                # sentence anywhere in the funnel reaches this command, so the only way to
+                # arrive here is the Command Panel's own button, which is a keystroke. This
+                # clause is the explicit half of it - a body that admits it came in through
+                # the ear is refused rather than trusted - so that the day somebody wires a
+                # spoken shortcut to enrolment, it fails loudly instead of working.
+                block = data.get("speaker") if isinstance(data.get("speaker"), dict) else {}
+                if str(data.get("via") or block.get("via") or "") == "voice":
+                    return refuse(403, "Enrolling a voice is done from the Command Panel, "
+                                       "not by asking out loud.")
+                name = str(data.get("name") or "").strip()[:120]
+                if not name:
+                    return refuse(400, "Give the voice a name first.")
+                address = str(data.get("addressForm") or data.get("address_form") or "").strip()[:120]
+                roster = voiceprint.enrolled()
+                # THE FIRST ENROLMENT IS THE BOSS, and it does not need to be asked. An empty
+                # store means the person at the keyboard is setting the house up, and the
+                # mandate's words are "First enrolment is the boss with hands: true".
+                hands_wanted = (True if not roster else
+                                str(data.get("hands") or "").strip().lower()
+                                in ("1", "true", "yes", "on"))
+                # RE-LEARNING KEEPS THE PRIVILEGE IT ALREADY HAD. A boss re-enrolling after a
+                # cold must not come back as a hands-less row because `hands` was left out of
+                # the body - that would stand the law down on the quietest possible path.
+                replace = str(data.get("replace") or "").strip().lower() in ("1", "true",
+                                                                            "yes", "on")
+                if replace:
+                    mine = voiceprint.slug(name) + ".json"
+                    for row in roster:
+                        if row.get("file") == mine and row.get("hands"):
+                            hands_wanted = True
+                clips, bad = clips_from("audio")
+                if not clips:
+                    return refuse(400, "I heard nothing usable%s."
+                                  % ((" - " + "; ".join(bad[:3])) if bad else ""))
+                started = time.time()
+                seconds = sum(voiceprint.seconds_of(s, r) for s, r in clips)
+                heard = len(clips)
+                row, why = voiceprint.enrol(clips, name, address or name, hands_wanted,
+                                            replace=replace)
+                clips = None                         # the samples, dropped here
+                took = int((time.time() - started) * 1000)
+                _SPEAKER_SEEN["embedMs"] += took
+                _SPEAKER_SEEN["audioSeconds"] = round(
+                    _SPEAKER_SEEN["audioSeconds"] + seconds, 2)
+                if row is None:
+                    # COUNTS ONLY IN THE LOG, per the Scribe's privacy law: how many seconds
+                    # and how many sentences, never whose voice and never what was said.
+                    sys.stderr.write("speaker: enrolment refused after %.1fs of audio in %d "
+                                     "clip(s), %dms\n" % (seconds, heard, took))
+                    return refuse(400, why)
+                sys.stderr.write("speaker: enrolled %s  hands=%s  %.1fs  %d sentences  %dms  "
+                                 "audio dropped\n" % (row["file"], row["hands"],
+                                                      row["seconds"], row["sentences"], took))
+                return self._send_json(200, {
+                    "ok": True, "kind": "speaker", "speaker": speaker_state(), "nodes": [],
+                    "answer": "", "error": "", "enrolled": row, "tookMs": took,
+                    # THE ASSERTION THE HARNESS READS. Not a promise - the promise is that
+                    # there is no code path in this route or in voiceprint.py that opens a
+                    # file for audio - but a field a proof can name, so that the day one
+                    # appears the harness has somewhere to go red.
+                    "keptAudio": False, "audioSeconds": round(seconds, 2)})
+
+            if cmd == "identify":
+                clips, bad = clips_from("audio")
+                if not clips:
+                    return refuse(400, "I heard nothing usable%s."
+                                  % ((" - " + "; ".join(bad[:3])) if bad else ""))
+                samples, rate = clips[0]
+                seconds = voiceprint.seconds_of(samples, rate)
+                started = time.time()
+                verdict = voiceprint.identify(samples, rate)
+                clips, samples = None, None          # the samples, dropped here
+                took = int((time.time() - started) * 1000)
+                _SPEAKER_SEEN["embedMs"] += took
+                _SPEAKER_SEEN["audioSeconds"] = round(
+                    _SPEAKER_SEEN["audioSeconds"] + seconds, 2)
+                turn = _speaker_remember(session, verdict)
+                seal = voiceprint.seal_for(verdict)
+                # THE LOG LINE IS A COUNT AND A LABEL AND NOTHING ELSE. The seal is live only -
+                # the mandate's word - so the name goes nowhere: what is written here is the
+                # turn number, the seal word, the score and the milliseconds. A ledger that
+                # knew which sentence was the boss's would be a record of who was in the room.
+                sys.stderr.write("speaker: turn %d  %s  cos %.3f  %.1fs  %dms  audio dropped\n"
+                                 % (turn, seal, verdict.get("score") or 0.0, seconds, took))
+                return self._send_json(200, {
+                    "ok": True, "kind": "speaker", "nodes": [], "answer": "", "error": "",
+                    "turn": turn, "ttlS": SPEAKER_TURN_TTL_S,
+                    # `seal` is computed here and not derived in the page: a stale tab must
+                    # not be able to promote a guest by relabelling them. See seal_for().
+                    "seal": seal, "who": verdict.get("who"),
+                    "addressForm": verdict.get("address_form") or "",
+                    "hands": bool(verdict.get("hands")),
+                    "score": verdict.get("score"), "known": verdict.get("known"),
+                    "why": verdict.get("why"), "tookMs": took,
+                    "keptAudio": False, "audioSeconds": round(seconds, 2),
+                    "speaker": speaker_state()})
+
+            return refuse(400, "I know cmd state, enrol, identify and forget.")
+
         # THE MINUTES HAND'S FIRST HALF, and the division of labour is the whole design:
         # THE BRAIN SUMMARISES HERE, THE TOOL ONLY WRITES. tools/save_minutes.py takes
         # finished markdown and puts it in a file - it holds no key, makes no network call
@@ -6096,9 +6897,57 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             # offer is standing.
             ear = data.get("ear")
             ear_open = bool(ear.get("open") if isinstance(ear, dict) else ear)
-            gate_status, gated = self._hands_gate(question, session, ear_open)
+            # THE `speaker` BLOCK is the page saying "this one came through the ear, and here
+            # is the turn number you gave me for it". Read BEFORE the gate, because the gate is
+            # where the doorman's law lives - see _hands_gate(). A message without it is a
+            # typed message, which is what it is, and the law does not apply to it.
+            #
+            # THE VERDICT IS FETCHED FROM THIS PROCESS'S OWN SLOT and never taken from the
+            # body: see _speaker_turn(). `guest` below is therefore a fact this server
+            # established from audio, not a claim the page made.
+            speaker, spoken, speaker_why = _speaker_turn(data, session)
+            named = bool(isinstance(speaker, dict)
+                         and speaker.get("who") not in (None, "", "GUEST"))
+            # AND AN EMPTY STORE IS NOT A ROOM FULL OF STRANGERS. With nothing enrolled there
+            # is nobody to be recognised, so an unidentified spoken turn is the ONLY kind there
+            # is - and treating it as a guest would take the boss's name off every answer in a
+            # house that never asked for a doorman. The mandate's words are that with zero
+            # enrolments the law stands down silently and today's behaviour holds, so the page
+            # does not send a speaker block at all in that state (see speakerBlock()) and this
+            # is the half that holds even if it did. Read only on the path that would otherwise
+            # de-address, so a recognised voice costs no directory listing.
+            guest = bool(spoken and not named)
+            if guest:
+                try:
+                    guest = bool(voiceprint and voiceprint.enrolled())
+                except Exception:                                  # noqa: BLE001
+                    guest = False
+            if spoken and speaker_why:
+                sys.stderr.write("  speaker: %s\n" % speaker_why)
+
+            def voiced(payload):
+                """Every answer out of /chat, with a guest's address form taken off.
+
+                ONE FUNNEL FOR ONE LAW. The mandate's words are that EVERY guest sentence
+                carries no address form at all rather than a guessed one - every one, not the
+                ones somebody remembered - and there are a dozen places below that write an
+                answer. So the law is applied once, here, on the way out, to whatever any of
+                them produced: the lines written in this file, the lines a model wrote, the
+                refusals, the prefixes. See deaddress().
+
+                It is a no-op for the boss, for a named enrolled voice, and for every typed
+                message ever sent - which is nearly all of them.
+                """
+                if guest and isinstance(payload, dict):
+                    for key in ("answer", "error"):
+                        if payload.get(key):
+                            payload[key] = deaddress(payload[key], load_config()[0])
+                    payload["speakerSeal"] = "GUEST"
+                return payload
+
+            gate_status, gated = self._hands_gate(question, session, ear_open, data)
             if gate_status is not None:
-                return self._send_json(gate_status, gated)
+                return self._send_json(gate_status, voiced(gated))
             prefix = str(gated or "")
             # PROTECTED CLASSES 2 AND 3, above every retrieval in this server: whether the
             # ear is open, who he is, who I am, what I can do. Answered from live state and
@@ -6113,25 +6962,28 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 if prefix:
                     said["answer"] = prefix + " " + said["answer"]
                     said["handsLapsed"] = True
-                return self._send_json(200, said)
+                return self._send_json(200, voiced(said))
             # Backstop. The viewer routes "remember that ..." to /remember itself,
             # but a stale tab must not be able to answer a capture instead of
             # performing it - the server is the real classifier either way.
             if CAPTURE_RE.match(question):
-                return self._send_json(*self._capture(question))
+                status, payload = self._capture(question)
+                return self._send_json(status, voiced(payload))
             # Same backstop, same reason: changing brains is not asking a question,
             # and a stale tab must not be able to answer one instead of doing it.
             if is_swap_request(question):
-                return self._send_json(*swap_brain(question))
+                status, payload = swap_brain(question)
+                return self._send_json(status, voiced(payload))
             # And once more for the timer. "Thirty minutes on this" is an
             # instruction, not a question about the notes, and a tab that has not
             # been reloaded since the feature landed must not be able to have it
             # answered conversationally instead of started.
             if focus.is_focus_request(question):
-                return self._send_json(*focus.handle({"say": question}))
+                status, payload = focus.handle({"say": question})
+                return self._send_json(status, voiced(payload))
             spent_before = lookups_so_far()
             try:
-                status, payload = answer_question(question, session)
+                status, payload = answer_question(question, session, guest=guest)
             except Exception as exc:                           # noqa: BLE001
                 status, payload = 500, {
                     "error": "The brain hit an unexpected error: %s" % exc,
@@ -6162,7 +7014,7 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 if payload.get(field):
                     payload[field] = prefix + " " + str(payload[field])
                     payload["handsLapsed"] = True
-            return self._send_json(status, payload)
+            return self._send_json(status, voiced(payload))
 
         if route == "/remember":
             data = self._read_json()
@@ -6464,6 +7316,15 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             door = str(data.get("door") or "button")[:16].lower()
             if door not in ("button", "voice", "curl"):
                 door = "button"
+            # THE DOORMAN, AT THE DOOR THAT ACTUALLY RUNS THINGS. The page recognises "yes"
+            # itself while a card is up and posts here - it does not send that word to /chat -
+            # so the law has to be here too or the whole of it is one code path from being
+            # bypassed by the very door it was written for. See doorman_refusal().
+            refusal, _seal = doorman_refusal(data, str(data.get("session") or "default")[:120],
+                                             "yes")
+            if refusal is not None:
+                refusal["pending"] = hands.pending_public()
+                return self._send_json(403, refusal)
             try:
                 status, payload = hands.execute(
                     door=door, proposal_id=str(data.get("id") or "")[:40] or None)
@@ -6495,6 +7356,14 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                         data.get("tool"),
                         tool_facts(data.get("tool"), data.get("params")), door=door)
                 elif cmd == "cancel":
+                    # AND THE SAME AT THE NO. A guest's no cancels a proposal the boss made
+                    # and is waiting on, which is a decision about his business, not an
+                    # opinion about it. See doorman_refusal().
+                    refusal, _seal = doorman_refusal(
+                        data, str(data.get("session") or "default")[:120], "no")
+                    if refusal is not None:
+                        refusal["pending"] = hands.pending_public()
+                        return self._send_json(403, refusal)
                     status, payload = hands.cancel(door=door, proposal_id=ident)
                     # A no at the button door, told to the same organ the spoken no is
                     # told to. This is where "the card says plainly that tab-lock is off

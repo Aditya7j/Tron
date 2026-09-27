@@ -42,7 +42,7 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, copyFileSync, readdirSync,
-         rmSync } from 'node:fs';
+         rmSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -256,6 +256,9 @@ function gazeClose() {
 }
 
 const t0 = Date.now();
+/* WALL CLOCK, not the monotonic one the log prefixes use: it is compared against a FILE's
+   mtime, and a file's mtime is wall clock. */
+const runStarted = Date.now();
 const failures = [];
 const notes = [];
 const episode = [];          // every say line, in order, for the lookbook
@@ -561,6 +564,88 @@ function backupProfileSession() {
   }
   backedUp = true;
   log('copied ' + n + ' session file(s) aside; they go back in teardown');
+  unwedgeProfile();
+}
+
+/* THE CRASH MARK, CLEARED - and it is this harness's own litter it is clearing.
+   Chrome writes profile.exit_type = "Crashed" the moment it opens a profile and flips it to
+   "Normal" on a clean shutdown. Read "Crashed" at startup and it does not restore the last
+   session, it offers the RESTORE BUBBLE instead - and while it is in that state it commits no
+   Session_<ts> file at all, so the next clean close has nothing to write and the mark never
+   clears itself. That is a wedge that holds: once in it, a profile stays in it.
+
+   AND THE THING THAT PUTS THIS PROFILE IN IT IS TEARDOWN, below, which force-kills whatever is
+   left on the profile so the next run starts from nothing. A force kill is the right teardown -
+   a run that leaves a browser behind poisons the next harness, not just the next lock run - but
+   it is also, precisely, a crash. So every red run of section 3 was being caused by the previous
+   run of this file, which is why four re-runs in a row failed identically instead of flaking.
+
+   MEASURED, on the profile in exactly that state: exit_type "Crashed" -> the polite close was
+   clean by the launcher's own reckoning ("the profile is free and its session was written"),
+   no Session_ file appeared in either Sessions/ or Sessions_Encrypted/, and the relaunch came
+   back with the launcher's --new-window tab and nothing else. The same cycle with this one field
+   set to "Normal" first wrote Session_13434987390668745 within the cycle and the relaunch handed
+   back BOTH tabs - the viewer and https://example.com/. One field, both outcomes.
+
+   WHY THIS IS NOT THE HARNESS ARRANGING ITS OWN PASS. The boss's Chrome exits cleanly when he
+   closes it; a crash mark on this profile is never his state, it is residue from a harness that
+   shoots browsers. Section 1a exists to borrow the profile and put it back, and putting it back
+   means putting it back in the condition the feature is actually used in. What is NOT done here
+   is the tempting bigger version - teaching launch-chrome.ps1 to clear the mark - because for a
+   browser that really did crash, the mark is true and the bubble is Chrome's own answer; a
+   launcher that quietly rewrote it would hide a real crash from the person it happened to.
+
+   SO THE GAP STAYS OPEN AND STAYS NAMED: ask for the port after a genuine Chrome crash and the
+   relaunch restores nothing, because there is nothing committed to restore. That is Chrome's
+   behaviour for everybody and it is not this hand's to fake.
+
+   FAILURE MODE IF THIS WERE SILENT: section 3 would go green with no record of why, and the next
+   reader would find the file's own comment above - which diagnosed this same symptom once, blamed
+   a half-restored backup, and prescribed throwing the profile away - still standing as the
+   explanation. So it prints what it found. */
+/* The newest Session_<ts> on the profile, as a wall-clock millisecond, or 0 for none. Both
+   folders, because Chrome/153 writes the session twice and either one appearing is proof it
+   committed. The FILE's mtime is read rather than the timestamp in its name: the name is Chrome's
+   own epoch, which is not Unix's, and one unit conversion is one more thing to get wrong in an
+   assertion whose whole job is to be believed. */
+function newestSessionAt() {
+  let newest = 0;
+  for (const dir of [join('Default', 'Sessions'), join('Default', 'Sessions_Encrypted')]) {
+    const d = join(PROFILE, dir);
+    if (!existsSync(d)) continue;
+    for (const f of readdirSync(d)) {
+      if (!/^Session_\d+$/.test(f)) continue;
+      try {
+        const t = statSync(join(d, f)).mtimeMs;
+        if (t > newest) newest = t;
+      } catch { /* locked, and a locked file is not evidence */ }
+    }
+  }
+  return newest;
+}
+
+function unwedgeProfile() {
+  const prefs = join(PROFILE, 'Default', 'Preferences');
+  if (!existsSync(prefs)) { note('no Preferences on the profile yet - nothing to unwedge'); return; }
+  let d;
+  try { d = JSON.parse(readFileSync(prefs, 'utf8')); }
+  catch (e) { note('the profile Preferences would not parse (' + e.message + '); left alone'); return; }
+  const was = (d.profile && d.profile.exit_type) || '(unset)';
+  if (was === 'Normal') { log('the profile\'s last exit reads Normal already - not wedged'); return; }
+  d.profile = d.profile || {};
+  d.profile.exit_type = 'Normal';
+  d.profile.exited_cleanly = true;
+  /* Written compactly and with no newline translation, because this is a 15 KB file Chrome owns
+     and the smallest possible change to it is the one field. The browser on this profile is
+     closed by the polite close above, so nothing is holding it open. */
+  try {
+    writeFileSync(prefs, JSON.stringify(d), { encoding: 'utf8' });
+    log('the profile\'s last exit read "' + was + '" - a crash mark this harness\'s own ' +
+        'teardown leaves behind - so it is set to Normal before the chain begins; without ' +
+        'this Chrome commits no session and --restore-last-session has nothing to hand back');
+  } catch (e) {
+    note('could not clear the crash mark (' + e.message + '); section 3 may find no tabs to restore');
+  }
 }
 
 let chromeExe = null;
@@ -789,11 +874,30 @@ async function consent() {
   /* AND NOW HE GOES TO HIS WORK, which is all that is left of the gesture. One press
      was spent, before the relaunch; presses is asserted below so that is a fact in the
      transcript rather than a claim in a comment. */
+  /* THE SESSION FILE, ASKED FOR BY NAME, because "no tabs came back" has two causes and they
+     want different repairs. If a Session_<ts> newer than this run exists, Chrome wrote a session
+     and the restore is what dropped it; if none exists, the close never committed one and the
+     profile is wedged - see unwedgeProfile(). Asserting only the tab count reports the symptom
+     both times and tells the next reader nothing about which. */
+  const freshSession = newestSessionAt();
+  ok(freshSession > runStarted,
+     'and the polite close committed a session for it to restore: the newest Session_ file on ' +
+     'the profile is ' + (freshSession ? new Date(freshSession).toISOString() : 'MISSING') +
+     ', written after this run began',
+     'FAILURE MODE: a profile carrying a crash mark commits no session through a clean ' +
+     'WM_CLOSE, so there is nothing to hand back and the close is not to blame.');
   const restored = (await findWork()).work;
   ok(restored.length === 1, 'the relaunch restored his work tab: ' +
      restored.map((t) => t.url).join(' '),
      'FAILURE MODE: a hand that "relaunches Chrome" by killing it. --restore-last-session ' +
      'only works on a browser that was closed, not shot.');
+  /* NAMED, rather than left to throw. Without this the chain dies on "Cannot read properties of
+     undefined (reading 'id')" and the run stops at 33 checks of 77 - two reds and forty-four
+     assertions that never got asked, which reads like a much smaller failure than it is. */
+  if (!restored.length) {
+    throw new Error('the relaunch restored no tab on ' + HOST + ', so there is no tab to lock ' +
+                    'and the rest of the chain has nothing to act on');
+  }
   const A = restored[0];
   await cdp('/json/activate/' + A.id);
   /* AND HE LOOKS AT IT, which /json/activate cannot do for him.

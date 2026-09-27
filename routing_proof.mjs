@@ -29,7 +29,13 @@
      SPOKEN_ONLY=1 node routing_proof.mjs the voice column alone
 
    The spoken column needs a real room: speakers, a microphone, and a headed Chrome. See
-   tools/mouth.mjs, whose header records the eight findings that recipe is made of.        */
+   tools/mouth.mjs, whose header records the eight findings that recipe is made of.
+
+   AND IT HAS THREE OUTCOMES, NOT TWO, for reasons measured over three consecutive runs - see
+   THE THIRD OUTCOME beside the scoreboard. A sentence the room mangled five times running is
+   reported UNPROVEN rather than failed, because no routing decision was made to judge; the
+   unproven are counted, named in the verdict line, and capped at two of thirteen, so a page
+   that hears nothing still fails and fails in one line instead of thirteen.                */
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, statSync, openSync, readSync, closeSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -49,14 +55,55 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /* ---- the scoreboard ---- */
 let pass = 0, fail = 0;
 const failures = [];
+/* ---- AND A THIRD OUTCOME, WHICH THE SPOKEN COLUMN ALONE NEEDS -----------------------------
+   An assertion should fail when the thing under test is wrong. The thing under test in this
+   file is the FUNNEL, and a sentence the room mangled five times running has told us nothing
+   about it either way: the boss's words never arrived, so there was no routing decision to be
+   right or wrong about. Counting that as a routing failure blames the wrong component - which
+   is a rule this file already keeps one paragraph down, where a phrase the room invents between
+   two fixtures is explicitly not the funnel's to answer for.
+   MEASURED, BECAUSE THE BUDGET BELOW HAD TO COME FROM SOMEWHERE. Three consecutive runs of the
+   full spoken column failed a DIFFERENT sentence each time and never the same one twice: first
+   "switch your voice to joe" and "is my calendar connected", then "no no cancel that", then
+   "what is the web gate". Each had five honest attempts and each was thrown away for the right
+   reason - "Is my phone", "Sorry pap", "Hey can you take a video for me", and three attempts
+   that came back empty altogether. A verdict that flips on which sentence the room fumbled is
+   not a reading of the funnel.
+   WHAT THIS DOES NOT LET THROUGH, and this is the whole design of it. Unproven is not a pass:
+   it is counted, printed on its own line, named in the verdict, and BUDGETED. A page whose ear
+   is broken, whose recogniser never starts, or whose microphone is muted puts every sentence in
+   this bucket and fails on the budget - which is a better failure than today's, because it
+   fails once with a count instead of thirteen times with thirteen explanations. A routing
+   regression is untouched: the words arrive, the funnel answers, and the assertion runs. */
+let unproven = 0;
+const unprovens = [];
+function cannotSay(claim, debug) {
+  unproven++; unprovens.push(scrub(claim));
+  say('  n/a  UNPROVEN ' + scrub(claim));
+  if (debug !== undefined) say('         ' + scrub(String(debug)).slice(0, 700));
+}
 const say = (s) => console.log(s);
 const step = (s) => say('\n  ·· ' + s);
 const note = (s) => say('  note ' + s);
+/* ---- THE SCRUB, AND IT IS A STANDING LAW RATHER THAN A TIDINESS -------------------------
+   No account address may appear in a log, a plate or the lookbook except as a digest. The
+   connection answers below quote the Command Panel's row verbatim, and when the grant is live
+   that row reads "GOOGLE: CONNECTED · someone@gmail.com" - so the one honest sentence in this
+   fixture is also the one that would put the boss's address into a file that gets pasted into
+   a section of a book. Every printed answer goes through here.
+
+   WHAT IT DOES NOT DO: it does not touch the assertion. okAnswer matches on "GOOGLE: " and
+   the state word comes off the payload, so a scrubbed print cannot make a red row look green
+   - the scrub is downstream of every judgement in this file. */
+function scrub(s) {
+  return String(s === undefined || s === null ? '' : s)
+    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '<address withheld>');
+}
 function ok(cond, claim, debug) {
-  if (cond) { pass++; say('  ok   ' + claim); return true; }
-  fail++; failures.push(claim);
-  say('  FAIL ' + claim);
-  if (debug !== undefined) say('         ' + String(debug).slice(0, 700));
+  if (cond) { pass++; say('  ok   ' + scrub(claim)); return true; }
+  fail++; failures.push(scrub(claim));
+  say('  FAIL ' + scrub(claim));
+  if (debug !== undefined) say('         ' + scrub(String(debug)).slice(0, 700));
   return false;
 }
 
@@ -204,6 +251,54 @@ const MATRIX = [
          'so a hand added tomorrow is named tomorrow. Asserted against the registry below ' +
          'rather than against a remembered sentence.'
   },
+  /* ---- CLASS 3, CONTINUED: THE CONNECTION ------------------------------------------
+     THE QUEUED NIT, AND IT WAS A REAL ONE. "How do I connect google" scores nothing against
+     a collection of coffee notes, so it fell to the bottom of the funnel, where "the notes
+     are thin" is the web gate's own cue - and the boss's question about the laptop in front
+     of him bought a search engine's opinion on connecting Google Calendar to Outlook. Three
+     rows, because the three shapes fail differently: the noun said outright, the noun
+     pointed at, and the question that presumes the wrong answer.
+
+     WHAT `answerHas` ASSERTS HERE is the part that keeps two voices in one house agreed. The
+     Command Panel has a row whose LINE is the state, and the spoken answer quotes that line
+     verbatim rather than paraphrasing it - so this fixture matches on "GOOGLE: ", which no
+     paraphrase would ever contain, and on the words "Command Panel". If server.py's ladder
+     and the panel's rowRead() ever drift apart, one of them stops containing the other's
+     string and this row is where it shows.                                               */
+  {
+    say: 'how do i connect google', setup: 'none',
+    want: { status: 200, kind: 'chat', route: 'identity', lookups: 0 },
+    answerHas: 'GOOGLE: ', alsoHas: ['Command Panel'], wantsGoogleState: true,
+    why: 'CLASS 3, THE CONNECTION, AND IT NAMES THE SWITCH. Read from the live /google ' +
+         'state at zero cost. The failure mode this replaces is not a wrong answer but a ' +
+         'wrong ROAD: the sentence used to reach the web gate, and a search engine cannot ' +
+         'see this machine’s token file.'
+  },
+  {
+    say: 'is my calendar connected', setup: 'none',
+    want: { status: 200, kind: 'chat', route: 'identity', lookups: 0 },
+    answerHas: 'GOOGLE: ', alsoHas: ['Command Panel'], wantsGoogleState: true,
+    why: 'THE SAME CLASS IN THE WORDS HE USES FOR IT. "Calendar" and "mail" are the organs ' +
+         'he thinks in; "Google" is the grant underneath. Both must arrive at the same ' +
+         'reading, or the answer depends on which word he happened to reach for.'
+  },
+  {
+    say: 'why is it not connected', setup: 'none', label: 'the noun pointed at, nothing pending',
+    want: { status: 200, kind: 'chat', route: 'identity', lookups: 0 },
+    answerHas: 'GOOGLE: ', alsoHas: ['Command Panel'], wantsGoogleState: true,
+    why: 'THE DEICTIC RUNG, AND IT IS DELIBERATELY NARROWER THAN THE OTHER TWO: "it" is ' +
+         'also how a standing offer is referred to, and this funnel is consulted before ' +
+         'about_the_proposal(). So it answers here, with nothing pending - and the row ' +
+         'below proves it stands down when there IS something on the card.'
+  },
+  {
+    say: 'why is it not connected', setup: 'pending', label: 'with an offer standing',
+    want: { status: 200 }, notConnection: true, noRetrieval: true,
+    why: 'AND THE SAME SENTENCE IS NOT THE CONNECTION WHEN SOMETHING IS ON THE CARD. He is ' +
+         'looking at a proposal and asking about IT. The failure mode if this rung did not ' +
+         'stand down: a question about the invitation in front of him answered with a ' +
+         'lecture about OAuth, and the offer neither executed nor released.'
+  },
   {
     say: 'tell me about the invoice importer', setup: 'none',
     want: { status: 200, minLookups: 1 },
@@ -276,17 +371,36 @@ async function typedPass() {
        a protected class carries `protected` with the class in it, so a real question that
        started coming back protected would be caught here rather than in a month. */
     const okNotProt = !row.notProtected || !got.protected;
+    /* THE CONNECTION'S OWN THREE CLAIMS.
+       `alsoHas`  - every string that must be in the sentence, not just the first one.
+                    answerHas is one substring, and one substring cannot express "it quotes
+                    the panel's reading AND names the row".
+       `wantsGoogleState` - the payload carries the state word, so a harness knows WHICH of
+                    the six readings it got without parsing English back out of the prose.
+                    A sentence is not evidence of a ladder; the word is.
+       `notConnection` - the negative claim, and the only one that can catch the deictic rung
+                    growing. Asserted as the absence of the state word rather than as the
+                    absence of a route, because a proposal remark is ALSO answered at zero
+                    cost from state, so route and lookups cannot tell the two apart. */
+    const okAlso = !row.alsoHas || row.alsoHas.every(
+      (s) => String(got.answer || '').indexOf(s) >= 0);
+    const okGState = !row.wantsGoogleState || (typeof got.googleState === 'string' &&
+      ['connected', 'absent', 'no-client', 'waiting', 'refused', 'reconnect', 'unknown']
+        .indexOf(got.googleState) >= 0);
+    const okNotConn = !row.notConnection ||
+      (!got.googleState && String(got.answer || '').indexOf('GOOGLE: ') < 0);
     ok(okStatus && okKind && okRoute && okLookups && okMin && okOk && okAnswer &&
-       okPending && okNotProt,
+       okPending && okNotProt && okAlso && okGState && okNotConn,
        'TYPED ' + label + ' -> ' + r.status + ' kind=' + got.kind +
        ' route=' + (got.route || '-') + ' lookups=' + got.lookups +
+       (got.googleState ? ' google=' + got.googleState : '') +
        (got.protected ? ' protected=' + got.protected : '') +
        (('want_pending' in row) ? ' pending=' + (got.pending ? got.pending.tool : 'none') : ''),
        JSON.stringify({ status: r.status, kind: got.kind, route: got.route,
                         lookups: got.lookups, protected: got.protected,
                         ok: got.ok, pending: got.pending && got.pending.tool,
                         answer: String(got.answer || got.error || '').slice(0, 160) }));
-    say('       he was told: "' + String(got.answer || got.error || '').slice(0, 150) + '"');
+    say('       he was told: "' + scrub(got.answer || got.error).slice(0, 150) + '"');
     if (trace) {
       const lines = trace.split(/\r?\n/).filter((l) => /route:|tool:|web lookup|notes/.test(l));
       if (lines.length) say('       the trace: ' + lines.map((l) => l.trim()).join(' ¦ ').slice(0, 300));
@@ -341,10 +455,151 @@ async function capabilitiesAgree() {
      'and it costs nothing to say it: a machine that has to search to find out what it ' +
      'can do does not know what it can do',
      JSON.stringify(r.body && r.body.lookups));
-  note('the manifest he speaks: "' + String((r.body || {}).answer || '').slice(0, 300) + '"');
+  note('the manifest he speaks: "' + scrub((r.body || {}).answer).slice(0, 300) + '"');
   note('the notes behind it: ' + JSON.stringify(health.notes) + ' · vectors ' +
        JSON.stringify(health.vectors));
   return r.body;
+}
+
+/* ================================ CITATION HONESTY ================================
+   A CHIP IS A CLAIM ABOUT THE SENTENCE ABOVE IT. "Drawn from" over three planets says: this
+   answer came out of these notes. That is a claim only the ANSWER can support, and this
+   server used to make it out of the RETRIEVAL - which runs before the answer exists. So a
+   brain that could not be reached came back as an error with three planets lit under "Drawn
+   from", and a refusal that correctly said the notes do not cover it came back cited on the
+   notes it was refusing about, with the camera flying to one of them.
+
+   WHY THIS IS MEASURED IN THE DOM AND NOT AT THE WIRE. `nodes: []` at the wire is the input
+   to renderAnswer(); the chip row is the output, and between them sit byId.get(), safeUrl(),
+   docCite() and a display toggle. The claim the mandate makes is about what the employer can
+   SEE, so the count is taken off #a-chips.children and the label off #a-src - which is also
+   the only way to notice the row going invisible for the wrong reason.
+
+   AND THE CONTROL IS THE POINT OF THE SECTION. "Chip count 0" is satisfied completely by a
+   chip renderer that has stopped working, and that is section 23's lesson twice over: an
+   assertion can be green and still be blind. So the last fixture is a real question about the
+   real notes, which MUST light at least one chip under "Drawn from" - and it runs through the
+   same page, the same ask(), the same renderer as the five that must light none.          */
+const CHIP_PORT = 9245;
+const CHIP_FIXTURES = [
+  { say: 'who are you', want: 0,
+    why: 'AN IDENTITY LINE CITES NOTHING. It comes out of the persona block, which is not in ' +
+         'the collection and has no planet.' },
+  { say: 'galaxy what can you do', want: 0,
+    why: 'NOR DOES A CAPABILITY LINE. It is read off the registry manifest; a chip under it ' +
+         'would point at a note that has never heard of the email hand.' },
+  { say: 'is my calendar connected', want: 0,
+    why: 'NOR THE CONNECTION. Read from the live /google state - see the four rows above - ' +
+         'and there is no note in the galaxy about this machine’s own token file.' },
+  { say: 'ok got it', want: 0,
+    why: 'AN ACKNOWLEDGEMENT IS A REPLY TO THE BUTLER, NOT A QUESTION PUT TO HIM. The ' +
+         'backchannel door spends nothing and must show nothing: chips under "right you are, ' +
+         'sir" would be provenance for a courtesy.' },
+  { say: 'good morning galaxy', want: 0,
+    why: 'AND A GREETING LEAST OF ALL. The vocative peel and the salutation veto already ' +
+         'stop the lookup; this asserts the CARD agrees with them.' },
+  { say: 'what do my notes say about coffee churn', want: 'some', label: 'THE CONTROL',
+    why: 'AND NOW THE OTHER DIRECTION, which is the only thing that makes the five above ' +
+         'mean anything. A real question about his real notes, answered from them, MUST ' +
+         'light a chip row labelled "Drawn from". Without this row a broken chip renderer ' +
+         'would pass this whole section 5/5.' }
+];
+
+async function chipHonesty() {
+  say('\n  ---- CITATION HONESTY: what the card claims about where a sentence came from ----');
+  const exe = CHROMES.find((p) => existsSync(p));
+  if (!exe) { ok(false, 'the chip column cannot run: no Chrome on this machine'); return []; }
+  const profile = mkdtempSync(join(tmpdir(), 'routing-chips-'));
+  /* HEADLESS AND MUTED, and it may be: nothing in this section needs a room. The spoken
+     column below is the headed one, and the two never overlap - this Chrome is killed before
+     that one is spawned, which is the background-shell law kept rather than tested. */
+  const chrome = spawn(exe, ['--remote-debugging-port=' + CHIP_PORT,
+    '--user-data-dir=' + profile, '--no-first-run', '--no-default-browser-check',
+    '--headless=new', '--mute-audio', '--disable-features=CalculateNativeWinOcclusion',
+    '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding',
+    '--window-size=1400,940', '--new-window', 'about:blank'],
+    { detached: true, stdio: 'ignore' });
+  const rows = [];
+  try {
+    let target = null;
+    for (let i = 0; i < 100 && !target; i++) {
+      try {
+        target = (await (await fetch('http://127.0.0.1:' + CHIP_PORT + '/json/list')).json())
+          .find((t) => t.type === 'page');
+      } catch (e) { /* not up yet */ }
+      if (!target) await sleep(300);
+    }
+    if (!target) { ok(false, 'the chip column: Chrome never came up on port ' + CHIP_PORT); return rows; }
+    const page = await new Page(target.webSocketDebuggerUrl).open();
+    await page.send('Runtime.enable');
+    await page.send('Page.enable');
+    await page.send('Page.navigate', { url: GALAXY + '/?mute=1' });
+    for (let i = 0; i < 200; i++) {
+      if (await page.evaluate('!!(window.__galaxy && __galaxy.ask && __galaxy.nodes)')
+            .catch(() => false)) break;
+      await sleep(250);
+    }
+    /* READ THROUGH THE PAGE'S OWN ask(), not through renderAnswer. __galaxy.say would let
+       this fixture hand the renderer whatever it liked, which would prove that the renderer
+       obeys a harness and nothing about what the server sends. */
+    const READ = `(function () {
+      var box = document.getElementById('a-chips');
+      var src = document.getElementById('a-src');
+      var lbl = src && src.querySelector('.lbl');
+      var txt = document.getElementById('a-text');
+      var kids = box ? Array.prototype.slice.call(box.children) : [];
+      return {
+        chips: kids.length,
+        tags: kids.map(function (k) { return k.tagName; }).join(','),
+        rowShown: !!(src && src.style.display !== 'none' && src.offsetParent !== null),
+        label: lbl ? lbl.textContent.trim() : '',
+        answer: txt ? txt.textContent.slice(0, 160) : '',
+        busyClass: document.getElementById('answer').className
+      };
+    })()`;
+    for (const f of CHIP_FIXTURES) {
+      const label = '"' + f.say + '"' + (f.label ? ' · ' + f.label : '');
+      step('chips for ' + label);
+      say('       ' + f.why);
+      await page.evaluate('__galaxy.ask(' + JSON.stringify(f.say) + ')');
+      /* WAIT FOR THE ANSWER AND NOT FOR A CLOCK. The interim line reads "Thinking across N
+         notes…", so a fixed sleep would measure the placeholder on a slow turn - and the
+         placeholder carries no chips, which would make every row pass for the wrong reason. */
+      let read = null;
+      for (let i = 0; i < 240; i++) {
+        read = await page.json(READ);
+        if (read && read.answer && !/^Thinking across|^Looking at|^Having a look|^Writing that/
+              .test(read.answer)) break;
+        await sleep(500);
+      }
+      const got = (read && read.chips) || 0;
+      const good = f.want === 'some' ? got >= 1 : got === f.want;
+      ok(good,
+         'CHIPS ' + label + ' -> ' + got + ' chip' + (got === 1 ? '' : 's') +
+         ', row ' + (read && read.rowShown ? 'shown' : 'hidden') +
+         (read && read.label ? ' labelled "' + read.label + '"' : '') +
+         (f.want === 'some' ? ' (at least one required)' : ' (none allowed)'),
+         JSON.stringify(read));
+      if (f.want === 'some') {
+        ok(!!(read && read.rowShown && read.label === 'Drawn from'),
+           '       and THE LABEL IS THE CLAIM: a notes answer says "Drawn from", which is a ' +
+           'statement about his own collection',
+           JSON.stringify(read && { rowShown: read.rowShown, label: read.label }));
+      } else {
+        ok(!!(read && !read.rowShown),
+           '       and THE WHOLE ROW IS GONE, not merely empty: an empty "Drawn from" heading ' +
+           'still claims a provenance, it just fails to name it',
+           JSON.stringify(read && { rowShown: read.rowShown, label: read.label }));
+      }
+      say('       he was told: "' + scrub(read && read.answer).slice(0, 140) + '"');
+      rows.push({ say: f.say, label: f.label || '', chips: got,
+                  rowShown: !!(read && read.rowShown), lbl: (read && read.label) || '' });
+      await sleep(200);
+    }
+  } finally {
+    spawnSync('taskkill', ['/PID', String(chrome.pid), '/T', '/F']);
+  }
+  return rows;
 }
 
 /* ================================ THE SPOKEN COLUMN ================================
@@ -454,7 +709,16 @@ function norm(s) {
    inside a compound noun is a transcription accident of the same family as the hyphen in
    "gpt-6 astra", which config.json's pinned phrases have folded since the brain was built.
    It does NOT weaken the guard: a recogniser that hears a DIFFERENT sentence still has
-   different letters, and that is the thing this test exists to refuse. */
+   different letters, and that is the thing this test exists to refuse.
+   AND IT IS COMPARED BY EQUALITY, NOT BY CONTAINMENT, which is a correction of this paragraph
+   rather than an addition to it. Containment was the first test and it had a hole the argument
+   above does not cover: a recogniser that adds a word has all the same letters AND SOME MORE.
+   Measured - "no no cancel that" came back as "No no cancel that Why", the trailing "Why" being
+   the room's and nobody else's, and containment waved it through as his sentence. The funnel
+   then did what it should with a longer sentence and sent it to the web for two lookups, and the
+   fixture failed the confirmation class for answering a question the boss never asked. Equality
+   keeps every accident this comment was written for - a swallowed space and "okay" for "ok" both
+   fold to the same letters - and refuses the one it was not. */
 function tight(s) {
   return norm(s).replace(/ /g, '');
 }
@@ -482,8 +746,18 @@ async function chatRows(page, from) {
    Everything else is said: the peel, all four protected classes, a yes and a no in a real
    voice, a directive, a refusal with nothing pending, and the two real questions that must
    still reach the notes and the web. */
+/* AND THREE OF THE FOUR CONNECTION ROWS ARE LEFT TYPED, which is a discretion decision and
+   not an omission. "Is my calendar connected" is spoken, because it is the sentence he would
+   actually say and the only one of the four whose transcription is at any risk - the room has
+   to get both "calendar" and "connected" right through a speaker and a microphone. The other
+   three are variations on the REGEX, not on the room: "how do i connect google" differs from
+   it only in which alternative of CONNECTION_RE matches, and the two deictic rows are about
+   what is on the card, which the typed column controls exactly and the room does not. Speaking
+   them would buy four copies of one claim at half a minute of talking laptop each. */
 const SPOKEN = MATRIX.filter((r) => !(r.say === 'can you listen to me' && r.ear === false))
-  .filter((r) => r.say !== 'what is react');
+  .filter((r) => r.say !== 'what is react')
+  .filter((r) => r.say !== 'how do i connect google')
+  .filter((r) => r.say !== 'why is it not connected');
 
 async function spokenPass() {
   say('\n  ---- SPOKEN: the same sentences, out of the speakers -------------------');
@@ -549,9 +823,23 @@ async function spokenPass() {
        had "yes yes do it galaxy" come back as "A half of that on top of" - a genuine new
        request, which released the proposal exactly as PART B says it must. Saying it again
        into an empty gate would then test nothing. So each attempt re-establishes the state
-       the row is about, and the retry is honest instead of lucky. */
+       the row is about, and the retry is honest instead of lucky.
+       AND FIVE, NOT THREE, WHICH IS ARITHMETIC AND NOT PATIENCE. The budget was three and it
+       was measured too small: on one full run of this column the on-device recogniser carried
+       the boss's actual words on the first attempt for nine of thirteen sentences, needed a
+       third for two more, and never managed two of them at all - "is my calendar connected"
+       came back as "Is my phone", then "My calendar connected", then "Sorry pap". Call the
+       per-attempt hit rate 0.6, which is about what that run shows. Three attempts then miss a
+       given sentence 6.4% of the time and a thirteen-sentence column goes red better than half
+       the time it is run, which makes the column's verdict a coin toss rather than a reading.
+       Five attempts take that to 1% a sentence and about one run in eight - the honest ceiling
+       for a real room, and still short of a guarantee, which is why this comment exists.
+       WHAT THIS DOES NOT DO is widen what counts as heard. Every attempt is still judged
+       against the boss's own words and a mishearing is still thrown away rather than routed;
+       the budget buys more chances at the microphone and no latitude at all in the assertion. */
+    const SPOKEN_TRIES = 5;
     let got = null, chats = [], fresh = [], attempts = 0, t0 = 0, before = null, transcript = [];
-    for (let attempt = 1; attempt <= 3 && !got; attempt++) {
+    for (let attempt = 1; attempt <= SPOKEN_TRIES && !got; attempt++) {
       attempts = attempt;
       await clearSlot();
       if (row.setup === 'pending') {
@@ -569,12 +857,12 @@ async function spokenPass() {
          a posted question that carries the sentence, and a status back. */
       const r = await mouth.speakAndHear(row.say, async () => {
         const w = await chatRows(page, wire0);
-        const hit = w.filter((e) => e.status > 0 && tight(e.question).indexOf(wantTight) >= 0);
+        const hit = w.filter((e) => e.status > 0 && tight(e.question) === wantTight);
         return hit.length ? hit : null;
       }, { timeoutMs: 26000, tries: 1 });
       transcript = r.transcript;
       chats = await chatRows(page, wire0);
-      const hit = chats.filter((e) => e.status > 0 && tight(e.question).indexOf(wantTight) >= 0);
+      const hit = chats.filter((e) => e.status > 0 && tight(e.question) === wantTight);
       fresh = (await page.json('__galaxy.ear.thoughts')).filter((t) => t.at >= t0);
       if (hit.length) { got = hit[hit.length - 1]; break; }
       say('       attempt ' + attempt + ': the room made it "' +
@@ -602,9 +890,20 @@ async function spokenPass() {
        the room invents in the gap between two fixtures is the room's, not the funnel's, and
        failing the funnel for it would be a test blaming the wrong component; it is printed
        above either way. What must not happen is the same sentence asked twice. */
-    const mine = chats.filter((e) => tight(e.question).indexOf(wantTight) >= 0);
+    const mine = chats.filter((e) => tight(e.question) === wantTight);
     const okOnce = mine.length === 1;
-    ok(heard && okKind && okRoute && okLookups && okMin && okOnce,
+    if (!heard) {
+      /* NOT HEARD IN FIVE TRIES - see THE THIRD OUTCOME at the top. No routing decision was
+         made, so there is nothing here to pass or fail; it is counted and budgeted instead.
+         The flush assertion below is skipped with it, because it would be measuring the same
+         non-event from the other end and did indeed fail alongside this in two of the three
+         runs that led to this change - one room fumble, two reds, both about nothing. */
+      cannotSay('SPOKEN ' + label + ' -> the room never carried his words to the funnel in ' +
+        attempts + ' tries, so the funnel made no decision to judge. What it heard instead: ' +
+        JSON.stringify(transcript.length ? transcript : chats.map((e) => e.question)),
+        JSON.stringify({ transcript, attempts, wire: chats.map((e) => e.question) }));
+    } else {
+    ok(okKind && okRoute && okLookups && okMin && okOnce,
        'SPOKEN ' + label + ' -> the funnel was asked "' + (got.question || '') + '" · ' +
        mine.length + ' ask' + (mine.length === 1 ? '' : 's') + ' · kind=' + got.kind +
        ' route=' + (got.route || '-') + ' lookups=' + got.lookups,
@@ -625,6 +924,7 @@ async function spokenPass() {
        fresh.map((t) => t.why).join('" then "') + '" · ' + (after.sealed - before.sealed) +
        ' late word' + (after.sealed - before.sealed === 1 ? '' : 's') + ' sealed off)',
        JSON.stringify({ fresh, twice, dTurns }));
+    }
     rows.push({ say: row.say, label: row.label || '', posted: got.question || '',
                 transcript, attempts, wire: got, flushes: fresh,
                 spoke: mouth.saidSince(mark) });
@@ -636,6 +936,23 @@ async function spokenPass() {
   ok(shape.opened === 1,
      'AND ALL OF IT ON ONE CLICK: ' + shape.turns + ' spoken turns, ' + shape.arms +
      ' arms of the recogniser, ' + shape.opened + ' session', JSON.stringify(shape));
+  /* THE BUDGET, WHICH IS WHAT KEEPS "UNPROVEN" FROM BEING A PLACE TO HIDE. Three measured runs
+     of this column each lost one sentence of thirteen, so two is the room's bad day and three is
+     something else: a muted microphone, a recogniser that never starts, a page whose ear opens
+     and hears nothing. That is exactly the failure this column exists to catch, and it fails
+     here - once, with a count, instead of thirteen times over with thirteen explanations.
+     The floor underneath it is the other half of the same claim: the column has to have PROVED
+     something. A run that heard two sentences and shrugged at eleven must not read as green
+     because eleven of them were politely filed as unproven. */
+  const heardRows = rows.filter((r) => r.posted).length;
+  ok(unproven <= 2 && heardRows >= rows.length - 2,
+     'AND THE ROOM ACTUALLY DELIVERED: ' + heardRows + ' of ' + rows.length +
+     ' spoken sentences reached the funnel in his own words, ' + unproven +
+     ' went unproven - inside the budget of 2, which three runs of this column put at one lost ' +
+     'sentence each',
+     unproven + ' of ' + rows.length + ' sentences never reached the funnel. Past two this is ' +
+     'not a room having a bad minute: check that the microphone is not muted, that on-device ' +
+     'recognition is installed, and that this harness is the only thing holding the microphone');
   await clearSlot();
   spawnSync('taskkill', ['/PID', String(chrome.pid), '/T', '/F']);
   return rows;
@@ -659,6 +976,10 @@ ok(TRACE_LIVE, 'the server\u2019s trace is readable, which is where PART A asks 
 
 const typed = TYPED_ONLY || !SPOKEN_ONLY ? await typedPass() : [];
 if (!SPOKEN_ONLY) await capabilitiesAgree();
+/* THE CHIP COLUMN GOES BEFORE THE SPOKEN ONE and both are sequential, because only one
+   headed Chrome can hold its own clicks at a time and the chip pass kills its own headless
+   one before returning. TYPED_ONLY keeps it: it is a wire-and-DOM claim, not a room claim. */
+const chips = SPOKEN_ONLY ? [] : await chipHonesty();
 const spoken = TYPED_ONLY ? [] : await spokenPass();
 
 /* ---- the table the lookbook wants, printed here so it is copied rather than retyped ---- */
@@ -688,7 +1009,29 @@ for (const m of MATRIX) {
       ' | ' + spoke.slice(0, 60));
 }
 
-say('\n  VERIFY ' + pass + '/' + (pass + fail) + (fail ? ' FAIL' : ' PASS'));
+/* ---- and the chip table, in the same shape and for the same reason ---- */
+if (chips.length) {
+  say('\n  ---- THE CITATION-HONESTY FIXTURES -----------------------------------');
+  say('  ' + 'sentence'.padEnd(42) + ' | chips | row      | label');
+  say('  ' + '-'.repeat(42) + '-+-------+----------+-----------');
+  for (const c of chips) {
+    say('  ' + (c.say + (c.label ? ' (' + c.label + ')' : '')).slice(0, 42).padEnd(42) +
+        ' | ' + String(c.chips).padEnd(5) + ' | ' +
+        (c.rowShown ? 'shown' : 'hidden').padEnd(8) + ' | ' + (c.lbl || '-'));
+  }
+}
+
+/* THE VERDICT NAMES THE UNPROVEN OUT LOUD, in the one line a reader copies into a report. An
+   unproven sentence that only showed up two hundred lines further up would be a pass with a
+   secret, which is the opposite of what the third outcome is for. */
+say('\n  VERIFY ' + pass + '/' + (pass + fail) + (fail ? ' FAIL' : ' PASS') +
+    (unproven ? ' · ' + unproven + ' UNPROVEN (the room, not the funnel: ' +
+     unprovens.map((u) => (u.match(/"([^"]+)"/) || [, u])[1]).join(', ') + ')' : ''));
+if (unproven && !fail) {
+  say('\n  the unproven sentences are listed above with what the room made of them instead.');
+  say('  They are inside the budget this file declares, and the assertion that says so is in');
+  say('  the run; a re-run usually carries them and usually loses a different one.');
+}
 if (fail) {
   say('');
   for (const f of failures) say('    FAILED: ' + f);

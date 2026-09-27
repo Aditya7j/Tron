@@ -338,6 +338,79 @@ async function main() {
   note('calendar.json is no longer a backend; the ledger is the witness. ' +
        'add_calendar_event has run ' + runs('add_calendar_event') + ' times before this run');
 
+  /* THE DOORMAN, READ BEFORE ANY WORD IS GIVEN OUT LOUD.
+     With at least one hands-privileged voiceprint enrolled, a spoken yes at this gate is
+     accepted from that larynx and from no other - and THIS HARNESS HAS NO LARYNX. say() is
+     __galaxy.ask(), which is the ear's own door and is marked `via: voice` exactly as a
+     dictated sentence is, but no audio was ever measured, so the turn number the page carries
+     is 0 and the gate fails closed on it. That is the law working rather than a fault in it,
+     and the honest thing for a proof to do is assert the law rather than route around it.
+
+     SO THE TWO SPOKEN CONFIRMATIONS BELOW FORK, on the one switch the law itself uses:
+
+       store empty    the law stands down silently, the spoken yes runs the hand, and every
+                      assertion in this file is the one it made before the doorman existed.
+       store guarded  the spoken yes is REFUSED in the mandate's words, the ledger does not
+                      move, the card STAYS UP - a stranger's word must not take the employer's
+                      question off his screen - and the same proposal is then confirmed at the
+                      keyboard, which is his other door, where the hand runs.
+
+     WHAT THIS DOES NOT DO is soften anything. Both branches require the hand to have run
+     exactly once by the end of the round; the guarded branch requires three things the open
+     one cannot ask for (the refusal's wording, a still ledger while the wrong voice spoke, a
+     surviving card) and one it can (the run). The door changes, the consequence does not.
+
+     FAILURE MODE IF THIS FORK WERE WRITTEN THE LAZY WAY - skipping the spoken round when the
+     store is guarded - a machine with an enrolled boss would quietly stop proving that a
+     consent ever runs a hand at all, and the file would go green by asserting less. */
+  const guarded = await page.json('!!(__galaxy.speaker && __galaxy.speaker.hasHands)');
+  const enrolled = guarded ? (await page.json('__galaxy.speaker.names')) || [] : [];
+  /* THE NAME IS READ TO BE LOOKED FOR AND NOT PRINTED ANYWHERE ELSE. The refusal must not
+     carry it, and the only way to assert an absence is to know what would be present. */
+  const bossName = String(enrolled[0] || '').replace(/[^A-Za-z ]/g, '').trim();
+  const DOORMAN = /i take orders from one voice in this house/i;
+  note('the speaker store reads ' +
+       (guarded ? 'GUARDED (' + enrolled.length + ' enrolled' +
+                  ') - so this harness’s voice is a guest at the Hands gate and its ' +
+                  'spoken yes is expected to be REFUSED, then given again at the keyboard'
+                : 'EMPTY - the doorman stands down and a spoken yes runs the hand'));
+
+  /* ONE PLACE FOR THE WORD, because this file gives it twice and a fork written twice is a
+     fork that drifts. Returns the mark to read the hand's own line from: on the open branch
+     that is the mark taken before the word, on the guarded branch it is the mark taken before
+     the KEYBOARD's word, so the caller's waitSaid cannot accidentally be satisfied by
+     something the refused attempt said. */
+  const consent = async (what) => {
+    const spokenMark = await mark();
+    await say('yes, go ahead');
+    if (!guarded) return spokenMark;
+    const ledgerAtRefusal = runs(what);
+    const refused = await waitSaid(DOORMAN, 30000, spokenMark);
+    ok(!!refused, 'THE DOORMAN REFUSES THIS HARNESS’S SPOKEN YES, in the mandate’s ' +
+       'words - a voice with no enrolled print is a guest, and a guest’s yes is not the ' +
+       'employer’s consent to ' + what + ': ' + JSON.stringify(refused),
+       JSON.stringify(refused));
+    ok(!new RegExp(bossName || 'NEVERMATCHES', 'i').test(String(refused || '')),
+       'and the refusal names NO NAME - not the enrolled one, not the guest’s - because ' +
+       'a refusal is not the place to tell a stranger who may give this house orders',
+       JSON.stringify(refused));
+    ok(runs(what) === ledgerAtRefusal,
+       'and NOTHING RAN on the strength of it: the ledger stood still while the wrong voice ' +
+       'said the right word',
+       'runs ' + ledgerAtRefusal + ' -> ' + runs(what));
+    /* waitFor rather than a bare read, and the wait is the assertion: settleProposal hides the
+       card, speaks the refusal and THEN puts the pending proposal back, in that order, so a
+       read taken the instant the line is heard can be a few milliseconds early. A timeout here
+       still fails - it is the card never coming back that this is about. */
+    ok(await waitFor(page, '__galaxy.hands.shown === true', 8000),
+       'AND THE CARD SURVIVED THE STRANGER: the refusal carries the pending proposal back, ' +
+       'so a guest saying yes cannot take the employer’s own question off his screen - ' +
+       'which is the quiet denial of service a refusal that merely hid the card would be');
+    const keyMark = await mark();
+    await click('ask-yes');
+    return keyMark;
+  };
+
   /* ---- 1. TYPED, and a proposal that shows its work ----------------------- */
   const markOne = await mark();
   await type('remind me to call the client at four');
@@ -492,10 +565,10 @@ async function main() {
      'with the spoken details rendered for reading', JSON.stringify(third.rows));
   ok(await page.evaluate('__galaxy.hands.saidYes("yes, go ahead") === true'),
      'the page agrees with the server about what consent sounds like');
-  const markVoice = await mark();
-  await say('yes, go ahead');
+  const markVoice = await consent('add_calendar_event');
   const voiceEvidence = await waitSaid(connected ? receipt : refusal2, 60000, markVoice);
-  ok(!!voiceEvidence, 'confirming by voice runs it and speaks the script\u2019s line: ' +
+  ok(!!voiceEvidence, 'confirming by ' + (guarded ? 'keyboard, the word having been refused ' +
+     'out loud, runs it' : 'voice runs it') + ' and speaks the script\u2019s line: ' +
      JSON.stringify(voiceEvidence));
   if (connected) {
     ok(/water the plants/i.test(String(voiceEvidence)),
@@ -511,10 +584,15 @@ async function main() {
   }
   await sleep(600);
   ok(runs('add_calendar_event') === runsBeforeVoice + 1,
-     'and the ledger records exactly one more run, from the spoken door alone',
+     'and the ledger records exactly one more run, from ' +
+     (guarded ? 'the two doors together - the spoken one refused, the pressed one honoured - ' +
+                'so a guest speaking before the employer presses costs NO extra run'
+              : 'the spoken door alone'),
      'runs ' + runsBeforeVoice + ' -> ' + runs('add_calendar_event'));
   ok(await page.evaluate('__galaxy.hands.shown === false'),
-     'the pair is gone from the tab that asked, without a click ever reaching it');
+     'the pair is gone from the tab that asked' +
+     (guarded ? ', the employer’s own key having settled what the room’s voice could not'
+              : ', without a click ever reaching it'));
 
   /* ---- 5. A CHANGED SUBJECT IS A WITHDRAWAL ------------------------------ */
   const runsBeforeDrop = runs('add_calendar_event');
@@ -575,13 +653,13 @@ async function main() {
     ok(!!dialProposal, 'and the recast is proposed OUT LOUD before anything is written',
        JSON.stringify(dialProposal));
 
-    const markSaidYes = await mark();
-    await say('yes, go ahead');
+    const markSaidYes = await consent('set_voice');
     /* "Speaking as X now, sir." is the script's own stdout and nothing else says it. By
        the time these words are synthesised config.json already names the voice - /say
        re-reads it per chunk - so the sentence is read in the voice it announces. */
     const recast = await waitSaid(/speaking as .+ now, sir/i, 40000, markSaidYes);
-    ok(!!recast, 'confirming by voice runs the hand and speaks the script’s own line: ' +
+    ok(!!recast, 'confirming by ' + (guarded ? 'keyboard, after the doorman refused the room’s '
+       + 'voice, runs' : 'voice runs') + ' the hand and speaks the script’s own line: ' +
        JSON.stringify(recast));
     ok(new RegExp('speaking as ' + label + ' now', 'i').test(String(recast || '')),
        'and it names the voice it is being read in: ' + JSON.stringify(recast));

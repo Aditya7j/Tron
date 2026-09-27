@@ -1264,6 +1264,382 @@ async function main() {
   await page.evaluate('__galaxy.camera.look(0, 0)');
   await sleep(1500);
 
+  /* ---- 2b-3. THE ORRERY: THE WORLDS THEMSELVES TRAVEL --------------------
+     A SECTION THAT EXISTS BECAUSE THE SECTION ABOVE IS NOT ENOUGH. "The root did not move
+     and the worlds' micro-orbits did" was already proved, and it was proved of a wobble a
+     few per cent of a world's radius wide, riding on the planet's own Object3D INSIDE its
+     group - a shimmer that no link and no label ever had to follow because nothing outside
+     that group could see it. The orrery is the other thing: the world's own COORDINATES
+     travel, which means the relation dots and the hover annotation have to travel with them.
+
+     THE FOUR FAILURE MODES THIS SECTION IS BUILT AROUND, each of which passed something
+     during development:
+       (a) the coordinates travel and the spheres do not. Measured for real: 21.99 world
+           units of coordinate against 3.48 of mesh, because 3d-force-graph puts its whole
+           per-frame position update behind `engineRunning` and stops the moment the layout
+           settles. Every screen-space reading agreed the deck was fine, because every one of
+           them went through graph2ScreenCoords, which projects the number and not the world.
+       (b) too slow to see. A floor satisfied by anything above it is the strip's mistake from
+           section 23 all over again, so the floor here is the DECLARED px/minute and not
+           "greater than zero".
+       (c) too fast to sit with. A ceiling, in the same units, from the same measurement.
+       (d) a drift that adds up - worlds walking out of frame over an afternoon. Caught by the
+           offset being bounded: |offset| must never exceed the world's own amplitude.
+     And one more that is not about motion at all: worlds must not drift INTO each other. The
+     amplitude was chosen against a measured 49-unit closest approach, and this re-measures the
+     closest approach over the whole window rather than trusting the arithmetic. */
+  const orrD = await page.json('__galaxy.orrery.DECLARED');
+  const orrOn = await page.json('({on: __galaxy.orrery.on, why: __galaxy.orrery.why,' +
+    ' worlds: __galaxy.orrery.worlds, frames: __galaxy.orrery.frames})');
+  note('orrery: ' + orrOn.why + ' · ' + orrOn.worlds + ' worlds · ' + orrOn.frames +
+       ' frames · amp ' + orrD.AMP + ' x radius, floor ' + orrD.AMP_MIN + 'u · periods ' +
+       orrD.T_MIN + '-' + orrD.T_MAX +
+       's · declared ' + orrD.PX_MIN + '-' + orrD.PX_MAX + ' px/minute');
+  ok(orrOn.on === true && orrOn.why === 'travelling' && orrOn.frames > 100,
+     'THE ORRERY IS RUNNING: ' + orrOn.frames + ' frames of travel so far, and it says "' +
+     orrOn.why + '" rather than naming a throw',
+     JSON.stringify(orrOn));
+  ok(orrD.AMP > 0 && orrD.AMP_MIN > 0 && orrD.T_MIN >= 60 && orrD.T_MAX > orrD.T_MIN &&
+     orrD.PX_MIN > 0 && orrD.PX_MAX > orrD.PX_MIN,
+     'and its numbers are DECLARED in one place: amplitude ' + orrD.AMP +
+     ' x the world\'s own radius with a floor of ' + orrD.AMP_MIN + ' world units, period ' +
+     orrD.T_MIN + '-' + orrD.T_MAX + 's, screen speed ' + orrD.PX_MIN + '-' + orrD.PX_MAX +
+     ' px/minute at the default camera',
+     JSON.stringify(orrD));
+
+  /* TWENTY SECONDS, sampled every second, and a picture at each end sixty seconds apart.
+     A second is the right grain for this: it is long enough that a world at 10 px/minute
+     has moved a measurable fraction of a pixel and short enough that twenty of them
+     describe the path rather than the chord. */
+  const ORR_MS = 20000, ORR_STEP = 1000;
+  note('watching ' + orrOn.worlds + ' worlds travel for ' + (ORR_MS / 1000) + 's');
+  const orrShotA = await page.shot('_runs/after/orrery-wide-A.png');
+  const orrShotAt = Date.now();
+  const orrSamples = [];
+  for (let i = 0; i * ORR_STEP <= ORR_MS; i++) {
+    orrSamples.push({ at: await page.evaluate('performance.now()'),
+                      s: await page.json('__galaxy.orrery.sample()') });
+    if (i * ORR_STEP < ORR_MS) await sleep(ORR_STEP);
+  }
+  const oFirst = orrSamples[0].s, oLast = orrSamples[orrSamples.length - 1].s;
+  const orrSecs = (orrSamples[orrSamples.length - 1].at - orrSamples[0].at) / 1000;
+
+  /* (a) THE SPHERES ARE WHERE THE NUMBERS SAY THEY ARE, every sample, every world. Not
+     "the mesh moved" - that was true while the defect was live, because the planetarium's
+     own micro-drift moves it - but "the mesh is AT the coordinate". A mesh that has stopped
+     being copied drifts away from its coordinate and never comes back. */
+  let meshOff = 0, meshWorld = '';
+  for (const smp of orrSamples) for (const w of smp.s) {
+    if (w.mx == null) continue;
+    const d = Math.hypot(w.mx - w.x, w.my - w.y, w.mz - w.z);
+    if (d > meshOff) { meshOff = d; meshWorld = w.id; }
+  }
+  ok(meshOff <= 0.001,
+     'AND THE SPHERES GO WITH THE NUMBERS: across ' + orrSamples.length + ' samples of ' +
+     oFirst.length + ' worlds the largest gap between a world\'s coordinate and its rendered ' +
+     'mesh was ' + meshOff.toFixed(5) + ' units',
+     'world ' + meshWorld + ' sat ' + meshOff.toFixed(3) + ' units from its own coordinate. ' +
+     'This is the library\'s engineRunning gate: it stops copying coordinates into Object3D ' +
+     'positions when the layout settles, and the orrery must do it instead');
+
+  /* (b) and (c) THE ENVELOPE, as screen-space PATH LENGTH per minute - the distance each
+     world actually travelled across the glass, summed over the window. Net displacement is
+     not used and must not be: a world halfway round its ellipse returns towards its start,
+     so a net-displacement floor is failed hardest by the world that travelled furthest. */
+  const orrRows = [];
+  for (let k = 0; k < oFirst.length; k++) {
+    let pathPx = 0, offMax = 0;
+    for (let i = 0; i < orrSamples.length; i++) {
+      const w = orrSamples[i].s[k];
+      offMax = Math.max(offMax, Math.hypot(w.ox || 0, w.oy || 0, w.oz || 0));
+      if (i === 0) continue;
+      const p = orrSamples[i - 1].s[k];
+      pathPx += Math.hypot(w.sx - p.sx, w.sy - p.sy);
+    }
+    orrRows.push({ id: oFirst[k].id, period: oFirst[k].period, amp: oFirst[k].amp,
+                   r: oFirst[k].r, offMax: offMax, pxMin: pathPx * 60 / orrSecs });
+  }
+  /* THE FLOOR BINDS WHERE THE DECLARATION SAYS IT BINDS. AMP_MIN exists because an unlinked
+     note is the smallest world on the deck and was the one world under the px floor; the claim
+     in the page is that 8.00 units is under what a single relation already buys, so it can
+     only ever catch degree-0 worlds. That is an arithmetic claim about live radii and it is
+     checked here rather than asserted in a comment: every world the floor lifted must be a
+     world whose radius is the smallest radius on the deck. */
+  const floored = orrRows.filter((r) => r.amp > orrD.AMP * r.r + 1e-9);
+  const minR = Math.min(...orrRows.map((r) => r.r));
+  ok(floored.every((r) => Math.abs(r.r - minR) < 1e-6),
+     'THE AMPLITUDE FLOOR CATCHES ONLY THE QUIETEST WORLDS: ' + floored.length + ' of ' +
+     orrRows.length + ' had their excursion lifted to the declared ' + orrD.AMP_MIN +
+     ' units, and every one of them is a world of the smallest radius on the deck (' +
+     minR.toFixed(2) + ' units, which is an unlinked note) - so no world with a relation, and ' +
+     'therefore no world with a close neighbour, travels further than its own radius licenses',
+     'the floor reached a world that has neighbours, which spends the collision margin the ' +
+     'amplitude was argued against: ' +
+     JSON.stringify(floored.filter((r) => Math.abs(r.r - minR) >= 1e-6)
+                           .slice(0, 5).map((r) => [r.id, +r.r.toFixed(2), +r.amp.toFixed(2)])));
+  orrRows.sort((a, b) => a.pxMin - b.pxMin);
+  const slowest = orrRows[0], fastest = orrRows[orrRows.length - 1];
+  note('slowest world "' + slowest.id + '" (period ' + slowest.period.toFixed(0) + 's) ' +
+       slowest.pxMin.toFixed(1) + ' px/minute · fastest "' + fastest.id + '" (period ' +
+       fastest.period.toFixed(0) + 's) ' + fastest.pxMin.toFixed(1) + ' px/minute');
+  const tooSlow = orrRows.filter((r) => r.pxMin < orrD.PX_MIN);
+  ok(orrRows.length >= 10 && tooSlow.length === 0,
+     'EVERY WORLD TRAVELS FAR ENOUGH TO SEE: all ' + orrRows.length + ' cleared the declared ' +
+     'floor of ' + orrD.PX_MIN + ' px/minute, the slowest at ' + slowest.pxMin.toFixed(1),
+     tooSlow.length + ' world(s) under the floor - a world that does not move is furniture ' +
+     'again, and "greater than zero" would have passed it: ' +
+     JSON.stringify(tooSlow.slice(0, 5).map((r) => [r.id, +r.pxMin.toFixed(2)])));
+  const tooFast = orrRows.filter((r) => r.pxMin > orrD.PX_MAX);
+  ok(tooFast.length === 0,
+     'AND NONE OF THEM IS BUSY: all ' + orrRows.length + ' stayed under the declared ceiling ' +
+     'of ' + orrD.PX_MAX + ' px/minute, the fastest at ' + fastest.pxMin.toFixed(1) +
+     ' - which is ' + (fastest.pxMin / 60).toFixed(2) + ' px in a second, and a second is ' +
+     'the interval the brief says nothing may be visible over',
+     tooFast.length + ' world(s) over the ceiling: ' +
+     JSON.stringify(tooFast.slice(0, 5).map((r) => [r.id, +r.pxMin.toFixed(2)])));
+  /* (d) BOUNDED, NOT INTEGRATED - and bounded by the RIGHT number, which the first version of
+     this assertion got wrong and was right to fail on. It compared the offset's magnitude to
+     the amplitude A, as though the excursion were a sphere of radius A. It is not: the three
+     axes carry A x 1, A x 0.62 and A x 0.84, so the furthest a world can be from its base is
+     A x sqrt(1 + 0.62^2 + 0.84^2) = 1.4456 A. The measured worst was 1.369 A - inside the real
+     envelope and outside the one I had written down. The honest statement of "bounded" is
+     per-axis, which is both correct and strictly stronger than any bound on the magnitude:
+     each component must stay inside its own axis weight. */
+  const AXIS = orrD.AXIS;
+  const perAxis = [];
+  for (let k = 0; k < oFirst.length; k++) {
+    let wx = 0, wy = 0, wz = 0;
+    for (const smp of orrSamples) {
+      const w = smp.s[k];
+      wx = Math.max(wx, Math.abs(w.ox || 0)); wy = Math.max(wy, Math.abs(w.oy || 0));
+      wz = Math.max(wz, Math.abs(w.oz || 0));
+    }
+    const a = oFirst[k].amp;
+    perAxis.push({ id: oFirst[k].id,
+                   rx: wx / (a * AXIS[0]), ry: wy / (a * AXIS[1]), rz: wz / (a * AXIS[2]) });
+  }
+  const bust = perAxis.filter((r) => r.rx > 1.001 || r.ry > 1.001 || r.rz > 1.001);
+  const worstAxis = Math.max(...perAxis.map((r) => Math.max(r.rx, r.ry, r.rz)));
+  ok(bust.length === 0,
+     'and the travel is BOUNDED rather than accumulated: across ' + orrSamples.length +
+     ' samples no world\'s offset ever left its per-axis envelope of A x ' +
+     JSON.stringify(AXIS) + ' (worst ' + worstAxis.toFixed(4) + ' of the axis allowance)',
+     'an offset past its envelope means the drift is being integrated, which walks the ' +
+     'worlds out of frame over an afternoon and passes every short measurement: ' +
+     JSON.stringify(bust.slice(0, 5)));
+  /* AND THEY DO NOT DRIFT INTO EACH OTHER. Surface to surface, over every sample. */
+  let tight = Infinity, tightPair = '';
+  for (const smp of orrSamples) {
+    for (let i = 0; i < smp.s.length; i++) for (let j = i + 1; j < smp.s.length; j++) {
+      const a = smp.s[i], b = smp.s[j];
+      const gap = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) - a.r - b.r;
+      if (gap < tight) { tight = gap; tightPair = a.id + '/' + b.id; }
+    }
+  }
+  /* THE FLOOR IS THE ARITHMETIC AND NOT A ROUND NUMBER, and it is RECOMPUTED from live bases
+     rather than copied out of the page's comment - which is the whole point, because the pair
+     that comment named stopped being the closest pair when the layout last moved and nothing
+     would have said so. A world can be at most A x sqrt(1 + 0.62^2 + 0.84^2) = 1.4456 A from
+     its base, so a pair's gap can shrink by at most 1.4456 (A1 + A2) - once, not twice, because
+     each world's excursion is measured from its own base and the gap is measured between the
+     bases. Over all 465 pairs, the smallest (base gap - that closure) is what the amplitude
+     guarantees, and it must be positive: that is the assertion an amplitude raised past what
+     this layout can carry would fail, and "greater than zero units of measured clearance"
+     would not. The measured approach is then checked against the bound as well, which is what
+     catches the model being wrong rather than the amplitude - an offset that could exceed
+     1.4456 A would show up here as a real gap smaller than a guaranteed one. */
+  let guard = Infinity, guardPair = '';
+  {
+    const bases = orrSamples[0].s.map((w) => ({ id: w.id, r: w.r, amp: w.amp,
+      x: w.x - (w.ox || 0), y: w.y - (w.oy || 0), z: w.z - (w.oz || 0) }));
+    for (let i = 0; i < bases.length; i++) for (let j = i + 1; j < bases.length; j++) {
+      const a = bases[i], b = bases[j];
+      const left = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) - a.r - b.r
+                 - 1.4456 * (a.amp + b.amp);
+      if (left < guard) { guard = left; guardPair = a.id + '/' + b.id; }
+    }
+  }
+  ok(guard > 0 && tight >= guard,
+     'and NO TWO WORLDS TOUCH while they travel, by arithmetic and not by luck: over all ' +
+     'pairs the tightest guarantee is ' + guard.toFixed(1) + ' world units of clearance (' +
+     guardPair + ', base gap minus 1.4456 x both amplitudes), and the closest any pair actually ' +
+     'came over the window was ' + tight.toFixed(1) + ' (' + tightPair + ') - outside the bound, ' +
+     'as it must be',
+     'either the guaranteed clearance has gone negative, which means the amplitude is wrong for ' +
+     'this layout, or a real approach came inside the bound, which means the bound is wrong: ' +
+     JSON.stringify({ guard: guard, guardPair: guardPair, tight: tight, tightPair: tightPair }));
+
+  /* LINKS FOLLOW THEIR WORLDS. This deck draws no library lines - linkVisibility(false), the
+     relation is carried by the travelling dots - so "links follow" is a claim about the dots,
+     and it is checked the way it is stated: a dot's live position, read out of the position
+     buffer, must lie ON the segment between its two endpoints' live coordinates. The failure
+     mode is a frame of lag: if flowFrame read last frame's endpoints while the worlds moved
+     this frame, every dot would sit slightly off its own line, in the direction its endpoints
+     were travelling. Perpendicular distance is the measurement that sees that and the
+     parameter t is the one that does not. */
+  const glue = await page.json(`(function(){
+    var out = [];
+    /* The dot buffer is laid out PER_LINK dots per link in the order of the active link
+       list, which is the same array flowFrame walks - so dot i belongs to link
+       floor(i / PER_LINK) and no lookup is needed or trusted. */
+    var links = __galaxy.active;
+    var per = __galaxy.flow.perLink || 1;
+    for (var i = 0; i < 12 && i < __galaxy.flow.dots; i++) {
+      var p = __galaxy.flow.sampleAt(i);
+      if (!p) continue;
+      var l = links[Math.floor(i / per)];
+      if (!l) continue;
+      var a = l.source, b = l.target;
+      if (!a || !b || !isFinite(a.x) || !isFinite(b.x)) continue;
+      var vx = b.x - a.x, vy = b.y - a.y, vz = b.z - a.z;
+      var len = Math.hypot(vx, vy, vz) || 1;
+      var wx = p[0] - a.x, wy = p[1] - a.y, wz = p[2] - a.z;
+      var t = (wx * vx + wy * vy + wz * vz) / (len * len);
+      var px = a.x + vx * t, py = a.y + vy * t, pz = a.z + vz * t;
+      out.push({ i: i, t: +t.toFixed(4), off: +Math.hypot(p[0]-px, p[1]-py, p[2]-pz).toFixed(4),
+                 len: +len.toFixed(2) });
+    }
+    return out;
+  })()`);
+  const offWorst = glue.length ? Math.max(...glue.map((g) => g.off)) : Infinity;
+  const tBad = glue.filter((g) => g.t < -0.02 || g.t > 1.02);
+  note('twelve dots against their live endpoints: worst perpendicular offset ' +
+       offWorst.toFixed(3) + ' units, t in [' +
+       (glue.length ? Math.min(...glue.map(g => g.t)).toFixed(3) : '?') + ', ' +
+       (glue.length ? Math.max(...glue.map(g => g.t)).toFixed(3) : '?') + ']');
+  ok(glue.length >= 6 && offWorst < 0.6 && tBad.length === 0,
+     'THE RELATIONS FOLLOW THEIR WORLDS: all ' + glue.length + ' sampled dots sit ON the ' +
+     'segment between their two endpoints\' LIVE coordinates - worst perpendicular offset ' +
+     offWorst.toFixed(3) + ' units against links ' +
+     (glue.length ? Math.min(...glue.map(g => g.len)).toFixed(0) : '?') + '+ units long',
+     'a dot off its own line is a frame of lag between the orrery moving the worlds and ' +
+     'flowFrame placing the dots, which is why the orrery runs before flowTick and not after: ' +
+     JSON.stringify(glue.slice(0, 6)));
+
+  /* THE HOVER ANNOTATION STAYS GLUED while its world drifts under the pointer. Not "the
+     annotation is still on screen" - that is true of an annotation nailed to one pixel while
+     its world leaves. The annotation's anchor must move BY THE SAME VECTOR the world's
+     projection moved, every sample. hudPlace derives the anchor from the projection plus a
+     leader of min(apparent radius, 90) + GAP, so the two deltas agree to within the change
+     in apparent radius and a rounding - a couple of pixels, not zero.
+     A world near the right edge is skipped: at HUD.EDGE the annotation mirrors to the other
+     side, which moves the anchor by twice the leader on one frame for an honest reason. */
+  /* THE WORLD IS CHOSEN BY INDEX AND HOVERED BY ITS OWN ID, which is not fussiness. The
+     sampler stringifies ids so its output is comparable, and the first version of this
+     section hovered that string - __galaxy.hover("3") - against a deck whose ids are NUMBERS.
+     byId.get("3") finds nothing, so nothing was hovered, and the section then measured an
+     annotation that was off: twelve samples of a frozen anchor, a slip of 0.57px, and an
+     assertion that read as "the annotation barely moved" when the truth was "there was no
+     annotation". Hence the index, and hence `on` and `node` being asserted on every sample
+     rather than assumed from the call having been made. */
+  const hoverPick = await page.json(`(function(){
+    var s = __galaxy.orrery.sample();
+    var best = null;
+    for (var i = 0; i < s.length; i++) {
+      if (s[i].sx == null || s[i].sx < 380 || s[i].sx > window.innerWidth - 420) continue;
+      if (s[i].sy < 120 || s[i].sy > window.innerHeight - 260) continue;
+      if (!best || s[i].amp > best.amp) { best = s[i]; best.idx = i; }
+    }
+    return best;
+  })()`);
+  ok(!!hoverPick, 'a world in open glass to hover, clear of the right edge where the ' +
+     'annotation mirrors: "' + (hoverPick ? hoverPick.id : 'none') + '"');
+  if (hoverPick) {
+    const IDX = hoverPick.idx;
+    const hovered = await page.json('(function(){ var n = __galaxy.Graph.graphData().nodes[' +
+      IDX + ']; __galaxy.hover(n.id);' +
+      ' return { id: String(n.id), type: typeof n.id, on: __galaxy.annotation.on }; })()');
+    await sleep(400);
+    ok(hovered.on === true,
+       'and hovering it TOOK: the annotation is on the glass for world "' + hovered.id +
+       '", whose id is a ' + hovered.type,
+       'the hover did not take, so everything below would be measuring an annotation that is ' +
+       'not there: ' + JSON.stringify(hovered));
+    /* THIRTY SECONDS, AND THE LENGTH IS DERIVED RATHER THAN PICKED. The bar below is "the
+       world must have gone somewhere", and the only defensible size for it is the declared
+       floor scaled to this window. At twelve seconds - what this watched at first - the
+       declared 6 px/minute guarantees 1.2 px, so a bar of 2 px was quietly asserting 10
+       px/minute: a number nothing declared, which duly failed the run the orrery's real
+       pixel scale came to light in. Thirty seconds makes the declared floor worth 3 px and
+       the bar an honest fraction of it. It costs no wall-clock either: the plates below are
+       a fixed sixty seconds apart and this time comes out of the sleep that was owed. */
+    const glueRows = [];
+    const GLUE_N = 31;
+    for (let i = 0; i < GLUE_N; i++) {
+      glueRows.push(await page.json(`(function(){
+        var w = __galaxy.orrery.sample()[${IDX}];
+        return { sx: w ? w.sx : null, sy: w ? w.sy : null, now: performance.now(),
+                 at: __galaxy.annotation.at, side: __galaxy.annotation.side,
+                 on: __galaxy.annotation.on, node: String(__galaxy.annotation.node) };
+      })()`));
+      if (i < GLUE_N - 1) await sleep(1000);
+    }
+    const g0 = glueRows[0], gN = glueRows[glueRows.length - 1];
+    const sideHeld = glueRows.every((r) => r.side === g0.side);
+    const stillOn = glueRows.every((r) => r.on === true && r.node === hovered.id);
+    let slip = 0;
+    for (let i = 1; i < glueRows.length; i++) {
+      const a = glueRows[i - 1], b = glueRows[i];
+      slip = Math.max(slip, Math.hypot((b.at[0] - a.at[0]) - (b.sx - a.sx),
+                                       (b.at[1] - a.at[1]) - (b.sy - a.sy)));
+    }
+    const worldRan = Math.hypot(gN.sx - g0.sx, gN.sy - g0.sy);
+    const annRan = Math.hypot(gN.at[0] - g0.at[0], gN.at[1] - g0.at[1]);
+    const glueSecs = (gN.now - g0.now) / 1000;
+    note('hovered "' + hoverPick.id + '" for ' + glueSecs.toFixed(0) + 's: its projection ran ' +
+         worldRan.toFixed(1) + 'px, the annotation ran ' + annRan.toFixed(1) +
+         'px, worst per-second slip ' + slip.toFixed(2) + 'px, side "' + g0.side + '" held ' +
+         sideHeld);
+    ok(stillOn && sideHeld && slip <= 3.5,
+       'THE ANNOTATION STAYS GLUED TO A DRIFTING WORLD: over ' + glueSecs.toFixed(0) +
+       's its anchor tracked the world\'s projection to within ' + slip.toFixed(2) +
+       'px per second - it followed, it was not merely still on the glass',
+       'a slip this large means the annotation is anchored to something other than the live ' +
+       'coordinate, which is invisible in a screenshot and obvious to a reader: ' +
+       JSON.stringify(glueRows.slice(0, 4)));
+    /* THE BAR IS THE DECLARATION, SCALED TO THE WINDOW, with a third taken off - and the third
+       is the one part of this that is a judgement rather than a derivation, so here is what it
+       pays for. PX_MIN is a floor on PATH length averaged over twenty seconds; this measures
+       NET displacement over thirty. A world whose motion happens to be pointing along the view
+       axis for this particular half-minute projects shorter than its own average, and the two
+       are only equal for a world travelling in a straight line across the glass. Two thirds is
+       what covers that without the bar ceasing to mean anything. */
+    const glueFloor = orrD.PX_MIN * (glueSecs / 60) * (2 / 3);
+    ok(annRan > glueFloor && worldRan > glueFloor,
+       'and it had something to follow: the world\'s projection moved ' + worldRan.toFixed(1) +
+       'px in those ' + glueSecs.toFixed(0) + 's and the annotation moved ' + annRan.toFixed(1) +
+       'px with it - against ' + glueFloor.toFixed(1) + 'px, which is the declared floor of ' +
+       orrD.PX_MIN + ' px/minute scaled to this window and discounted a third for foreshortening',
+       'both near zero means this passed by nothing having moved, which proves no glue at ' +
+       'all: ' + JSON.stringify({ worldRan: worldRan, annRan: annRan, floor: glueFloor }));
+    await page.evaluate('__galaxy.hover(null)');
+    await sleep(300);
+  }
+
+  /* AND THE SECOND WIDE SHOT, SIXTY SECONDS AFTER THE FIRST - waited out rather than
+     assumed. The twenty-second sampler and the twelve-second hover come to about thirty-five
+     seconds between the plates, and "sixty seconds apart" is the brief's number and not
+     approximately its number, so the remainder is slept off here. The only thing that may
+     differ between the two plates is where the worlds are: same camera, same star field,
+     same legend, same toast, nothing hovered in either. */
+  const PLATE_GAP_MS = 60000;
+  const owed = PLATE_GAP_MS - (Date.now() - orrShotAt);
+  if (owed > 0) { note('holding ' + (owed / 1000).toFixed(0) + 's more to make the plates a ' +
+                       'full minute apart'); await sleep(owed); }
+  const orrShotB = await page.shot('_runs/after/orrery-wide-B.png');
+  const plateGap = (Date.now() - orrShotAt) / 1000;
+  ok(plateGap >= 59.5,
+     'TWO WIDE SHOTS A FULL MINUTE APART: ' + plateGap.toFixed(1) + 's between ' +
+     orrShotA.split('/').pop() + ' and ' + orrShotB.split('/').pop() +
+     ' - the worlds are elsewhere and nothing else is',
+     'plates ' + plateGap.toFixed(1) + 's apart cannot show a minute of travel');
+  const netPx = [];
+  for (let k = 0; k < oFirst.length; k++) {
+    netPx.push(Math.hypot(oLast[k].sx - oFirst[k].sx, oLast[k].sy - oFirst[k].sy));
+  }
+  note('over the ' + orrSecs.toFixed(0) + 's window, net screen displacement ran ' +
+       Math.min(...netPx).toFixed(1) + ' to ' + Math.max(...netPx).toFixed(1) + ' px');
+
   /* ---- 2c. THE PRESENCE: A FACE MADE OF LIGHT, AND WHAT IT COSTS ---------
      THE HOLOGRAM IS PART OF THE IDLE PAGE NOW, so it is measured the way the textures and
      the nebula are: not "does it appear" but "does the deck still hold its floor with it on
@@ -2257,7 +2633,7 @@ async function main() {
   const rows = sheet.rows || {};
   note('orders: ' + Object.keys(rows).map((k) => k + ' "' + (rows[k] || {}).label + '" · ' +
     (rows[k] || {}).line).join(' | '));
-  /* SEVEN ORDERS NOW, AND IN THIS ORDER. The presence was the sixth act added to this
+  /* EIGHT ORDERS NOW, AND IN THIS ORDER. The presence was the sixth act added to this
      sheet - the only way to change the hologram's mode by hand - and it sits after `links`
      because the sheet reads outward from the session: what you are doing, where, what you
      can see, what is looking back, what it knows, WHAT IT CAN REACH, how it sounds.
@@ -2265,13 +2641,22 @@ async function main() {
      archive is what this machine holds, the grant is what it can touch outside the house,
      and the voice is how it tells you about either. The list is asserted whole rather than
      by length so that an order appearing, disappearing or MOVING is a failure with a name
-     in it - which is exactly what caught this assertion when the seventh arrived. */
+     in it - which is exactly what caught this assertion when the seventh arrived, and again
+     when the eighth did.
+
+     `voice` IS THE EIGHTH AND IT IS LAST FOR A REASON THAT IS NOT ALPHABETICAL. Learning a
+     voiceprint is the only order on this sheet that is boss-only, and the guard is
+     STRUCTURAL rather than a check: no sentence anywhere in the funnel reaches that action,
+     so the only way to start an enrolment is to press this row - which is a keystroke, and
+     the keyboard is the boss's door. It sits after `cast` because the reading ends where the
+     sheet's trust does: everything above is something the house does, and this is the house
+     being told whose voice it works for. */
   ok(JSON.stringify(sheet.ids) ===
-     JSON.stringify(['focus', 'lock', 'links', 'presence', 'archive', 'google', 'cast']) &&
-     sheet.count === 7,
-     'SEVEN DIEGETIC ORDERS, and they are the seven the constitution lists: start focus, ' +
+     JSON.stringify(['focus', 'lock', 'links', 'presence', 'archive', 'google', 'cast',
+                     'voice']) && sheet.count === 8,
+     'EIGHT DIEGETIC ORDERS, and they are the eight the constitution lists: start focus, ' +
      'lock the tab, simplify the links, change the presence, open the archive, connect ' +
-     'Google, cast the voice',
+     'Google, cast the voice, learn a voice',
      JSON.stringify({ ids: sheet.ids, rendered: sheet.count }));
   const dumb = sheet.ids.filter((id) => !rows[id] || !rows[id].label || !rows[id].line ||
                                         !rows[id].shown);

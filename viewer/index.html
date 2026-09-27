@@ -1064,6 +1064,20 @@
     border:1px solid rgba(255,107,127,.45);border-radius:999px;padding:3px 9px 2px;
     letter-spacing:.15em}
   #seal.open #seal-ear{display:inline-block}
+  /* THE SPEAKER CELL, and it is deliberately the quieter of the two pills. EAR OPEN is a
+     warning - a microphone is live in this room - and warnings are pink here. Who is talking
+     is not a warning, it is a fact, so it borrows the muted foreground and a hairline border
+     and sits beside the loud one rather than competing with it. It is display:none until the
+     doorman has actually reached a verdict, because an empty pill on the glass would be the
+     seal implying it knows something it does not. */
+  #seal-who{display:none;font-weight:600;color:var(--muted);
+    border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:3px 9px 2px;
+    letter-spacing:.15em}
+  #seal-who.on{display:inline-block}
+  /* And a voice the gate will take an order from is named in the same green the seal uses
+     for SPEAKING: it is the one reading on this deck that means "this person can make
+     something happen", and it should look different from a guest at a glance. */
+  #seal-who.boss{color:#4be0b8;border-color:rgba(75,224,184,.42)}
   #seal-text{opacity:.9}
   /* THE SPACER, which is why the organ rail ends up centre-right without anything being
      positioned absolutely: one flexible element between the seal and the organs, and the
@@ -2316,10 +2330,12 @@
   <div id="status"><i></i><span id="status-text">ready</span><span class="said" id="status-said"></span></div>
   <form id="bar" autocomplete="off">
     <!-- THE SEAL, and the dot it has always had. READY / LISTENING / SPEAKING, plus the
-         EAR OPEN cell that the transparency law requires while a conversation is open. -->
+         EAR OPEN cell that the transparency law requires while a conversation is open, and
+         beside it the SPEAKER cell: who the doorman decided was talking, live only. -->
     <span id="seal" data-state="ready">
       <span class="dot" id="dot"></span>
       <b id="seal-ear">ear open</b>
+      <b id="seal-who"></b>
       <span id="seal-text">ready</span>
     </span>
     <span class="gap"></span>
@@ -3788,6 +3804,288 @@ async function loadLib() {
      property of the frame rather than of the order things happen to run in. */
   let stillTick = null;
 
+  /* ============================== THE ORRERY ==============================================
+     WORLDS THAT TRAVEL. Until now a note took its position from the d3 solver once, at
+     settle, and then sat in it forever: the deck moved, the camera moved, the sky leaned,
+     and the worlds themselves were furniture. They now drift.
+
+     THE DECLARED NUMBERS, the way section 12 declared its alphas.
+
+         amplitude multiplier   0      ->  1.25 x the world's own radius, with a floor of
+                                           8.80 world units (drafted at 0.55, then 1.00 -
+                                           see AMP and AMP_MIN below)
+         period, per world      none   ->  60 s .. 100 s, one period each, seeded by id
+                                           (drafted at 70 .. 190, then 60 .. 120)
+         screen-space speed     0      ->  ORRERY.PX_MIN .. ORRERY.PX_MAX px/minute
+                                           at the default camera (measured, see below)
+
+     CALM, NEVER BUSY. The brief is that a world's position changes perceptibly over a
+     MINUTE and not over a second, which is a statement about screen-space speed and not
+     about amplitude - a large amplitude with a long period is calm, and a small one with a
+     short period is a twitch. So the period range is the number that was chosen first and
+     the amplitude second.
+
+     WHY THE AMPLITUDE IS A MULTIPLE OF THE WORLD'S OWN RADIUS rather than a fixed distance:
+     a fixed distance would be safe for the big worlds and would push the small ones into each
+     other, because the separation the solver leaves between two worlds scales with their radii
+     (the collide force pads every world by planetRadius(n) + 18) and a fixed excursion does
+     not. Tying the excursion to the radius makes the same amplitude multiplier equally safe
+     everywhere on the deck rather than safe on average; the multiplier is then one number to
+     argue about once, against the closest pair, which is what AMP does below.
+
+     WHAT IT WRITES, AND THE CLAIM THAT TURNED OUT TO BE HALF TRUE. The node COORDINATES are
+     the authority - n.x/n.y/n.z - because they are what everything downstream reads:
+     hudPlace() re-projects the hovered world from live n.x/y/z every frame, and flowFrame()
+     places every travelling dot by interpolating between its two endpoints' live n.x/y/z. So
+     the annotation and the relations follow from writing the three numbers, with nothing to
+     keep in step. That much was the plan and that much held.
+     What did NOT hold is the mesh. The plan said 3d-force-graph re-reads node coordinates
+     every frame and would carry the world's own sphere along for free; it does not. Its
+     tickFrame() puts the ENTIRE position update - nodes and links both - behind
+     `engineRunning && ...`, so the moment the layout settles and onEngineStop fires, the
+     library stops copying coordinates into Object3D positions altogether. Measured: over
+     sixty seconds the node coordinates moved up to 21.99 world units while the rendered
+     meshes moved 3.48, and that 3.48 was the planetarium's own local micro-drift rather than
+     any of this. The orrery was moving numbers that nothing was drawing.
+     So the mesh position is written here too, which is exactly the assignment the library
+     makes while it is still awake. The alternative was to keep the engine running forever
+     with its forces zeroed so that tickFrame kept firing, and it was rejected: it would have
+     meant onEngineStop never firing, and onEngineStop is what runs the deck's one
+     zoomToFit.
+     FAILURE MODE THIS NAMES: a world whose coordinates travel and whose sphere does not. It
+     is invisible to every assertion phrased on n.x/y/z - including, for one measurement, the
+     px/minute envelope below, which was computed through graph2ScreenCoords and so was
+     faithfully reporting the projection of a number nobody could see.
+     THERE IS NO LINK GEOMETRY TO REBUILD, and that is this deck's own doing rather than luck:
+     linkVisibility(false) retires the library's line objects entirely - see THE SILENT WIRES -
+     and the relation is carried by flowFrame()'s dots, which are the page's and read the
+     coordinates. A deck that drew library lines would need those rebuilt here as well.
+
+     WHY THERE IS NO ARMING STEP. The obvious shape is "wait for onEngineStop, capture base
+     positions, then orbit around them", and it has two faults: Graph.onEngineStop is a
+     setter and the deck already owns it, and a base captured once goes stale the moment the
+     density toggle re-runs the solver. Instead the base is RECOVERED every frame as
+     (current position - the offset this function last wrote). While the solver is still
+     working, base tracks it and the world both settles and drifts; once the solver stops,
+     base is constant and the drift is all that is left. Nothing to arm, nothing to
+     invalidate, and no accumulated error, because the offset is bounded rather than
+     integrated.
+     FAILURE MODE THIS AVOIDS: a drift that adds up. An orrery that did x += delta each frame
+     would walk its worlds out of the frame over an afternoon and pass every short assertion.
+
+     THE ROOT IS NOT TOUCHED. This moves worlds WITHIN the galaxy root; the root's own
+     transform is stillTick's business and stillTick still runs last. dPos 0 / dQuat 0 holds
+     because nothing here reaches for the root, the camera, or the scene. */
+  const ORRERY = {
+    /* 1.25 x the world's own radius, and THE ROAD TO IT IS WORTH KEEPING because one wrong
+       number sat in the middle of it for two drafts.
+       The first draft used 0.55 and was raised to 1.00 on this argument: "at the default
+       camera the deck spans 431.9 world units across 460 px - 1.064 px per world unit - so a
+       peak-to-peak of 1.1 radii came to about nine pixels in a minute, which is a diff and not
+       a thing a reader sees." THE 1.064 WAS WRONG, and so was every pixel figure that came out
+       of it. It was read off a projection of the LAYOUT SPAN, which is not the scale: the
+       camera settles at z 2270 with a 50-degree vertical field, so the glass shows
+       2 x 2270 x tan(25) = 2117 world units over 842 css px - 0.3977 px per world unit, two and
+       a half times finer than the figure the amplitude was chosen against. Measured directly by
+       projecting (0,0,0) and (100,0,0) and dividing: 0.3977. The first calibration then made the
+       matching mistake in the other direction and reported "9.99 .. 41.03 px/minute", which is
+       11.27 .. 41.08 WORLD UNITS per minute - the same measurement with the wrong unit on it.
+       In true pixels AMP 1.00 delivers 4.37 .. 15.88 px/minute, so the slowest world was
+       travelling half of what the rejected 0.55 draft was believed to travel, and the argument
+       that licensed 1.00 is the argument that rejects it.
+       WHAT 1.25 BUYS AND WHAT IT COSTS. The ceiling is collision: the closest pair on this deck
+       settles 47.2 world units apart SURFACE TO SURFACE (worlds 16 and 29, radii 7.57 and 8.29
+       - measured over all 465 pairs from live bases, not from the one pair an earlier draft
+       named, which the layout has since moved off the top of that list), and since two worlds
+       have independent phases the worst case is that both run at each other at full excursion.
+       The furthest a world gets from its base is NOT A - the three axes below are weighted 1,
+       0.62 and 0.84, so it is A x sqrt(1 + 0.62^2 + 0.84^2) = 1.4456 A - and the gap can
+       therefore shrink by at most 1.4456(A1 + A2), which for that pair is 28.7 units and leaves
+       18.5 of the 47.2 GUARANTEED, whatever the phases do. At AMP 1.00 the same pair had 25.6
+       in hand; 2.00 is what is forbidden, at 45.9 of closure against 47.2 of gap.
+       SO THE PIXELS CAME MOSTLY FROM THE PERIOD INSTEAD, which costs nothing in collision -
+       screen speed is amplitude over period, and 190 s was a slower slow end than the calm
+       budget needed. 60 .. 100 with AMP 1.25 raises every world by between 1.46x and 2.38x and
+       leaves the fastest at well under half a pixel per second, which is the brief's actual
+       constraint. Choosing it the other way round - amplitude to 1.8, period untouched - would
+       have bought the same pixels and spent 44 of the 49.1.
+       (An earlier draft of this arithmetic doubled the closure term and read 34 units. It was
+       wrong in the safe direction, so the amplitude it licensed stood; the number is corrected
+       rather than the choice.)
+       NOTE the ceiling is not the d3 collide radius (planetRadius + 18). That is the separation
+       the force ASKS for; it is soft, and the charge at -260 delivers far more. Choosing the
+       amplitude against the constant rather than against the measurement would have capped this
+       at a third of what the deck can actually carry. */
+    AMP: 1.25,          // x the world's own radius; was 0, drafted at 0.55, then 1.00
+    /* AND A FLOOR IN WORLD UNITS, because the multiplier has one victim and it is the same one
+       every time. A world's radius is cbrt(1.1 + degree x 0.8) x 4.4, so an UNLINKED note - the
+       quietest world on the deck - is also the smallest at 4.54 units against 7.15 for anything
+       with one relation, and 1.25 x 4.54 was measured at 5.95 px/minute while the next slowest
+       world managed 8.6. One world under the floor, and it is the one a reader is least likely
+       to be looking at and most likely to mistake for furniture.
+       THE FLOOR IS FREE HERE, which is why it is a floor and not a re-argued multiplier: the
+       charge pushes an unlinked note to the edge of the sky, and this deck's one degree-0 world
+       sits 819 units from its nearest neighbour - measured, over all 465 pairs. Lifting its
+       excursion from 5.68 to 8.80 spends 4.5 of those 819. The collision argument above is
+       untouched because the pair it is about (16/29) has amplitudes of 9.47 and 10.37, both
+       already over the floor, and a floor can only ever bind on the smallest.
+       AND 8.80 IS THE HIGHEST IT CAN GO, which is why it is not a rounder number. One relation
+       buys a radius of 7.15 and therefore an amplitude of 8.94; anything at or above that would
+       start lifting worlds that have neighbours, and the collision margin those worlds are
+       holding is the margin the whole section is built on. So the floor is set just under it,
+       which makes it the most the quietest world can be given for nothing.
+       IT WAS 8.00 FIRST and 8.00 was not enough, for a reason worth keeping: the unlinked world
+       travels 36 world units a minute at that amplitude and projects only 7.9 pixels of them,
+       because its ellipse happens to lie along the view axis at the default camera. World-unit
+       travel and screen travel are not the same measurement and this deck's slowest world on the
+       glass is not its slowest world in space.
+       FAILURE MODE THIS NAMES: a floor set high enough to bind on a world that has a neighbour.
+       If that ever stops being true, deck_proof checks it - it recomputes which worlds the floor
+       lifted from live radii every run, rather than trusting this paragraph. */
+    AMP_MIN: 8.80,      // world units, whatever the radius says; binds on degree-0 worlds only
+    T_MIN: 60,          // seconds, the fastest world; was 70
+    /* 100 AND NOT 120, AND THE 20 SECONDS CAME OFF FOR A MEASURED REASON. At 120 the slowest
+       world cleared the declared floor by 13% on one run and 34% on another, and the spread is
+       not noise: the envelope below is path length over a TWENTY-second window, so a world on a
+       120-second clock is measured over a sixth of its own ellipse and gets a different sixth
+       every run. The slow end of the period range is therefore the run-to-run variance of the
+       floor assertion, and shortening it is how the floor gets a margin. Lowering PX_MIN to 5
+       would have bought the same green and bought it by moving the declaration to wherever the
+       code happened to land, which is how a declared number becomes decoration. */
+    T_MAX: 100,         // seconds, the slowest; was 190, then 120
+    /* THE MEASURED SCREEN-SPACE ENVELOPE at the default camera, over a 20-second window, as
+       screen-space PATH LENGTH per minute - the distance a world actually travels across the
+       glass, not the distance between where it started and where it ended. Net displacement was
+       the first thing tried and it is the wrong measure: a world halfway round its ellipse can
+       return almost to its start, and a net-displacement floor would then be failed by a world
+       that had travelled the furthest of any of them.
+       The floor is what a reader must be able to SEE over a minute; the ceiling is where the
+       room would start to read as busy. Both are the measurement with a margin either side,
+       because these are thirty-one seeded periods sampled over one window and a re-run lands
+       near these numbers rather than on them.
+       MEASURED 8.57 .. 22.30 px/minute over 31 worlds at 1400x940 (1378 x 842 css) with the
+       deck holding 60fps, at a camera that settles at z 2304 - so 0.3919 px per world unit,
+       taken by projecting (0,0,0) and (100,0,0) and dividing rather than inferred from a span.
+       Declared 6 .. 30. Three consecutive runs put the slowest world at 8.68, 8.61 and 8.57 and
+       the fastest at 22.30, 22.23 and 22.23, which is where the margins come from: under two
+       percent of run-to-run drift once the period range was tightened, and a floor and ceiling
+       set about a third clear of the measurement on either side. Before that tightening the
+       slowest world varied between 6.8 and 8.0 from run to run and the same declared floor of 6
+       was a coin toss - the margin is the point of the declaration, not a courtesy.
+       THE OLD CEILING OF 70 WAS DECORATION and is worth saying so: nothing on the deck came
+       within a factor of three of it, so it could not have failed and therefore was not an
+       assertion. 30 is a number this deck could actually cross if an amplitude or a period were
+       changed carelessly, which is the only kind of ceiling worth declaring. */
+    PX_MIN: 6,
+    PX_MAX: 30,
+    RATIOS: [1, 1.13, 0.79],   // deliberately not 1:1:1 - see below
+    AXIS: [1, 0.62, 0.84]      // and not a circle in one plane either
+  };
+  const orrery = {
+    on: false, why: 'not started', worlds: 0, amp: ORRERY.AMP,
+    tMin: ORRERY.T_MIN, tMax: ORRERY.T_MAX, frames: 0
+  };
+  /* A cheap deterministic hash, so a world's period and phase are a property of its id and
+     not of the order graphData happened to hand it over in. The same note drifts the same
+     way across a reload, which is what makes the sixty-seconds-apart plates reproducible. */
+  function orbSeed(id) {
+    let h = 2166136261;
+    const s = String(id == null ? '' : id);
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h * 16777619) >>> 0; }
+    /* AND THEN AN AVALANCHE, which is not decoration. Plain FNV-1a over the short ids this
+       deck uses ('0'..'29') leaves most of its entropy in the low bits, and dividing by 2^32
+       throws exactly those away: the first measurement of this section came back with the
+       thirty periods clumped into three bands of 79-84, 92-98 and 134-140 seconds, which is a
+       mechanism with three gears rather than thirty worlds each on its own clock. The mix
+       below is murmur3's finaliser and it costs four operations once per world, ever. */
+    h ^= h >>> 16; h = (h * 2246822507) >>> 0;
+    h ^= h >>> 13; h = (h * 3266489909) >>> 0;
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  }
+  /* planetRadius() lives in the planetarium, which does not exist under ?planets=0, and a
+     note is a world whether or not there is a glow over it - the same argument the planet
+     hook makes above. So the radius is recomputed here from the Graph API the planetarium
+     also reads, rather than reached for across a section that may not have loaded. */
+  function orbRadius(n) {
+    let val = 1;
+    try { const f = Graph.nodeVal(); val = (typeof f === 'function' ? f(n) : f) || 1; }
+    catch (e) { val = 1; }
+    let rel = 4.4;
+    try { rel = Graph.nodeRelSize() || 4.4; } catch (e) { rel = 4.4; }
+    return Math.cbrt(val) * rel;
+  }
+  /* ONE PLACE, because the harness divides by it. The per-axis bound assertion in deck_proof
+     reads the amplitude out of sample() and checks every offset against it; if the frame
+     applied the floor and the probe did not, the floored world would report an offset 1.41x
+     its own declared amplitude and the assertion would fail on the measurement being wrong
+     rather than on the motion being wrong. */
+  function orbAmp(n) {
+    return Math.max(ORRERY.AMP_MIN, ORRERY.AMP * orbRadius(n));
+  }
+  function orreryFrame(now) {
+    if (!orrery.on) return;
+    let data = null;
+    try { data = Graph.graphData(); } catch (e) { return; }
+    const ns = (data && data.nodes) || null;
+    if (!ns || !ns.length) return;
+    const t = now / 1000;
+    let live = 0;
+    for (let i = 0; i < ns.length; i++) {
+      const n = ns[i];
+      if (!n || !isFinite(n.x) || !isFinite(n.y) || !isFinite(n.z)) continue;
+      let orb = n.__orb;
+      if (!orb) {
+        const seed = orbSeed(n.id);
+        const seed2 = orbSeed('y:' + n.id), seed3 = orbSeed('z:' + n.id);
+        const period = ORRERY.T_MIN + (ORRERY.T_MAX - ORRERY.T_MIN) * seed;
+        const w = 2 * Math.PI / period;
+        orb = n.__orb = {
+          ox: 0, oy: 0, oz: 0, period: period,
+          w1: w * ORRERY.RATIOS[0], w2: w * ORRERY.RATIOS[1], w3: w * ORRERY.RATIOS[2],
+          p1: seed * 6.283185307, p2: seed2 * 6.283185307, p3: seed3 * 6.283185307
+        };
+      }
+      /* THE BASE, recovered rather than remembered. */
+      const bx = n.x - orb.ox, by = n.y - orb.oy, bz = n.z - orb.oz;
+      /* A world the reader is DRAGGING is pinned by fx/fy/fz, and the library forces x to fx
+         every tick. Orbiting it would be a fight this loses once per frame and would also
+         corrupt the recovered base, because the offset written would not be the offset
+         present. So a pinned world is put back on its base and left there. */
+      if (n.fx != null || n.fy != null || n.fz != null) {
+        orb.ox = orb.oy = orb.oz = 0;
+        continue;
+      }
+      const A = orbAmp(n);
+      /* Three incommensurate frequencies, and three different axis weights. A single
+         frequency on all three axes is a circle, and a room full of circles of the same
+         period reads as a mechanism; these trace slow open curves that never quite repeat,
+         which is what "travel" looks like as opposed to "rotation". */
+      orb.ox = A * ORRERY.AXIS[0] * Math.cos(orb.w1 * t + orb.p1);
+      orb.oy = A * ORRERY.AXIS[1] * Math.sin(orb.w2 * t + orb.p2);
+      orb.oz = A * ORRERY.AXIS[2] * Math.sin(orb.w3 * t + orb.p3);
+      n.x = bx + orb.ox; n.y = by + orb.oy; n.z = bz + orb.oz;
+      /* AND THE SPHERE GOES WITH THEM - see the header. The same assignment the library makes
+         in tickFrame() while the engine is awake, made here because it stops. The world
+         object's CHILDREN are left alone: the planetarium's spin lives on p.spin.rotation and
+         its micro-drift on p.orbit.position, both inside this group, so writing the group's
+         position moves the world without touching either. */
+      const obj = n.__threeObj;
+      if (obj && obj.position) obj.position.set(n.x, n.y, n.z);
+      live++;
+    }
+    orrery.worlds = live;
+    orrery.frames++;
+  }
+  /* A reader who asked for less motion gets today's amplitudes, as ever: the worlds stand
+     still, and the hook is not merely amplitude-zeroed but never called, so the per-frame
+     cost is one boolean for the whole session. */
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    orrery.on = false; orrery.why = 'prefers-reduced-motion'; orrery.amp = 0;
+  } else {
+    orrery.on = true; orrery.why = 'travelling';
+  }
+
   (function orbit(now) {
     const dt = Math.min(now - last, 60); last = now;
     /* THE ROOM'S MOOD FIRST, and before the deck on purpose: deckSkyFrame reads work.sway
@@ -3807,6 +4105,15 @@ async function loadLib() {
        there is a glow over it. Same discipline as above: a throw takes the spin down and
        nothing else. */
     if (planetTick) { try { planetTick(now); } catch (e) { planetTick = null; } }
+    /* THE ORRERY, after the spin and before everything that READS a world's position. The
+       order is the whole contract: flowTick samples link midpoints and hudPlace re-projects
+       the hovered world, and both must see this frame's coordinates rather than the last
+       one's. Run the other way round and a link's dots would trail its endpoints by one
+       frame and the annotation's leader line would lag the world it points at - small at
+       these speeds, and exactly the kind of small that a reader notices without being able
+       to say what is wrong. Guarded like its neighbours: a throw stops the travel and costs
+       the page nothing else. */
+    if (orrery.on) { try { orreryFrame(now); } catch (e) { orrery.on = false; orrery.why = 'frame: ' + ((e && e.message) || 'threw'); } }
     // dt rather than now: a dot advances by DISTANCE, and distance needs an interval.
     if (flowTick) { try { flowTick(dt); } catch (e) { flowTick = null; } }
     /* And the annotation follows its world. It has to be re-projected every frame and not
@@ -4457,7 +4764,15 @@ async function loadLib() {
     $('ask-clock').textContent = 'running…';
     clearTimeout(proposalTimer); clearInterval(proposalTicker);
     setStatus('thinking', 'running ' + asked.tool);
-    const data = await toolPost('/execute', { id: asked.id, door: door || 'button' });
+    /* THE DOORMAN TRAVELS WITH THE CONSENT, and this is the door where it matters most. A
+       spoken "yes" never reaches /chat: ask() recognises the word itself while a card is up and
+       posts straight here, so a law written only at /chat would have been one line of code from
+       being walked around by the very door it was for. The block is sent for door 'voice' only,
+       it is a turn number, and the server reads the verdict it reached from audio under that
+       number. `session` goes with it because the verdict lives in this session's slot. */
+    const data = await toolPost('/execute', {
+      id: asked.id, door: door || 'button', session: SESSION,
+      speaker: door === 'voice' ? speakerBlock('voice') : null });
     settleProposal(data, said);
   }
 
@@ -4465,8 +4780,20 @@ async function loadLib() {
     if (!proposal) return;
     const asked = proposal;
     chime('no');
-    const data = await toolPost('/tools',
-      { cmd: 'cancel', id: asked.id, door: door || 'button' });
+    /* AND THE BARKED "STOP" IS WAITED FOR HERE RATHER THAN IN ask(), because a bark does not go
+       through ask() at all: heardFinal() sends it straight past the buffer, which is the whole
+       point of an interrupt. interrupt() fires the identification off the ring before it calls
+       this, and this is where the answer is collected - bounded, like every other wait on the
+       doorman, so a stop that silences the voice is never held up by a fetch. */
+    if (door === 'voice') await speakerSettled();
+    /* AND THE NO IS GUARDED TOO, which looks like caution and is not. The mandate names both
+       words, and the asymmetry is the reason: a guest who can say no can cancel the employer's
+       proposal - the email he has just asked for, three seconds before it goes - and "anybody
+       in the room may veto anything" is not a smaller hole than "anybody may consent", it is
+       the same hole pointed the other way. The Yes and No buttons are unaffected. */
+    const data = await toolPost('/tools', {
+      cmd: 'cancel', id: asked.id, door: door || 'button', session: SESSION,
+      speaker: door === 'voice' ? speakerBlock('voice') : null });
     settleProposal(data, door === 'button' ? 'No' : 'no');
   }
 
@@ -4580,6 +4907,12 @@ async function loadLib() {
          without it disables the button rather than leaving an organ that opens a picker onto
          a hole. See scribeHealthFrom(). */
       if (data && data.scribe) scribeHealthFrom(data.scribe);
+      /* AND WHO THIS HOUSE KNOWS BY VOICE, on the same trip and for the same reason again: the
+         Command Panel must not offer to learn a voice on a machine with no model, and the count
+         is what decides whether the row's word is "learn" or "learn again". Re-read every poll
+         so a voiceprint enrolled in another tab, or a store emptied by hand, changes the row
+         without a reload. See speakerHealthFrom(). */
+      if (data && data.speaker) speakerHealthFrom(data.speaker);
       /* AND THE RAIL, on the same trip and for the same reason as the three above it: the
          question is "what is this machine actually doing", and /health is the only thing
          that can answer it. Last, so a rail that threw could never cost the chip its
@@ -4909,7 +5242,14 @@ async function loadLib() {
        reads CONNECTED out of a cache while the token is dead. So it is asked when the
        sheet opens, and while consent is in flight, and at no other time. */
     { id: 'google',  key: 'G' },
-    { id: 'cast',    key: 'V' }
+    { id: 'cast',    key: 'V' },
+    /* THE DOORMAN, and it lives here for a reason that is not convenience. Learning a voice is
+       boss-only, and the guard is structural rather than a check: no sentence anywhere in the
+       funnel reaches this action, so the only way to start an enrolment is to press this row -
+       which is a keystroke, and the keyboard is the boss's door. The server refuses an
+       enrolment whose body admits it came in through the ear, which is the same rule written
+       where it holds even if this page is wrong. */
+    { id: 'voice',   key: 'W' }
   ];
   const cmd = { opens: 0, paints: 0, view: 'list', ran: '' };
   let cmdBuilt = false;
@@ -5042,6 +5382,57 @@ async function loadLib() {
         line: cited
           ? cited + ' passage' + (cited === 1 ? '' : 's') + ' cited · reopen them'
           : files + ' file' + (files === 1 ? '' : 's') + ' · nothing cited yet'
+      };
+    }
+    /* LEARN A VOICE, and it has six readings because there are six true things to say: no
+       model on this machine, no ear open to listen through, nobody enrolled yet, an enrolment
+       in progress, a refusal that was just read out, and a voice already known. The LABEL is
+       the action and the LINE is the state, on the grant row's rule below.
+
+       IT REFUSES RATHER THAN OPENING A MICROPHONE. Pressing this with the ear shut could open
+       one - the press is a gesture and getUserMedia would be allowed - and it deliberately does
+       not: a control that starts recording from a list of orders is the transparency law's exact
+       inverse. The seal is lit first, by the employer, and then this listens through it. */
+    if (id === 'voice') {
+      const known = speaker.count || 0;
+      const mine = speaker.bossCall || 'your voice';
+      if (!speaker.asked) {
+        return { label: 'Learn a voice', tone: '', off: true,
+                 line: 'asking the server…' };
+      }
+      if (!speaker.installed || !speaker.ready) {
+        return { label: 'Learn a voice', tone: 'bad', off: true,
+                 line: speaker.why || 'no voiceprint model on this machine' };
+      }
+      if (speaker.enrolling) {
+        return { label: 'Listening…', tone: 'live',
+                 line: speaker.enrolLine || 'say ' + (speaker.minSentences || 3) +
+                       ' sentences · nothing yet' };
+      }
+      if (!ear.open) {
+        return { label: known ? 'Learn ' + mine + ' again' : 'Learn a voice',
+                 tone: 'bad', off: true,
+                 line: known ? known + ' known · open the ear first'
+                             : 'open the ear first · it listens through that one' };
+      }
+      if (speaker.enrolWhy) {
+        return { label: known ? 'Learn ' + mine + ' again' : 'Learn a voice', tone: 'bad',
+                 line: String(speaker.enrolWhy).slice(0, 96) };
+      }
+      if (!known) {
+        return { label: 'Learn a voice', tone: '',
+                 line: (speaker.minSentences || 3) + ' spoken sentences · ' +
+                       (speaker.minSeconds || 8) + 's · embeddings only, no audio kept' };
+      }
+      /* THE ROSTER IS NAMED, and only the names: the panel has never been shown an embedding
+         and could not print one. `hands` is the fact worth painting because it is the one that
+         decides whose spoken yes this house acts on. */
+      const hands = speaker.enrolled.filter(function (r) { return r && r.hands; }).length;
+      return {
+        label: 'Learn ' + mine + ' again', tone: 'local',
+        line: known + ' voice' + (known === 1 ? '' : 's') + ' known · ' +
+              (hands ? hands + ' may use the hands' : 'none may use the hands') +
+              ' · press to re-learn'
       };
     }
     /* THE GRANT, and the row's LABEL is the action while its LINE is the state, because
@@ -5213,6 +5604,29 @@ async function loadLib() {
          employer can watch it arrive is this line. Closing the sheet on him would leave
          him with a browser tab and no idea what the machine thought had happened. */
       googRun();
+      cmdPaint();
+      return true;
+    }
+    /* LEARN A VOICE, and the sheet STAYS OPEN for the same reason the grant's does: the only
+       place the employer can watch three sentences being counted is this line. Pressing it a
+       second time while it is listening gives up - a control with no way out of a state it put
+       you into is a trap - and says so. */
+    if (id === 'voice') {
+      if (speaker.enrolling) {
+        speakerEnrolStop('');
+        cmdPaint();
+        return true;
+      }
+      speaker.enrolWhy = '';
+      /* REPLACING WHEN A VOICE IS ALREADY KNOWN, and the old row survives a failure: see
+         speakerEnrolSend(), where `replace` means the new embedding overwrites the old only once
+         it exists. Forgetting first and then being four seconds short would leave the house with
+         no hands-privileged voiceprint and the Hands law silently stood down. */
+      speakerEnrolStart(speaker.count > 0);
+      speakLine(speaker.count > 0
+        ? 'Say ' + (speaker.minSentences || 3) + ' sentences and I will learn your voice again.'
+        : 'Say ' + (speaker.minSentences || 3) + ' sentences, whatever you like, and I will ' +
+          'learn your voice. I keep the measurement and not the recording.');
       cmdPaint();
       return true;
     }
@@ -8651,7 +9065,13 @@ async function loadLib() {
   const SAID_YES_RE = wholeWord(YES_WORDS);
   const SAID_NO_RE = wholeWord(NO_WORDS);
 
-  async function ask(question) {
+  /* `spoken` IS PASSED IN AND NEVER GUESSED. flushThought() is the only caller that sets it,
+     because it is the only caller that knows: every other path into this function is a
+     keystroke, a chip or a harness typing through the summoned line, and the difference between
+     those two is exactly what the Hands law turns on. A page that inferred it from "is the ear
+     open" would call a typed sentence spoken for as long as a conversation was running, which
+     is the one mistake that would take the keyboard away from the boss. */
+  async function ask(question, spoken) {
     if (busy || !question.trim()) return;
 
     /* THE ONE PLACE A NEW QUESTION SILENCES THE OLD ANSWER, and one of only three in
@@ -8660,6 +9080,13 @@ async function loadLib() {
        being read; that is the defect this whole arrangement exists to end. Asking is a
        person's decision, so asking still stops the voice. */
     speakCancel('a new question');
+
+    /* AND THE DOORMAN IS WAITED FOR, ABOVE THE GATE. earSpeechEnd() started the identification
+       before this function was called; this is where the answer is collected, and it has to be
+       above the proposal branch below because that branch is where a spoken yes becomes an
+       email. Bounded by SPEAKER_WAIT_MS: a verdict that has not arrived is not waited for, and
+       a turn with no verdict is refused at the gate rather than honoured - see speakerBlock(). */
+    if (spoken) await speakerSettled();
 
     /* THE GATE FIRST, above every organ below it. While something is awaiting a word,
        that word decides what happens - and a sentence that is neither yes nor no is a
@@ -8799,7 +9226,13 @@ async function loadLib() {
       const res = await fetch('/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: question, session: SESSION })
+        /* THE SPEAKER BLOCK, ON THE TURNS THAT CAME THROUGH THE EAR AND ON NO OTHERS. It is a
+           turn number and the word "voice": the server looks the number up in its own slot and
+           reads the verdict IT reached from audio, so nothing this page could put here would
+           name a person or claim a privilege. A typed question sends no block, which is how the
+           keyboard stays the boss's other door. */
+        body: JSON.stringify({ question: question, session: SESSION,
+                               speaker: spoken ? speakerBlock('voice') : null })
       });
       let data = null;
       try { data = await res.json(); } catch (e) { data = null; }
@@ -9223,6 +9656,39 @@ async function loadLib() {
   const SCRIBE_SEAL_MS = 4400;
   const scribeSeal = { word: '', timer: null, said: '', times: 0 };
 
+  /* ---------- THE DOORMAN'S SEAL ----------
+     SPEAKER: BOSS · SPEAKER: RYAN · SPEAKER: GUEST.
+
+     WHY IT IS DECLARED HERE, twenty-odd screens above the machinery that fills it, and for
+     exactly the reason written over scribeSeal: sealPaint() runs during boot, before the ear
+     and before the Scribe, so a `const` declared down in the doorman's own section would be in
+     its temporal dead zone for every paint the boot sequence makes and the seal would throw
+     instead of reading READY. The state lives up here beside the two readouts that share the
+     same constraint; everything that WRITES it lives below the Scribe.
+
+     THE WORD IS THE SERVER'S AND NOT THIS PAGE'S. `seal` is copied verbatim out of
+     POST /speaker's reply, where voiceprint.seal_for() computed it from an embedding of real
+     audio. This page does not derive it, cannot promote a guest by relabelling one, and holds
+     no threshold of its own to compare against.
+
+     AND IT IS LIVE ONLY. Nothing in here is posted, logged, appended to the ledger or written
+     to the lookbook: `turns` is a count and the rest is cleared the moment the ear closes. The
+     server keeps counts too and nothing else - see _SPEAKER_SEEN. */
+  const speaker = {
+    /* what /health says about the machine */
+    installed: false, ready: false, count: 0, hasHands: false, enrolled: [],
+    dim: 0, threshold: 0, minSeconds: 0, minSentences: 0, bossCall: '', why: '', asked: false,
+    /* the live verdict, this turn only */
+    seal: '', who: '', addressForm: '', hands: false, score: 0, turn: 0, at: 0,
+    /* what the page is doing */
+    tap: null, sink: null, mode: '', trouble: '', ring: [], ringSamples: 0,
+    pending: null, enrolling: false, enrolClips: [], enrolSeconds: 0, enrolWhy: '',
+    enrolLine: '', replacing: false, enrolTimer: null,
+    /* counts, for the panel and for the harness */
+    turns: 0, boss: 0, guests: 0, known: 0, failed: 0, lastMs: 0, chunks: 0, seconds: 0,
+    echoDropped: 0
+  };
+
   function scribeSealSay(word, ms) {
     scribeSeal.word = String(word || '');
     scribeSeal.said = scribeSeal.word;
@@ -9268,6 +9734,20 @@ async function loadLib() {
          this string. earEngineWord() is the only thing that can decide it. */
       const said = 'ear open · ' + earEngineWord();
       if (cell.textContent !== said) cell.textContent = said;
+    }
+    /* AND WHO IS TALKING, on the same paint and under the same rule as the cell above it: it
+       is shown while the ear is open and it says the word the SERVER reached. It goes dark the
+       instant the ear closes, because "who was talking" is not a fact about a page with no
+       microphone open - it is a fact about a conversation, and that one has ended. */
+    const whoCell = $('seal-who');
+    if (whoCell) {
+      const said = open && speaker.seal ? 'speaker: ' + speaker.seal : '';
+      if (whoCell.textContent !== said) whoCell.textContent = said;
+      whoCell.classList.toggle('on', !!said);
+      /* GREEN MEANS THE GATE WOULD TAKE AN ORDER, which is `hands` and not the word BOSS: an
+         enrolled voice with no hands reads as its own name in the muted colour, and that is
+         the same distinction seal_for() draws on the server. */
+      whoCell.classList.toggle('boss', !!(said && speaker.hands));
     }
     el.classList.toggle('open', open);
     /* THE DATA-STATE IS NOT OVERRIDDEN BY A REFUSAL, and that is deliberate rather than an
@@ -10923,7 +11403,14 @@ async function loadLib() {
        thought. A question the assistant just asked out loud is answered without a
        wake word; the sentence after this one is an ordinary question again. */
     if (fxAnswerArmed()) return fxAnswer(thought);
-    ask(thought);                        // exactly the path a typed question takes
+    /* AND A SENTENCE SAID INTO AN ENROLMENT IS NOT A QUESTION. While Learn a voice is taking
+       its three sentences the words are a sample and nothing else, so they are noted and go no
+       further: sending them to the brain would answer "the quick brown fox jumps over the lazy
+       dog" out loud in the middle of teaching it a voice. Everything above this line still
+       happens - the recogniser is held and re-armed exactly as it is for a real turn, because
+       the next sentence has to be heard the same way. */
+    if (speaker.enrolling) { earThoughtNote('an enrolment sentence', thought); return; }
+    ask(thought, true);                  // exactly the path a typed question takes, said aloud
   }
 
   function interrupt(label) {
@@ -10939,8 +11426,17 @@ async function loadLib() {
     fxAnswerClose();
     /* And including a proposal. "stop", "cancel" and "never mind" are barked interrupts,
        so they never reach ask() - which would make them the three refusals that did not
-       work. Here they refuse, properly, through the server. */
-    if (proposal) refuseProposal('voice');
+       work. Here they refuse, properly, through the server.
+
+       AND THE DOOR IS NAMED HONESTLY, which matters now that a door decides whose word counts.
+       Escape is a keystroke and must always work - the keyboard is the boss's other door - so it
+       refuses as 'button'. A barked word is a voice and refuses as 'voice', and the ring is
+       asked who said it first: the bark arrives before the detector has ended the utterance, so
+       without this line it would travel with the PREVIOUS sentence's turn number and a guest
+       could cancel the employer's proposal on the strength of the employer's own voice. */
+    const barked = label !== 'escape';
+    if (barked) speakerTurnEnd();
+    if (proposal) refuseProposal(barked ? 'voice' : 'button');
     /* "STOP" IS NOT "GOODBYE". Inside an open conversation a barked stop silences the
        answer and hands the turn back; it does not close the session, because the four
        closers exist precisely so that ending one is something he SAYS. */
@@ -11116,11 +11612,24 @@ async function loadLib() {
   }
 
   /* ---- THE STREAM AND THE ANALYSER ----
-     One getUserMedia for the session, one AnalyserNode on it, and NOTHING downstream: the
-     analyser is not connected to the destination, so the room is never fed back into
-     itself, and there is no recorder, no buffer and no blob in this file at all. The
-     numbers it produces are an RMS per frame, which is used for exactly two things - the
-     waveform ring's amplitude, and knowing when a sentence started and stopped. */
+     One getUserMedia for the session and one AnalyserNode on it. The analyser is not connected
+     to the destination, so the room is never fed back into itself, and the numbers it produces
+     are an RMS per frame used for exactly two things - the waveform ring's amplitude, and
+     knowing when a sentence started and stopped.
+
+     AND THERE IS NOW A SECOND TAP ON THIS STREAM, WHICH THIS COMMENT USED TO DENY. It said
+     there was no recorder, no buffer and no blob in this file at all; that was true for as long
+     as it was, and the honest thing to do when it stopped being true was to say what took its
+     place rather than leave the reassuring sentence standing. See THE DOORMAN below the Scribe.
+     What it is, exactly: while voiceprints are enrolled, one AudioWorkletNode on this same
+     MediaStreamSource keeps the last fourteen seconds of the room in RAM, in half-second
+     chunks, and drops everything older on every chunk. When a sentence ends, the span the VAD
+     called speech is cut out of that ring, packed as a WAV and POSTed once so the server can
+     say who was talking. No sample is written to a disk on either side, none survives the ear
+     closing - speakerEarDown() drops the ring and earStreamDown() calls it - and with nothing
+     enrolled the tap is never built and no audio is read at all. The one thing that cannot be
+     claimed any more is that this page never buffers audio. It does, for fourteen seconds, and
+     the seal says so while it happens. */
   async function earStreamUp() {
     if (ear.stream) return true;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -11149,6 +11658,12 @@ async function loadLib() {
       ear.frames = 0;
       ear.peak = 0;
       earLoopUp();
+      /* AND THE DOORMAN IS OFFERED THE SAME SOURCE, never a second microphone. Not awaited: it
+         decides for itself whether there is anybody to recognise, and an ear that waited on a
+         worklet module would be an ear that opens slower on every machine for the benefit of
+         the houses that have enrolled somebody. If it refuses, the seal simply never names
+         anybody and every spoken turn is treated as a guest's at the gate. */
+      speakerEarUp(ear.src);
       return true;
     } catch (e) {
       ear.why = 'the analyser was refused';
@@ -11163,6 +11678,12 @@ async function loadLib() {
   function earStreamDown() {
     if (ear.raf !== null) { try { cancelAnimationFrame(ear.raf); } catch (e) { /* ignore */ } }
     ear.raf = null;
+    /* THE DOORMAN GOES FIRST, and that order is the point: its ring holds the only audio this
+       page has ever kept, and it is dropped before the tracks are stopped rather than after -
+       so there is no instant in which a closed microphone has a recording of the room sitting
+       behind it. It also clears the seal, because who was talking is a fact about a
+       conversation and that conversation has ended. */
+    speakerEarDown();
     if (ear.src) { try { ear.src.disconnect(); } catch (e) { /* already gone */ } }
     if (ear.analyser) { try { ear.analyser.disconnect(); } catch (e) { /* already gone */ } }
     if (ear.stream) {
@@ -11588,6 +12109,14 @@ async function loadLib() {
     ear.ends++;
     if (!ear.open) return;
     earSilenceArm();
+    /* THE DOORMAN IS ASKED HERE, ABOVE THE FLUSH, and that order is the only reason the turn
+       number exists by the time the question is posted. flushThought() below calls ask()
+       synchronously; ask() then awaits speaker.pending, which this line has already set. The
+       other way round - identifying inside ask() - would work too, and would embed the sentence
+       AFTER deciding what to do with it, which is the shape that lets a proposal be confirmed
+       before anybody has established who confirmed it. It takes no decision of its own: while
+       enrolling it keeps the sentence as a clip, otherwise it starts one request. */
+    speakerTurnEnd();
     /* THE PAUSE THAT ENDS A TURN, decided by the room rather than by a stopwatch. The
        recogniser's own FINISH_MS buffer is still armed underneath - it is what answers on a
        machine that would not give us an analyser - but a real silence is the better signal
@@ -13054,6 +13583,447 @@ async function loadLib() {
      whatever .title holds as the button's permanent base description, and a placeholder
      captured there outlives the condition it described. */
   $('scribebtn').disabled = true;
+
+  /* ==================================================================
+     THE DOORMAN: WHO IS TALKING, AND WHOSE ORDERS THIS HOUSE TAKES
+     ==================================================================
+     WHAT IT ACTUALLY DOES. While the ear is open a second tap sits on the microphone the ear
+     already holds and keeps the last fourteen seconds of it in RAM. When a sentence ends, the
+     span the VAD says was speech is cut out of that ring, packed into a 16 kHz WAV and POSTed
+     to /speaker as `identify`. The server embeds it with ECAPA-TDNN, compares the 192 floats
+     against the enrolled voiceprints and answers with one word - BOSS, a name, or GUEST - and a
+     turn number. The audio never touches a disk on either side and is not kept in this page
+     beyond the ring, which rolls.
+
+     THIS PAGE DECIDES NOTHING. It holds no threshold, no embedding and no name it did not read
+     out of a reply. All it carries forward is a NUMBER, and the whole of the Hands law on the
+     server is "which verdict does that number stand for". So the worst a stale or tampered tab
+     can do is quote a verdict this server already reached from real audio; making a guest's yes
+     into the boss's would take the boss's larynx.
+
+     AND IT FAILS CLOSED, which is the one thing in here worth checking twice. speakerBlock()
+     answers `{via:'voice', turn}` for every sentence that came through the ear - including one
+     the doorman could not identify, could not reach the server about, or ran out of time on. A
+     turn number the server never issued is refused at the gate exactly as a guest is. The
+     tempting version, which omits the block when identification failed, would make a hung
+     fetch into a way of being promoted.
+
+     NO VOICEPRINTS, NO TAP. With an empty store the ring is never built, no audio is read and
+     no request is made: there is nobody to recognise, so taking a recording to find that out
+     would be a cost with no answer at the end of it. That is also the mandate's "with zero
+     enrolments the law stands down silently".
+
+     AND THE EAR'S OWN COMMENT WAS TRUE UNTIL THIS BLOCK EXISTED. It said there was no
+     recorder, no buffer and no blob in this file; there is now, it is here, and earStreamUp's
+     comment has been rewritten to say exactly what it is and how long it lives rather than left
+     standing as the reassuring sentence it used to be. */
+  const SPEAKER_CHUNK_S = 0.5;        // the tap's grain: short enough to bound the ring's tail
+  const SPEAKER_RING_MS = 14000;      // and it rolls; nothing older than this exists anywhere
+  const SPEAKER_LEAD_MS = 250;        // taken from BEFORE the onset - see speakerSlice()
+  const SPEAKER_MAX_MS = 12000;       // one utterance's worth; a monologue is cut, not queued
+  const SPEAKER_MIN_MS = 600;         // under this there is no voice in it worth embedding
+  const SPEAKER_WAIT_MS = 2600;       // how long a turn waits for a verdict before going on
+  const SPEAKER_ENROL_MS = 90000;     // and how long enrolment waits for somebody to speak
+  const SPEAKER_ENROL_MAX = 8;        // sentences; a guard on a person who keeps talking
+
+  /* ---- /health, once a poll: what the machine can do and who it knows ----
+     The same shape as scribeHealthFrom and for the same reason: the Command Panel must not
+     offer Learn a voice on a machine with no model, and it must know whether the word is
+     "learn" or "learn again" before it is pressed rather than after. */
+  function speakerHealthFrom(state) {
+    if (!state) return;
+    speaker.installed = !!state.installed;
+    speaker.ready = !!state.ready;
+    speaker.count = Number(state.count) || 0;
+    speaker.hasHands = !!state.hasHands;
+    speaker.enrolled = Array.isArray(state.enrolled) ? state.enrolled : [];
+    speaker.dim = Number(state.dim) || 0;
+    speaker.threshold = Number(state.threshold) || 0;
+    speaker.minSeconds = Number(state.minSeconds) || 0;
+    speaker.minSentences = Number(state.minSentences) || 0;
+    speaker.bossCall = String(state.bossCall || '');
+    speaker.why = String(state.why || '');
+    speaker.asked = true;
+    if (cmd && cmd.view === 'list' && $('cmd') && $('cmd').classList.contains('open')) {
+      cmdPaint();
+    }
+  }
+
+  /* ---- THE TAP ----
+     THE SAME PROCESSOR AS THE SCRIBE'S, with a different grain. SCRIBE_TAP_SRC takes its
+     length from processorOptions, so a second node of the registered "scribe-tap" costs no new
+     worklet source and no second module: half a second instead of three, and the module is
+     registered once for whichever organ asks first. Two taps that drifted apart would be two
+     places to fix a resampling bug. */
+  async function speakerTapUp() {
+    if (actx.audioWorklet) {
+      try {
+        if (!scribeModuleUp) {
+          const url = URL.createObjectURL(
+            new Blob([SCRIBE_TAP_SRC], { type: 'text/javascript' }));
+          try {
+            await actx.audioWorklet.addModule(url);
+            scribeModuleUp = true;
+          } finally { URL.revokeObjectURL(url); }
+        }
+        const node = new AudioWorkletNode(actx, 'scribe-tap', {
+          numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
+          processorOptions: { seconds: SPEAKER_CHUNK_S }
+        });
+        node.port.onmessage = function (ev) {
+          const d = ev.data;
+          if (d && d.pcm) speakerChunk(d.pcm, d.rate || actx.sampleRate);
+        };
+        speaker.mode = 'worklet';
+        return node;
+      } catch (e) {
+        speaker.trouble = 'the worklet was refused (' + ((e && e.name) || 'error') + ')';
+      }
+    }
+    if (!actx.createScriptProcessor) return null;
+    const want = Math.max(1, Math.round(actx.sampleRate * SPEAKER_CHUNK_S));
+    const node = actx.createScriptProcessor(4096, 1, 1);
+    let buf = new Float32Array(want), n = 0;
+    node.onaudioprocess = function (ev) {
+      const ch = ev.inputBuffer.getChannelData(0);
+      for (let i = 0; i < ch.length; i++) {
+        buf[n++] = ch[i];
+        if (n >= want) { const out = buf; buf = new Float32Array(want); n = 0;
+                         speakerChunk(out, actx.sampleRate); }
+      }
+    };
+    speaker.mode = 'scriptprocessor';
+    return node;
+  }
+
+  /* THE EAR'S STREAM AND NOT A SECOND ONE. `src` is ear.src, the MediaStreamSource the ear
+     already built, so this adds one node to an existing graph and opens no microphone of its
+     own: there is exactly one getUserMedia in this page's conversation path and it stays that
+     way. If this returns false the ear is unaffected and the seal simply never names anybody. */
+  async function speakerEarUp(src) {
+    if (!src || speaker.tap) return !!speaker.tap;
+    if (!speaker.installed || !speaker.ready) return false;
+    /* NOBODY ENROLLED AND NOBODY ENROLLING: no tap. See the section head. */
+    if (!speaker.count && !speaker.enrolling) return false;
+    if (typeof actx === 'undefined' || !actx) return false;
+    let node = null;
+    try { node = await speakerTapUp(); } catch (e) { node = null; }
+    if (!node) {
+      speaker.trouble = speaker.trouble || 'this machine would not give the doorman a tap';
+      return false;
+    }
+    try {
+      /* THE ZERO-GAIN PULL, and it is the same one the Scribe documents at its own graph: a
+         node with no path to the destination is never asked to process anything, and a path at
+         any gain but zero is the room coming back out of the speakers and round again. */
+      const sink = actx.createGain();
+      sink.gain.value = 0;
+      src.connect(node);
+      node.connect(sink);
+      sink.connect(actx.destination);
+      speaker.tap = node;
+      speaker.sink = sink;
+      speaker.ring = [];
+      speaker.ringSamples = 0;
+      speaker.trouble = '';
+      return true;
+    } catch (e) {
+      speaker.trouble = 'the doorman could not be wired to the ear';
+      try { node.disconnect(); } catch (e2) { /* nothing to undo */ }
+      return false;
+    }
+  }
+
+  /* AND IT IS TORN DOWN WITH THE SESSION, ring and all. The ring is the only audio this page
+     has ever held and it does not outlive the microphone it came from: earStreamDown() stops
+     the tracks, this drops the samples, and the seal goes dark on the same paint. */
+  function speakerEarDown() {
+    ['tap', 'sink'].forEach(function (k) {
+      const node = speaker[k];
+      if (!node) return;
+      try { if (node.port) node.port.onmessage = null; } catch (e) { /* not a worklet */ }
+      try { node.onaudioprocess = null; } catch (e) { /* not a processor */ }
+      try { node.disconnect(); } catch (e) { /* already gone */ }
+      speaker[k] = null;
+    });
+    speaker.ring = [];
+    speaker.ringSamples = 0;
+    speaker.pending = null;
+    speaker.seal = ''; speaker.who = ''; speaker.addressForm = '';
+    speaker.hands = false; speaker.score = 0; speaker.turn = 0;
+    speakerEnrolStop('');
+    sealPaint();
+  }
+
+  /* ---- THE RING, AND IT ROLLS ----
+     Each chunk is stamped with the time it ARRIVED, which is the time its last sample was
+     taken, and anything older than SPEAKER_RING_MS is dropped on the next chunk. There is no
+     path out of this array except speakerSlice() and no path out of speakerSlice() except a
+     POST, so the longest any sample exists is fourteen seconds and a fetch. */
+  function speakerChunk(pcm, rate) {
+    if (!speaker.tap) return;                    // a chunk that landed after the ear closed
+    speaker.chunks++;
+    const at = Date.now();
+    speaker.ring.push({ pcm: pcm, rate: rate || 48000, at: at,
+                        ms: (pcm.length / (rate || 48000)) * 1000 });
+    speaker.ringSamples += pcm.length;
+    while (speaker.ring.length && (at - speaker.ring[0].at) > SPEAKER_RING_MS) {
+      speaker.ringSamples -= speaker.ring[0].pcm.length;
+      speaker.ring.shift();
+    }
+  }
+
+  /* THE LEAD IS NOT A DETAIL. earVad() declares speech only after EAR_VAD_FRAMES frames over
+     the gate, so ear.speechAt is already a little way into the first word - and the first word
+     is where a person's voice is most itself. Two hundred and fifty milliseconds before the
+     onset puts the attack back in. */
+  function speakerSlice(fromAt, toAt) {
+    const want = [];
+    let rate = 0;
+    for (let i = 0; i < speaker.ring.length; i++) {
+      const c = speaker.ring[i];
+      if (c.at < fromAt || (c.at - c.ms) > toAt) continue;
+      want.push(c.pcm);
+      rate = c.rate;
+    }
+    if (!want.length) return null;
+    let n = 0;
+    for (let i = 0; i < want.length; i++) n += want[i].length;
+    const out = new Float32Array(n);
+    let at = 0;
+    for (let i = 0; i < want.length; i++) { out.set(want[i], at); at += want[i].length; }
+    return { pcm: out, rate: rate, ms: (n / (rate || 48000)) * 1000 };
+  }
+
+  /* ---- THE TURN ----
+     Called from earSpeechEnd(), which is called by the VAD's hangover and by nothing else, so
+     the span this cuts is the span the detector called speech. It runs BEFORE flushThought()
+     hands the sentence to ask(), which is what makes the turn number available by the time the
+     question is posted; ask() then waits on speaker.pending rather than racing it. */
+  function speakerTurnEnd() {
+    if (!speaker.tap || !ear.open) return null;
+    const now = Date.now();
+    const from = Math.max(now - SPEAKER_MAX_MS, (ear.speechAt || now) - SPEAKER_LEAD_MS);
+    /* AND A SPAN THE BUTLER WAS TALKING THROUGH IS NOT USED, which is not a nicety - it is the
+       difference between learning a person's voice and learning the machine's. The ring is a
+       microphone, the microphone hears the speakers, and the first thing that happens after
+       "say three sentences and I will learn your voice" is the butler saying it out loud. So the
+       span is checked against echo.liveAt, which is the last moment the mouth was live: any
+       overlap at all and the sentence is dropped rather than averaged into an embedding.
+       DROPPING IS THE SAFE DIRECTION for identification too - a turn with no verdict is treated
+       as a guest's and refused at the gate, where the alternative is a verdict computed from a
+       mixture of two voices that would score as neither. */
+    if (echoTtsLive() || (echo.liveAt && echo.liveAt >= from)) {
+      speaker.echoDropped = (speaker.echoDropped || 0) + 1;
+      return null;
+    }
+    const cut = speakerSlice(from, now);
+    if (!cut || cut.ms < SPEAKER_MIN_MS) return null;
+    if (speaker.enrolling) return speakerEnrolAdd(cut);
+    speaker.pending = speakerIdentify(cut);
+    return speaker.pending;
+  }
+
+  /* ONE WAV, ONE POST, AND THE SAMPLES GO OUT OF SCOPE HERE. `cut` is the only reference and
+     it is not stored: the blob is handed to fetch, the reply is four fields, and nothing in
+     this function keeps either. */
+  async function speakerIdentify(cut) {
+    const started = Date.now();
+    try {
+      const form = new FormData();
+      form.append('cmd', 'identify');
+      form.append('session', SESSION);
+      form.append('audio0', speakerWav(cut), 'turn.wav');
+      const res = await fetch('/speaker', { method: 'POST', body: form });
+      const data = await res.json();
+      speaker.lastMs = Date.now() - started;
+      if (!data || data.ok === false) {
+        speaker.failed++;
+        return null;
+      }
+      speaker.turns++;
+      speaker.turn = Number(data.turn) || 0;
+      speaker.at = Date.now();
+      /* THE WORD IS COPIED, NOT COMPUTED. seal_for() on the server decided it from the
+         embedding; this page would have to hold a threshold to reach it independently, and a
+         page that held a threshold would be a page that could move one. */
+      speaker.seal = String(data.seal || 'GUEST');
+      speaker.who = String(data.who || '');
+      speaker.addressForm = String(data.addressForm || '');
+      speaker.hands = !!data.hands;
+      speaker.score = Number(data.score) || 0;
+      speaker.seconds = Math.round((Number(data.audioSeconds) || 0) * 100) / 100;
+      if (speaker.hands) speaker.boss++;
+      else if (speaker.who && speaker.who !== 'GUEST') speaker.known++;
+      else speaker.guests++;
+      sealPaint();
+      return data;
+    } catch (e) {
+      speaker.failed++;
+      speaker.lastMs = Date.now() - started;
+      return null;
+    }
+  }
+
+  /* THE SAME PACKER AS THE SCRIBE'S, named separately so this section reads on its own and so
+     a future change to one organ's format cannot silently change the other's. 16 kHz mono is
+     what the model was trained at and what voiceprint.py resamples everything to anyway. */
+  function speakerWav(cut) {
+    return scribeWav(cut.pcm, cut.rate);
+  }
+
+  /* ---- WHAT THE REST OF THE PAGE ASKS ----
+     speakerSettled() is awaited by every spoken turn before it posts, so the verdict for THIS
+     sentence is the one the server reads. It is bounded: a verdict that has not arrived in
+     SPEAKER_WAIT_MS is not waited for, because a conversation that stalled on a doorman would
+     be a worse failure than one that refused an order. */
+  async function speakerSettled() {
+    const p = speaker.pending;
+    if (!p) return null;
+    let timer = null;
+    try {
+      return await Promise.race([p, new Promise(function (done) {
+        timer = setTimeout(function () { done(null); }, SPEAKER_WAIT_MS);
+      })]);
+    } finally { clearTimeout(timer); }
+  }
+
+  /* AND THIS IS THE ONE THAT MUST FAIL CLOSED. It answers a block for every sentence that came
+     through the ear while voiceprints exist - identified or not - because the server's law is
+     "spoken and not established" and that is precisely the state a missing verdict is in. The
+     turn number is 0 when there is none, which is a number this server never issued.
+     IT IS SILENT WITH AN EMPTY STORE. No voiceprints means no doorman: the block is omitted,
+     the server sees a typed message and today's behaviour holds exactly. */
+  function speakerBlock(via) {
+    if (!speaker.count) return null;
+    if (!speaker.installed) return null;
+    return { via: via || 'voice', turn: speaker.turn || 0 };
+  }
+
+  /* ---- ENROLMENT: THREE SENTENCES, THROUGH THE EAR THAT IS ALREADY OPEN ----
+     IT REQUIRES THE EAR TO BE OPEN AND DOES NOT OPEN ONE. A row that opened a microphone to
+     learn a voice would be a control that starts recording from a list of orders, and the
+     transparency law's whole point is that the seal is lit BEFORE anything is heard. So this
+     refuses with the reason, the employer presses the ear, and the sentences are taken through
+     the tap that is already there.
+
+     IT IS THE KEYBOARD'S ROW. cmdRun() is reachable from a click and from the panel's key and
+     from nowhere else - no sentence in the funnel arrives here - and the server refuses an
+     enrolment whose body admits it came in by voice. Two halves of one guard, and the server's
+     half is the one that holds if this page is ever wrong. */
+  function speakerEnrolStart(replacing) {
+    if (!speaker.installed || !speaker.ready) return false;
+    if (speaker.enrolling) return true;
+    speaker.enrolling = true;
+    speaker.replacing = !!replacing;
+    speaker.enrolClips = [];
+    speaker.enrolSeconds = 0;
+    speaker.enrolWhy = '';
+    speaker.enrolLine = 'say ' + (speaker.minSentences || 3) + ' sentences · nothing yet';
+    clearTimeout(speaker.enrolTimer);
+    speaker.enrolTimer = setTimeout(function () {
+      if (!speaker.enrolling) return;
+      speakerEnrolStop('nobody spoke');
+      speakLine('I gave up waiting for those sentences. Press the row again when you are ready.');
+      cmdPaint();
+    }, SPEAKER_ENROL_MS);
+    /* AND THE TAP COMES UP FOR AN EMPTY STORE TOO, which is the one case where it must: the
+       first enrolment in the house happens with nothing enrolled, so speakerEarUp's "nobody to
+       recognise" guard has to be satisfied by `enrolling` rather than by a count. */
+    if (ear.src && !speaker.tap) speakerEarUp(ear.src);
+    cmdPaint();
+    return true;
+  }
+
+  function speakerEnrolStop(why) {
+    clearTimeout(speaker.enrolTimer);
+    speaker.enrolTimer = null;
+    speaker.enrolling = false;
+    speaker.replacing = false;
+    /* THE CLIPS GO HERE AND NOWHERE ELSE. Whether enrolment succeeded, was refused or timed
+       out, the samples are dropped on the way out of this function - there is no branch in this
+       page that writes them anywhere, and none that keeps them for a second attempt. */
+    speaker.enrolClips = [];
+    speaker.enrolSeconds = 0;
+    if (why) speaker.enrolWhy = String(why);
+    speaker.enrolLine = '';
+  }
+
+  /* EACH SENTENCE IS KEPT AND THE SET IS OFFERED AS SOON AS THERE ARE ENOUGH OF THEM - even
+     when they are plainly too short. That is deliberate: the server owns the seconds refusal
+     and names the seconds still missing, and a page that withheld the request until it thought
+     the answer would be yes would be a page holding a second copy of the rule. So it posts, it
+     reads the refusal out loud, and it keeps listening. */
+  function speakerEnrolAdd(cut) {
+    speaker.enrolClips.push(cut);
+    speaker.enrolSeconds += cut.ms / 1000;
+    const want = speaker.minSentences || 3;
+    speaker.enrolLine = speaker.enrolClips.length + ' of ' + want + ' · ' +
+                        speaker.enrolSeconds.toFixed(1) + 's';
+    cmdPaint();
+    if (speaker.enrolClips.length >= want) speakerEnrolSend();
+    else if (speaker.enrolClips.length >= SPEAKER_ENROL_MAX) speakerEnrolSend();
+    return null;
+  }
+
+  async function speakerEnrolSend() {
+    const clips = speaker.enrolClips.slice(0, SPEAKER_ENROL_MAX);
+    const replacing = speaker.replacing;
+    const name = speaker.bossCall || 'the boss';
+    const started = Date.now();
+    try {
+      const form = new FormData();
+      form.append('cmd', 'enrol');
+      form.append('session', SESSION);
+      form.append('name', name);
+      form.append('addressForm', name);
+      /* REPLACE RATHER THAN FORGET-THEN-ENROL, and the order is the whole reason. Deleting the
+         house's only hands-privileged row and THEN discovering the new sentences were four
+         seconds short would stand the Hands law down silently, which is the failure this part
+         exists to prevent. With `replace` the old row is overwritten only once a new embedding
+         exists, and a refusal leaves it exactly where it was. */
+      if (replacing) form.append('replace', 'true');
+      for (let i = 0; i < clips.length; i++) {
+        form.append('audio' + i, speakerWav(clips[i]), 'enrol' + i + '.wav');
+      }
+      const res = await fetch('/speaker', { method: 'POST', body: form });
+      const data = await res.json();
+      if (data && data.speaker) speakerHealthFrom(data.speaker);
+      if (!data || data.ok === false) {
+        /* THE REFUSAL IS THE SERVER'S SENTENCE, read out as it was written: it is the side that
+           counted the seconds, and a page that paraphrased "another 3.4 seconds, if you would"
+           into "that was not enough" would be throwing away the only useful half of it. */
+        const line = String((data && (data.error || data.answer)) ||
+                            'The doorman would not answer.');
+        speaker.enrolWhy = line;
+        /* AND IT KEEPS LISTENING. A refusal for too little speech is answered by more speech,
+           and closing enrolment here would make the employer press the row again for it. The
+           duplicate refusal is the one that ends it, because saying it twice cannot help. */
+        if (/already enrolled/i.test(line) || speaker.enrolClips.length >= SPEAKER_ENROL_MAX) {
+          speakerEnrolStop(line);
+        }
+        speakLine(line);
+        cmdPaint();
+        return false;
+      }
+      const row = data.enrolled || {};
+      speakerEnrolStop('');
+      speaker.lastMs = Date.now() - started;
+      /* THE SENTENCE SAYS WHAT WAS KEPT AND WHAT WAS NOT, because "learned your voice" leaves
+         the interesting half out. keptAudio is asserted by the harness and stated here. */
+      speakLine('I have your voice now, ' + name + ' - ' +
+                (row.sentences || clips.length) + ' sentences, ' +
+                Math.round(Number(row.seconds) || 0) + ' seconds, kept as ' +
+                (row.dim || speaker.dim || 192) + ' numbers. The audio is gone.');
+      cmdPaint();
+      return true;
+    } catch (e) {
+      speakerEnrolStop('the server could not be reached');
+      speakLine('I could not reach the server to learn that voice.');
+      cmdPaint();
+      return false;
+    }
+  }
 
   /* ==================================================================
      THE TYPEWRITER
@@ -17887,6 +18857,46 @@ async function loadLib() {
   window.__galaxy = {
     Graph: Graph, nodes: nodes, allLinks: allLinks, strongLinks: strongLinks,
     focus: focusNode, ask: ask, colorOf: colorOf,
+    /* THE ORRERY, read-only and by getter - the declared numbers next to the live ones, so a
+       harness can assert that what the room is doing is what the constants said it would.
+       There is no setter, deliberately: an instrument that can turn the travel off is an
+       instrument that can be made to pass by turning it off. The one way to stop the worlds
+       is prefers-reduced-motion, which is the reader's lever and not the harness's.
+       `sample()` returns each world's current offset and its own period, which is what the
+       twenty-second assertion differences and what the px/minute envelope was measured
+       from - offsets rather than positions, because a position also contains whatever the
+       solver is still doing and the offset is the only part this section is answerable for. */
+    orrery: {
+      DECLARED: { AMP: ORRERY.AMP, AMP_MIN: ORRERY.AMP_MIN,
+                  T_MIN: ORRERY.T_MIN, T_MAX: ORRERY.T_MAX,
+                  PX_MIN: ORRERY.PX_MIN, PX_MAX: ORRERY.PX_MAX,
+                  RATIOS: ORRERY.RATIOS.slice(), AXIS: ORRERY.AXIS.slice() },
+      get on() { return orrery.on; },
+      get why() { return orrery.why; },
+      get worlds() { return orrery.worlds; },
+      get frames() { return orrery.frames; },
+      sample: function () {
+        const d = Graph.graphData(); const out = [];
+        const ns = (d && d.nodes) || [];
+        for (let i = 0; i < ns.length; i++) {
+          const n = ns[i], o = n.__orb;
+          const s = Graph.graph2ScreenCoords(n.x, n.y, n.z);
+          /* THE MESH POSITION IS PART OF THE SAMPLE, and it is here because of the one
+             defect this section actually had: the coordinates travelled and the spheres did
+             not, and every reading taken through graph2ScreenCoords agreed that everything
+             was fine. A harness that can only see n.x/y/z cannot tell the difference between
+             a world that moved and a number that moved. */
+          const m = n.__threeObj && n.__threeObj.position;
+          out.push({ id: String(n.id), x: n.x, y: n.y, z: n.z,
+                     mx: m ? m.x : null, my: m ? m.y : null, mz: m ? m.z : null,
+                     sx: s ? s.x : null, sy: s ? s.y : null,
+                     ox: o ? o.ox : null, oy: o ? o.oy : null, oz: o ? o.oz : null,
+                     period: o ? o.period : null, r: orbRadius(n),
+                     amp: orbAmp(n) });
+        }
+        return out;
+      }
+    },
     /* THE HEARTBEAT, read straight off the live object. A harness asserting "he did not
        stall" reads `stalls` and `worstGapMs`; a harness working out WHY reads `notes`, which
        is where the blocker is named. `beats` against the wall clock is the crude check that
@@ -18362,6 +19372,74 @@ async function loadLib() {
        through a real worklet to a real transcriber, and a door that could inject text would
        make that proof worthless. start() is the same function the click calls, which is the
        only way the picker can be reached at all. */
+    /* THE DOORMAN, READ AND NEVER DRIVEN. Everything in here is a getter: there is no entry
+       point that hands this object a verdict, a name or a turn number, because a probe that
+       could set one would be a way for a harness - or anything else with a console - to promote
+       a guest without a larynx. The only writable thing is `enrol`, which is the panel's own
+       press and goes through exactly the same refusals.
+
+       AND THE SEAL IS THE SERVER'S WORD, verbatim, which is the point of reading it here: a
+       harness asserting `seal === 'BOSS'` is asserting what voiceprint.seal_for() decided from
+       an embedding, not what this page felt like painting. */
+    speaker: {
+      get installed() { return speaker.installed; },
+      get ready() { return speaker.ready; },
+      get why() { return speaker.why; },
+      get count() { return speaker.count; },
+      get hasHands() { return speaker.hasHands; },
+      get names() { return speaker.enrolled.map(function (r) { return String(r.name || ''); }); },
+      get mode() { return speaker.mode; },
+      get trouble() { return speaker.trouble; },
+      get tapped() { return !!speaker.tap; },
+      /* THE RING, IN NUMBERS AND NEVER IN SAMPLES. A harness must be able to prove that audio
+         is held and then dropped, and `samples` with `ms` is enough to prove both - handing out
+         the Float32Array would put the room's audio somewhere a console could copy it. */
+      get ringChunks() { return speaker.ring.length; },
+      get ringSamples() { return speaker.ringSamples; },
+      get ringMs() {
+        let ms = 0;
+        for (let i = 0; i < speaker.ring.length; i++) ms += speaker.ring[i].ms;
+        return Math.round(ms);
+      },
+      RING_MS: SPEAKER_RING_MS, CHUNK_S: SPEAKER_CHUNK_S, LEAD_MS: SPEAKER_LEAD_MS,
+      WAIT_MS: SPEAKER_WAIT_MS,
+      /* THE LIVE VERDICT. Cleared by speakerEarDown(), so a harness can assert that closing the
+         ear takes the label off the glass as well as the samples out of memory. */
+      get seal() { return speaker.seal; },
+      get who() { return speaker.who; },
+      get hands() { return speaker.hands; },
+      get score() { return speaker.score; },
+      get turn() { return speaker.turn; },
+      get turns() { return speaker.turns; },
+      get boss() { return speaker.boss; },
+      get guests() { return speaker.guests; },
+      get known() { return speaker.known; },
+      get failed() { return speaker.failed; },
+      get echoDropped() { return speaker.echoDropped; },
+      get chunks() { return speaker.chunks; },
+      get lastMs() { return speaker.lastMs; },
+      /* THE PRIVACY LAW WHERE A HARNESS CAN READ IT, on the Scribe's rule: this page has no path
+         that writes a sample anywhere, and the ring does not outlive the microphone. */
+      keepsAudio: false,
+      get block() { return speakerBlock('voice'); },
+      /* THE SEAL AS THE GLASS HAS IT, off the DOM rather than off the flag, for the reason the
+         organ rail is a reader: the cell's text is what the employer can actually see. */
+      get cell() {
+        const el = document.getElementById('seal-who');
+        if (!el) return null;
+        return { text: el.textContent || '', on: el.classList.contains('on'),
+                 boss: el.classList.contains('boss') };
+      },
+      get enrolling() { return speaker.enrolling; },
+      get enrolClips() { return speaker.enrolClips.length; },
+      get enrolSeconds() { return Math.round(speaker.enrolSeconds * 100) / 100; },
+      get enrolWhy() { return speaker.enrolWhy; },
+      get row() { return cmdRead('voice'); },
+      /* THE PANEL'S OWN PRESS, and nothing else. It goes through cmdRun, so the ear-shut refusal
+         and the boss-only structure are the same ones a hand meets. */
+      enrol: function () { return cmdRun('voice'); },
+      settled: function () { return speakerSettled(); }
+    },
     scribe: {
       get installed() { return scribe.installed; },
       get ready() { return scribe.ready; },

@@ -11,6 +11,21 @@ config.json
 # here is reachable from the browser either.
 secrets/
 
+# THE DOORMAN'S MEMORY. speaker-store/ holds one json per enrolled voice, and each one
+# carries 192 floats that are a measurement of a person's larynx. No audio is in there -
+# nothing in voiceprint.py can write a sample - so it cannot be played back, but an
+# embedding is still biometric data about a named human being and it does not belong in a
+# repository any more than a refresh token does. Listed beside secrets/ for that reason and
+# denied to Read in .claude/settings.json for the same one. The server never serves
+# anything outside viewer/, so it is not reachable from the browser either.
+speaker-store/
+
+# THE DOWNLOADED WEIGHTS. models/ is the ECAPA-TDNN ONNX file the doorman embeds with:
+# 24.9 MB of somebody else's published weights, fetched once, an asset rather than source
+# and rebuildable by re-downloading it. Same reason voices/ is ignored. README says which
+# file and where.
+models/
+
 # PYTHON CACHES
 __pycache__/
 *.pyc
