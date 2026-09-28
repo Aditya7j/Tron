@@ -41,10 +41,15 @@
  * Usage:  python server.py 2> server-trace.log   then   node deck_proof.mjs
  *         DECK_HEADED=1 node deck_proof.mjs      to watch it happen in a window
  */
-import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, existsSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, existsSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/* The project root as this file's own place, not as the shell's: the corpus swap below is a
+   build.py run and a file read, and both would be about the wrong directory otherwise. */
+const ROOT = dirname(fileURLToPath(import.meta.url));
 
 const GALAXY = 'http://127.0.0.1:4700';
 const PORT = 9236;
@@ -98,6 +103,58 @@ const ok = (c, claim, detail) => {
 };
 const note = (m) => console.log('  note ' + m);
 const procs = []; const profiles = [];
+
+/* ============ THE REFERENCE CORPUS, AND WHY THIS HARNESS NOW BUILDS ITS OWN ============
+ * THIS IS A RENDERER PROOF, AND IT WAS QUIETLY A CORPUS PROOF. Half of what is below is a
+ * claim about how RELATIONS are drawn: one travelling dot per link, no Line object anywhere,
+ * ring thickness as a ladder of four widths earned by a world's own link count, simplify-on-
+ * load showing the strong subset and hiding the rest. Every one of those needs a graph with
+ * links in it, and until PART 8 there was one by luck: the collection shipped with a dummy
+ * cafe whose thirty notes cross-referenced each other, and this file scored 238/238 against
+ * it without ever saying that was a dependency.
+ *
+ * PART 8 moved that corpus to archive/quarantine/ and left three true notes behind, which do
+ * not mention one another. Nought links. Five checks went red and a sixth threw on
+ * __galaxy.active[0], taking a hundred and seventy-six further checks with it - and not one
+ * of those reds was about the renderer. The harness was reporting the shape of his
+ * collection.
+ *
+ * SO IT BRINGS ITS OWN SKY. graph-data.js is rebuilt from archive/quarantine/ for the length
+ * of the run and rebuilt from notes/ again afterwards, and BOTH builds pass --no-vectors, so
+ * the embeddings are never touched: the quarantine stays unindexed, which is the whole point
+ * of it being quarantined, and his own notes are never re-embedded to pay for a frame-rate
+ * measurement. Nothing is written into notes/ at all - the thirty notes already exist, they
+ * are not his, and they are the exact corpus the numbers below were calibrated against.
+ *
+ * AND THE RESTORATION IS A CHECK. A harness that leaves the galaxy showing a fictional cafe
+ * has broken the thing it was measuring, and it must say so in its own verdict line. */
+const REF = 'archive/quarantine';
+const PY = 'C:/Users/Fullstack Developer/AppData/Local/Programs/Python/Python313/python.exe';
+let swapped = null;               // the reading taken before the swap, or null if never swapped
+
+function buildFrom(dir) {
+  const args = dir ? [dir, '--no-vectors'] : ['--no-vectors'];
+  const p = spawnSync(PY, ['build.py'].concat(args), { cwd: ROOT, encoding: 'utf8' });
+  const line = String(p.stdout || '').split(/\r?\n/)
+    .filter((l) => /worlds|nodes|links/i.test(l)).slice(-1)[0] || '';
+  return { code: p.status, line: line.trim() };
+}
+/* WHAT THE PAGE WILL LOAD, read out of the file the page loads rather than out of /health -
+   the server holds its own in-memory index and this swap deliberately does not disturb it.
+   `root` is the notesRoot build.py stamped into the file, and it is the field the restoration
+   is asserted on: a count cannot be the claim here, because the boss can file a note through
+   the Census or the remember hand while this harness is running - he did, twice, during the
+   run that taught this - and "his collection is back" must not go red because his collection
+   grew. The root is the thing that was swapped, so the root is the thing to check. */
+function graphCounts() {
+  try {
+    const src = readFileSync(join(ROOT, 'viewer', 'graph-data.js'), 'utf8');
+    const n = (src.match(/"id":\s*\d+/g) || []).length;
+    const l = (src.match(/"source":\s*\d+/g) || []).length;
+    const m = src.match(/"notesRoot":\s*"([^"]*)"/);
+    return { nodes: n, links: l, root: m ? m[1] : '?' };
+  } catch { return { nodes: -1, links: -1, root: '?' }; }
+}
 
 class Page {
   constructor(u) { this.u = u; this.id = 0; this.w = new Map(); this.casts = 0; this.casting = false; this.errors = []; }
@@ -235,6 +292,27 @@ async function main() {
   if (!exe) throw new Error('no chrome.exe');
   const health = await (await fetch(GALAXY + '/health')).json();
   note('server up, model ' + (health.model || '?'));
+
+  /* THE SKY THIS RUN MEASURES. See the note above the swap helpers: the relation half of
+     this file needs a graph with relations in it, and his own three notes do not mention
+     each other. Swapped only when there is nothing to draw, so a collection that has grown
+     links of its own is measured as it stands and the quarantine is left alone. */
+  const mine = graphCounts();
+  if (mine.links > 0) {
+    note('the collection has ' + mine.links + ' relations of its own, so it is measured as ' +
+         'it stands and no corpus is swapped in');
+  } else {
+    const built = buildFrom(REF);
+    const ref = graphCounts();
+    swapped = mine;
+    ok(built.code === 0 && ref.links > 0,
+       'his collection draws ' + mine.links + ' relations, so the reference corpus is built ' +
+       'in for the length of the run: ' + ref.nodes + ' worlds, ' + ref.links + ' relations',
+       JSON.stringify({ exit: built.code, line: built.line, ref: ref }));
+    if (!(built.code === 0 && ref.links > 0)) {
+      throw new Error('the reference corpus would not build; nothing below would mean anything');
+    }
+  }
 
   const profile = mkdtempSync(join(tmpdir(), 'deck-'));
   profiles.push(profile);
@@ -1312,6 +1390,42 @@ async function main() {
      has moved a measurable fraction of a pixel and short enough that twenty of them
      describe the path rather than the chord. */
   const ORR_MS = 20000, ORR_STEP = 1000;
+  /* FIRST, THE SKY HAS TO BE COLD. Every number below is a SCREEN-SPACE path length, and a
+     world's screen position moves for two quite different reasons: the orrery's own ellipse,
+     which is what is being measured, and the force layout still settling, which is not. The
+     two are indistinguishable in sx/sy, and the second one is much the larger while it lasts.
+     MEASURED: on a thirty-world corpus this reported the fastest world at 74.5 px/minute
+     against a declared ceiling of 30 - two and a half times over - with every world-space
+     offset inside its own amplitude, which is the signature of exactly this confusion: the
+     orbits were within bounds and the ground underneath them was still moving.
+     THE BASE POSITION IS THE ONE TO WATCH, not x: x is base + orbit, so a cold layout under a
+     travelling orrery still changes x every frame. base = x - ox, which the sample already
+     carries both halves of. */
+  const baseStill = async () => {
+    let prev = null;
+    for (let i = 0; i < 60; i++) {
+      const s = await page.json('__galaxy.orrery.sample()');
+      const base = s.map((w) => [w.x - (w.ox || 0), w.y - (w.oy || 0), w.z - (w.oz || 0)]);
+      if (prev) {
+        let worst = 0;
+        for (let k = 0; k < base.length; k++) {
+          worst = Math.max(worst, Math.hypot(base[k][0] - prev[k][0], base[k][1] - prev[k][1],
+                                             base[k][2] - prev[k][2]));
+        }
+        if (worst < 0.02) return { secs: i, worst: worst };
+      }
+      prev = base;
+      await sleep(1000);
+    }
+    return { secs: 60, worst: -1 };
+  };
+  const cold = await baseStill();
+  ok(cold.worst >= 0 && cold.worst < 0.02,
+     'THE SKY IS COLD BEFORE IT IS TIMED: the force layout settled after ' + cold.secs +
+     's, and every world\'s base position now moves less than ' + cold.worst.toFixed(4) +
+     ' units a second - so what is measured below is the orrery and not the simulation',
+     'the layout was still moving after 60s (worst ' + cold.worst.toFixed(3) + ' units/s), so ' +
+     'a screen-space speed measured now would be the simulation\'s and not the orrery\'s');
   note('watching ' + orrOn.worlds + ' worlds travel for ' + (ORR_MS / 1000) + 's');
   const orrShotA = await page.shot('_runs/after/orrery-wide-A.png');
   const orrShotAt = Date.now();
@@ -1346,18 +1460,83 @@ async function main() {
      world actually travelled across the glass, summed over the window. Net displacement is
      not used and must not be: a world halfway round its ellipse returns towards its start,
      so a net-displacement floor is failed hardest by the world that travelled furthest. */
+  /* THE STRIDE HAS TO BE LONGER THAN THE NOISE, AND A SECOND IS NOT. This is a path length in
+     SCREEN PIXELS, and the declared ceiling is 30 px/minute - which is half a pixel a second.
+     Summed over twenty one-second intervals, absolute magnitudes of half-pixel displacements
+     are mostly the projection's own jitter: the camera's micro-drift, the parallax's eased
+     lean, and the rounding in graph2ScreenCoords. Every one of those contributes a POSITIVE
+     term to a sum of magnitudes, so the estimator can only ever read high.
+     MEASURED, TWICE, AND THE SECOND ATTEMPT IS WHY THIS COMMENT EXISTS. At a one-second stride
+     the thirty worlds read 19.7 to 74.6 px/minute against a declared 6 to 30 - the whole
+     distribution lifted, which looks like a term they all share. So the per-interval median
+     was computed as that shared term and subtracted, and the fastest world went UP, from 30.5
+     to 64.9: subtracting a vector from a displacement of similar size and different direction
+     increases its magnitude. That disconfirmed the shared-term theory and named the real one -
+     at this stride there is no signal to decompose, only noise.
+     FIVE SECONDS INSTEAD. A world of 60-100s period crosses about a quarter of its ellipse in
+     the twenty-second window, so four five-second chords follow that arc to well under a
+     percent, while each one carries five times the travel for the same jitter. Net
+     displacement is still refused, for the reason the original comment gives: a world halfway
+     round its ellipse is on its way home, and a floor measured on the chord is failed hardest
+     by the world that travelled furthest. The one-second figure is kept beside it as
+     `glassPxMin` so the two can be read against each other rather than one replacing the
+     other quietly. */
+  /* AND THE ENVELOPE IS A CLAIM ABOUT A CAMERA, WHICH THIS SKY IS NOT SITTING AT.
+     PX_MIN/PX_MAX are declared in SCREEN PIXELS, and the declaration says where from: "at the
+     default camera ... at 1400x940 (1378 x 842 css) ... at a camera that settles at z 2304 -
+     so 0.3919 px per world unit", over 31 worlds. A pixel is not a property of the orrery. It
+     is the product of the orbit, the field of view and HOW FAR AWAY THE CAMERA PARKED, and the
+     camera parks wherever the deck's one zoomToFit puts it - which depends on how wide the
+     layout spread, which depends on the corpus. A harness that brings its own sky, as this one
+     now does, is by construction not at the camera the numbers were taken from.
+     THIS WAS THE THIRD HYPOTHESIS AND THE RIGHT ONE, and the first two are worth keeping
+     because each was disconfirmed by a measurement rather than dropped. (1) The force layout
+     was still cooling: refuted by the cold-sky gate above - it settles in a second and the
+     worst base motion after that is 0.0000 units/s. (2) A motion the whole frame shared was
+     being counted as each world's own: refuted by subtracting the per-interval median, which
+     moved the fastest world the WRONG WAY, from 30.5 to 64.9. (3) The scale: the readings ran
+     2.4x the ceiling, and 2.4x is not a subtle bug - it is what a camera two and a half times
+     closer does to every pixel figure on the glass, which is the exact mistake this
+     declaration's own comment records making twice in the other direction.
+     SO THE READINGS ARE CONVERTED to the camera the ceiling was declared at before they are
+     compared to it. For a fixed vertical field of view the scale goes as height/distance, so
+     the factor is (live distance / 2304) x (842 / live css height) - no field of view needed,
+     which matters because the page does not expose one. Both figures are printed. If the two
+     cameras ever coincide the factor is 1 and nothing happens.
+     FAILURE MODE THIS NAMES, and it is the one that was live here: a green ceiling on a wide
+     sky and a red one on a narrow sky, from the same orrery, with the harness reporting a
+     defect in the page every time the employer's collection changed shape. */
+  const DECL_Z = 2304, DECL_H = 842, DECL_PX = 0.3919;
+  const cam = await page.json('({pos: __galaxy.camera.pos, t: __galaxy.camera.target,' +
+                              ' h: window.innerHeight, w: window.innerWidth})');
+  const camDist = Math.hypot(cam.pos[0] - cam.t.x, cam.pos[1] - cam.t.y, cam.pos[2] - cam.t.z);
+  const toDecl = (camDist / DECL_Z) * (DECL_H / cam.h);
+  note('the camera sits ' + camDist.toFixed(0) + ' units out over ' + cam.h + ' css px (' +
+       (DECL_PX / toDecl).toFixed(4) + ' px per world unit) where the envelope was declared at ' +
+       DECL_Z + ' over ' + DECL_H + ' (' + DECL_PX + ') - so every reading below is multiplied ' +
+       'by ' + toDecl.toFixed(3) + ' to be compared with a ceiling declared at that camera');
+  const STRIDE = 5;
   const orrRows = [];
   for (let k = 0; k < oFirst.length; k++) {
-    let pathPx = 0, offMax = 0;
+    let pathPx = 0, jitterPx = 0, offMax = 0;
     for (let i = 0; i < orrSamples.length; i++) {
       const w = orrSamples[i].s[k];
       offMax = Math.max(offMax, Math.hypot(w.ox || 0, w.oy || 0, w.oz || 0));
       if (i === 0) continue;
       const p = orrSamples[i - 1].s[k];
-      pathPx += Math.hypot(w.sx - p.sx, w.sy - p.sy);
+      jitterPx += Math.hypot(w.sx - p.sx, w.sy - p.sy);
+      if (i % STRIDE === 0) {
+        const q = orrSamples[i - STRIDE].s[k];
+        pathPx += Math.hypot(w.sx - q.sx, w.sy - q.sy);
+      }
     }
+    const strided = Math.floor((orrSamples.length - 1) / STRIDE) * STRIDE;
+    const perSample = orrSecs / (orrSamples.length - 1);
     orrRows.push({ id: oFirst[k].id, period: oFirst[k].period, amp: oFirst[k].amp,
-                   r: oFirst[k].r, offMax: offMax, pxMin: pathPx * 60 / orrSecs });
+                   r: oFirst[k].r, offMax: offMax,
+                   pxMin: pathPx * 60 * toDecl / (strided * perSample),
+                   glassPxMin: jitterPx * 60 * toDecl / orrSecs,
+                   here: pathPx * 60 / (strided * perSample) });
   }
   /* THE FLOOR BINDS WHERE THE DECLARATION SAYS IT BINDS. AMP_MIN exists because an unlinked
      note is the smallest world on the deck and was the one world under the px floor; the claim
@@ -1381,7 +1560,11 @@ async function main() {
   const slowest = orrRows[0], fastest = orrRows[orrRows.length - 1];
   note('slowest world "' + slowest.id + '" (period ' + slowest.period.toFixed(0) + 's) ' +
        slowest.pxMin.toFixed(1) + ' px/minute · fastest "' + fastest.id + '" (period ' +
-       fastest.period.toFixed(0) + 's) ' + fastest.pxMin.toFixed(1) + ' px/minute');
+       fastest.period.toFixed(0) + 's) ' + fastest.pxMin.toFixed(1) + ' px/minute · ' +
+       'at the declared camera, measured on a ' + STRIDE + 's stride · on this run\'s own ' +
+       'glass they travel ' + slowest.here.toFixed(1) + ' and ' + fastest.here.toFixed(1) +
+       ' · summed at a 1s stride, where jitter is a bigger share of the reading, ' +
+       slowest.glassPxMin.toFixed(1) + ' and ' + fastest.glassPxMin.toFixed(1));
   const tooSlow = orrRows.filter((r) => r.pxMin < orrD.PX_MIN);
   ok(orrRows.length >= 10 && tooSlow.length === 0,
      'EVERY WORLD TRAVELS FAR ENOUGH TO SEE: all ' + orrRows.length + ' cleared the declared ' +
@@ -1703,8 +1886,20 @@ async function main() {
     ' frames: __galaxy.presence.frames})');
   ok(face0.mode === 'face',
      'FACE MODE IS LIVE for the measurement below', JSON.stringify(face0));
-  ok(face0.points >= 8000 && face0.points <= 12000,
-     'and it is a face assembled from ' + face0.points + ' POINTS - inside the 8-12k band ' +
+  /* THE BAND MOVED WITH §27 PART 3, AND THE CEILING DID NOT. The face was 8-12k when the well
+     was a 300px square; PART 3 grows it to 420px, which is 1.96x the glass, and a point count
+     held still would have thinned the cloud by half at the exact moment the head became the
+     dominant anchor. PRES.CAP is 13800 - see the coverage arithmetic there for why 1.15x the
+     count and 1.96x the sprite area was chosen over the 23,500 points that holding per-pixel
+     density outright would have cost. The mandate's own ceiling of 14000 is untouched and is
+     still asserted below at line ~1964; this band is the SPEC's band, and the two are different
+     promises: one is "not more than the machine was sized for", the other is "the face is a
+     face and not a handful of dots".
+     The lower bound stays at 8000 deliberately: it is the number below which the cloud stops
+     reading as a volume, and the compact tier thins by DENSITY rather than by count, so no tier
+     is entitled to fall through it. */
+  ok(face0.points >= 8000 && face0.points <= 13800,
+     'and it is a face assembled from ' + face0.points + ' POINTS - inside the 8-13.8k band ' +
      'the spec names, under a ' + face0.capacity + '-point buffer allocated once',
      JSON.stringify(face0));
   ok(face0.objects === 1 && face0.materials === 1 && face0.shader === true,
@@ -2032,7 +2227,8 @@ async function main() {
     ' fits: __galaxy.presence.well.fits, why: __galaxy.presence.well.why,' +
     ' density: __galaxy.presence.well.density, min: __galaxy.presence.well.min,' +
     ' minCompact: __galaxy.presence.well.minCompact, mode: __galaxy.presence.mode,' +
-    ' points: __galaxy.presence.points, degraded: __galaxy.presence.degraded,' +
+    ' points: __galaxy.presence.points, capacity: __galaxy.presence.capacity,' +
+    ' degraded: __galaxy.presence.degraded,' +
     ' compactAudit: __galaxy.presence.compactAudit, trial: __galaxy.presence.trial,' +
     ' baseline: __galaxy.presence.baseline, probation: __galaxy.presence.probation})';
   const atWidth = async (w) => {
@@ -2043,15 +2239,48 @@ async function main() {
     await sleep(280);
     return page.json(TIER_READ);
   };
+  /* THE HEAD'S OWN COUNT, AND IT HAS TO BE THE HEAD'S. presence.points is whatever the last
+     presFill() wrote, and the RING is a fill too - about 5,100 points at full density. The
+     lane below is deliberately crowded (note panel, session card, focus running), which is
+     enough on this GPU to make the face fail its own 55fps floor and stand down to the ring
+     mid-ladder. Read blind, that turns the density ladder into a comparison between the
+     face's compact count and the RING's full one - 6,211 against 5,092 - and reports the
+     resculpted head as having grown when it had simply been replaced.
+     So: if the face has stood down, it is put back BY HAND before the count is taken, the
+     same way this file already does at the compact tier, and it is said out loud each time.
+     Then the fill is waited for: presFill is synchronous but it is called from the resize
+     path, so points and density can be read one frame apart and disagree. */
+  const settled = async (label) => {
+    let r = await page.json(TIER_READ);
+    if (r.mode !== 'face') {
+      note(label + ': the face had stood down to the ' + r.mode + ' (' +
+           (r.degraded || r.probation || '?') + '), so it is put back by hand to count it - ' +
+           'the ring is a fill of its own and would be counted as a head');
+      await page.evaluate('__galaxy.presence.set("face")');
+      await sleep(1200);
+    }
+    for (let i = 0; i < 25; i++) {
+      r = await page.json(TIER_READ);
+      /* WITHIN TWO, because presN() rounds each region of the head separately and the parts
+         do not have to add up to a rounding of the whole. An exact equality here would
+         simply never be true at a fractional density and this would spin for five seconds
+         before returning the same answer. */
+      const want = Math.max(8, Math.round(r.capacity * r.density));
+      if (r.mode === 'face' && Math.abs(r.points - want) <= 2) return r;
+      await sleep(200);
+    }
+    return r;
+  };
   const crowdId = await page.evaluate('__galaxy.nodes[0].id');
   await page.evaluate('__galaxy.focus(' + JSON.stringify(crowdId) + ', true)', true);
   const crowdStart = await galaxy('/focus', { cmd: 'start', minutes: 9 });
   note('the lane crowded: the note panel open and a real session card up (state=' +
        ((crowdStart && crowdStart.focus && crowdStart.focus.state) || '?') + ')');
   await sleep(1400);
-  const wide = await atWidth(1920);
+  await atWidth(1920);
+  const wide = await settled('the full tier');
   ok(wide.tier === 'full' && wide.builtTier === 'full' && wide.density === 1 &&
-     wide.points > 0,
+     wide.points > 0 && wide.points === wide.capacity,
      'at 1920x' + TIER_H + ' the well is ' + wide.side + 'px, clear of the ' + wide.min +
      'px full floor, and the head is at full density: ' +
      wide.points.toLocaleString() + ' points',
@@ -2139,7 +2368,7 @@ async function main() {
   await sleep(1400);
   await page.evaluate('__galaxy.layout.run()');
   await sleep(400);
-  const backWide = await page.json(TIER_READ);
+  const backWide = await settled('back at full width');
   ok(backWide.tier === 'full' && backWide.builtTier === 'full' && backWide.density === 1 &&
      backWide.points === wide.points,
      'and the tier is not a one-way door: the window comes back and so does the full ' +
@@ -2651,12 +2880,32 @@ async function main() {
      the keyboard is the boss's door. It sits after `cast` because the reading ends where the
      sheet's trust does: everything above is something the house does, and this is the house
      being told whose voice it works for. */
+  /* AND NOW THERE ARE TEN, because two of them open a BOARD rather than doing a thing, and
+     each one sits directly under the order it is the wide reading of. `connectors` goes
+     between `google` and `cast`: the Google row is one grant with one verb, and the board
+     behind this row is every reach the house has - the grant, the hands, the voice, the eyes
+     and the Scribe - so it belongs where "what it can reach" already was, one line wider.
+     `clock` goes between `cast` and `voice` for the same rule and for one more: it is the
+     only row on the sheet that reports a fact about the world rather than about this machine,
+     and it stops short of `voice` because the boss-only order stays last, as it has since it
+     arrived. A board row is still an ORDER - it has a label, a state line and a keystroke -
+     so it is asserted in this list rather than beside it, and the list is still whole rather
+     than counted, so a row appearing, vanishing or MOVING is a failure with a name in it. */
+  /* AND NOW ELEVEN, because the Census is the third board. It goes between `clock` and
+     `voice`, which is the same rule applied a third time and one new one: every row above it
+     TELLS him something - what he is doing, what it can see, what it can reach, what time it
+     is somewhere else - and this is the only row on the sheet that ASKS HIM FOR SOMETHING.
+     That is why it cannot go first: a sheet whose opening line wanted an answer out of him
+     would be an order sheet that took orders. And `voice` still ends the sheet, because the
+     boss-only order has been last since it arrived and a list that reshuffles when a feature
+     lands is a list nobody can read the argument off. */
   ok(JSON.stringify(sheet.ids) ===
-     JSON.stringify(['focus', 'lock', 'links', 'presence', 'archive', 'google', 'cast',
-                     'voice']) && sheet.count === 8,
-     'EIGHT DIEGETIC ORDERS, and they are the eight the constitution lists: start focus, ' +
-     'lock the tab, simplify the links, change the presence, open the archive, connect ' +
-     'Google, cast the voice, learn a voice',
+     JSON.stringify(['focus', 'lock', 'links', 'presence', 'archive', 'google', 'connectors',
+                     'cast', 'clock', 'census', 'voice']) && sheet.count === 11,
+     'ELEVEN DIEGETIC ORDERS, and they are the eleven the constitution lists: start focus, ' +
+     'lock ' +
+     'the tab, simplify the links, change the presence, open the archive, connect Google, ' +
+     'read the connectors, cast the voice, read the world clock, sit the Census, learn a voice',
      JSON.stringify({ ids: sheet.ids, rendered: sheet.count }));
   const dumb = sheet.ids.filter((id) => !rows[id] || !rows[id].label || !rows[id].line ||
                                         !rows[id].shown);
@@ -3050,27 +3299,56 @@ async function main() {
     await page.shot('deck-galaxy-bloom.png');
     note('wrote deck-galaxy-bloom.png (the galaxy with the glow on)');
 
-    /* A RAMP, NOT A NUMBER. This used to set the throttle to 20x and wait, and 20x is not
-       a fact about anything - it is a guess about how slow a machine has to pretend to be
-       before a headless compositor misses a frame. Measured here it lands at 46-52fps, a
-       hair ABOVE the 45 floor, so the test passed or failed on which side of the floor the
-       noise fell. What is actually being proved is that a SUSTAINED SAG drops the bloom, so
-       the harness leans harder until the sag exists and then holds the brake to it.
-       AND THE WAIT IS A SLEEP, NOT A POLL. waitFor asks the page a question every few
-       hundred milliseconds, and at these throttle rates answering one is itself a long
-       frame - long enough to trip the brake's own "the browser suspended us" guard, which
-       resets the sag timer. The harness was interrupting the very sag it was waiting for.
-       So: lean, go quiet for longer than the three-second grace, then ask once. */
+    /* A BUSY THREAD, NOT A THROTTLE, AND THE THROTTLE IS WHY THIS COMMENT IS LONG.
+       The brake's rule is three seconds with NO frame at or above the floor, reset by any
+       single frame over it - deliberately, because one bad second is a flight or a rebuild
+       and not a verdict about the glow. Emulation.setCPUThrottlingRate cannot produce that
+       shape. It multiplies main-thread WORK, so it makes frames spiky rather than slow, and
+       a spiky frame rate crosses the floor constantly.
+       MEASURED, with a sampler on the judge's own reading, one row per frame (_runs/
+       bloom_sag.log): at 20x the mean was 51.3fps, 86% of frames were at or over the floor,
+       and the LONGEST CONTINUOUS SAG was 1450ms against a 3000ms grace. At 30x it was worse
+       - 91% over the floor and a longest sag of 318ms - because leaning harder makes the
+       stalls deeper, not longer. So the brake was right every time it did not fire, and the
+       old ramp's own end-of-sleep reading (run 4: "held 25.9fps at 30x") was a snapshot of
+       an instant, not a description of seven seconds. It read like a broken brake and was a
+       lying measurement. That is the failure mode this provocation is built to avoid.
+       WHAT DOES IT: a rAF hook of the harness's own that spins for a fixed number of
+       milliseconds and then asks for the next frame. That pins the frame rate flat - burn
+       30ms and the page holds 31.5fps with ONE crossing of the floor in nine seconds - which
+       is exactly the machine the guard exists for, and the judge measures the page's frame
+       rate without caring why it sagged. The burn stays well under the judge's 2000ms
+       "the browser suspended us" ceiling: a frame that long is not counted at all, so a
+       heavier hand than this would silence the very judge it is trying to convict.
+       THE RAMP SURVIVES, and 18ms is in it on purpose: it lands at ~50fps, above the floor,
+       so the first rung asserts by omission that the brake does NOT fire on a page that is
+       merely busy. AND THE WAIT IS A SLEEP, NOT A POLL - waitFor would ask the page a
+       question every few hundred milliseconds, and answering one while the thread is
+       saturated is itself a long frame. The harness would interrupt the sag it is waiting
+       for. So: lean, go quiet for longer than the grace, then ask once. */
     let dropped = false;
-    for (const rate of [20, 30, 45]) {
-      note('throttling the CPU ' + rate + '\u00d7 to drive the frame rate under 45fps\u2026');
-      await page.send('Emulation.setCPUThrottlingRate', { rate });
+    const burnOn = (ms) => page.evaluate('(function(){window.__burn=' + ms + ';' +
+      'if (window.__burning) return "already"; window.__burning = true;' +
+      '(function spin(){ if (!window.__burning) return;' +
+      ' var until = performance.now() + window.__burn;' +
+      ' while (performance.now() < until) {}' +
+      ' requestAnimationFrame(spin); })(); return "burning";})()');
+    for (const burn of [18, 30, 45]) {
+      note('holding the main thread busy ' + burn + 'ms a frame to sag the frame rate below ' +
+           '45 and keep it there\u2026');
+      await burnOn(burn);
       await sleep(7000);
       const sag = await page.json('({bloom: __galaxy.deck.bloom, fps: __galaxy.deck.fps})');
-      if (sag.bloom === false) { dropped = true; note('the brake fired at ' + rate + '\u00d7'); break; }
-      note('held ' + sag.fps + 'fps at ' + rate + '\u00d7 - above the floor, so leaning harder');
+      if (sag.bloom === false) {
+        dropped = true;
+        note('the brake fired at ' + burn + 'ms a frame (' + sag.fps + 'fps)');
+        break;
+      }
+      note('held ' + sag.fps + 'fps at ' + burn + 'ms a frame - above the floor, so leaning ' +
+           'harder');
     }
-    await page.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+    await page.evaluate('window.__burning = false; "stopped"');
+    await sleep(1200);
     const why = await page.evaluate('__galaxy.deck.why');
     ok(dropped, 'THE BLOOM DISABLES ITSELF when the frame rate cannot hold the floor: ' +
        JSON.stringify(why));
@@ -3096,6 +3374,20 @@ async function main() {
 
 main().catch((e) => { bad.push('the run itself: ' + e.message); console.log('\n  ERROR ' + e.message); })
   .finally(async () => {
+    /* HIS OWN SKY BACK, AND SAID OUT LOUD. First, before the browsers are even closed: a
+       run that dies here leaves the galaxy showing a fictional cafe, and the one thing worse
+       than that is leaving it there quietly. */
+    if (swapped) {
+      const back = buildFrom('');
+      const now = graphCounts();
+      ok(back.code === 0 && now.root === 'notes' && now.nodes > 0,
+         'and his own collection is back in the galaxy, built from ' + now.root + ': ' +
+         now.nodes + ' worlds, ' + now.links + ' relations' +
+         (now.nodes === swapped.nodes ? '' :
+          ' (it was ' + swapped.nodes + ' when this run began - he filed one while it ran)'),
+         JSON.stringify({ exit: back.code, was: swapped, now: now,
+                          fix: 'run: python build.py' }));
+    }
     procs.forEach(p => { try { process.kill(p.pid); } catch { } });
     await sleep(600);
     profiles.forEach(p => { try { rmSync(p, { recursive: true, force: true }); } catch { } });

@@ -41,6 +41,18 @@ def main():
     if not token:
         say("Self test failed: no token was given")
         return 1
+    # THE DELIBERATE FAILURE, and it is here rather than in a harness for one reason: the
+    # Halt Law is a claim about what happens when a real subprocess really fails, and the
+    # only way to test that claim without mocking the subprocess layer - which would prove
+    # nothing about the subprocess layer - is to have one hand that can be asked to fail on
+    # purpose. This is the hand that touches nothing, so it is the only safe place for it.
+    #
+    # It exits non-zero with its reason on stdout, which is exactly the contract above, so a
+    # chain halting on this is halting on the same shape of failure as a Google 500.
+    if token == "FAIL" or token.startswith("FAIL-"):
+        say("Self test failed on purpose, token %s"
+            % "".join(c for c in token[:120] if c.isprintable()))
+        return 1
     # Echoed, capped, and stripped of anything that is not a printable character: the
     # token travels back so the caller can prove THIS run produced THIS line, and a
     # control character in a spoken sentence is a bug looking for somewhere to happen.

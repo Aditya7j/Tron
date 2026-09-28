@@ -300,13 +300,21 @@ const MATRIX = [
          'lecture about OAuth, and the offer neither executed nor released.'
   },
   {
-    say: 'tell me about the invoice importer', setup: 'none',
-    want: { status: 200, minLookups: 1 },
+    say: 'tell me about the meeting minutes', setup: 'none',
+    want: { status: 200, kind: 'notes', minLookups: 1 },
     notProtected: true,
     why: 'AND THE FUNNEL DOES NOT SWALLOW A REAL QUESTION. This one is HIS: it is about ' +
          'his notes, it must reach them, and it must cost what a retrieval costs. A ' +
          'protected class that grew until it caught this would be a machine that stopped ' +
-         'reading his own files.'
+         'reading his own files. IT USED TO ASK ABOUT AN INVOICE IMPORTER, and PART 8 is ' +
+         'why it does not. The importer was a note in the demonstration corpus; once that ' +
+         'corpus was quarantined the sentence went to the WEB - and this row went on ' +
+         'passing, because all it demanded was a status and a lookup, and a web search is ' +
+         'a lookup. A fixture whose stated reason has quietly stopped describing what ' +
+         'happens is worse than a red: it is a row of evidence for a claim nobody is ' +
+         'testing any more. So it now names something his own files actually hold, and ' +
+         'kind=notes is asserted outright so the door it went through is pinned, not ' +
+         'inferred from a count that two different doors can both produce.'
   },
   {
     say: 'what is react', setup: 'none',
@@ -498,11 +506,14 @@ const CHIP_FIXTURES = [
   { say: 'good morning galaxy', want: 0,
     why: 'AND A GREETING LEAST OF ALL. The vocative peel and the salutation veto already ' +
          'stop the lookup; this asserts the CARD agrees with them.' },
-  { say: 'what do my notes say about coffee churn', want: 'some', label: 'THE CONTROL',
+  { say: 'what am I building you for', want: 'some', label: 'THE CONTROL',
     why: 'AND NOW THE OTHER DIRECTION, which is the only thing that makes the five above ' +
          'mean anything. A real question about his real notes, answered from them, MUST ' +
          'light a chip row labelled "Drawn from". Without this row a broken chip renderer ' +
-         'would pass this whole section 5/5.' }
+         'would pass this whole section 5/5. THE QUESTION CHANGED IN PART 8 and the control ' +
+         'got stronger for it: it used to ask about coffee churn, which was a note in the ' +
+         'demonstration corpus, and that corpus is now quarantined. This asks something only ' +
+         'HIS two captures answer, so the row it lights is provenance for his own words.' }
 ];
 
 async function chipHonesty() {

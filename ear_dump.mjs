@@ -74,15 +74,65 @@ const note = (s) => say('  note ' + s);
    proposal on the table and a gate open across the turn, which is a different fixture. Each
    one is an ordinary question that makes the butler answer OUT LOUD, because the answer is
    what the next turn has to survive. */
-const SENTENCES = [
+const ALL_SENTENCES = [
   'tell me about coffee',
   'what do you know about the roaster',
   'and what did i write about the grinder exactly',
   'and who exactly am i',
   'tell me everything the notes say about brewing coffee at home',
-  'what else is in there about the beans'
+  'what else is in there about the beans',
+  /* SIX MORE, AND THEY ANSWER A DIFFERENT QUESTION THAN THE FIRST SIX. Six turns is enough to
+     photograph a collapse if one happens early; the mandate asks whether a session degrades
+     over TWELVE, which is a claim about ACCUMULATION - a noise floor that creeps up a little
+     each turn, a reference that goes stale once and stays stale, a recogniser restarted eleven
+     times. The same four-to-twelve-word spread is kept, for the reason the first six give, and
+     so is the same rule: no closers, no interrupts, and nothing that trips a hand's trigger,
+     because a proposal on the table holds a gate open across the turn and that is a different
+     fixture. */
+  'say that again more slowly',
+  'what does the checklist say about opening up',
+  'and how many hours do the beans rest',
+  'remind yourself what i asked you first',
+  'go through what the notes say about the wholesale accounts and the deliveries',
+  'is there anything else worth knowing'
 ];
+/* TWELVE IS THE MANDATE'S NUMBER AND SIX IS THE DIAGNOSIS'S. The default stays six, so running
+   this file by hand is still the two-minute photograph it was written to be; the proof that
+   asserts on twelve asks for twelve. */
+/* EAR_DUMP_CLOUD=1 runs the same session against the cloud service instead of the on-device
+   engine, for comparison only. See where it is used. */
+const CLOUD = process.env.EAR_DUMP_CLOUD === '1';
+const WANT_TURNS = Math.max(1, Math.min(ALL_SENTENCES.length,
+  parseInt(process.env.EAR_DUMP_TURNS || '6', 10) || 6));
+const SENTENCES = ALL_SENTENCES.slice(0, WANT_TURNS);
 const words = (s) => String(s || '').trim().split(/\s+/).filter(Boolean).length;
+/* HOW MANY OF HIS OWN WORDS CAME BACK, which is a different number from how many words the ear
+   delivered - and the difference is not small. The delivered count is what this file has always
+   printed, and for a diagnosis it is the right column: a turn reading 250% is a turn where the
+   room handed over two and a half times what he said, which is the butler's own answer leaking
+   into the microphone or the previous turn arriving late, and a human reading the table beside
+   the transcript wants to see that.
+
+   IT IS THE WRONG NUMBER TO ASSERT ON. "heard >= 90% of spoken" is a claim about RECALL - of the
+   words he said, how many survived - and a raw count can clear 90% while carrying none of them.
+   The first run of the twelve-turn proof read 250%, 144%, 225%, 200% and an aggregate of 113.2%,
+   which is a measurement saying nothing at all about whether he was understood.
+
+   A MULTISET AND NOT A SET, because "say that again more slowly" has no repeats but "what do you
+   know about the roaster" could, and a set intersection would score a doubled word as heard once
+   and a dropped one as heard anyway. Each spoken word is matched against one unused heard word
+   and then struck off. Punctuation and case go, because the recogniser's commas are its own. */
+const bag = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9' ]+/g, ' ')
+  .trim().split(/\s+/).filter(Boolean);
+function recalled(spoken, heard) {
+  const pool = bag(heard);
+  let hit = 0;
+  for (const w of bag(spoken)) {
+    const at = pool.indexOf(w);
+    if (at >= 0) { pool.splice(at, 1); hit++; }
+  }
+  return hit;
+}
 
 /* ---- CDP, the same twenty lines every harness here uses ---- */
 class Page {
@@ -180,6 +230,24 @@ async function main() {
   /* BEFORE NAVIGATING, or the page's own script takes the real constructor first and the
      recogniser's lifecycle cannot be read at all. */
   await page.send('Page.addScriptToEvaluateOnNewDocument', { source: TAP });
+  /* THE OTHER ENGINE, ON REQUEST AND NEVER BY DEFAULT (EAR_DUMP_CLOUD=1).
+     Both engines answer through one API and neither says which it is, so "the on-device model
+     hears this room worse than the service" cannot be settled by argument - only by the same
+     two sentences, the same speakers and the same minutes, twice. This stubs the ONE static the
+     page reads before it decides, over CDP, before navigation: the page itself is unmodified,
+     because a knob added to the page for a question would outlive the question. install() is
+     left alone - the page only reaches for it when available() says downloadable. */
+  if (CLOUD) {
+    await page.send('Page.addScriptToEvaluateOnNewDocument', {
+      source: "(function () {" +
+        "['SpeechRecognition', 'webkitSpeechRecognition'].forEach(function (n) {" +
+        "  var R = window[n];" +
+        "  if (R && typeof R.available === 'function') {" +
+        "    R.available = function () { return Promise.resolve('unavailable'); };" +
+        "  }" +
+        "});})()"
+    });
+  }
   /* NOT ?mute=1. See the header: the butler has to speak, because his own voice in the
      microphone is half of what is under suspicion. */
   await page.send('Page.navigate', { url: GALAXY + '/' });
@@ -206,8 +274,14 @@ async function main() {
     if (local && ['available', 'no-api', 'unavailable'].indexOf(local.state) >= 0) break;
     await sleep(1000);
   }
-  note('the recognition engine: ' + JSON.stringify(local));
-  if (!local || local.state !== 'available') {
+  // THE PACK, not the engine: nothing has armed yet, so `on` cannot be true here. See below.
+  note('the on-device pack: ' + JSON.stringify(local));
+  if (CLOUD && (!local || local.state === 'unavailable')) {
+    note('THE CLOUD HALF, ON PURPOSE (EAR_DUMP_CLOUD=1). available() has been stubbed to ' +
+         '"unavailable" before navigation, so the page chooses the service the way it would on ' +
+         'a machine with no pack - and the refusal below is stood down for this run only, ' +
+         'because a comparison between the two engines is the one reading it would prevent.');
+  } else if (!local || local.state !== 'available') {
     say('\n  REFUSING TO TAKE THE DUMP. On-device recognition is ' +
         ((local && local.state) || 'unknown') + ', so every empty turn below could be the ' +
         'cloud service\'s silent throttle rather than this page. That is a finding about ' +
@@ -255,6 +329,22 @@ async function main() {
          'cannot show themselves in this run. The table below is still real; it is just ' +
          'blind to half the suspects.');
   }
+
+  /* WHICH ENGINE HEARD HIM - AND THE READING IS TAKEN AFTERWARDS, FURTHER DOWN, NOT HERE.
+     The page publishes this as __galaxy.ear.local so a spoken harness can say in its own
+     transcript whether the words stayed in the room or went to a service, and the engine is
+     chosen at the ARM: the property is set on the recogniser the first time the ear arms, which
+     is after this point in the file. So `on` is false here for every run that will ever exist,
+     and the first version of this read sat exactly here and called it a verdict - it printed
+     "THESE WORDS ARE GOING TO A SERVICE" against a page that had simply not armed yet, and I
+     wrote most of a diagnosis on top of it before `tries: 0` in the same line gave it away.
+     The instrument was reading the shutter again, one layer up from the last time.
+
+     WHAT THIS LINE IS FOR, then: the pack's availability BEFORE the session, which is a real
+     thing worth recording (it is what the refusal above turns on) and is not a claim about
+     which engine answered. The verdict is read after the last turn, where it exists. */
+  const engineAtOpen = await page.json('__galaxy.ear.local');
+  note('the pack, before a single arm: ' + JSON.stringify(engineAtOpen));
 
   /* ================================ THE SESSION ================================ */
   const rows = [];
@@ -306,6 +396,53 @@ async function main() {
           'page\'s turn counter had not moved: nothing was flushed and nothing was asked.');
     }
   }
+  /* AND THEN WAIT FOR THE LAST TURN'S FINAL, which the loop above cannot wait for.
+     Every turn's wait ends when the page's turn counter moves. For turns 1..n-1 that is late
+     enough by accident: the NEXT turn's say() spends seconds arming and speaking, and the
+     final lands during it. For turn n there is no next turn, so the dump is read the instant
+     the counter moves - and the header below says in its own words why that is too early:
+     THE FINAL ARRIVES AFTER THE FLUSH THAT ENDS THE TURN. The first twelve-turn run with a
+     real recall measure read turn 12 as 0 of 6 words with nothing delivered at all, while the
+     browser tap showed its interims still arriving one line above the table. That was not the
+     ear collapsing on a long session - it was this harness photographing the shutter.
+
+     BOUNDED, AND LOUD IF IT EXPIRES. This waits for the last turn's own dump row to carry a
+     transcript, for at most fifteen seconds, and says so if it never does - a turn that truly
+     delivered nothing must still be able to read as nothing. It does NOT loosen anything: the
+     words are still the words the page reports, judged against the sentence he said. */
+  {
+    const last = rows[rows.length - 1];
+    const deadline = Date.now() + 15000;
+    let got = '';
+    while (Date.now() < deadline) {
+      const now = await page.json('__galaxy.ear.dump');
+      got = now.filter((d) => d.n > last.nBefore).map((d) => d.heard)
+        .filter(Boolean).join(' ').trim();
+      if (got) break;
+      await sleep(300);
+    }
+    if (got) {
+      say('');
+      say('  the last turn’s transcript landed after its flush, as it always does - waited ' +
+          'for it before reading the dump');
+    } else {
+      note('the last turn delivered no transcript even after fifteen seconds of waiting, so ' +
+           'its nought is the ear’s and not the shutter’s');
+    }
+  }
+  /* AND NOW THE ENGINE, WHICH IS A READING AND NOT A HOPE. Taken after the last turn, because
+     the property is set at the arm and the arms are all behind us: whatever this says is what
+     heard the twelve sentences above. The cloud recogniser throttles silently and raises no
+     error - it fires audiostart, soundstart and speechstart into a loud room and hands back one
+     word or none - so a low table under a cloud reading is not evidence about this page. */
+  const engine = await page.json('__galaxy.ear.local');
+  note('the engine that heard him: ' + JSON.stringify(engine));
+  if (!engine || engine.on !== true) {
+    note('THESE WORDS WENT TO A SERVICE AND DID NOT STAY IN THE ROOM (' +
+         ((engine && engine.state) || 'unknown') + (engine && engine.why ? ', ' + engine.why
+         : '') + '). It throttles without raising, so every recognition number in this run is ' +
+         'UNTRUSTWORTHY until the same run is made with processLocally taken.');
+  }
   mouth.unwatch();
 
   /* ================================ THE ROWS, READ WHOLE ================================
@@ -330,6 +467,10 @@ async function main() {
       r.n === rows.length ? undefined : rows[r.n].finalsBefore);
     r.heard = r.dumpRows.map((d) => d.heard).filter(Boolean).join(' ').trim();
     r.heardWords = words(r.heard);
+    /* BOTH NUMBERS ARE KEPT. heardWords is what the room delivered and recalledWords is how much
+       of it was his - see recalled() above. The table prints both and the proof asserts on the
+       second, because only one of them is a claim about being understood. */
+    r.recalledWords = recalled(r.sentence, r.heard);
   }
 
   say('\n  ' + '='.repeat(78));
@@ -371,24 +512,28 @@ async function main() {
   say('\n  ' + '='.repeat(78));
   say('  WORDS SPOKEN AGAINST WORDS HEARD, TURN BY TURN');
   say('  ' + '-'.repeat(78));
-  say('  ' + pad('turn', 5) + rpad('said', 5) + rpad('heard', 7) + rpad('%', 6) +
-      rpad('arms', 6) + rpad('fin', 5) + rpad('int', 5) + '  ' + 'sentence');
+  say('  ' + pad('turn', 5) + rpad('said', 5) + rpad('heard', 7) + rpad('his', 5) +
+      rpad('%', 6) + rpad('arms', 6) + rpad('fin', 5) + rpad('int', 5) + '  ' + 'sentence');
   let collapsed = 0;
   for (const r of rows) {
-    const pct = r.spokenWords ? Math.round(100 * r.heardWords / r.spokenWords) : 0;
+    /* THE PERCENTAGE IS RECALL and not delivery - see recalled(). It was the delivered count
+       until a twelve-turn run printed 250% for a turn nobody could have understood. */
+    const pct = r.spokenWords ? Math.round(100 * r.recalledWords / r.spokenWords) : 0;
     const fin = r.dumpRows.reduce((a, d) => a + d.finals, 0);
     const intm = r.dumpRows.reduce((a, d) => a + d.interims, 0);
     /* THE COLLAPSE, DEFINED BEFORE IT IS COUNTED so the definition cannot be chosen to suit
        the result: the mandate's own two tests, under 90% of the words or under three words
        from a sentence that carried four or more. */
-    const bad = pct < 90 || (r.heardWords < 3 && r.spokenWords >= 4);
+    const bad = pct < 90 || (r.recalledWords < 3 && r.spokenWords >= 4);
     if (bad) collapsed++;
     say('  ' + pad((bad ? '*' : ' ') + r.n, 5) + rpad(r.spokenWords, 5) +
-        rpad(r.heardWords, 7) + rpad(pct + '%', 6) + rpad(r.armsUsed, 6) +
+        rpad(r.heardWords, 7) + rpad(r.recalledWords, 5) + rpad(pct + '%', 6) +
+        rpad(r.armsUsed, 6) +
         rpad(fin, 5) + rpad(intm, 5) + '  ' + r.sentence.slice(0, 40));
   }
   say('  ' + '-'.repeat(78));
-  say('  * = under 90% of the words, or under three words from a sentence of four or more');
+  say('  * = under 90% of HIS words came back, or under three of them from a sentence of four');
+  say('  said = what he spoke · heard = what the room delivered · his = how many were his');
 
   const floor = await page.json('({floor: __galaxy.ear.floor, frames: __galaxy.ear.floorFrames})');
   const gate = await page.json('__galaxy.ear.echo.gate');
@@ -425,6 +570,20 @@ async function main() {
         'applied to this table would be a guess with a table stapled to it.');
   }
   say('  ' + '='.repeat(78) + '\n');
+  /* TAGGED AND MACHINE-READABLE, for the caller that asserts rather than reads. session_proof's
+     spoken half spawns this file and judges the table; it is handed the numbers rather than
+     asked to parse the columns above, because a proof that re-derives its evidence out of
+     another file's formatting is a proof that breaks when a column is widened. */
+  say('EARDUMP ' + JSON.stringify({
+    opened: shape.opened, turns: rows.length, collapsed,
+    rows: rows.map((r) => ({
+      n: r.n, said: r.spokenWords, delivered: r.heardWords, heard: r.recalledWords,
+      pct: r.spokenWords ? Math.round(100 * r.recalledWords / r.spokenWords) : 0,
+      arms: r.armsUsed, ended: !!r.ended, sentence: r.sentence
+    })),
+    engine: engine || { on: false, state: 'unread' },
+    shape, floor, gate
+  }));
   return collapsed ? 1 : 0;
 }
 

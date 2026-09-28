@@ -89,7 +89,8 @@
     }
    ],
    "timeout_s": 45,
-   "proposal": "That would be '{title}', {when}, {duration}, sir, written into your Google calendar. Shall I put it in?"
+   "proposal": "That would be '{title}', {when}, {duration}, sir, written into your Google calendar. Shall I put it in?",
+   "step": "Write '{title}' into your Google calendar, {when}, {duration}."
   },
   {
    "id": "send_email",
@@ -122,7 +123,8 @@
     }
    ],
    "timeout_s": 45,
-   "proposal": "I have an email ready for {to}, sir, under the subject '{subject}'. The card carries what it says. Shall I send it?"
+   "proposal": "I have an email ready for {to}, sir, under the subject '{subject}'. The card carries what it says. Shall I send it?",
+   "step": "Send an email to {to} under the subject '{subject}'."
   },
   {
    "id": "set_voice",
@@ -153,7 +155,8 @@
     }
    ],
    "timeout_s": 10,
-   "proposal": "You are hearing {current} at the moment, sir. That would make it {voice} from the next word on. Shall I change the voice?"
+   "proposal": "You are hearing {current} at the moment, sir. That would make it {voice} from the next word on. Shall I change the voice?",
+   "step": "Change the voice from {current} to {voice}."
   },
   {
    "id": "relaunch_chrome",
@@ -172,7 +175,8 @@
    ],
    "params": [],
    "timeout_s": 120,
-   "proposal": "I need Chrome relaunched with the debugging port to lock a tab, sir. Shall I?"
+   "proposal": "I need Chrome relaunched with the debugging port to lock a tab, sir. Shall I?",
+   "step": "Relaunch Chrome with the debugging port."
   },
   {
    "id": "summon_tab",
@@ -187,7 +191,8 @@
    ],
    "params": [],
    "timeout_s": 15,
-   "proposal": "Shall I bring you back?"
+   "proposal": "Shall I bring you back?",
+   "step": "Bring you back to the locked tab."
   },
   {
    "id": "selftest",
@@ -208,7 +213,8 @@
     }
    ],
    "timeout_s": 10,
-   "proposal": "A self test, sir, carrying the token {token} and touching nothing. Shall I run it?"
+   "proposal": "A self test, sir, carrying the token {token} and touching nothing. Shall I run it?",
+   "step": "Run a self test carrying the token {token}."
   },
   {
    "id": "save_minutes",
@@ -219,9 +225,9 @@
     "save minutes that have already been drafted into notes/, under a title like Meeting-2026-09-26-1432"
    ],
    "triggers": [
-    "\bminutes\b",
-    "\b(?:write|type)\\s+up\b[^.]{0,30}\bmeeting\b",
-    "\bsave\b[^.]{0,20}\b(?:the\\s+)?(?:meeting|transcript)\b"
+    "\\bminutes\\b",
+    "\\b(?:write|type)\\s+up\\b[^.]{0,30}\\bmeeting\\b",
+    "\\bsave\\b[^.]{0,20}\\b(?:the\\s+)?(?:meeting|transcript)\\b"
    ],
    "params": [
     {
@@ -241,7 +247,44 @@
     }
    ],
    "timeout_s": 15,
-   "proposal": "I have the minutes drafted, sir, to be kept as '{title}'. Shall I save it?"
+   "proposal": "I have the minutes drafted, sir, to be kept as '{title}'. Shall I save it?",
+   "step": "Save the minutes as '{title}'."
+  },
+  {
+   "id": "save_note",
+   "name": "Write a thought down as a note",
+   "script": "save_note.py",
+   "capabilities": [
+    "write something the employer wants remembered into his own collection as a note",
+    "keep a thought, a decision or a fact he has just said, so it can be cited later",
+    "leave folder out unless the Census is asking: it is captures unless told otherwise"
+   ],
+   "triggers": [
+    "\\bremember\\s+that\\b",
+    "\\b(?:write|note|jot)\\b[^.]{0,12}\\b(?:that|this|it)\\b[^.]{0,8}\\bdown\\b",
+    "\\bmake\\s+a\\s+note\\b",
+    "\\b(?:add|keep)\\s+(?:a\\s+|this\\s+)?note\\b"
+   ],
+   "params": [
+    {
+     "name": "title",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "body",
+     "type": "text",
+     "required": true
+    },
+    {
+     "name": "folder",
+     "type": "string",
+     "required": false
+    }
+   ],
+   "timeout_s": 15,
+   "proposal": "That would go into your collection as '{title}', sir, a note of its own. The card carries what it says. Shall I write it down?",
+   "step": "Write a note titled '{title}'."
   }
  ]
 }

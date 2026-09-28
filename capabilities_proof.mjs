@@ -69,7 +69,15 @@ const step = (m) => say('\n  ·· ' + m);
 /* THE CANARY. A hand with a human name no prose of mine would ever have written, so that
    finding it in his mouth can only mean he read the registry. Inert by construction: the
    script does not exist on disk, which _clean_tool permits and which means the worst case of
-   a bug in this fixture is a proposal that cannot run. */
+   a bug in this fixture is a proposal that cannot run.
+
+   IT CARRIES A `step` BECAUSE THE CONTRACT GREW. The Chain Protocol made `step` - the same
+   action as an imperative, for a numbered plan - required rather than defaulted, and an entry
+   that does not validate does not exist. This fixture stands in for a real hand someone fits
+   by editing JSON, so it must satisfy exactly what a real hand must satisfy; the alternative
+   was to default `step` from `proposal`, which would have had this file quietly deciding what
+   the registry's schema is. When it lacked one, all five fitted-state assertions failed and
+   the server's own stderr said why, tool by tool - which is the loader behaving correctly. */
 const CANARY_ID = 'water_the_ferns';
 const CANARY_NAME = 'Water the ferns on the landing';
 const CANARY = {
@@ -84,6 +92,7 @@ const CANARY = {
   params: [{ name: 'which', type: 'string', required: false }],
   timeout_s: 5,
   proposal: 'The ferns on the landing, sir - a full can each. Shall I?',
+  step: 'water the ferns on the landing',
 };
 
 async function ask(question, session) {

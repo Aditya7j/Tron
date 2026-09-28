@@ -41,7 +41,7 @@
    Section E launches its own Chrome on port 9263, so this file runs ALONE: a background
    sweep that also holds port 9222 will take its clicks. Preflight check 25 is the cheap
    standing version of section A and runs on every preflight.                            */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync, readFileSync, writeFileSync, readdirSync,
          statSync, readFileSync as slurp } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -834,6 +834,126 @@ async function sectionF(before) {
   return st;
 }
 
+/* ================================ SECTION G: THE LENGTH LADDER ================================
+   THE FAILURE THIS SECTION EXISTS FOR, and it is not the one the threshold was chosen against.
+   The calibration measured four-to-six-second utterances and found a 0.52 gap between the same
+   voice and a different one, which is why 0.50 is where it is. It did not measure what happens
+   when the employer says something LONG - and an ECAPA vector is an average over everything it
+   was given, so a forty-five-word turn with two pauses in it is an average of his larynx and
+   two silences. The doorman that knows him at ten words can stop knowing him at forty-five,
+   which is the doorman getting worse the more evidence it is given.
+
+   THE MEASUREMENT IS A SUBPROCESS, deliberately, and it is the one place this file breaks its own
+   rule about not shelling out to python for its inputs. tools/ladder.py's header gives the two
+   reasons: a rung is defined in WORDS, which needs a synthesiser, and the guest half has to be
+   scored against a roster holding only the employer, which cannot be arranged against a live
+   store this harness does not own. Three of the four calibration clips per voice ARE the
+   enrolment audio, so a long rung spliced out of them would be scored against a voiceprint
+   partly made of itself.
+
+   WHAT IS ASSERTED HERE AND NOT THERE: that file prints and this one judges. It is given no
+   thresholds and no verdicts - it reports cosines and the seal the server's own seal_for()
+   computed, and every claim below is made against numbers read out of its LADDER line.        */
+function ladder() {
+  const py = ['C:/Users/Fullstack Developer/AppData/Local/Programs/Python/Python313/python.exe',
+    'python'].find((p) => p === 'python' || existsSync(p));
+  /* THE ABSOLUTE PATH FIRST. Bare `python` on this machine is the Windows Store stub, which
+     exits without running anything and would make this look like a ladder that printed no line
+     rather than a python that was never there. */
+  const out = spawnSync(py, ['tools/ladder.py'], { encoding: 'utf8', timeout: 600000 });
+  const line = String(out.stdout || '').split(/\r?\n/).find((l) => l.startsWith('LADDER '));
+  if (!line) {
+    throw new Error('tools/ladder.py printed no LADDER line: ' +
+      String(out.stderr || out.stdout || '').slice(-400));
+  }
+  return { found: JSON.parse(line.slice(7)), text: String(out.stdout || '') };
+}
+
+async function sectionG() {
+  step('G. THE LENGTH LADDER - does he stay himself when he talks for longer?');
+  const { found } = ladder();
+  const rungs = found.rungs || [];
+  const bossRungs = rungs.filter((r) => r.boss);
+  const guestRungs = rungs.filter((r) => !r.boss);
+  say('  ' + 'rung'.padEnd(11) + 'voice  words  secs   whole    best  win  seal');
+  for (const r of rungs) {
+    say('  ' + r.rung.padEnd(11) + String(r.voice).padEnd(7) + String(r.words).padStart(5) +
+        String(r.seconds).padStart(7) + score(r.whole).padStart(8) + score(r.score).padStart(8) +
+        String(r.windows).padStart(5) + '  ' + r.seal);
+  }
+
+  ok(bossRungs.length === 3 && bossRungs.every((r) => r.above && r.seal === 'BOSS'),
+     'THE EMPLOYER IS ABOVE THE FLOOR AT ALL THREE LENGTHS - ' +
+     bossRungs.map((r) => r.words + 'w ' + score(r.score)).join(', ') +
+     ' against a floor of ' + found.floor,
+     JSON.stringify(bossRungs));
+  /* AND HE DOES NOT DECAY, which is the assertion the mandate is really asking for: "above the
+     threshold" could be true of a curve falling steeply towards it. The claim is that the long
+     rung is not materially worse than the short one - a tenth of a cosine either way is the
+     model's own scatter between two readings of one voice (the calibration measured 0.8182 to
+     0.9382 within a single larynx), and anything beyond that is length hurting him. */
+  const shortest = bossRungs[0] || {}, longest = bossRungs[bossRungs.length - 1] || {};
+  ok(longest.score >= shortest.score - 0.10,
+     '  and he does not DECAY with length: ' + shortest.words + ' words scored ' +
+     score(shortest.score) + ' and ' + longest.words + ' words scored ' + score(longest.score) +
+     ', a change of ' + (longest.score - shortest.score).toFixed(4) + ' inside the model\u2019s ' +
+     'own 0.12 scatter between two readings of one voice');
+  ok(guestRungs.length === 6 && guestRungs.every((r) => !r.above && r.seal === 'GUEST'),
+     'AND NO STRANGER REACHES HIS ROW AT ANY LENGTH: worst of ' + guestRungs.length +
+     ' guest readings was ' + score(Math.max(...guestRungs.map((r) => r.score))) +
+     ', under the floor of ' + found.floor,
+     JSON.stringify(guestRungs.map((r) => r.voice + ':' + r.words + 'w=' + score(r.score))));
+  ok(Math.max(...guestRungs.map((r) => r.score)) < found.near,
+     '  and not one of them even reaches the near band at ' + found.near +
+     ', so UNVERIFIED is a word this machine can only say to somebody it half-knows');
+
+  /* THE TWO CASES THE WINDOWS ARE FOR. Every boss rung above gains nothing from windowing -
+     +0.0000 across the board - and that is the FIXTURE having no defect to cure rather than
+     the windows failing: a piper clip is wall-to-wall speech by one speaker with no room and
+     no pause in it, and windowing exists to throw away exactly those. So they are put in. */
+  const cases = found.windows || [];
+  for (const c of cases) {
+    say('  ' + c.case.padEnd(46) + score(c.whole).padStart(8) + ' whole ->' +
+        score(c.score).padStart(8) + ' best   ' + c.windows + ' win  ' + c.seal);
+  }
+  const hush = cases[0] || {}, over = cases[1] || {};
+  ok(hush.whole < found.floor && hush.score >= found.floor && hush.seal === 'BOSS',
+     'HE SPEAKS AND THEN THE ROOM IS QUIET FOR EIGHT SECONDS, and the whole-clip reading is ' +
+     score(hush.whole) + ' - BELOW the floor, and below every stranger ever measured here - ' +
+     'while the best window is ' + score(hush.score) + '. Without windowing that turn is the ' +
+     'employer refused in his own house for pausing',
+     JSON.stringify(hush));
+  ok(over.score >= found.floor && over.seal === 'BOSS' && over.score > over.whole,
+     'A GUEST TALKS OVER THE MIDDLE OF HIS SENTENCE and his own three seconds are still found: ' +
+     score(over.whole) + ' whole, ' + score(over.score) + ' windowed. This is the bark sliced ' +
+     'across two voices that section 24 left open, and a max over windows is what closes it',
+     JSON.stringify(over));
+
+  /* THE DEGRADATION CURVE AND THE NEAR BAND. A band no real input lands in is a line of code
+     that has never run, so the curve is what proves 0.35 was placed somewhere reachable. */
+  const curve = found.curve || [];
+  for (const c of curve) {
+    say('  noise x' + String(c.noise).padEnd(5) + String(c.snrDb).padStart(7) + ' dB  ' +
+        score(c.whole).padStart(8) + score(c.score).padStart(8) + '  ' + c.seal +
+        (c.near ? '   <-- the near band' : ''));
+  }
+  const falling = curve.map((c) => c.score);
+  ok(falling.every((s, i) => i === 0 || s <= falling[i - 1] + 0.02),
+     'THE DOORMAN DEGRADES AND DOES NOT SNAP: burying his voice in noise walks the cosine down ' +
+     falling.map((s) => score(s)).join(' > ') + ' - monotone, so there is a band between ' +
+     '"certain" and "stranger" rather than a cliff');
+  const band = curve.filter((c) => c.near);
+  ok(band.length >= 1 && band.every((c) => c.seal === 'UNVERIFIED'),
+     'AND THE NEAR BAND IS REACHED BY THE RIGHT INPUT - his own voice at ' +
+     (band[0] || {}).snrDb + ' dB reads ' + score((band[0] || {}).score) +
+     ' and the seal says UNVERIFIED, not GUEST. NEVER A SILENT GUEST FOR THE BOSS: he is told ' +
+     'the doorman could not be sure, and the keyboard Yes is named',
+     JSON.stringify(band));
+  ok(curve.filter((c) => c.seal === 'GUEST').length >= 1,
+     '  and far enough down it does say GUEST, so UNVERIFIED is a band and not the new floor');
+  return found;
+}
+
 /* ================================ THE RUN ================================ */
 const audioBefore = audioUnder('.', 0, []);
 let health = null;
@@ -849,6 +969,7 @@ try {
   await sectionD();
   if (!WIRE_ONLY) await sectionE();
   else note('section E skipped: WIRE_ONLY=1 is a regression pass, not a pass');
+  await sectionG();
   await sectionF(audioBefore);
 } catch (err) {
   fail++;

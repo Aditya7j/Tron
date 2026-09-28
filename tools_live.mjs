@@ -363,8 +363,14 @@ async function main() {
      FAILURE MODE IF THIS FORK WERE WRITTEN THE LAZY WAY - skipping the spoken round when the
      store is guarded - a machine with an enrolled boss would quietly stop proving that a
      consent ever runs a hand at all, and the file would go green by asserting less. */
-  const guarded = await page.json('!!(__galaxy.speaker && __galaxy.speaker.hasHands)');
-  const enrolled = guarded ? (await page.json('__galaxy.speaker.names')) || [] : [];
+  /* FROM THE SERVER, FOR THE REASON WRITTEN OUT AT LENGTH IN chain_proof.mjs: the page learns
+     this from a /health poll, so reading it off the page makes the fork a race, and losing the
+     race does not skip a round - it runs the wrong branch and reds three assertions about a
+     server that behaved. GET /speaker is the doorman answering about himself. */
+  const roster = await (await fetch(GALAXY + '/speaker')).json();
+  const guarded = !!(roster && roster.hasHands);
+  const enrolled = guarded
+    ? (roster.enrolled || []).map((r) => String(r && r.name || '')).filter(Boolean) : [];
   /* THE NAME IS READ TO BE LOOKED FOR AND NOT PRINTED ANYWHERE ELSE. The refusal must not
      carry it, and the only way to assert an absence is to know what would be present. */
   const bossName = String(enrolled[0] || '').replace(/[^A-Za-z ]/g, '').trim();

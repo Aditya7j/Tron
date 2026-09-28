@@ -53,9 +53,19 @@ SHARED_WIKILINK_MIN = 6      # co-citation: N shared [[targets]] => a link
 MIN_MENTION_SLUG_WORDS = 2   # single-word titles are too generic to match on
 MIN_MENTION_WORD_LEN = 6     # ...unless that one word is long
 
+# "quarantine" IS THE ONE ENTRY HERE THAT IS ABOUT MEANING RATHER THAN MACHINERY. Everything
+# else on this list is somebody's tooling. A quarantine holds documents that are REAL FILES and
+# must stay readable on disk, and must not be findable by the assistant: the demonstration
+# corpus this console was built against, which was thirty notes about a coffee business that is
+# not his. Leaving them anywhere under notes/ makes them stars in HIS galaxy; leaving them under
+# archive/ is worse than it looks, because archive/ is indexed for VECTORS - so a quarantined
+# note would still be retrieved and still be CITED, and a citation is the strongest claim this
+# machine makes. One walker feeds both the graph and the vectors, so one name on this list takes
+# a folder out of both at once. Named, not path-matched, so a second quarantine needs no edit.
 SKIP_DIRS = {
     ".git", ".svn", ".hg", "node_modules", "viewer", "__pycache__",
     ".obsidian", ".trash", ".vscode", ".idea", "venv", ".venv", "env",
+    "quarantine",
 }
 
 # Words that should not be Title Cased when a label is built from a filename.

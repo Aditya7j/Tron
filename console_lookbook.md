@@ -4487,3 +4487,1374 @@ are both green, read from HEAD. Zero unexplained reds.
 - **`lock_proof` now names its own abort.** Without it the chain died on `Cannot read properties of
   undefined (reading 'id')` and stopped at 33 checks of 78 — two reds and forty-five assertions that
   were never asked, which reads like a far smaller failure than it is.
+
+## 25 · Two things asked for, one word given, and where it stops
+
+One piece of work in four parts, and the parts are not independent: the planner is worthless
+without the card, the card is a lie without the halt, and the halt is unprovable without a hand
+that can be made to fail on purpose. The shape that fell out of the research is the one sentence
+worth remembering from this round — **a chain is not a second gate, it is a second thing behind the
+same gate.** Every law already written at that gate covers it because nothing about the gate
+changed: one `_pending` slot under one lock, one TTL, one voiceprint check, one pair of buttons.
+
+The round found two real defects and both were in this machine's own voice rather than in the new
+code. It also found one red in the sweep that was a fixture failing to keep up with a contract that
+had grown, which is the honest kind of red.
+
+The order below is the mandate's.
+
+### PART 0 — The research, before the code
+
+**Structured brain output, and the terminator that never arrives.** The mandate asks for a JSON
+array of `{hand, params}` steps, and the obvious way to read one out of a model's answer is the way
+the single tool tag is read: a regex. That is the one thing `chain_tag()` is not, and it is a
+measurement rather than a taste. The tag opens `[[chain:` and closes `]]`; a JSON array closes `]`.
+A model asked for `[[chain: [ {...}, {...} ]]]` writes **`}}]]`** — its own array bracket doing
+double duty as the first of the tag's pair — and a pattern demanding three closing brackets reads
+nothing at all. The first probe scored **0 chains out of 5** for exactly that reason. Replacing the
+pattern with `json.JSONDecoder().raw_decode`, which is the authority on where an array ends, and
+then asking only that the leftover *begin* with a `]`, scored **6 out of 6** on the same five
+prompts plus one, and **every one of the six had written a single `]`**. The leniency costs nothing
+because nothing in the parsed array is trusted: every step is looked up with `find()` exactly and
+validated against that tool's own schema in `propose_chain()`. The safety is in the lookup and the
+schema, never in the bracket count. The second finding was negative and shaped the prompt: without
+an explicit *ONE INTENT IS NOT A CHAIN* sentence a model that has just been handed a new toy
+reaches for it, so the sentence is in the protocol, and with it **6 single-intent directives out of
+6 still came back as ordinary `[[tool: ]]` tags and none as a chain of one**.
+
+**UI composition for stacked proposals.** The question was whether a plan of four needs its own
+card, and the answer is no — it needs one more *surface* inside the card there already is. The
+existing gate card is a label, a rows grid, two buttons, a countdown and a vignette; the chain card
+is the same card with `<ol class="steps">` filled and the rows grid emptied, and `showProposal()`
+fills exactly one of the two and empties the other. Two measurements decided the details. First,
+**an empty `display:grid` still generates a box**: the unused rows grid contributed a 0-pixel-high
+rectangle *and* its 13px margin between the label and step one, so both surfaces got a
+`:empty{display:none;margin:0}` rule and an unused list now costs nothing. Second, **the height cap
+is a chain of flex parents and one missing link anywhere silently does nothing** — the
+`#answer.capped` rule had to name `#ask-steps` beside `#ask-rows` and pin `.pair` at
+`flex:0 0 auto`, or a four-step plan pushed the Yes button off the bottom of a short window with no
+scrollbar to say so. The numbering is `counter-reset`/`counter-increment` on the list itself rather
+than digits written into the markup, which is what makes the rendered order the document's own
+order; the cost of that choice is recorded under *What is left open*.
+
+**State passing between registry hands.** This is the single deliberate exception to the oldest rule
+in `hands.py` — *the parameters come from the slot, never from the request that confirms it; no door
+may substitute a recipient between the asking and the doing* — because a `{{step1}}` is precisely a
+substitution between the asking and the doing. So it is bounded four ways, and the first bound is
+the one that makes the rest cheap. **A placeholder may land only in a `text` field.** Across the
+whole registry the `text` fields are exactly `body`, `description` and `minutes`; every address,
+subject, title, time, token and voice name is a `string`. So *"a placeholder may only land in a
+text field"* and *"a recipient can never be substituted"* are the same sentence, and the second one
+is checkable by reading the schema rather than by trusting a function. **Backwards only:** step 2
+may quote step 1, and a step quoting itself or a later step is refused while a human is still
+reading the card rather than halfway through with one hand already run. **Visible before the yes:**
+the placeholder is *not* expanded at proposal time, so the card shows `{{step1}}` in the field it
+will land in and the employer can see that a value they have not read yet will be pasted there — a
+silent expansion at run time would be this machine editing a letter after it was approved. And
+**capped at `CHAIN_PASTE_MAX = 200` characters**, because a letter that is mostly another program's
+stdout is not a letter the employer wrote. The `text`-only rule is checked twice, at proposal time
+and again in `_paste()`; the cheap check is what tells the employer early, the second is what makes
+it true.
+
+### PART 1 — THE PLANNER
+
+`chain_protocol()` is appended by `prompt_block()`, never typed into the persona constants, and it
+is generated from the same registry the executor reads so a capability sentence cannot drift out of
+date. This is the whole of what the brain is told about plans, rendered live:
+
+```
+  AND A DIRECTIVE MAY CONTAIN MORE THAN ONE. "add a meeting and email the team", "put it in the
+  calendar then write to Tom" name TWO of the things above in one breath. When, and only when,
+  the one message genuinely asks for more than one of them, reply with nothing but a chain tag:
+  a JSON array of steps, in the order they must happen, using "hand" for the id and "params"
+  for the details.
+  [[chain: [{"hand": "add_calendar_event", "params": {"title": "Vendor call", "start":
+  "2026-09-27T16:00"}}, {"hand": "send_email", "params": {"to": "team@example.com", "subject":
+  "Vendor call", "body": "I have put the vendor call in the diary. {{step1}}"}}]]
+  Every id must be one of the ids above, at most 4 steps, and the same rules apply to each step
+  as to a single one: fill in only what they told you, and if a required detail for ANY step is
+  genuinely missing, ask for that one thing in prose instead of guessing it.
+  ONE INTENT IS NOT A CHAIN. A message that asks for a single thing gets the ordinary
+  [[tool: ...]] tag, never this one.
+  STEP N MAY USE STEP N-1. Write {{stepN}} where an earlier step's result belongs - only ever
+  inside a long text field such as a body or a description, and never in an address, a subject,
+  a title or a time. The server fills it in after that step has actually succeeded, and shows
+  them the placeholder before they say yes.
+  NOTHING HAPPENS WHEN YOU DO THIS EITHER. They are shown the numbered plan and asked once for
+  the whole of it.
+```
+
+Four things about that block are deliberate. The clock in the example is real, for the same reason
+the single tag's example carries one: a calendar hand that takes ISO stamps cannot be filled in by
+a model that does not know what day it is. The step cap is interpolated from `CHAIN_MAX_STEPS`
+rather than typed, so the number asked for and the number enforced cannot differ — preflight 27
+asserts that sentence against the constant. The placeholder restriction is *taught* rather than
+left to be discovered, because `propose_chain()` refuses a placeholder in an address by name and a
+refusal the model could have avoided is a turn wasted on both sides. And the block says nothing
+about the Chain Card, the halt law or the ledger: the model is being asked for a plan, not for a
+user interface, and every sentence about what the server will do with a plan is a sentence it can
+get wrong out loud.
+
+**The funnel did not change.** `hands_wanted()` is still a door and not a decision, the routing is
+untouched, and the chain path opens only when the brain's answer carries a chain tag. A plan of one
+falls through to `propose()` — the mandate's own rule, and also the only way the ordinary card,
+receipt and ledger row stay the normal case rather than a special case of a bigger thing.
+
+Measured live, through the real box and the real brain, with two instructions in one breath:
+
+```
+plan: ["1 Write 'Vendor call' into your Google calendar, Monday 28 September at 4:00 pm,
+        30 minutes (the default, since no end was given).",
+       "2 Send an email to team@acme.com under the subject 'Vendor call tomorrow at 16:00'."]
+```
+
+Two steps, in the order they must happen — the calendar before the email that refers to it.
+
+### PART 2 — THE CHAIN CARD
+
+The card is a **fork of one card, not a second card**, and that is the safety argument rather than
+a tidiness one. Same slot id, same label position, same two buttons, same countdown, same vignette;
+`params` and `fields` travel **empty** on a chain so that any surface still rendering the
+single-proposal rows shows nothing at all rather than step one's parameters passed off as the whole
+plan. `tool` on the slot stays the first step's real registry id rather than the word "chain",
+which is load-bearing in three places that know nothing about chains: `_record()` drops an outcome
+for an id the registry does not have, the page's status strip reads it, and `about_the_proposal()`
+logs it.
+
+Each step shows the **server's** sentence for that action, filled from that tool's `step` template
+in the registry, never the model's prose about it — a model that paraphrases one action can
+understate it, and a model paraphrasing two has twice the room. The step lines carry no `body`, no
+`minutes` and no `description`, enforced in `_clean_tool()`, because the plan is read out loud and
+a step line that interpolated the employer's correspondence would read it to whoever is in the
+room. The exact values sit under each sentence in mono, because those are read with the eyes by the
+one person entitled to read them.
+
+**Measured, three-step plan, 1280×860 window:**
+
+| surface | rectangle |
+|---|---|
+| the card (`#a-ask`) | **722 × 311** |
+| the steps list (`#ask-steps`) | **722 × 221** |
+| the single-proposal rows (`#ask-rows`) | **no rectangle at all** |
+| Yes button, bottom edge | **635** |
+| the organ rail, top edge | **684** |
+
+The Yes button clears the rail by 49px with three steps up, the list sits above the buttons in
+reading order, and the empty rows grid takes no room — which it did before the `:empty` rule, both
+the zero-height box and its 13px margin.
+
+**The spoken proposal is one sentence for the whole plan**, ordered aloud because a listener has no
+numbers to look at:
+
+> "I have a two-step plan, sir. First, write 'Vendor call' into your Google calendar, Monday 28
+> September at 4:00 pm, 30 minutes (the default, since no end was given). Second, send an email to
+> team@acme.com under the subject 'Vendor call tomorrow at 16:00'. Shall I execute the chain?"
+
+**THE FIRST REAL DEFECT OF THIS ROUND WAS IN THAT SENTENCE, and it was this machine's own voice.**
+Round 1 of `chain_proof` failed twice on "the plan was never heard". The first hypothesis was audio
+autoplay, and it was half right: a throwaway probe established that only a **trusted** mouse event
+unlocks speech — `page.evaluate('el.click()')` does not, `Input.dispatchMouseEvent` does — before
+the gesture `speak()` returns false, `unlocked:false`, the line is recorded `aloud:false` and no
+`speakLine` event fires; after it the held line is released. So the harness now clicks for real.
+That alone did not fix it. The true cause was `spokenForm()`'s `SPOKEN_MAX_CHARS = 260`: it packs
+whole sentences up to the cap and drops the rest, **and a two-step plan whose first step is a
+calendar entry runs to about 270 characters.** The twelve characters over the cap were *"Shall I
+execute the chain?"*. The butler read out a plan and never asked for the word, while the card sat
+there waiting for one. `spokenForm()` now rescues a trailing question: if the last sentence ends in
+a question mark and the packed form does not already contain it, the question is appended. The
+harness assertion was rewritten to the truth rather than to the symptom — the spoken line must
+**end** with "Shall I execute the chain?", must open "I have a two-step plan", must carry First and
+Second, and the card must carry the server's sentence in full, cap or no cap, so that reading it
+and hearing it agree.
+
+**THE DOORMAN'S CHAIN.** Nothing was written for this. Because the chain reuses the one `_pending`
+slot and `/chain/execute` is a *name* for `/execute`'s path, the voiceprint law, the TTL, the
+withdrawal rule and the supersede rule all apply unchanged. Proved on a genuinely guarded store: a
+guest's spoken yes at a two-step gate was refused in the same words as at a single one —
+
+> "I take orders from one voice in this house, and it is not speaking just now."
+
+— **zero hands executed**, which is the half a per-step gate would have got wrong; the card
+survived the stranger, because a guest's word must not be able to take the employer's own question
+off his screen; and the keyboard Yes then ran the plan the room's voice could not.
+
+### PART 3 — SEQUENTIAL EXECUTION AND THE HALT LAW
+
+`/chain/execute` runs the approved steps in order through the same registry hands, pasting each
+step's evidence forward. **If step N fails, step N+1 is never attempted.** Measured, with a
+three-step plan whose middle step is a self test carrying a token that makes it exit 1 on purpose:
+
+> "Self test passed, token HALT-ONE. Step 2 of 3 — test the hands themselves — failed: The tool
+> failed, sir: Self test failed on purpose, token FAIL-TWO. I have stopped the chain, so step 3 was
+> not attempted."
+
+Four things in one receipt, in this order: what **did** happen, with step one's own evidence; where
+it stopped, **by number**; why, in the script's own words; and what was abandoned, so nobody is
+left assuming the rest went through.
+
+**The proof of the halt is a number that does not move.** Saying "step 3 was skipped" is a claim
+about an absence, so it is asserted three ways: `save_minutes`' ledger row is **unchanged**, the
+file step 3 would have written **does not exist**, and the ledger's chain row names the index. Step
+one *and* step two both really started — two runs counted against the hand that touches nothing —
+and step two is recorded as **failed** rather than **refused**, because the subprocess did start.
+That distinction is the one a single failure taxonomy in `_spawn()` exists to keep honest.
+
+**The ledger records a chain as one transaction**, in its own `chains` array, keyed by a
+`chain_id` minted once at proposal time:
+
+```json
+{"id":"c6ab92c6a-22","status":"ok",     "steps":["selftest","save_minutes"],           "ran":2,"stopped":0,"at":"2026-09-27T20:17:06"}
+{"id":"c6ab92c6b-23","status":"halted", "steps":["selftest","selftest","save_minutes"],"ran":1,"stopped":2,"at":"2026-09-27T20:17:07"}
+{"id":"c6ab92c69-21","status":"refused","steps":["add_calendar_event","send_email"],   "ran":0,"stopped":1,"at":"2026-09-27T20:17:05"}
+```
+
+Three statuses, `ok` / `halted` / `refused`, the count that ran and the index it stopped at. It
+keeps **none** of what the hands were given — no token, no address, no title — which is asserted
+rather than intended. A refused plan is one refused transaction, not two refused tools.
+
+**State passing, proved end to end.** Before the yes the card showed `{{step1}}` in the `minutes`
+field, in the field it will land in, exactly as it will be sent, and said so in English beside the
+number — *"quoting what step 1 returns"* — while step one quoted nothing, having nothing behind it.
+After the yes, `notes/Chain proof.md` contained **`CHAIN-ONE`**, which is step one's own stdout, and
+the literal `{{step1}}` was **gone**, not left in the file as this machine's markup.
+
+### PART 4 — REGRESSION
+
+**`chain_proof.mjs` — VERIFY 57/57 PASS.** Four rounds. (1) A two-intent directive **typed through
+the real box and answered by the real brain**, asserted on screen and out loud, then declined. (2) A
+two-step plan injected as **model-shaped text** closing with `}}]]`, accepted with a real click,
+proving state passing into a real file. (3) A three-step plan whose middle step fails for real,
+proving the Halt Law and the unmoved row, and carrying the layout measurements. (4) The Doorman's
+chain: a guest's spoken yes refused, zero hands run, card intact, keyboard Yes then settling it.
+
+The injection door is `/tools {"cmd":"chain"}` and it reads **`said` before `steps`** on purpose:
+`chain_tag()` is the part of this feature a regression test cannot reach any other way, and it is
+the part that was measured wrong first. A harness posting a ready-made array would prove
+`propose_chain()` and leave the scanner — which is where the bug lived — untested for ever. The
+`cmd == "chain"` door is the exact sibling of `cmd == "propose"`: it asks for a proposal and it
+cannot run one; consent is still only ever given at `/execute` or `/chain/execute`, under the
+doorman.
+
+**preflight check 27 — "a plan of two is a schema, and a plan that breaks it never pends."** 73 ms,
+no brain call, three clauses. (a) The protocol is *called* rather than grepped — its source is a
+Python string full of escaped quotes, so a grep for `"hand"` finds nothing — and it must teach
+`"hand"`, `"params"`, `[[chain:`, `{{step`, the one-intent sentence and the cap **in the number the
+server enforces**; `chain_tag()` must use a JSON scanner and must not be matching three closing
+brackets again. (b) **Seven malformed plans, each refused by its documented key, each naming its
+step, and each leaving nothing pending** — `chain-empty`, `chain-too-long`, `chain-bad-step`,
+`chain-unknown-tool`, `chain-step-missing`, `chain-ref-field` (a placeholder aimed at an address),
+`chain-ref-order` (a placeholder pointing forwards). The *nothing pending* half is the one that
+matters: a refusal that left a half-read plan in the slot is a plan a later yes could confirm. (c)
+And the gate is not simply shut — a good plan **is** accepted, in the shape a model really writes
+it, with the placeholder still visible and step two declaring `uses:[1]`; a plan of one falls
+through to an ordinary single proposal rather than becoming a numbered list of one item; and the
+check puts the proposal down again afterwards, so the next thing to say yes in this house does not
+find this one waiting. Finally, **every run count in the ledger is identical either side of the
+check** — it only ever proposed.
+
+**THE ONE RED IN THE SWEEP THAT WAS NOT A FLAKE.** `capabilities_proof` fell from 16/16 to 11/16,
+and all five failures were in its fitted state: the server restarted, read the registry, and
+reported **7 hands, not 8**. The canary had been silently dropped. The cause is this round's own
+work — `_clean_tool()` now **requires** a `step` template, because a tool with no imperative
+sentence of its own could only be described in a numbered plan by its filename or by the model's
+prose, and the second is the one voice this module will not use. An entry that does not validate
+does not exist; it is not repaired, defaulted or guessed at, and the server said so on stderr, tool
+by tool. Two fixes were available. Defaulting `step` from `proposal` would have gone green by
+having a design decision quietly reversed to suit an old fixture. Instead the **fixture** gained
+the field it now owes: the canary stands in for a real hand somebody fits by editing JSON, so it
+must satisfy exactly what a real hand must satisfy. 16/16 on the re-run.
+
+`lock_proof` failed once on drift being noticed in **1643 ms against a 1500 ms budget**, and passed
+alone at **764 ms** — a timing flake of the known kind, re-run solo before being believed, as the
+standing rule for this machine requires.
+
+**Baseline and after.** Solo, sequential, quiet, `port_proof` last.
+
+| harness | baseline (round start) | after §25 |
+|---|---|---|
+| desk_proof | 44 checks, 0 failed | **44 checks, 0 failed** |
+| layout_proof | 150/150 PASS | **150/150 PASS** |
+| followup_proof | 47/47 PASS | **47/47 PASS** |
+| salutation_proof | 26/34 FAIL (named, pre-existing) | **26/34 FAIL — identical, same four assertions** |
+| capabilities_proof | 16/16 PASS | **16/16 PASS** (11/16 first, see above) |
+| persona_proof | 19/19 PASS | **19/19 PASS** |
+| nudge_proof | 21/21 PASS | **21/21 PASS** |
+| deck_proof | 238/238 PASS | **238/238 PASS** |
+| focus_probe | PROBE 26/26 + 85 checks, 0 failed | **PROBE 26/26 + 85 checks, 0 failed** |
+| voice_proof | 145/145 PASS | **145/145 PASS** |
+| conversation_proof | 114/114 PASS | **114/114 PASS** |
+| routing_proof | 91/91 PASS | **91/91 PASS** |
+| echo_proof | 49/49 PASS | **49/49 PASS** |
+| console_proof | 30/30 PASS | **30/30 PASS** |
+| scribe_proof | 59 checks, 0 fail | **59 checks · 59 pass · 0 fail · PASS** |
+| brain_live | 33 checks, 0 failed | **33 checks, 0 failed** |
+| eyes_live | 56 checks, 0 failed | **56 checks, 0 failed** |
+| tools_live | 62/62 PASS | **62/62 PASS** |
+| **chain_proof** | *(did not exist)* | **57/57 PASS** |
+| google_hands_proof | 24/24 PASS, 2 skipped | **24/24 PASS, 2 skipped** (grant present, real-API branch reserved) |
+| speaker_proof | 61/61 PASS | **61/61 PASS** |
+| lock_proof | 78 checks, 0 failed | **78 checks, 0 failed** (one timing flake, re-run solo) |
+| preflight | 23 pass, 0 fail, 3 warn (26 checks) | **24 pass, 0 fail, 3 warn (27 checks)** |
+| port_proof | 24 checks, 0 failed (last) | **24 checks, 0 failed (last)** |
+
+`speaker_proof` and `google_hands_proof` were re-run specifically to show the chain wrapper did not
+break the hands underneath it, and neither moved. The three preflight warns are the standing ones —
+`/model`, the focus session and the eyes report — with causes already recorded.
+
+### What is left open
+
+New this round:
+
+- **The spoken cap ate a question, and it may still eat other things.** `SPOKEN_MAX_CHARS = 260`
+  now rescues a trailing question mark, which is the case that was measured and the case that
+  matters at a gate. It does not rescue anything else. A long line whose last sentence is an
+  *imperative* rather than a question is still dropped silently, and nothing asserts that it is not.
+- **The rendered list number cannot be read back by any API.** `getComputedStyle(li, ':before')
+  .content` returns the rule — `counter(step) "."` — with the counter unresolved, and there is no
+  interface that returns the digit the user sees. So `chain_proof` asserts the strongest available
+  proxy: the list is an `OL` of `LI`s, every marker is literally `counter(step)`, and the children's
+  order and text match the server's steps. A CSS rule that shipped a *wrong* counter would still
+  pass. The probe surface reports `n` as the DOM position and says so in its own comment rather
+  than pretending to have read the glyph.
+- **A chain of four has never been proposed by a model.** The cap is 4, the harness exercises 2 and
+  3, and preflight exercises 5-refused. Nothing has yet measured whether a real directive naming
+  four intents comes back as four steps or as prose.
+- **Placeholders are proved only into `minutes`.** The `text` fields are `body`, `description` and
+  `minutes`; state passing has been proved end to end into the third. Into an email `body` it is
+  proved at proposal time only, because proving it further means sending real mail.
+
+Carried forward, unchanged, from §24 and before: a guest asking *who am I* is told the boss's name;
+`deaddress`'s uncommaed-terminal-call-name limit; *Learn a voice* enrols only the boss; a bark
+sliced across two voices scores as neither; `speaker_proof`'s adaptive third-larynx assertion; the
+~5% tool→compose flake on *"switch your voice to joe"*; `"no no cancel that Why"` routing to the
+web; the spoken column's ~1-sentence recognition loss, still reported as UNPROVEN against a budget
+of 2; `routing_proof`'s spoken confirmations 403'd by the doorman; and a genuine Chrome crash
+leaving the relaunch nothing to restore. Reserved for the employer: the Gmail real-API send, the
+single OAuth consent click, and the two by-hand Calm Sky checks. The watch-capture gap stays
+documented in `README.md`.
+
+### The discretion decisions of this round, with reasons
+
+- **The chain reuses the one `_pending` slot rather than getting its own.** A second gate for
+  multi-step work would have been a second gate to forget to guard, and the guard is the whole
+  point of that file. This is why the Doorman's Chain needed no new code — and why it needed a
+  test anyway.
+- **`/chain/execute` is a name for `/execute`'s path, not a second executor.** There is exactly one
+  route in this server that can start a subprocess, and duplicating it to serve a nicer URL would
+  have doubled the number of places consent is checked. The cost of the alias is that a mislabelled
+  post costs a trace line rather than an unapproved hand, which is the right way round.
+- **The spoken sentence says "sir", not "Addi" as the mandate's example does.** Every registry line
+  in this file says "sir"; threading a live speaker's `address_form` into `hands.py` would fork the
+  persona's addressing rule, and the persona block is protected. The sentence's *shape* is the
+  mandate's — "I have a two-step plan… First… Second… Shall I execute the chain?" — and only the
+  vocative follows the house.
+- **`step` is required rather than defaulted from `proposal`.** It cost a red in the sweep and it is
+  still right: a question and an imperative are different sentences, and a registry that silently
+  invents the one it lacks is a source of surprises. The fixture moved instead.
+- **The step line is allowed to name LESS than the card shows.** `{body}`, `{minutes}` and
+  `{description}` are refused in a step template at load time, because the plan is spoken aloud and
+  the rows below it are not. The same leak preflight 16(f) plants a canary for.
+- **A bad time at step 2 refuses the whole plan rather than proposing it.** The employer would
+  otherwise be approving a first step that runs and a second that was never going to.
+- **A refusal names its step number.** A plan is the one refusal where *"that would not work"* is
+  genuinely ambiguous about which part, and the model is owed the same specificity so it can fix
+  one field instead of guessing again.
+- **The tool id a model sent is never echoed back or logged** when the registry does not have it.
+  It came from a language model, and this file's standing habit is that model text does not reach
+  disk.
+- **`chain_proof` injects the model's TEXT rather than an array.** Posting a ready-made array would
+  have been simpler and would have left the scanner — the one place the bug actually was —
+  permanently untested.
+- **Preflight 27 calls `chain_protocol()` instead of grepping `hands.py` for it.** The rendered
+  string is both what the model receives and the thing the escaped source hides; a grep for `"hand"`
+  against `\"hand\"` on disk finds nothing and would have passed by accident in the other direction.
+- **Preflight 27 cancels what it proposes.** A check that leaves a live gate standing hands the next
+  spoken *yes* in the house something it never asked about.
+- **`spokenForm()` rescues the question rather than raising the cap.** Raising 260 would have hidden
+  this instance and left the class; rescuing the interrogative fixes the case where the dropped
+  words are the *request for consent*, which is the only case where the omission changes what the
+  employer does.
+
+## 26 · The lie was in the history, and four instruments were reading the shutter
+
+Section 25 closed with a machine that could be asked for two things at once. Section 26 began with a
+worse complaint: over a long conversation it started *making things up*. At turn 17 of a real session it
+said, in its own voice and with no hedge, that the first thing it had been asked that day was where the
+employer lived — a question from turn 9 — and that the barista plan had come second, which was turn 14.
+Confident, fluent and wrong.
+
+The mandate was to **name the layer before curing it**: instrument a session, log every turn, and let
+the evidence say which of four mechanisms was at work — the ear lying to the brain, the brain losing its
+grounding to truncation, the chain protocol bleeding into ordinary answers, or a referent resolving to
+the wrong object. Fix what the evidence names and nothing else.
+
+### PART 0 · The hunt, and the mechanism it named
+
+`session_proof.mjs` runs twenty typed turns — note questions, web questions, identity, single-intent
+directives, two-intent directives, a refusal, follow-ups carried by *it* and *that* — and logs, per
+turn: the sentence that arrived, the sentence uttered, the routing kind, the retrieval scores with their
+cited passages, the chain-tag, the prompt's assembly size and order with anything evicted, and the
+model's raw output. Turn 2 and turn 20 are deliberately the same question. Turn 17 is the eviction
+probe. Turn 19 is the staleness probe.
+
+**The mechanism is (b), and it is a particular kind of (b): the model invented nothing.** Every raw
+output was faithful to the prompt it was given. What was wrong was the prompt: a four-pair history
+window with *nothing anywhere in it saying there had been eight earlier turns*. Asked what came first,
+the model answered honestly from the oldest thing it could see — and the oldest thing it could see was
+turn 9. It was not hallucinating. It was being lied to by omission, and the liar was the assembler.
+
+The other three suspects were checked, and one of them could not be cleared honestly:
+
+- **(a) transcript ≠ utterance.** `heard` and `asked` are recorded separately by `turn_begin()` and never
+  reconciled, precisely so this question can be asked. No turn was answered against a sentence other
+  than the one that arrived. But on a typed turn there is no ear, and `heard` is empty by design — so
+  the wide claim is reported **UNPROVEN by construction** rather than passed. A harness that prints a
+  tick there is lying about what it measured.
+- **(c) chain-protocol bleed.** The protocol is in the prompt on every turn, and no ordinary answer came
+  back wearing a plan structure.
+- **(d) antecedent staleness.** Turn 19's *it* resolved to the object from turn 18, not to an older one.
+
+### PART 1 · The context budget
+
+| what | value |
+| --- | --- |
+| `MAX_CONTEXT` | 48 000 characters, declared on the wire, not only in a comment |
+| `CONTEXT_FLOOR` | 29 000 |
+| largest prompt in twenty turns | 26 712 characters — **44% headroom at the worst turn** |
+| `HISTORY_TURNS` | 4 pairs held in full |
+| `OLDER_KEEP` / `OLDER_MAX` / `SUMMARY_PAIR_MAX` | 8 / 4 000 / 200 |
+
+The order is **persona → manifest → chain-protocol → guest → standing-offer → retrieval → recent-turns →
+older-turns → question**, one assembly order for the whole session, and seven of the nine blocks can
+never be evicted: persona, manifest, chain-protocol, guest, standing-offer, retrieval and the question
+itself. Only `recent-turns` and `older-turns` are droppable.
+
+**The eviction rule, which is the actual repair.** Turns beyond the window are no longer dropped; they
+are *summarised by rule* into a block headed `EARLIER IN THIS CONVERSATION` that says in plain words
+that it is a summary and holds the gist. Turn 1 is pinned. No line is cut mid-sentence. At turn 20 the
+window held **8 recent messages and a 2 109-character summary of what was dropped**, and the answer
+cited `cold-brew-recipe.md` — the same passage turn 2 cited, from 44% less room. Asked at turn 17 what
+came first, it now says the first thing was a good morning, and does not name turn 9. Preflight's own
+reading of the same machinery: sixteen pairs leave a four-pair window and a **1 733-character summary**,
+with the middle counted but not quoted.
+
+`accounted` is true on every assembled turn: an assembly of 5 928 characters is charged to the character
+against the nine blocks, so nothing rides on the wire uncounted. The hands block is a composition —
+manifest 3 609 + protocol 1 470 = the 5 080 bytes it always was.
+
+### PART 3 · The grounding audit
+
+Every answer carries one of six declared classes — `notes · web · persona · state · refusal · chain` —
+asserted against what the answer actually has behind it.
+
+| turn | class | what stands behind it |
+| --- | --- | --- |
+| 2, 3, 14, 15, 18, 19, 20 | `notes` | a real passage at or above threshold, shown |
+| 7, 8 | `web` | 3 fetched sources each |
+| 4, 5 | `persona` | cites nothing, fetched nothing — **no chip can render** |
+| 6 | `state` | a live reading, nothing cited |
+| 10, 12 | `chain` | really did propose hands from the registry |
+
+Six turns the server would not classify went to a **separate judge process**, and it called all six
+grounded: turn 1 `persona` ("its own greeting and offer of service, nothing reported from elsewhere");
+turn 9 `notes` ("reports absence of the address in the employer's notes without inventing content");
+turn 11 `refusal` ("it stands down and asserts no action taken, claiming nothing"); turn 13 `state`;
+turn 16 `persona` ("the assistant's own translation, composed rather than reported"); turn 17 `state`
+("it recalls earlier turns, which the summary and recent turns in the prompt support"). No answer in the
+session wore `notes` or `web` with nothing behind it. Five conversational, identity, capability and
+connection-state sentences render **nought chips and nought citations**, while a real notes question
+still lights five — the gate is a judgement and not a blanket.
+
+### PART 4 · The sure door
+
+**The length ladder.** Measured in `tools/ladder.py` against a one-row roster built in memory from
+piper's voices — nothing written to `speaker-store/`, no vector printed, only cosines.
+
+| rung | the employer | strangers (worst of six readings) |
+| --- | --- | --- |
+| 13 words | 0.9079 | — |
+| 30 words | 0.8950 | — |
+| 47 words | 0.9166 | 0.1969 |
+
+**No decay with length.** The floor is 0.50 and the near band 0.35; the worst stranger reading is under
+both. Windowing gains the employer **+0.0000 on every rung** — and that is not the feature failing, it is
+the fixture having no defect to cure: a piper clip is wall-to-wall speech with no room and nobody else in
+it, and windowing exists to throw away exactly those things. So the two cases it *is* for were built:
+
+| case | whole clip | best window | gain |
+| --- | --- | --- | --- |
+| he speaks, then eight seconds of room | **−0.0532** | **0.8662** | **+0.9194** |
+| a guest talks over the middle of his sentence | 0.8157 | 0.8858 | +0.0701 |
+
+The first is decisive: on the whole-clip reading the employer scores *worse than any stranger ever
+measured* and is refused outright. The second **closes §24's open item, "a bark sliced across two voices
+scores as neither."**
+
+**The near band is reachable, and by the right input.** His own voice buried by degrees: 0.8950, 0.7765,
+0.7133, 0.6357, **0.4756 → UNVERIFIED at −6 dB SNR**, 0.2911, 0.0975, 0.0232. Monotone. So 0.35 is not
+dead code, and what reaches it is the employer in a very loud room — not a stranger. `seal_for()` gained
+a fourth word, and the server refuses in its own sentence: *"I could not be sure that was you, so I have
+not acted on it. Say it once more, a little longer, or press Yes on the card."* Never a silent GUEST for
+the boss.
+
+**Longevity is the one claim this round does not get to make, and the reason is the room.** Four
+twelve-turn spoken sessions were run. Every one of them held the *structural* claims: one open, one arm
+per turn, zero hard errors, zero barge-ins, the on-device engine taken every time, and — importantly —
+**no positional decay**, the soft turns scattered across the session rather than clustering at the end.
+What varied, wildly, was how many of his words came back:
+
+| run | soft turns of 12 | aggregate | room, per turn | note |
+| --- | --- | --- | --- | --- |
+| A | **2** (86%, 31%) | ~93% | 0.28 – 0.41 | ten of twelve word-perfect; **at budget** |
+| B (`session_proof`) | 6 | 83.5% (76 of 91) | 0.19 – 0.44 | reds at turns 1, 4, 5, 12 |
+| C | 10 | — | 0.16 – 0.41 | bad from turn 1 |
+| D | 6 | — | 0.28 – 0.38, **then 0.014 / 0.006** | perfect through turn 6, then the room blacked out |
+
+Run D is the one that explains the rest. Turns 1–6 came back **100% each**. Turn 7 delivered nothing and
+turn 8 delivered nothing, and their input peaks read **0.014 and 0.006** — sitting between turns that
+read 0.38, and below `VAD_OFF` (0.018), so the page was right not to hear anything. Turns 9–12 recovered
+the level and never recovered the accuracy. **The room intermittently collapses to four percent of its
+level, mid-session, and comes back.** That is in the machine's audio path, not in the ear and not in the
+funnel, and it is now recorded per turn so that nobody reads it as either.
+
+So `SHORT_BUDGET` stays at **2** and `session_proof SPOKEN` is reported **RED: 80/83**, failing exactly
+the three longevity claims. Lowering the budget to ten would buy a green by agreeing that a butler need
+only hear a third of what is said to him, which is not a repair. The table above is the evidence; run A
+is the only one taken in a room that behaved for twelve consecutive turns.
+
+### The room was turned down, and it took most of the evening to see it
+
+Before any of that, every spoken sentence in the house was returning empty — twelve-turn sessions with
+nothing delivered, and `routing_proof` reporting **0 of 14** sentences reaching the funnel. The first
+three hypotheses were all wrong, and they are worth listing because each one *fit*:
+
+1. **The background-shell law.** A harness launched from a backgrounded shell cannot raise its Chrome, so
+   `routing_proof` was re-run in the foreground. Identical: fourteen empty transcripts. **Cleared.**
+2. **The cloud recogniser's silent throttle** — the documented failure that produces exactly this
+   symptom. Cleared by the instrument itself: `__galaxy.ear.local` read `on: true, state: available,
+   tries: 7`. The words were staying in the room the whole time. **Cleared.**
+3. **Windows communications ducking**, which reduces other sounds by 80% while a microphone is open. The
+   fit was almost too good: the best reading of the evening was 0.034, and the known-good level times
+   0.2 is 0.034 exactly. `HKCU\Software\Microsoft\Multimedia\Audio\UserDuckingPreference` was absent, so
+   the 80% default applied; it was set to 3 ("do nothing") and the room was measured again. **0.0444.
+   Disconfirmed** — a hypothesis retired by measurement rather than by argument.
+
+The cause was that **the machine's output volume had been turned down**. Raising it moved the page's own
+analyser from 0.007–0.044 to **0.375–0.400**, and the same twelve sentences that had returned nothing
+came back word-perfect on a single arm each. Trimmed toward the recipe's documented 0.17–0.23, a
+three-turn control read **100% / 100% / 100%, one arm each, zero collapsed**.
+
+Which is worth being blunt about: for several hours the suspects were the recogniser, the page, the
+harness and the operating system's mixer policy, and the answer was the volume knob. The earlier
+reading of *"0.23 → 0.16 → 0.04 → 0.00 across consecutive runs on an idle machine"*, written up in the
+previous round as a mysterious environmental decay, was this all along, and the residual intermittent
+collapse in run D is the same path still misbehaving.
+
+### Four instruments that were measuring the wrong thing
+
+This round found four defects of one family — the harness measuring itself rather than the thing — and
+that is a pattern, not a coincidence.
+
+**(1) `heardWords` was not a recall.** It counted *words the room delivered*, so a turn read 250% and a
+session read 113.2% — 103 words against 91 spoken — and the mandate's "heard ≥ 90% of spoken" was
+meaningless in both directions at once: turn 4 read 0% and turn 1 read 250% in the same run. A count of
+delivered words can clear 90% while carrying *none of his words*, because the butler's own answer and the
+neighbouring turn's late final land in the same window. `recalled()` now matches his words against the
+delivered ones as a **multiset** — each spoken word struck off against one unused heard word, so a
+doubled word is not scored twice and a dropped one is not forgiven. Both numbers are kept and printed
+side by side, because the delivered count is still the right *diagnosis* column: a turn reading 250% is a
+turn where something else was in the microphone, and a human wants to see that. Only the recall is
+asserted on. The first two-turn run after the change earned its keep immediately: 7 words delivered, 6 of
+them his — the ear had returned *rooster* for *roaster*, which the old measure scored 100%.
+
+**(2) The last turn was photographed before its final landed.** Every turn's wait ends when the page's
+turn counter moves. For turns 1..n−1 that is late enough by accident, because the next turn's `say()`
+spends seconds arming and speaking and the final lands during it. For turn *n* there is no next turn, so
+the dump was read the instant the counter moved — and this file's own header already says why that is too
+early: **the final arrives after the flush that ends the turn.** Turn 12 read 0 of 6 words with nothing
+delivered while the browser tap showed its interims still arriving one line above the table. There is now
+a bounded fifteen-second wait for the last turn, and it reports which happened — a turn that truly
+delivered nothing must still be able to read as nothing.
+
+**(3) The engine verdict was read before the engine was chosen.** The page publishes
+`__galaxy.ear.local` so a spoken harness can say whether the words stayed in the room or went to a
+service. `ear_dump` read it **immediately after the ear opened** — and the engine is chosen at the *arm*,
+which is later. So `on` was false for every run that will ever exist, and the first version of that read
+called it a verdict: it printed THESE WORDS ARE GOING TO A SERVICE against a page that had simply not
+armed yet. Most of a diagnosis was written on top of it — the cloud recogniser's documented silent
+throttle, which fits the symptom perfectly — before `tries: 0` in the same line gave it away. The reading
+is now taken after the last turn, where it exists, and the same session that had "proved" the cloud was
+answering reported `on: true, tries: 6`. `session_proof` now asserts the engine as a red of its own,
+before the recall claims, so a cloud run fails by name rather than being mistaken for an ear that
+degrades over a long session.
+
+**(4) The chain ledger is a ring, and `chain_proof` had forgotten it.** The proof that a refused plan is
+recorded as ONE transaction and not one row per tool was written as arithmetic:
+`chains().length === chainsBefore + 1`. `hands.py` caps the file at `CHAIN_LEDGER_MAX = 50` on the read
+*and* on the write, so the fifty-first append pushes the oldest row out and **the length never moves
+again**. The harness scored 78/78 the day before this was found purely because the ring had not filled
+yet; it then failed twice identically, with a ledger row that was visibly correct — `status: refused`,
+both steps, one row. A latent red with a date on it, and one that reads as a regression in the server
+rather than as arithmetic in the harness. It now asserts **identity, not length**: the row is new if its
+id was not in the ledger before, and "one and not two" is the claim that exactly one id appeared. True at
+any ring position, and it now says so out loud — *"1 new row(s) in a ledger of 50 (the ring holds 50, so
+this counts ids and not rows)"*.
+
+### The page fix underneath it: an engine chosen once, and a flag that could lie
+
+`processLocally` was only ever set inside `buildRecogniser()`, and the recogniser is built **once** —
+`if (!recogniser)` at the arm. So whatever the pack's state was at the first arm decided the whole
+conversation, and the comment promising that "the pack can land between two turns" was never implemented
+for a reused instance. `earLocalTake()` now runs at every arm. It also cannot lie in either direction: on
+a fresh instance it recomputes from nothing, and on one that has already taken the property it returns
+early and keeps the answer, because re-writing `processLocally` on a recogniser that has already run a
+session and reading it back is a question the browser need not answer the same way twice — and a false
+read-back there would say *the cloud has him* about a recogniser that is still local. Under-claiming and
+over-claiming are both lies. It also now says **which** of the two things happened when it fails, because
+an empty `why` beside `on: false` was ambiguous between "the pack was not ready at this arm" and "the
+browser refused the write" — opposite faults with opposite repairs, and both used to read as silence.
+
+`ear_dump.mjs` gained `EAR_DUMP_CLOUD=1`, which stubs the one static the page reads before it decides —
+over CDP, before navigation, so the page itself is unmodified, because a knob added to the page for a
+question outlives the question. It exists because both engines answer through one API and neither says
+which it is, so "the on-device model hears this room worse than the service" cannot be settled by
+argument: only by the same sentences, the same speakers and the same minutes, twice.
+
+### PART 2 · The orchestrator's checks, re-asserted
+
+`chain_proof.mjs` stands at **78/78** against a 57/57 baseline. Seven malformed plans are refused, each
+naming the documented key it broke, with nothing left pending; a good plan is accepted in the shape a
+model writes it; a plan of one falls through to a single proposal — **one intent is not a chain** — over a
+precision fixture set producing zero chain cards. Step N failing halts the chain, N+1 never runs, the
+ledger row names the stop index and the receipt names what succeeded and where it stopped. A guest's
+spoken *yes* is refused in the same words with zero hands run and the card intact; the keyboard *yes*
+settles it. `{{stepN}}` substitutes end to end into minutes and into a **draft**, never a real send, and
+the placeholder never reaches the spoken line or a card title.
+
+**The fuzz set**, seven shapes — truncated JSON, missing and doubled terminators, a tag without its array,
+an array without its tag — leaves **no `{{`, no `}}`, no `"hand":`, no tag and no bracket array on any
+answer surface**, while the control answer *about* JSON is byte-identical with its braces intact.
+
+**The spoken summary** is generated and never truncated: a four-step plan whose sentence runs to 365
+characters — over the 260-character spoken cap — still ends with *"Shall I execute the chain?"*, announces
+*"and two more steps on the card"*, and the number it announces is the number it dropped: 2 lost, 2 owned
+up to. Nothing under the cap is touched.
+
+### PART 5 · Baseline and after
+
+| harness | baseline (§26 start) | after |
+| --- | --- | --- |
+| session_proof (typed) | *(new)* | **75/75 PASS** |
+| session_proof (`SPOKEN=1`) | *(new)* | **80/83 FAIL** — the three longevity claims, named to the room |
+| chain_proof | 57/57 PASS | **78/78 PASS** (after the ring fix) |
+| speaker_proof | 61/61 PASS | **70/70 PASS** |
+| routing_proof | 91/91 PASS | **89/89 PASS · 1 UNPROVEN** (13 of 14 sentences delivered, budget 2) |
+| preflight | 24 pass, 0 fail, 3 warn (27) | **26 pass, 0 fail, 3 warn (29)** |
+| persona_proof | 19/19 PASS | 19/19 PASS |
+| capabilities_proof | 16/16 PASS | 16/16 PASS |
+| nudge_proof | 21/21 PASS | 21/21 PASS |
+| console_proof | 30/30 PASS | 30/30 PASS |
+| echo_proof | 49/49 PASS | 49/49 PASS |
+| followup_proof | 47/47 PASS | 47/47 PASS |
+| salutation_proof | 26/34 FAIL (named) | 26/34 FAIL (unchanged, named) |
+| desk_proof | 44 checks, 0 failed | 44 checks, 0 failed |
+| layout_proof | 150/150 PASS | 150/150 PASS |
+| deck_proof | 238/238 PASS | 238/238 PASS |
+| tools_live | 62/62 PASS | 62/62 PASS |
+| brain_live | 33 checks, 0 failed | 33 checks, 0 failed |
+| eyes_live | 56 checks, 0 failed | 56 checks, 0 failed *(3 reds batched, 0 solo)* |
+| scribe_proof | 59 pass, 0 fail, PASS | 59 pass, 0 fail, PASS |
+| voice_proof | 145/145 PASS | 145/145 PASS |
+| conversation_proof | 114/114 PASS | 114/114 PASS |
+| focus_probe | PROBE 26/26 · 85 checks, 0 failed | **PROBE 26/26 · 85 checks, 0 failed** (2 reds batched, 0 on a clean server) |
+| google_hands_proof | 24/24 PASS, 2 skipped | 24/24 PASS, 2 skipped |
+| lock_proof | 78 checks, 0 failed | **78 checks, 0 failed** (third attempt; timing flake) |
+| port_proof | 24 checks, 0 failed (last) | 24 checks, 0 failed (last) |
+
+The two new preflight integers are **28, the prompt has a cap, an order, and a memory of what it
+dropped** and **29, every answer carries a grounding class, and a class is not a route**. The three warns
+are the routine 10, 11 and 12.
+
+**Three reds in this sweep were the sweep's own fault, and saying so is the point.**
+
+- **Eleven phantom reds in `routing_proof`**, all of the form *"THE TRACE NAMES THE CLASS: a line reading
+  route: identity"*. The server had been restarted with its stderr going to `_runs/server-trace.log`,
+  and every harness reads `server-trace.log` in the project root — so eleven assertions were reading a
+  frozen file. Restarted to the right path, the same run scored 89/89. The house rule exists for exactly
+  this and was still broken by hand.
+- **Two reds in `focus_probe`**, both of the form *"the room is the ordinary room: k=0 … with no
+  session"*. The server was holding a **leftover `state: "ended"` session** with `drifts: 2` and
+  `locked: true` still on it, and the at-rest assertions require no session at all. On a freshly started
+  server: 85 checks, 0 failed. `lock_proof` was contaminated by the same thing — 73 checks with 17
+  failures cascading from one root, *"THE LOCK COMPLETED ITSELF … lockedTab=''"* — and came back to its
+  full 78 checks once the server was clean, then needed a third attempt for the documented 1500 ms
+  drift-notice budget, missed at 1690 ms.
+
+### Discretion decisions, with reasons
+
+- **`CONTEXT_ORDER` is the precedence ladder; `where` is the geometry.** Retrieval rides in the final
+  user turn — a declared deviation, so the two ideas are not silently conflated in one list.
+- **Summarising by rule, not by model.** `summarise_pairs()` makes no model call: a summary generated by
+  the thing being audited is not evidence about it, and it would cost a call per turn.
+- **`/session/dump` is a kill switch rather than an opt-in.** A dump that has to be asked for is a dump
+  nobody takes on the run that mattered.
+- **The judge is a separate process that bypasses `call_model`.** THE COSTUME — `wear_persona()` runs on
+  every list `call_model` is handed, so a judge would be asked to rule while dressed as the butler; and
+  THE METER — `call_model` also completes the open turn's budget plan and files a model call, so judging
+  a session would change the session it was judging.
+- **The transcript-vs-utterance claim is reported UNPROVEN in the typed half** rather than passed. There
+  is no ear on a typed turn, and a tick there would be a lie about coverage.
+- **The length ladder lives in `tools/ladder.py`, not in the harness.** Rungs defined in *words* need a
+  synthesiser, and the stranger half needs a roster with one row in it — against the live store the
+  strangers have rows of their own and `identify()` would correctly answer about the wrong pair of
+  voices. The first draft made exactly that mistake and reported a guest as admitted when the doorman had
+  been right; the mistake is recorded in the file.
+- **`ear_dump.mjs` was extended to twelve turns rather than a second ear grown inside `session_proof`.**
+  One ear, one no-retry rule; the default stays six so the by-hand photograph is unchanged.
+- **The longevity 90% rule carries a measured budget; the collapse rule and the aggregate carry none.** A
+  session allowed two soft turns and nothing else cannot pass by degrading quietly across all twelve.
+- **Both word counts are kept, and only one is asserted on.** The delivered count is a diagnosis and the
+  recall is the claim; deleting the first would have thrown away the column that explains the second.
+- **`SHORT_BUDGET` was left at 2 with the harness red**, rather than raised to fit the room. A budget
+  fitted to the worst room on record is not a budget.
+- **The engine A/B is a harness env knob, not a page knob.** A switch added to the page to answer a
+  question outlives the question.
+- **The ducking hypothesis was tested by changing one machine setting, and it is still changed.**
+  `HKCU\Software\Microsoft\Multimedia\Audio\UserDuckingPreference` was absent and is now `3` ("do
+  nothing"). It did not fix anything and it is outside the application; it is recorded here by its exact
+  key so it can be undone in one line, because an undocumented change to the test rig is worse than the
+  hypothesis it failed to prove.
+- **The premature engine verdict was withdrawn in public rather than quietly deleted.** The wrong
+  diagnosis was well-evidenced and wrong, and the reason it was wrong — an instrument read before the
+  thing it measures exists — is the same class of defect as the recall bug, the shutter bug and the ring
+  bug. Four in one round is a pattern worth leaving on the page.
+
+### Left open
+
+- **The room's render level intermittently collapses to ~4% mid-session and recovers** (run D, turns 7–8
+  at 0.014 and 0.006 between turns at 0.38, on an idle machine with 11.8 GB free). Ducking is
+  disconfirmed; the mechanism is unnamed and is outside the application. **The twelve-turn longevity
+  claim is blocked on it**, and `session_proof SPOKEN` stays red until a room holds for twelve
+  consecutive turns.
+- **`SHORT_BUDGET = 2` is met by one of four runs.** Run A met it; B, C and D did not, at verified room
+  levels. The budget is not yet earned.
+- The spoken 260-character cap still drops a trailing **imperative** silently; only the interrogative is
+  rescued.
+- The rendered list number cannot be read back by any API.
+- **A chain of four has never been proposed by a model**; `chain_proof` round 6 executes the page's own
+  bytes for that reason.
+- `what can you do` is classed `identity` rather than `capability` (pre-existing).
+- Three of `chain_proof` round 5's six single-intent fixtures raise no card at all.
+- **Windowing buys the employer nothing on TTS fixtures.** Its benefit can only be measured in a real
+  room; the two constructed cases stand in for that.
+- **The near band's end-to-end refusal through a live spoken turn is not yet asserted** — only the seal
+  and the curve are.
+- `lock_proof`'s 1500 ms drift-notice budget is met on roughly one attempt in three on this machine
+  (1690 ms, 1643 ms recorded).
+- `focus_probe` and `lock_proof` both require a server with no session on it, and nothing enforces that
+  but the operator.
+- Everything carried from §24: a guest asking *who am I* is told the employer's name; `deaddress`'s
+  uncommaed terminal-call-name limit; *Learn a voice* enrols only the employer; `speaker_proof`'s
+  adaptive third-larynx assertion; the ~5% tool→compose flake on *switch your voice to joe*, seen again
+  this round; `"no no cancel that Why"` → web; a genuine Chrome crash leaving the relaunch nothing to
+  restore.
+- **`routing_proof`'s spoken confirmations are still 403'd by the doorman**, and the room being fixed did
+  not change it: with an offer standing, the wire still reads
+  `403 kind=tool route=confirmation lookups=0 q="Yes yes do it Galaxy"`. The harness is green there
+  because it asserts the *route*, not the outcome — worth knowing before anyone reads 89/89 as this being
+  settled.
+- **Closed this round:** §24's "a bark sliced across two voices scores as neither".
+
+## 27 · A clock that costs nothing, and the island that proves it
+
+### Why this part existed at all
+
+Before this round, *"what time is it in Tokyo"* was **a web search**. A round trip, a rate limit, a
+citation chip under the answer, and a latency the employer could hear — all spent computing a
+subtraction. The whole of PART 7 is an answer to that: a table on this disk, read in microseconds,
+citing nothing because it read nothing.
+
+### The diagnosis that shaped the design
+
+`zoneinfo` is in the Python standard library. **Its data is not on Windows.**
+
+```
+>>> from zoneinfo import ZoneInfo          # imports fine
+>>> ZoneInfo("Asia/Tokyo")
+ModuleNotFoundError: No module named 'tzdata'
+>>> len(available_timezones())
+0
+```
+
+The import succeeding is the trap. A module that tested `import zoneinfo` and then fell back to a
+hand-written offset table would have read **identically right for six months** and been an hour out
+every March and October, silently, in both directions. So `worldclock.py` has two doors and it
+**proves the first one with a real key before adopting it**:
+
+```python
+if viastdlib("Asia/Tokyo") is not None:     # not `if zoneinfo:`
+```
+
+The second door is `dateutil.zoneinfo`, already installed, carrying **598 bundled IANA zones** — no
+new pip dependency. The route names which door answered, and that naming is the check: a silent
+fallback is invisible until spring.
+
+### The fixtures
+
+**Three cities, checked against a database this harness did not read from.** Node's V8 ships its own
+full ICU copy of the IANA rules — a different database, a different project, a different process. A
+harness that asked `worldclock.py` what time it ought to be would have proved only that Python is
+deterministic.
+
+| place | server (`dateutil.zoneinfo`) | Node ICU | offset handed to the page | ICU offset |
+|---|---|---|---|---|
+| London | `07:49` | `07:49` | `60` | `60` |
+| New York | `02:49` | `02:49` | `-240` | `-240` |
+| Tokyo | `15:49` | `15:49` | `540` | `540` |
+
+The offset is asserted **separately from the time**, because the board ticks its tiles from that
+number: a reading that is right on open and 60 minutes out thereafter passes a time-only check and
+is wrong for as long as anybody watches it.
+
+**The date line — the pair that proves the day is computed.** Apia and Pago Pago are about a hundred
+miles apart at `+13:00` and `-11:00`. They read the same minute on different days, always.
+
+```
+It is 7:49 in the evening in Apia, Addi - today, against your clock.
+It is 7:49 in the evening in Pago Pago, Addi - yesterday, against your clock.
+```
+
+```
+offsets   Apia +780   Pago Pago -660     opposite signs
+minute    19:49       19:49              the same
+date      2026-09-28  2026-09-27         different days
+```
+
+A day offset derived from the hour difference collapses these two into one reading, and the tile
+that says *tomorrow* then says it about the wrong island. **Tokyo is the same lesson quietly:** four
+and a half hours from his clock is nought days by any arithmetic on the offset, and is still
+tomorrow at nine in the evening. So the day is a **difference of calendar dates**, on the server and
+on the page, and the clause is always present — *"against your clock"* — because *tomorrow* alone
+leaves it open whether it means tomorrow in Samoa.
+
+**A place that is not a place.**
+
+```
+I do not know where Narnia is, Addi, so I will not guess at its clock.
+I do not know where Zanzibar On Sea is, Addi, so I will not guess at its clock.
+I do not know where Upper Fenwickshire is, Addi, so I will not guess at its clock.
+```
+
+No time in the refusal, no nearest match, no *did you mean*. A guess reads exactly like a right
+answer, and a clock confidently in the wrong hemisphere is worse than no clock. The place is handed
+back **capitalised** even though the funnel's vocative peel lower-cases everything, because *"I do
+not know where narnia is"* makes a second and untrue claim on top of the true one — that the word
+was not recognised as a place name.
+
+**Zero chips, through the real page.**
+
+```
+It is 3:49 in the afternoon in Tokyo, Addi - today, against your clock.
+chips 0 · #a-src display:none · #panel not open · web lookups in server-trace.log 0 -> 0
+```
+
+The sources row is `display:none` rather than shown-and-empty — a *Drawn from* heading over nothing
+is a claim about a source that does not exist.
+
+**The board.** Seven tiles, his own marked, and the day word only where it is earned:
+
+```
+Here 12:19   London 07:49   New York 02:49   San Francisco 23:49 yesterday
+Tokyo 15:49  Dubai 10:49    Sydney 16:49
+7 rendered against 7 computed · repaints 2 -> 4 while open · 0 tiles after close · timer stopped
+```
+
+`CLOCK_DAY_WORD['0']` is the empty string on purpose. *today* on six tiles out of seven is noise;
+its **absence** is the information.
+
+### Two bugs the fixtures found before the employer could
+
+**`re.VERBOSE` strips the space inside an alternation.** `(?:'s| is)?` compiled to `(?:'s|is)?`, so
+*"what is the time in Sydney"* silently fell out of the clock class while *"what time is it in
+Sydney"* worked. A class that works on the phrasing I happened to type first. The repair extracts
+`_WHAT` / `_NOW` / `_ASKS` with explicit `\s`, and the harness now carries ten phrasings:
+
+```
+what time is it in Sydney · what is the time in Sydney · what's the time in Sydney
+whats the time in sydney · time in sydney · what is the time in sydney right now
+sydney time · what day is it in auckland · how late is it in berlin · time in tokyo japan
+```
+
+**`"what is the time"` returned nothing.** The loose possessive pattern matched first, read the
+place as `"what is the"`, failed to resolve it, and returned a flat refusal instead of falling
+through — three of his most ordinary phrasings out of the class. Fixed by ordering `asked()` so the
+anchored *here* forms are tried before the possessive.
+
+Two more caught by ear rather than by assertion: `"It is 3 30 in the afternoon"` — a bare number
+pair, which a neural voice reads as *three, thirty* — and `"It is 12 o'clock in the afternoon"`.
+Both are now asserted (`%d:%02d`, and `twelve noon` / `midnight` as special cases).
+
+### The class is not a dragnet
+
+The opposite failure to a miss, and the harder one to notice: a protected class that grew until it
+caught *"what time is it in Tokyo"* can grow one word further and catch *"what time did I write that
+note"*, which has an answer in his notes. Ten sentences are asserted to route **elsewhere**:
+
+```
+what did I write about Tokyo · what time did I write that note · how much time is left
+set a timer for ten minutes · what is the difference between Tokyo and London
+schedule a meeting in Tokyo · what is the weather in Tokyo · who are you (identity)
+are you there (meta) · what can you do (identity)
+```
+
+`PROTECTED_CLASSES` is untouched — still `("confirmation", "meta", "identity", "directive")`. The
+clock stands beside them in `UNPAID_CLASSES` and is tried only after all four decline. Check 30
+asserts that structurally, because the cheap way to add a fifth class is to append it to the four.
+
+### Verdicts
+
+```
+clock_proof.mjs      VERIFY 95/95 PASS
+preflight.py         27 pass, 0 fail, 3 warn        (30 checks; warns are the routine 10, 11, 12)
+```
+
+Check 30 — *the clock costs nothing and knows what day it is there*:
+
+```
+the clock reads dateutil.zoneinfo, knows 215 places, and the route costs nothing
+the four protected classes are as the mandate wrote them and the clock is tried after them
+a clock question answers from a table on this disk: 0 nodes, 0 lookups, 0 sources
+the date line holds: Apia is today and Pago Pago is yesterday, against his own clock
+a place it cannot find is refused plainly, with no time in the refusal and nothing spent on it
+and it declines the three sentences that only look like clock questions
+```
+
+### The Connectors board · six readings, the hands from a file, and one absence
+
+The Command Panel gains a row, **Connectors**, and behind it a grid of nine tiles. Every value on it
+is read from something else: the first six from `/google`, `/tools` and the page's own live state,
+and the rest from `tools/registry.json` itself. Nothing on this board holds a fact of its own.
+
+```
+  TILE                              VALUE            SMALL PRINT                                  ACTION
+  ------------------------------------------------------------------------------------------------------
+  Calendar                          CONNECTED        can write events · <account email>           -
+  Gmail                             CONNECTED        can send mail · <account email>              -
+  Notion                            NOT CONFIGURED   no hand in the registry and no client here   Connect (disabled)
+  Voice                             PIPER            joe-medium                                   Recast
+  Eyes                              CLOSED           the eye button is the only control           -
+  Scribe                            READY            base.en · can write minutes on a yes         -
+  Relaunch Chrome with the debug…   HAND             3 capabilities · 0 parameters                 -
+  Test the hands themselves         HAND             1 capability · 1 parameter                    -
+  Bring you back to the locked tab  HAND             1 capability · 0 parameters                   -
+
+  head: Read from /google and 7 hands in the registry. A hand runs when you ask for it and
+        say yes — never by pressing a tile here.
+  row : Connectors | 6 connectors · 7 hands · google connected
+```
+
+The account name is `<account email>` here and in every log this round, as it has been since the
+Google row first existed. The board shows it on his own glass, which is where it belongs; a lookbook
+is a document that leaves the machine.
+
+### The one law this board could have broken
+
+A grid of nine tiles next to an executor is a second door. The Halt Law gives the registry exactly
+one: a proposal, a spoken yes, one run. So **no hand tile carries a button** — not a disabled one,
+none — and the head says so in the place a human reads rather than only in a comment. The only verbs
+on the whole board are Notion's disabled *Connect* and the Voice *Recast*, which is a control that
+already existed one row above.
+
+Eyes and Scribe are verbless for a narrower reason. The Eyes Law names **one variable and one
+control**; a second button here could be pressed in the half-second `#eye` disagreed with it.
+
+**And a connected grant carries no verb either.** The first plate of this board read `CONNECTED`
+beside a disabled button saying `Connect`, which a reader takes as a broken button rather than as a
+state. *Disconnect* is not the missing word: the Google row already owns it, and a second revoke door
+is the thing Eyes and Scribe are kept quiet to prevent. Connected is a readout; anything else is a
+button with a reason under it. That is the decorative thing this part cut.
+
+### Notion is an absence, reported
+
+```
+Notion   NOT CONFIGURED   no hand in the registry and no client on this machine   [Connect] disabled
+```
+
+No route, no stub, no placeholder waiting for a key — the honest reading of a service this house does
+not have, which is the reading he needs in order to ask for it. The harness asserts the registry
+holds no `notion` hand, so the tile is a reading of the absence rather than scaffolding for it.
+
+### The canary
+
+The mandate asks for a fake registry connector that surfaces a tile and leaves no ghost. The entry
+planted names a script **that does not exist**, asserted before it is written, so a tile can appear
+for something that could never execute:
+
+```
+  planted   id canary_connector · script canary_connector_does_not_exist.py (asserted absent)
+  /tools    carries it without a restart, on registry.json's own st_mtime rule
+  grid      9 -> 10 tiles · keyed "hand:canary_connector" · act "" (no verb, like every hand)
+  removed   /tools drops it · grid back to 9 · the name is nowhere in document.body at all
+  file      tools/registry.json byte-for-byte what it was, asserted in `finally`
+```
+
+The restoration is written twice on purpose — inline and again in `finally`, where the equality is a
+check rather than a hope. A harness that plants a row in a real file and throws halfway is a harness
+that edits the employer's registry.
+
+### Three reds, and only one of them was the page
+
+The first run read `56/59`. Two of the three were a real bug and one was the harness lying to itself.
+
+**The row under a full grid said it had not read anything yet.** `boardOpen()` painted the grid when
+the read landed and nothing repainted the order sheet, and the row's own reading arrives from the
+same fetch. So the employer would have seen nine live tiles above a line saying `not read yet`. One
+line in `boardOpen` fixes it for every board there will ever be.
+
+**Two boards shared one reading slot.** `board.read` was a single variable, so opening Connectors
+over the World Clock left the clock row reporting `0 tiles · 0 places known` about an organ that was
+working perfectly. It is now `boardRead[name]`, with `board.read` a getter that can only read, and
+check 31 asserts `board.read` is never assigned.
+
+**And the third red was mine.** The harness gated its assertions on "`/health` has landed", proved by
+the rail's model cell carrying text — and the markup ships every rail cell with an ellipsis
+placeholder:
+
+```html
+<div class="rl" id="rail-model"><span class="rk">model:</span><b class="rv">…</b></div>
+```
+
+`"…"` is truthy. The gate passed in the first frame, and worse, the model value also arrives on a
+*second* route — `loadBrains()` reads `/brains` and paints the chip, and `/brains` answers long before
+`/health`, which probes piper, whisper, the index and the web door on its way. So the harness read a
+page mid-boot and reported the Voice tile as `BROWSER` and the Scribe tile as `ASKING`: both correct
+for a page that had not been told otherwise yet, and both indistinguishable from a bug in the tiles.
+
+A throwaway diagnostic settled it in one run, by asking the page rather than the code:
+
+```
+visibilityState  "visible"        voice.engine     "piper"
+console.log      speak: engine is piper, en_US-joe-medium, locally
+scribe.installed true             rail model text  "OPUS 5"
+```
+
+The page was never wrong. The gate is now the **archive** cell, matched against the four shapes
+`railFrom()` can write into it — `off`, `building`, `N file`, `N files` — never against "not the
+placeholder", because an empty string would pass that. The archive is on `/health` and nowhere else
+in the page, and it is not one of the facts the sections below it assert, so waiting on it is not
+waiting for the answer.
+
+### Verdicts
+
+```
+connectors_proof.mjs   VERIFY 61/61 PASS
+preflight.py           28 pass, 0 fail, 3 warn        (31 checks; warns are the routine 10, 11, 12)
+```
+
+Check 31 — *the connectors board reads two routes and cannot run a hand*:
+
+```
+the board's two routes answer and neither carries a token or a secret to the browser (7 hands, grant 'connected')
+and /tools still publishes no script path and no trigger word
+each of the 4 named tiles speaks for a hand the registry actually validates: add_calendar_event, send_email, set_voice, save_minutes
+and not one hand tile carries a verb, so the grid cannot become a second door into the executor
+each board writes its own reading by name and board.read only reads, so the World Clock row cannot report the Connectors board's answer
+and the row behind a board is repainted from the same reading as the grid
+and POST /tools runs nothing (400)
+```
+
+Each of the three source-level clauses was tested against a doctored copy of `index.html` before it
+was trusted: a planted `act:` on a hand tile, a planted write to `board.read`, and `cmdPaint()` taken
+out of `boardOpen`. All three fail when they should, which is the only thing that makes them checks.
+
+### One voice, one surface · what stands down, and what may never
+
+While the butler is reading an answer the sentence is in the speakers, on the transient caption and —
+until this part — on the card as well. Three copies of one sentence, and the employer's eye is asked
+to pick which one to read. So the card's answer paragraph now stands down for exactly as long as the
+subtitle is carrying **the same sentence**, and comes back the moment it is not.
+
+```
+  ---- one voice, one surface ---------------------------------------------
+  caption: "It is 4:48 in the afternoon in Tokyo, Addi — today, against your clock."
+  card   : ""   (textContent kept: "It is 4:48 in the afternoon in Tokyo, Ad"…)
+  -------------------------------------------------------------------------
+```
+
+The second line is the whole of the design. `card` is empty because nothing on the glass carries the
+words; `textContent` is intact because the paragraph was **hidden, never written**. The card is the
+record. Eleven harnesses read `#a-text`, the Scribe quotes it, and a law implemented by emptying it
+would have destroyed the thing it was tidying.
+
+The proof is a clock question, chosen deliberately: it answers from a table on this disk, spends no
+model and consumes no sources, and still renders a real card and speaks through the real funnel. It is
+the cheapest honest way to have one sentence on two surfaces at one instant.
+
+### What could NOT stand down, and why the rule is one child deep
+
+The mandate retires "the quoted-utterance block and the repeated toast". Both turned out to name
+something load-bearing, and saying so is part of the work:
+
+**`#a-q` is the antecedent-memory law made visible.** `followup_proof` asserts it three times — *"the
+card still quotes them, rewrite or no rewrite"* — because the only way to see that *"and what about
+his?"* was resolved against the right question is to read the question the card is quoting. The
+antecedent memory is on the DO-NOT-ALTER list. So `#a-q` stays, and the rule reaches `> .a` and
+nothing above it: the question is not what is in the speakers.
+
+**"The repeated toast" is this page's own name for `#brain`** — `const toast = layoutMine('brain')` —
+the telemetry surface, not a second copy of the answer. There was no duplicate toast to retire.
+
+And the paragraph stands down **only for its own sentence**, which is the clause that keeps the rest
+of the deck honest. A capped answer, a plan whose tail is *"and two more steps on the card"*, an error
+softened for the ear — all of those are a caption that is deliberately *not* the paragraph, and hiding
+the card under them would hide text the voice is pointing at. The harness asserts the inverse directly:
+a different line spoken over the same card puts the paragraph straight back.
+
+```js
+const same = !!held && capCollapse(line) === held &&
+             body.scrollHeight <= body.clientHeight + 1;
+```
+
+The second clause is a belt on a brace. `layout_proof` focuses `#a-text` and drives it with a real
+Page Down, and a `display:none` element takes neither focus nor a scroll — so a paragraph that is
+currently a scroller never yields. A long answer never matches its own spoken form anyway (the voice
+is capped at 260 characters), so the guard costs nothing and removes the whole class of collision.
+
+> **Amended by the boot plates, later in this section.** Equality alone missed the one screen every
+> session starts with: the autoplay law joins held lines into one breath, so the caption carries
+> *salutation + readiness line* while the card holds the salutation alone, and the greeting stood on
+> both surfaces. A `startsWith` clause was added — the safe direction — and a `bare` rule for a
+> yielded card with nothing left to show. See *The boot ceremony · what the plates caught*.
+
+### The four ways down, and the frame that must not exist
+
+`answerYield()` is called from four places, and the reason is a frame rather than a tidiness:
+
+```
+captionShow    the subtitle takes the sentence      -> the card stands down
+captionFade    four seconds after his voice ends    -> the card takes it back, same tick
+captionClear   a cancelled subtitle                 -> the card takes it back at once
+renderAnswer   a new answer under an old caption    -> the decision is re-taken, both ways
+```
+
+A missing one of those leaves a blank paragraph with nothing speaking — invisible in a screenshot
+taken a second too early, and exactly the kind of defect that ships. `captionFade` gives the
+paragraph back inside the same timer callback that drops the `.up` class, so there is never a frame
+with the sentence on neither surface.
+
+`renderAnswer` matters in both directions: it releases the card when the new answer has drifted from
+the caption still on screen, and it yields again the moment the caption for *this* answer arrives —
+whichever of the two lands first.
+
+### Verdicts
+
+```
+voice_proof.mjs   VERIFY 162/162 PASS      (was 156/156 — six new checks, headed, out loud)
+preflight.py      29 pass, 0 fail, 3 warn  (32 checks; warns are the routine 10, 11, 12)
+layout_proof.mjs  VERIFY 150/150 PASS      the focus-and-Page-Down scroller, untouched
+followup_proof    VERIFY  47/47  PASS      "the card still quotes them", untouched
+clock_proof.mjs   VERIFY  94/94  PASS      chain_proof 78/78 PASS
+```
+
+Check 32 — *an answer being read is on one surface, and the card keeps the record*:
+
+```
+the card stands down by one CSS rule on one child (display:none), so the yield costs no frame and moves nothing
+and answerYield() writes that class and nothing else - no textContent, no innerHTML, no removal: the record survives being hidden
+and all four state changes tell the card: raised, faded, cancelled, and a new answer painted under an old subtitle
+while the quoted utterance stays on the card: the yield reaches the answer paragraph and nothing above it
+```
+
+Nine doctored copies of `index.html` were run through it before it was trusted — the rule deleted; the
+paragraph hidden by `opacity:0` instead; a `transition` added to a rule that fires on every sentence
+of a streamed read; `answerYield` made to empty the paragraph; the fade, the cancel and the re-take
+each removed in turn; the quoted utterance retired; and a rule reaching `#answer.yield #a-q`. All nine
+fail, the untouched control passes, and no doctored copy ever reached `viewer/`: the check was pointed
+at a temporary `ROOT` instead.
+
+### And one red that was real
+
+`deck_proof` asserts the order sheet **whole** rather than by length, so that a row appearing,
+vanishing or moving is a failure with a name in it. The Connectors and World Clock rows made it eight
+against ten, and it failed as designed. Updated to the ten, in the reading the sheet has always had:
+`connectors` under `google`, because the grant is one reach and the board is every reach; `clock`
+under `cast`, because it is the only row that reports a fact about the world rather than this machine;
+and `voice` still last, because the boss-only order does not move. `VERIFY 236/238`.
+
+The two remaining are this desktop, not the deck: three consecutive runs each failed a *different*
+pair of frame-rate clauses — the face's point count read mid-rebuild, then the bloom's own floor, then
+`IDLE GALAXY HOLDS 48.2fps` against a 55 fps floor. Named in the open list rather than explained away.
+
+### The boot ceremony · he reports for duty, once
+
+On the first **healthy** `/health` of a session the butler says one sentence, over about three seconds
+of music this machine makes for itself:
+
+> I am ready, Addi. Fully functional — every feature live.
+
+Declarative and unhedged, and the trigger is the reason it is allowed to be. `/health` is the route
+that probes piper, the transcriber, the index, the Google grant and the web door, so *"fully
+functional"* is read off a reading rather than off optimism — which is why the ceremony rides the
+health poll and not `DOMContentLoaded`, a thing that knows nothing about any of them. A butler who
+reports for duty with *"I think most things are working"* has told you to go and check.
+
+### Nine oscillators and no asset
+
+```js
+put(130.81, 0,    2.90, 0.10, 'sine');      // C3, the room
+put(196.00, 0.06, 2.84, 0.09, 'sine');      // G3, under it
+[261.63, 329.63, 392.00, 493.88, 523.25]    // C4 E4 G4 B4 C5, walking up
+put(659.25, 2.48, 0.62, 0.12, 'sine');      // E5 and B5, the landing
+put(987.77, 2.54, 0.56, 0.09, 'sine');
+```
+
+Nine notes, **3.10 s**, scheduled on the audio clock ahead of time and stopping themselves. There is
+no file: an `.mp3` would have been four lines shorter and a network request, a decode, a cache entry
+and a thing to forget to ship — and a sound this page's mute law does not cover.
+
+It plays through the **existing** `toneNote()` on the chime bus, and that is not tidiness either: the
+pump already ducks the whole tone bus to a fifth of itself the moment speech starts and lifts it 90 ms
+after the queue runs dry. So the jingle opens, the sentence lands on top of it, and the tail comes back
+up when he has finished — *"ducked 80% beneath"* with no new code. A private gain node for the flourish
+would have been a second thing to duck and a second thing to get wrong. Worst-case sum at any instant
+is 0.57 of a bus whose ceiling is 0.15, so the ceremony cannot be louder than the room's own
+vocabulary.
+
+### Three ways of being quiet, which are not the same thing
+
+```
+a MUTED tab          {fired:1, said:false, spoke:false, jingle:{played:false}}
+                     why: "muted: a tab that cannot make a sound holds no ceremony"
+                     caption: "Good afternoon, Addi. Galaxy here - 31 notes indexed…"   ← and no more
+
+prefers-reduced      {fired:1, reduced:true, said:true, jingle:{played:false}}
+   -motion           jingle.why: "prefers-reduced-motion: the line, without the flourish"
+                     caption: "…I am ready, Addi. Fully functional — every feature live."   ← up, legible
+
+no gesture yet       {fired:1, said:true, spoke:false, jingle:{played:true, notes:9, ms:3100}}
+                     why: "held for the first gesture, by the autoplay law"
+```
+
+A **muted** tab holds no ceremony at all and says so in words. Silence means silence, not "silence
+except for the nice bits" — and the sentence is not given to the glass either, because a muted tab is a
+harness's tab and nine of them would have booted into a page announcing something none of them asked
+about. It still claims the flag, so unmuting mid-answer cannot set the ceremony off.
+
+**Reduced motion** drops the flourish and keeps the sentence. The setting is a request about the
+machine's manners, not a request to be told less, so the line goes through the funnel, raises the
+caption and fades the quiet way. And the gesture that releases a held line checks the same setting
+before it plays the music — one gate is not a law if the other door is open.
+
+**And the common case is neither**: Chrome gives no sound before a gesture, so at boot the ceremony
+fires, the jingle is armed, and the sentence is held by the autoplay law that already existed. The
+first click releases both, so they arrive together instead of the music playing to an empty room and
+the words turning up a minute later. `boot.why` keeps saying *"held for the first gesture"* afterwards
+on purpose: it is the record of the ceremony's own moment, and the said-ledger is where you read that
+the line was later heard.
+
+### Once per session, and not once per poll
+
+The rail polls `/health` every ten seconds for as long as the tab is open. So *"the first healthy one"*
+has to still mean something after the two-hundredth, and the guard is a flag claimed **before** anything
+is scheduled — not a timestamp, not a debounce, not a storage key:
+
+```
+ONCE PER SESSION, AND NOT ONCE PER POLL: 5 healthy /health readings have now landed, four of them
+demanded just now, and the ceremony is still one firing at one timestamp with the same 9 notes
+```
+
+Demanded rather than waited for: four forced `__galaxy.brain.refresh()` round trips through the same
+door the brain chip uses, because the rail's own poll returns early while a tab is hidden and a proof
+that waited on it would be asserting the harness's patience. `voice_proof` asks the same question at
+the *end* of an eleven-minute run, minutes and a great many polls later, and pins the timestamp and the
+note count as well as the count of firings.
+
+### The four frames
+
+```
+boot-01-held.png       the ceremony has fired; the browser will not make a sound yet; the sentence
+                       is held and already on the glass
+boot-02-sounding.png   600 ms after the first gesture: nine notes playing, the line being read over
+                       them, and one text surface carrying it
+boot-03-settled.png    the queue is dry and the caption's four seconds have run out: the card has
+                       taken its paragraph back, the face is built, the seal reads READY
+boot-04-reduced.png    the same moment as 02 on a machine that asked for less motion: the sentence
+                       on the glass, nothing sounding
+```
+
+### What the plates caught, which no harness had
+
+Frame 02, first cut: the greeting appeared **twice** — in the card and again inside the caption, forty
+pixels apart. The one-surface rule compared the two character for character, and at boot the autoplay
+law joins every held line into one breath, so the caption carried *salutation + readiness line* while
+the card held the salutation alone. Not equal, therefore "different sentences", therefore both stood.
+Exactly the duplication the rule exists to prevent, on the one screen every session starts with.
+
+```js
+const same = !!held && (spoken === held || spoken.indexOf(held) === 0) &&
+             body.scrollHeight <= body.clientHeight + 1;
+```
+
+**Starts with** is the only clause added, and it is the safe direction: the voice is reading the whole
+of the paragraph and then going on, so nothing is hidden that is not being said. The reverse — a caption
+*shorter* than the card — still fails, which is what keeps the 260-character cap, a plan whose tail is
+*"and two more steps on the card"* and an error softened for the ear readable while the voice is
+pointing at them. A containment test anywhere in the middle was rejected: a three-word paragraph would
+vanish behind any long sentence that happened to quote it. Preflight now fails on
+`indexOf(held) > …` for that reason.
+
+And the fix exposed the next thing, which is why plates are taken at all: with the paragraph hidden and
+no question and no sources to show — the salutation is rendered with none — the card became an **empty
+rounded box** hovering above the subtitle. The duplication cured and a piece of furniture left standing
+in its place. So a yielded card with nothing left to show now stops drawing its frame:
+
+```css
+#answer.yield.bare{background:transparent;border-color:transparent}
+#answer.yield.bare::before{opacity:0}
+```
+
+`bare` is measured off the card's own children — any visible sibling of the paragraph with text, an
+image, a canvas or a button keeps the frame — rather than off the kind of answer, because the card
+gains and loses a question, a source row, a thumbnail and a Yes/No pair at four different moments and a
+rule that guessed from the route would be wrong at three of them. The element keeps its place in the
+flow, so nothing below it moves when the paragraph comes back.
+
+### Verdicts
+
+```
+boot_proof.mjs    VERIFY 21/21 PASS        new: three tabs - muted, reduced-motion, plain
+voice_proof.mjs   VERIFY 169/169 PASS      the ceremony out loud, and once per session after 11 min
+preflight.py      30 pass, 0 fail, 3 warn  (33 checks; warns are the routine 10, 11, 12)
+```
+
+Check 33 — *he reports for duty once, with music he makes, and is quiet three ways*:
+
+```
+the flag is claimed before the first sound (boot.fired at 254, the jingle at 507), and it guards the whole function - so the two-hundredth healthy poll is as quiet as the second
+every note is an oscillator through the existing toneNote() - 9 scheduled frequencies, no fetch, no <audio>, no decode, nothing to ship
+and it plays on the bus toneDuck() already lowers, which is the whole of "ducked beneath the voice" - no second gain to get wrong
+a muted tab claims the ceremony, says why in words, and returns before the line and the music both
+prefers-reduced-motion drops the flourish and keeps the sentence, and the gesture that releases a held line checks the same setting before it plays
+and it fires on the first HEALTHY /health - the sentence is read off the probe rather than off DOMContentLoaded, which knows nothing
+```
+
+Ten doctored copies of `index.html` were run through it before it was trusted: the once-per-session
+guard deleted; the jingle scheduled *before* the flag was claimed; `bootJingle`'s own second refusal
+disabled; an asset fetched; a private gain node built; the muted branch stripped of its `return`; the
+muted branch stripped of its reason; reduced motion made to drop the sentence with the flourish; the
+first gesture made to play the flourish a quiet machine had declined; and the readiness claim made from
+`true` instead of from the health poll's verdict. All ten fail, the untouched control passes, and no
+doctored copy ever reached `viewer/` — the check was pointed at a temporary `ROOT` instead. The first
+run of that negative test caught **two holes in the check itself**: the flag's position was being read
+off the muted branch's copy of the same assignment, and one break had been written against an anchor
+that appears in `tonesUp()` as well, so it had been mutating the wrong function all along.
+
+### Left open
+
+- **`SPEAKING` is on the glass twice** — `#status-text` above the input and `#seal-text` inside it,
+  both fed by `setStatus()`, 46 px apart. Neither carries the *answer*, so it is not the one-surface
+  law, and the seal is the state surface the transparency law is written on. It is a legibility
+  judgement about two nodes nine harnesses read, so it is named here rather than cut quietly.
+- **Stray untextured square sprites** appear in the corners of every headless plate, including the
+  earlier `deck-*.png` set. They move between frames, which reads like point sprites drawn without a
+  GPU rather than anything in the deck; unconfirmed on the employer's own browser.

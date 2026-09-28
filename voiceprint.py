@@ -86,6 +86,39 @@ DUPLICATE_THRESHOLD = 0.70
 ENROL_MIN_SECONDS = 8.0
 ENROL_MIN_SENTENCES = 3
 
+# THE WINDOW. See windows() for why a long turn is not one embedding; these are the numbers that
+# reading is done with. 3.0 s because the calibration above measured embedding quality flattening
+# off at about three seconds, so a window is as short as it can be while still being a reading of
+# a larynx rather than of a phoneme. The hop is half the window on purpose: a phrase that falls
+# across a boundary is cut in two by one grid and sits whole inside the next, and at a hop equal
+# to the window there is no next.
+WINDOW_SECONDS = 3.0
+WINDOW_HOP_SECONDS = 1.5
+WINDOW_MIN_SECONDS = 2.5
+# Twelve windows is eighteen seconds of hopping and about half a second of embedding. The cap is
+# here because identify() runs on the turn the employer is waiting through, and an unbounded loop
+# over a clip means a two-minute recording silently becomes a two-second pause in the room.
+WINDOW_MAX = 12
+# A window carrying less than a quarter of the loudest window's RMS is silence, breath or room.
+# Relative and not absolute - see windows() - and deliberately generous: the cost of keeping a
+# quiet window is one low cosine that the max discards, while the cost of dropping a real one is
+# the three seconds that would have identified him.
+WINDOW_GATE_RATIO = 0.25
+
+# THE NEAR BAND, and it exists because of one asymmetry: the two errors do not cost the same, and
+# neither does the SILENCE about them. A score under MATCH_THRESHOLD makes the speaker a guest,
+# which is correct and safe - but when the closest row is the employer's and the score is well
+# clear of every cross-voice reading ever measured here (0.2954 was the worst), calling him a
+# guest without comment is the doorman looking through him. That is the failure the mandate names
+# as "never a silent GUEST for the boss".
+#
+# So: at or above MATCH_THRESHOLD he is recognised. Between NEAR_THRESHOLD and MATCH_THRESHOLD he
+# is STILL A GUEST - nothing is admitted, no hand is unlocked, the law is untouched - but the
+# verdict says so out loud and the seal reads UNVERIFIED, so he is asked to say it again or to
+# use the keyboard Yes rather than being quietly ignored. 0.35 sits above the 0.2954 high-water
+# mark of a genuine stranger and below the floor, which is the whole width available.
+NEAR_THRESHOLD = 0.35
+
 _session = None
 
 
@@ -300,6 +333,52 @@ def embed(samples, rate=SAMPLE_RATE):
     return (vec / norm).tolist()
 
 
+def windows(samples, rate=SAMPLE_RATE):
+    """The clip cut into overlapping energy-gated windows. Returns a list of sample arrays.
+
+    WHY A LONG TURN IS NOT ONE EMBEDDING. An ECAPA vector is an average over whatever it was
+    given, so everything in the clip that is not the speaker's voice is mixed into the answer
+    at full weight: the two seconds of room before he starts, the pause while he thinks, the
+    chair, the second person who says "mm" in the middle. On a five-word "yes, go ahead" there
+    is nothing else in the clip and the whole-clip reading is the best one available. On a
+    forty-five-word sentence there is a great deal else, and the boss's score falls the LONGER
+    he speaks - which is the exact opposite of what a doorman should do, and is the failure the
+    length ladder in speaker_proof.mjs exists to measure.
+
+    So the clip is also read in pieces, and identify() takes the BEST piece. The claim a max
+    makes is the honest one for this question: "somewhere in this audio there are three seconds
+    that are unmistakably him". A mean would let silence outvote him.
+
+    THE GATE IS RELATIVE AND NOT ABSOLUTE, because gain is not knowable here - this audio has
+    already been through Chrome's automatic gain control, and a fixed RMS floor would pass every
+    window of a loud clip and none of a quiet one. Each window is judged against the loudest
+    window in its own clip, so the thing being dropped is silence RELATIVE to this speaker on
+    this occasion.
+
+    IT NEVER RETURNS A WINDOW SHORTER THAN WINDOW_MIN_SECONDS. Below about two and a half
+    seconds the embedding starts to describe the phoneme rather than the larynx, and a short
+    tail window would be a low score that the max then has to be trusted to ignore. Dropping it
+    is cheaper than trusting a maximum.
+    """
+    step = int(WINDOW_HOP_SECONDS * rate)
+    span = int(WINDOW_SECONDS * rate)
+    least = int(WINDOW_MIN_SECONDS * rate)
+    if step < 1 or len(samples) < span + step:
+        # One window would be the whole clip, and identify() already scores that.
+        return []
+    cuts = []
+    at = 0
+    while at + least <= len(samples) and len(cuts) < WINDOW_MAX:
+        cuts.append(samples[at:at + span])
+        at += step
+    energies = [float(np.sqrt(np.mean(np.square(np.asarray(c, dtype=np.float64))) + EPSILON))
+                for c in cuts]
+    loudest = max(energies) if energies else 0.0
+    if not loudest:
+        return []
+    return [c for c, e in zip(cuts, energies) if e >= loudest * WINDOW_GATE_RATIO]
+
+
 def cosine(a, b):
     """Cosine of two embeddings. Both are stored L2-normalised, so this is a dot product - but
     it normalises anyway, because a caller handing in a raw vector should get a real cosine and
@@ -419,21 +498,47 @@ def identify(samples, rate=SAMPLE_RATE, roster=None):
     vec = embed(samples, rate)
     if vec is None:
         return {"who": "GUEST", "address_form": "", "hands": False, "score": 0.0,
-                "best": "", "known": len(rows), "why": "too little audio to embed"}
-    scored = sorted(((cosine(vec, r["embedding"]), r) for r in rows),
-                    key=lambda p: p[0], reverse=True)
-    if not scored:
+                "best": "", "known": len(rows), "windows": 0, "whole": 0.0,
+                "unverified": False, "why": "too little audio to embed"}
+    if not rows:
         return {"who": "GUEST", "address_form": "", "hands": False, "score": 0.0,
-                "best": "", "known": 0, "why": "nobody is enrolled"}
+                "best": "", "known": 0, "windows": 0, "whole": 0.0,
+                "unverified": False, "why": "nobody is enrolled"}
+    # THE WHOLE CLIP AND ITS WINDOWS, and the match is the best of them - see windows(). The
+    # whole-clip reading is always in the pool and never replaced by the windows, which is what
+    # makes this change unable to make anything worse: every score here is a maximum over a set
+    # that CONTAINS the number this function used to return on its own. A voice that was
+    # recognised before is still recognised; what can move is a long turn that was not.
+    pieces = [vec]
+    for cut in windows(samples, rate):
+        part = embed(cut, rate)
+        if part is not None:
+            pieces.append(part)
+    whole_best = max(cosine(vec, r["embedding"]) for r in rows)
+    scored = sorted(((max(cosine(p, r["embedding"]) for p in pieces), r) for r in rows),
+                    key=lambda p: p[0], reverse=True)
     score, row = scored[0]
+    reading = {"score": round(score, 4), "best": row["name"], "known": len(rows),
+               # HOW MANY READINGS AND WHAT THE WHOLE CLIP ALONE SAID, both reported, because
+               # the difference between them IS the ladder's measurement: a turn where the
+               # windows beat the whole clip by a wide margin is a turn that would have been
+               # refused before this existed, and that is worth being able to see from a log.
+               "windows": len(pieces) - 1, "whole": round(whole_best, 4)}
     if score >= MATCH_THRESHOLD:
-        return {"who": row["name"], "address_form": row["address_form"], "hands": row["hands"],
-                "score": round(score, 4), "best": row["name"], "known": len(rows),
-                "why": "cosine %.3f at or above %.2f" % (score, MATCH_THRESHOLD)}
-    return {"who": "GUEST", "address_form": "", "hands": False, "score": round(score, 4),
-            "best": row["name"], "known": len(rows),
-            "why": "closest was %s at cosine %.3f, under %.2f" % (row["name"], score,
-                                                                  MATCH_THRESHOLD)}
+        return dict(reading, who=row["name"], address_form=row["address_form"],
+                    hands=row["hands"], unverified=False,
+                    why="cosine %.3f at or above %.2f, best of %d reading(s)"
+                        % (score, MATCH_THRESHOLD, len(pieces)))
+    # UNDER THE FLOOR IS A GUEST EITHER WAY. The near band changes what is SAID and nothing about
+    # what is allowed: `who` is GUEST, `hands` is False, and the Hands gate will refuse this yes
+    # exactly as it always has. What it buys is that the refusal can name itself as "I could not
+    # be sure it was you" instead of "you are a stranger", which is the difference between a door
+    # that is shut and a door that pretends not to have heard.
+    near = score >= NEAR_THRESHOLD and bool(row.get("hands"))
+    return dict(reading, who="GUEST", address_form="", hands=False, unverified=near,
+                why=("could not be sure: closest was %s at cosine %.3f, under %.2f"
+                     if near else "closest was %s at cosine %.3f, under %.2f")
+                    % (row["name"], score, MATCH_THRESHOLD))
 
 
 def enrol(clips, name, address_form, hands, replace=False):
@@ -517,7 +622,14 @@ def seal_for(verdict):
     and does not derive it, so a stale tab cannot promote a guest by relabelling them.
     """
     if not isinstance(verdict, dict) or verdict.get("who") in (None, "", "GUEST"):
-        return "GUEST"
+        # AND A FOURTH WORD, which is the one the mandate added: UNVERIFIED. It is still a
+        # guest in every way that matters to the gate - seal_for is a label and unlocks
+        # nothing - but a boss whose voice came in under the floor sees the doorman admit to
+        # being unsure rather than a seal that reads GUEST at him. See the near band in
+        # identify(): this word can only appear when the closest row is hands-privileged, so
+        # it is never shown to an actual stranger.
+        return "UNVERIFIED" if isinstance(verdict, dict) and verdict.get("unverified") \
+            else "GUEST"
     return "BOSS" if verdict.get("hands") else str(verdict["who"])
 
 

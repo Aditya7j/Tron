@@ -592,6 +592,95 @@
   .cand .cst.local{color:var(--local)}
   .cand .cst.bad{color:rgba(255,107,107,.72)}
 
+  /* ---- THE BOARDS ----
+     ONE CONTAINER, THREE BOARDS, and that is a decision rather than a shortcut. The panel
+     needed a Connectors grid, a World Clock grid and a Census intake, and the casting view
+     above shows what happens when a view gets its own markup and its own two CSS rules: the
+     rules are `#cmd.casting .cb{display:none}` and its mirror, written twice, and a fourth
+     view built that way means eight rules that all have to agree about which one is showing.
+     So the boards share a shell, a back button and a heading, and differ only in the tiles
+     that boardFill() puts in the grid. A board that is not the open one has no DOM at all,
+     which is also why a removed connector cannot leave a ghost tile: there is nothing to
+     leave it in.
+
+     ADDED ALONGSIDE, NOT INSTEAD. `.cast` and `#cmd.casting` are untouched - the audition is
+     a protocol with a server conversation in it, not a grid of readings, and folding it into
+     this shell would have been a rewrite of a working thing to save five lines. */
+  #cmd .board{display:none;padding:7px 9px 11px;flex-direction:column;gap:8px;overflow:auto}
+  #cmd.boarding .cb{display:none}
+  #cmd.boarding .board{display:flex}
+  #cmd .board .bhead{font-size:11.5px;line-height:1.5;color:var(--ink);opacity:.8;
+    padding:0 2px 1px}
+  #cmd .board .bhead b{color:#fff;font-weight:600}
+  /* The grid is two columns at this width and collapses to one below it. minmax with a 0
+     floor rather than auto, because a tile holding a long city name would otherwise widen
+     its whole column and push the second one off the panel. */
+  #cmd .board .bgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+  #cmd .board .bgrid.one{grid-template-columns:1fr}
+  .btile{position:relative;border:1px solid var(--line);border-radius:4px;
+    padding:8px 9px 9px;background:rgba(255,255,255,.015);min-width:0}
+  .btile .bn{display:flex;align-items:baseline;gap:6px;min-width:0}
+  .btile .bn b{font-weight:600;font-size:11.5px;color:#fff;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis}
+  /* THE DAY OFFSET RIDES HERE, and it is the reason this span exists: a clock tile without
+     it is a half-answer, so it is beside the name where the eye lands and not in the small
+     print underneath. */
+  .btile .bn em{margin-left:auto;flex:0 0 auto;font-style:normal;font-family:var(--mono);
+    font-size:8px;letter-spacing:.13em;text-transform:uppercase;color:var(--local);
+    opacity:.85}
+  .btile .bv{display:block;margin-top:5px;font-family:var(--mono);font-size:17px;
+    letter-spacing:.02em;color:#fff;font-variant-numeric:tabular-nums}
+  .btile .bs{display:block;margin-top:3px;font-family:var(--mono);font-size:8.5px;
+    letter-spacing:.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis}
+  /* The same three lights as every other surface on this deck. Nothing is coloured for
+     emphasis; a tile is cyan because its organ is running. */
+  .btile.live{border-color:rgba(110,231,255,.3);background:rgba(110,231,255,.04)}
+  .btile.live .bs{color:var(--live)}
+  .btile.local{border-color:rgba(240,184,102,.3);background:rgba(240,184,102,.04)}
+  .btile.local .bs{color:var(--local)}
+  .btile.bad{border-color:rgba(255,107,107,.28);background:rgba(255,107,107,.04)}
+  .btile.bad .bs{color:rgba(255,107,107,.72)}
+  /* THE HOME TILE is the one every other reading is "against", so it is marked. A left edge
+     rather than a glow: it is a reference, not a state. */
+  .btile.home{border-left:2px solid var(--accent)}
+  .btile button{margin-top:7px;width:100%;padding:5px 7px;border:1px solid var(--line);
+    border-radius:3px;background:rgba(255,255,255,.02);color:var(--ink);cursor:pointer;
+    font-family:var(--mono);font-size:9px;letter-spacing:.11em;text-transform:uppercase;
+    transition:background .16s,border-color .16s}
+  .btile button:hover:not(:disabled){background:rgba(124,196,255,.1);
+    border-color:rgba(124,196,255,.3)}
+  .btile button:disabled{opacity:.4;cursor:default}
+
+  /* ---- THE CENSUS'S THREE EXTRA FIELDS ----
+     ADDED ALONGSIDE, and none of the four rules above is touched. The Census needed a tile
+     that asks a question in prose, takes an answer, and offers two verbs instead of one -
+     and the honest way to get one was three more optional fields on boardTile rather than a
+     fourth view with its own markup. A Connectors or World Clock tile sets none of them and
+     renders byte-for-byte what it rendered before, which is what keeps connectors_plate and
+     clock_proof asserting the same DOM they were written against.
+
+     .bq IS PROSE AND .bv IS A READING, which is why the question does not go in .bv: that
+     span is 17px tabular mono built to hold 09:41, and a sentence in it wraps into a wall of
+     numerals. The reading on a Census tile is the chapter's progress; the question is prose
+     underneath it. */
+  .btile.wide{grid-column:1 / -1}
+  .btile .bq{display:block;margin-top:6px;font-size:13px;line-height:1.45;color:#fff;
+    font-weight:500}
+  .btile .bi{display:block;width:100%;margin-top:8px;padding:8px 9px;
+    border:1px solid var(--line);border-radius:3px;background:rgba(0,0,0,.24);
+    color:#fff;font-family:inherit;font-size:12.5px;line-height:1.4;
+    /* The grid is 2 columns wide and an input is content: without this it would size
+       itself off its own value and push the second column off the panel. */
+    box-sizing:border-box;min-width:0}
+  .btile .bi::placeholder{color:rgba(143,160,192,.5)}
+  .btile .bi:focus{outline:none;border-color:rgba(240,184,102,.5);
+    background:rgba(240,184,102,.05)}
+  /* TWO VERBS SIDE BY SIDE, and the row exists only when there are two: one button still
+     gets the full-width rule above, untouched. */
+  .btile .brow{display:flex;gap:6px;margin-top:7px}
+  .btile .brow button{margin-top:0;flex:1 1 0;width:auto}
+
   /* ---------- side panel ---------- */
   /* Its width is the governor's, because the width is what every other surface's
      rectangle is derived FROM: the canvas is the window less this. */
@@ -764,6 +853,37 @@
     overscroll-behavior:contain;scrollbar-width:thin}
   /* Code and keys break anywhere, and a block of code scrolls on its own axis rather than
      being broken - a wrapped line of code is a line of code that has been edited. */
+  /* ---------- ONE SURFACE AT A TIME ----------
+     WHILE THE CAPTION IS CARRYING THE ANSWER, THE CARD DOES NOT ALSO CARRY IT. The same
+     sentence in two live surfaces two inches apart is not redundancy, it is noise: the eye
+     reads it twice and learns nothing the second time, and the room has a subtitle arguing
+     with a paragraph for the employer's attention.
+     WHICH ONE YIELDS, AND WHY IT IS THIS ONE. The caption is the transient surface and the
+     card is the record, so the instinct is to drop the caption - and the mandate says the
+     opposite, because while he is being SPOKEN to the sentence belongs where his eye already
+     is: on the glass, under the presence, in time with the voice. The card keeps the question,
+     the citation chips, the frame and the gate, and takes its paragraph back the moment the
+     caption goes down. Four seconds later there is one surface again, and it is the record.
+     ONLY WHEN THE TWO ARE THE SAME SENTENCE. answerYield() compares them character for
+     character: a capped answer, a plan with a step "on the card", an error the voice softened
+     - all of them differ from what is written, so the paragraph stays exactly where the voice
+     is pointing at it. Nothing about this rule can hide a word he was told to look for.
+     NO TRANSITION ON PURPOSE. This is a display swap on an element eight harnesses read and
+     one of them scrolls; an animation here would be a frame of two surfaces or none, and the
+     cinematic law's own escape - complete under 100ms - is satisfied most cheaply by 0ms. */
+  #answer.yield>.a{display:none}
+  /* AND A YIELDED CARD WITH NOTHING ELSE ON IT DOES NOT DRAW A FRAME, which the boot plates
+     asked for and nothing else would have. Every ordinary answer keeps its quoted utterance
+     above the paragraph, so hiding the paragraph leaves a card with a visible question in it -
+     correct, and the frame belongs. The salutation and the readiness line are the exception:
+     they are rendered with no question and no sources, so a yielded card was an empty rounded
+     box hovering forty pixels above the subtitle - the duplication cured and a piece of
+     furniture left standing in its place. Glass with nothing behind it and no light on its rim,
+     so the sentence in the voice is the only thing on the screen; the element keeps its place in
+     the flow, so nothing below it moves when the paragraph comes back. `bare` is set by
+     answerYield() from what the card can actually show, never from the kind of answer. */
+  #answer.yield.bare{background:transparent;border-color:transparent}
+  #answer.yield.bare::before{opacity:0}
   #answer .a code,#answer .a kbd,#answer .a samp,#answer .a tt{overflow-wrap:anywhere}
   #answer .a pre{margin:10px 0;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;
     white-space:pre;scrollbar-width:thin}
@@ -841,6 +961,55 @@
   #a-ask .rows span{color:#f2f6ff;word-break:break-word;white-space:pre-wrap;
     max-height:190px;overflow:auto;overscroll-behavior:contain}
   #a-ask .rows i{color:rgba(143,160,192,.7);font-style:normal;font-family:var(--font)}
+  /* AND THE ROWS TAKE NO ROOM ON A PLAN. Measured, not assumed: an empty display:grid still
+     generates a box, so the chain card carried a 0px-high grid AND its 13px margin between
+     the label and step one. The same :empty rule as the steps list gets, for the same
+     reason and in the opposite direction - whichever of the two surfaces is not in use
+     must cost nothing. */
+  #a-ask .rows:empty{display:none;margin:0}
+  /* ----------------------------------------------------------------- THE CHAIN CARD
+     The numbered plan, and it is the one part of this card that is PROSE rather than
+     parameters - so it is in the reading font, not the mono. That is the opposite of the
+     decision three rules above, and for the same reason: mono is for values you must check
+     character by character, and "Send an email to tom@acme.com under the subject 'Invoice'"
+     is a sentence you read. The exact values are still below it, in the rows, in mono.
+
+     ol/li AND NOT A DIV PER LINE. The numbers are the list's own, so the markup cannot
+     disagree with itself about the order, and a step inserted by a future hand cannot arrive
+     numbered 2 in a list whose second item it is not. No digit is written into the markup,
+     which is what the harness checks: it reads this rule back off the element and asserts the
+     number is counter(step) - the list counting its own children - and then compares the
+     children's order to the server's.
+
+     GRID, so a step that wraps to three lines keeps its text aligned under itself rather
+     than running back under the number - a plan whose second line looks like a third step is
+     a plan somebody approves the wrong reading of. */
+  #a-ask .steps{list-style:none;margin:0 0 13px;padding:0;font-size:12.5px;
+    line-height:1.5;counter-reset:step}
+  /* AND IT TAKES NO ROOM WHEN THERE IS NO PLAN. The list is in the markup for every
+     proposal, single or chained, so an empty one must be worth nothing: without this, every
+     ordinary one-tool card would grow 13px of margin under its rows for a list with nothing
+     in it. :empty and not a class, because "has no children" is the exact condition. */
+  #a-ask .steps:empty{display:none;margin:0}
+  #a-ask .steps li{counter-increment:step;display:grid;
+    grid-template-columns:22px 1fr;gap:2px 8px;padding:7px 0;
+    border-top:1px solid rgba(255,196,100,.1)}
+  #a-ask .steps li:first-child{border-top:0;padding-top:0}
+  #a-ask .steps li::before{content:counter(step) ".";color:#ffc86a;
+    font-variant-numeric:tabular-nums;font-size:11.5px;line-height:1.62}
+  #a-ask .steps .what{color:#f2f6ff}
+  /* WHICH STEP THIS ONE QUOTES, said in the card rather than only in the body's braces: the
+     placeholder is visible in the rows, and this is the same fact in English for somebody who
+     is reading the plan rather than auditing it. */
+  #a-ask .steps .uses{grid-column:2;color:rgba(255,200,106,.72);font-size:11px;
+    letter-spacing:.02em}
+  #a-ask .steps .vals{grid-column:2;display:grid;grid-template-columns:auto 1fr;
+    gap:3px 10px;margin-top:5px;font-family:var(--mono);font-size:11px;line-height:1.5}
+  #a-ask .steps .vals b{color:var(--muted);font-weight:500;white-space:nowrap}
+  #a-ask .steps .vals span{color:rgba(226,235,252,.92);word-break:break-word;
+    white-space:pre-wrap;max-height:120px;overflow:auto;overscroll-behavior:contain}
+  #a-ask .steps .vals i{color:rgba(143,160,192,.7);font-style:normal;
+    font-family:var(--font)}
   #a-ask .pair{display:flex;align-items:center;gap:10px}
   #a-ask button{border-radius:999px;cursor:pointer;font-family:inherit;font-size:13px;
     padding:9px 22px;
@@ -881,54 +1050,175 @@
      MONO, because a transcript is a record. A proportional font in a scrolling column of
      machine transcription makes two similar lines look identical, which is the one thing a
      reader of minutes must be able to tell apart. */
-  #scribepanel{display:none;background:linear-gradient(200deg,rgba(9,16,28,.9),
-      rgba(5,8,16,.94));
-    border:1px solid rgba(34,224,255,.26);border-radius:16px;padding:13px 15px 12px;
+  /* =========================================================================
+     §27 PART 5 · THE SCRIBE'S OWN SKIN
+
+     Every other surface on this glass is cyan over blue-black, and the minutes panel was the
+     same cyan over the same blue-black - so the one panel on the page that is not the machine
+     talking but a RECORD BEING KEPT looked like another readout. It now has its own hue, its
+     own paper and its own seal, and the reason is not decoration: a man glancing at this
+     screen has to be able to tell at once whether he is looking at what the butler THINKS or
+     at what the room SAID. Those are different kinds of claim and the Scribe privacy law
+     rests on the difference.
+
+     DARK LEDGER PAPER RATHER THAN WHITE. The obvious reading of "log-paper" is a light sheet,
+     and a light sheet 400px wide on a near-black deck is a lamp: it would blow the void's
+     contrast, drag the eye off the head §27 PART 3 just made the anchor, and make the toast
+     column beneath it unreadable. So it is paper the colour paper goes in a dark room - warm,
+     fibrous, ruled - and the warmth alone is enough to separate it from every cyan panel.
+
+     THE HUE IS AMBER BECAUSE AMBER IS NOT CYAN. Not a taste argument: the deck's whole
+     vocabulary of state is cyan (running), green (good), amber/red (attention). Amber was the
+     only warm channel not already spoken for by a state, and the Scribe is not a state.
+
+     THE FIBRE IS CUT, AND THAT IS THIS PART'S ONE DECORATIVE CUT. It was two
+     repeating-linear-gradients, a vertical and a horizontal pass at .014 and .010 alpha,
+     standing in for paper grain - and in the plate at 2x scale neither of them is visible. Two
+     extra paint layers on a backdrop-filtered SCROLLING panel, for a texture I could not find
+     with my eye on a screenshot twice life size. The panel is unmistakably a ledger without
+     them, which is what the plate shows: the warm ground, the ruled entries, the stamp gutter
+     and the seal do all of that work. A texture nobody can see is not subtlety, it is cost.
+     (It was also the right SHAPE of idea and the reason is worth keeping: had grain been
+     wanted it would have stayed a gradient, never a fetched .png, because an image is a
+     request, a cache entry and a thing to forget to ship - the no-webfont law's own argument.)
+
+     WHAT DID NOT CHANGE: every class and id the harnesses read - .head, .lbl, .rec, .meta,
+     .lines, .t, .note, .bad, .foot, #scribe-draft - is still here and still means what it
+     meant. layout_proof measures this panel's HEIGHT in two states and nothing else about it,
+     and the 34px strip law below is untouched: see #scribepanel.strip.
+     ========================================================================= */
+  #scribepanel{display:none;
+    --sc-accent:#e9b978;          /* the Scribe's hue, and nothing else on the page uses it */
+    --sc-ink:#ece3d1;             /* ink on paper, not light on glass */
+    --sc-rule:rgba(233,185,120,.15);
+    /* A WARM FAINT, and it exists because of a plate rather than a preference. var(--muted) is
+       a cool blue-grey - correct everywhere else on this glass and the one COLD thing on this
+       sheet, which in the first plate made the machine's own asides read as pasted in from
+       another panel. A note is still visibly not speech: it is fainter, and it is unstamped. */
+    --sc-faint:rgba(226,206,176,.5);
+    /* THE STAMP COLUMN, AND IT IS A FIXED LENGTH ON PURPOSE. Every transcript line is its own
+       grid container - there is no shared grid across the entries - so the only thing keeping
+       the stamps in one column is that this track is the same absolute width in all of them.
+       min-content or max-content would give each line the gutter ITS OWN stamp needs and the
+       column would stagger. The number is 62px because scribeStamp() does not pad the minutes
+       and does not roll over to hours: a two-hour meeting stamps `137:22`, six mono characters,
+       and the track has to hold the longest stamp the meeting will reach rather than the first
+       one it wrote. Measured, not guessed - see the fit assertion in scribe_skin_probe. */
+    --sc-gutter:62px;
+    background:linear-gradient(196deg,rgba(28,22,15,.93),rgba(16,12,9,.96));
+    border:1px solid rgba(233,185,120,.24);border-radius:16px;padding:13px 15px 12px;
     backdrop-filter:var(--blur);
-    box-shadow:0 18px 54px rgba(0,0,0,.55),inset 0 0 40px rgba(34,224,255,.045)}
+    box-shadow:0 18px 54px rgba(0,0,0,.58),inset 0 0 40px rgba(233,185,120,.05)}
   #scribepanel.show{display:block;
     animation:scriberise .32s cubic-bezier(0.16,1,0.3,1)}
   @keyframes scriberise{from{opacity:0;transform:translateY(14px)}
     to{opacity:1;transform:none}}
-  #scribepanel .head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  /* THE MARGIN CAME DOWN WHEN THE RULE WENT IN, and it is not a taste adjustment. A rule under
+     the head is 1px of border over its own padding, and left on top of the old 10px margin it
+     made 19px of air where there had been 10 - the rule sat nearer the entries than the label
+     it belongs to, and the panel got 9px taller. That 9px is not free: #scribepanel is a child
+     of the toast, the Layout Governor sizes the presence well from what the toast LEAVES, and
+     the well was measured at 225px with this panel open against a 192px floor. Nine pixels of
+     decoration spends the head's side, which is the one thing §27 PART 3 exists to protect. */
+  #scribepanel .head{display:flex;align-items:center;gap:10px;margin-bottom:6px;
+    border-bottom:1px solid var(--sc-rule);padding-bottom:7px}
+  /* THE HEADER SEAL. A pseudo-element and not a new element, because ::before on a flex
+     container becomes a flex item in its own right - so the seal lands first in the row,
+     ahead of the record dot, with no markup added and therefore nothing new for a harness
+     to trip over. It is a struck seal rather than a logo: a filled disc, a ring set in from
+     its edge, and a warm bloom, all in the Scribe's own hue.
+
+     IT IS HIDDEN IN STRIP MODE, and the reason is in the strip's own note below: with the
+     note panel open this column is 312px and the label already ellipsizes there. 16px of
+     seal plus 10px of gap is 26px taken from the one budget on this panel that has none to
+     give, and it would be taken from the label, which is the thing that says MINUTES.
+
+     THE ROW IS REORDERED WITH `order` RATHER THAN WITH MARKUP. ::before is inserted first,
+     and first in the DOM is the .rec dot - so a live panel would have shown a 16px amber
+     seal and an 8px amber dot side by side, two warm discs the eye has to tell apart before
+     it can read either. The label is pulled ahead of the dot instead, so the row reads
+     seal · TAKING THE MINUTES · ● · timer: the record light sits against the words it
+     qualifies. .meta keeps its margin-left:auto and so stays hard right whatever its order. */
+  #scribepanel .head::before{content:'';flex:0 0 auto;width:16px;height:16px;order:0;
+    border-radius:50%;
+    background:radial-gradient(circle at 34% 30%,rgba(255,224,178,.95),
+      rgba(214,152,78,.85) 58%,rgba(138,88,32,.9));
+    box-shadow:0 0 10px rgba(233,185,120,.35),
+      inset 0 0 0 1.5px rgba(46,28,10,.55),
+      inset 0 0 0 3px rgba(255,226,180,.35)}
   #scribepanel .lbl{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
-    color:#7fe9ff}
-  /* The live dot, and it is the same borrowed beat as everything else that is running. */
-  #scribepanel .rec{width:8px;height:8px;border-radius:50%;background:#22e0ff;
-    box-shadow:0 0 11px #22e0ff;flex:0 0 auto;display:none;
+    color:var(--sc-accent);order:1}
+  /* The live dot, and it is the same borrowed beat as everything else that is running - but
+     in the Scribe's hue, because a recorder's light is the one place on this glass where a
+     warm lamp is the older and more legible convention. */
+  #scribepanel .rec{width:8px;height:8px;border-radius:50%;background:var(--sc-accent);
+    box-shadow:0 0 11px rgba(233,185,120,.85);flex:0 0 auto;display:none;order:2;
     animation:pulse 1.15s ease-in-out infinite}
   #scribepanel.live .rec{display:block}
   #scribepanel .meta{margin-left:auto;font-family:var(--mono);font-size:10.5px;
-    letter-spacing:.02em;color:var(--muted);font-variant-numeric:tabular-nums}
+    letter-spacing:.02em;color:rgba(233,185,120,.62);font-variant-numeric:tabular-nums;
+    order:3}
   /* THE COLUMN ITSELF. A fixed ceiling rather than a growing panel: an hour's meeting is
      hundreds of lines and a column that grew would walk up the window and out of it,
      taking the toast's own rectangle with it. Scroll, auto-scrolled from the script while
      the reader is at the bottom and left alone the moment they scroll up - see
      scribeAppend(). */
+  /* THE MARGIN RULE is a background on the SCROLL CONTAINER and not on the lines, so that it
+     runs unbroken from the top of the column to the bottom of it and does not scroll with the
+     text - a ledger's margin is a property of the sheet, not of the entries. A background on
+     a scrolling box is painted against that box and stays put while its content moves, which
+     is exactly the behaviour wanted and the reason the rule is not drawn per line. */
   #scribepanel .lines{max-height:198px;overflow-y:auto;overscroll-behavior:contain;
-    font-family:var(--mono);font-size:12px;line-height:1.62;color:#dfe9ff;
-    display:flex;flex-direction:column;gap:5px}
-  #scribepanel .lines p{margin:0;word-break:break-word}
-  #scribepanel .lines p .t{color:rgba(127,233,255,.6);margin-right:8px}
+    font-family:var(--mono);font-size:12px;line-height:1.62;color:var(--sc-ink);
+    display:flex;flex-direction:column;gap:5px;
+    background-image:linear-gradient(90deg,
+      transparent 0 calc(var(--sc-gutter) - 10px),
+      var(--sc-rule) calc(var(--sc-gutter) - 10px) calc(var(--sc-gutter) - 9px),
+      transparent calc(var(--sc-gutter) - 9px))}
+  /* THE TIMESTAMP GUTTER, and it is a grid because the alternative does not hold. The line is
+     written by scribeAppend() as <p><span class="t">mm:ss</span>then the words</p>, and with
+     the stamp merely floated or margined the SECOND visual line of a long utterance wraps back
+     under the stamp and the column loses its left edge. Two tracks: the stamp in the first,
+     the bare text node auto-placed into the second, and a wrap stays in its own track.
+
+     THE RULE IS PER ENTRY, NOT PER VISUAL LINE. A repeating gradient at the line pitch is the
+     prettier answer and it is the wrong one: its pitch is a constant while the text's leading
+     moves with the font that actually resolved, with the user's zoom and with any fallback -
+     so it agrees with the text on the machine it was tuned on and drifts everywhere else. An
+     ENTRY is also the unit a man reading minutes counts in. */
+  #scribepanel .lines p{margin:0;word-break:break-word;
+    display:grid;grid-template-columns:var(--sc-gutter) 1fr;
+    padding-bottom:4px;border-bottom:1px solid var(--sc-rule)}
+  /* overflow:hidden is the guard, not the layout. If a meeting ever runs long enough that the
+     stamp outgrows the track, a right-aligned overflow escapes to the LEFT - out through the
+     panel's own padding and onto the glass - so it is clipped at the margin instead. */
+  #scribepanel .lines p .t{color:rgba(233,185,120,.72);margin-right:0;
+    padding-right:14px;text-align:right;font-variant-numeric:tabular-nums;
+    white-space:nowrap;overflow:hidden}
   /* The three kinds of line that are not transcript: a refusal, a note about the machine,
-     and the placeholder before the first words land. Each is visibly not speech. */
-  #scribepanel .lines p.note{color:var(--muted);font-style:normal}
+     and the placeholder before the first words land. Each is visibly not speech - and each
+     carries NO .t span, so a two-track template would drop its words into the stamp column.
+     One track, padded to the width of the gutter, lands them on the same left edge as speech
+     with the margin rule left clear. */
+  #scribepanel .lines p.note{color:var(--sc-faint);font-style:normal}
   #scribepanel .lines p.bad{color:#ffb3a0}
+  #scribepanel .lines p.note,#scribepanel .lines p.bad{
+    grid-template-columns:1fr;padding-left:var(--sc-gutter)}
   #scribepanel .foot{display:none;align-items:center;gap:10px;margin-top:11px;
-    padding-top:10px;border-top:1px solid rgba(34,224,255,.16)}
+    padding-top:10px;border-top:1px solid var(--sc-rule)}
   #scribepanel.done .foot{display:flex}
   #scribepanel .foot button{border-radius:999px;cursor:pointer;font-family:inherit;
     font-size:12.5px;padding:8px 18px;
     transition:background .16s,border-color .16s,color .16s,transform .12s ease-out}
-  #scribe-draft{background:linear-gradient(180deg,rgba(120,232,255,.3),
-      rgba(40,190,230,.18));
-    color:#e6fbff;border:1px solid rgba(34,224,255,.65);font-weight:600}
-  #scribe-draft:hover:not(:disabled){border-color:rgba(140,240,255,.95);
+  #scribe-draft{background:linear-gradient(180deg,rgba(247,206,146,.3),
+      rgba(206,146,66,.18));
+    color:#fff4e2;border:1px solid rgba(233,185,120,.65);font-weight:600}
+  #scribe-draft:hover:not(:disabled){border-color:rgba(250,214,160,.95);
     transform:translateY(-2px)}
   #scribe-close{background:transparent;color:var(--muted);border:1px solid var(--line)}
   #scribe-close:hover:not(:disabled){color:#fff;border-color:rgba(140,170,220,.5)}
   #scribepanel .foot button:disabled{opacity:.45;cursor:default;transform:none}
-  #scribepanel .foot .said{margin-left:auto;font-size:11px;color:var(--muted);
+  #scribepanel .foot .said{margin-left:auto;font-size:11px;color:var(--sc-faint);
     font-family:var(--mono)}
 
   /* ---------- THE MINUTES, COLLAPSED TO ONE LINE ----------
@@ -951,8 +1241,18 @@
      word MINUTES - so the number is a floor the strip normally sits exactly on and may exceed
      if a font ever makes it, and the harness reports the declared number and the measured one
      side by side rather than assuming they agree. */
+  /* §27 PART 5 · THE SKIN GIVES THE STRIP NOTHING BACK. The head gained a seal and a ruled
+     underline, and both are STRUCK OFF here, because both are height and this is the one
+     state on the panel where height is a law rather than a preference. The arithmetic, since
+     it is the whole reason these two lines exist: 7px + 7px of strip padding and a ~13px
+     head is 27px, comfortably under the 34px floor the governor declares - but the new
+     border-bottom and its 8px of padding would make it 36px, and layout_proof asserts this
+     panel measures no more than STRIP_H + 1. A decorative rule would have broken a published
+     vertical budget. The seal goes for the width reason given at .head::before. */
   #scribepanel.strip{padding:7px 15px;overflow:hidden}
-  #scribepanel.strip .head{margin-bottom:0;flex-wrap:nowrap}
+  #scribepanel.strip .head{margin-bottom:0;flex-wrap:nowrap;
+    border-bottom:0;padding-bottom:0}
+  #scribepanel.strip .head::before{display:none}
   #scribepanel.strip .lines,#scribepanel.strip .foot{display:none}
   /* ONE LINE MEANS ONE LINE, and the first measurement of this strip said otherwise: 49px at
      1280 and at 1600 against 34px at 1920. Nothing was wrapping at the FLEX level - nowrap is
@@ -1007,9 +1307,14 @@
   #answer.capped>.a{flex:0 1 auto;min-height:0}
   #answer.capped #a-ask{display:flex;flex-direction:column;min-height:0;flex:1 1 auto}
   #answer.capped #ask-lbl{flex:0 0 auto}
-  #answer.capped #ask-rows{flex:1 1 auto;min-height:0;overflow-y:auto;
-    overscroll-behavior:contain;scrollbar-width:thin}
+  #answer.capped #ask-rows,#answer.capped #ask-steps{flex:1 1 auto;min-height:0;
+    overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
   #answer.capped .pair{flex:0 0 auto}
+  /* THE STEPS LIST IS IN THE RULE ABOVE AND THAT IS NOT TIDINESS. The comment at the head of
+     this block says it: the cap is a CHAIN of flex parents and one missing link anywhere
+     silently does nothing. #ask-steps is a new child of #a-ask, so a four-step plan on a
+     short window would have grown the card until the Yes button left the screen - the exact
+     failure the rows were capped for, arriving again through the sibling nobody added. */
 
   /* THE DECK DIMS. A full-window vignette that darkens the corners while a hand is
      offered, so the card carrying the two buttons is the only lit thing on screen.
@@ -1688,9 +1993,18 @@
   #presence .pb.b2{right:0;top:0;border-right-width:1px;border-top-width:1px}
   #presence .pb.b3{right:0;bottom:0;border-right-width:1px;border-bottom-width:1px}
   #presence .pb.b4{left:0;bottom:0;border-left-width:1px;border-bottom-width:1px}
-  #presence-tag{position:absolute;left:0;bottom:-15px;width:100%;text-align:center;
-    font-family:var(--mono);font-size:8.5px;letter-spacing:.34em;text-transform:uppercase;
-    color:rgba(124,196,255,.42)}
+  /* THE ONE DECORATIVE THING §27's SELF-CRITIQUE CUT. This printed FACE - or RING, or CUBE -
+     in small caps under the well. It was useful while the three modes were being built and it
+     is instrumentation now: the boss can see that it is a face, and a caption under his
+     butler's head that names the render mode is the kind of label that makes a product look
+     like somebody's dashboard. Now that the head is the dominant anchor it was the loudest
+     remaining piece of furniture in the frame.
+     HIDDEN AND NOT DELETED, on purpose: presence-tag is still written at ~17304, the node is
+     still there for anyone with an inspector open, and the mode is still on __galaxy.presence
+     for every harness that asks. Deleting the node would have meant a null to guard for the
+     sake of three lines of CSS. No harness, no preflight check and no lookbook reads this
+     selector - grepped before it was touched. */
+  #presence-tag{display:none}
 
   /* =========================================================================
      THE MIND
@@ -2255,6 +2569,19 @@
         <span class="cs">the rest of the orders</span></span>
     </button>
   </div>
+  <!-- THE BOARD. One shell for three boards - Connectors, World Clock, Census - filled by
+       boardFill() and emptied when it closes. The heading and the back row are here because
+       they are the same on all three; everything else is the board's own and lives in the
+       grid, so a board that is not open has no tiles anywhere in this document. -->
+  <div class="board" id="cmd-board">
+    <div class="bhead" id="board-head"></div>
+    <div class="bgrid" id="board-grid"></div>
+    <button class="cmdact" id="board-back" type="button">
+      <span class="ck">&larr;</span>
+      <span class="cw"><span class="cl">Back</span>
+        <span class="cs">the rest of the orders</span></span>
+    </button>
+  </div>
 </section>
 
 <aside id="panel">
@@ -2291,6 +2618,12 @@
     <div id="a-ask">
       <div class="lbl" id="ask-lbl">Awaiting your word</div>
       <div class="rows" id="ask-rows"></div>
+      <!-- THE PLAN, when there is more than one step. Empty and unshown for a single
+           proposal: showProposal() fills exactly ONE of these two and empties the other, so
+           the card can never show a plan of two beside the parameters of one. An <ol>, so the
+           numbers the employer approves are the browser's count of the steps rather than a
+           number this file wrote next to each one. -->
+      <ol class="steps" id="ask-steps"></ol>
       <div class="pair">
         <button id="ask-yes" type="button">Yes</button>
         <button id="ask-no" type="button">No</button>
@@ -2542,9 +2875,25 @@ const STAR_BANDS = [
    sweets - steel blue, old gold, deep violet, jade, rosewood, olive gold, copper,
    mulberry - each one darker and less saturated than the pastel it replaces, which is
    what lets a lit sphere read as a body of that colour instead of a lamp with that
-   colour inside it. A ninth cluster wraps round to steel blue, exactly as an eleventh
+   colour inside it. A TENTH cluster wraps round to steel blue, exactly as an eleventh
    used to.
-   WHY THERE ARE EIGHT AND NOT SEVEN. There were seven until build.py's eighth group
+   WHY THERE ARE NINE NOW, AND WHY THE NINTH IS GREEN. The sentence above used to say a
+   NINTH cluster would wrap, and on 28 September 2026 one arrived and did: the boss's own
+   words went into notes/captures/ through the capture path, which made a ninth folder, and
+   deck_proof went red inside the hour on exactly the clause this palette exists for -
+   "8 colours across 9 folders". That is the check working. It is worth being plain about
+   what it means, because it will happen again: THE PALETTE IS A FUNCTION OF HIS CORPUS,
+   not of this file, so every folder he or the Scribe creates spends one of these and the
+   count has to be reachable from the top of the list rather than buried as a literal.
+   #6BBC57 is hue 108.1, and like #A9609D it was chosen by measurement rather than taste.
+   The eight hues present were 0, 22, 45.6, 52.2, 163.7, 207.7, 257 and 309.9; every gap
+   round the wheel was 50 degrees or less except ONE - the 111.5 between chartreuse and
+   teal, a green hole wide enough for two of any other gap. 108 sits in it 55.8 from each
+   neighbour, which is more separation than any other hue on the wheel still had. Its
+   saturation (43) and lightness (54) are the family's own medians, so it is a leaf and not
+   a lamp: deck_proof's sweet ceiling is max > 224 with a spread over 120, and this is 188
+   with a spread of 101.
+   WHY THERE WERE EIGHT AND NOT SEVEN. There were seven until build.py's eighth group
    arrived and was not a folder at all: a note saved at the ROOT of notes/ is filed as
    "unfiled" (build.py:232), so the very first meeting the scribe writes without being
    told where to put it makes an eighth cluster - eight is an ORDINARY corpus, not an
@@ -2556,7 +2905,7 @@ const STAR_BANDS = [
    wide gap is the 103 degrees between violet and rosewood, and 310 sits in it 53 from
    one neighbour and 50 from the other - the most separated hue the wheel still had. */
 const PALETTE = ['#5B8DB8','#C9A227','#7E6BAE','#4FA08A','#C46A6A','#B5A642','#C77B4F',
-                 '#A9609D'];
+                 '#A9609D','#6BBC57'];
 /* THE SECOND HOME, and the one line in this file that knows about it.
    The countdown card does not get rebuilt on the desktop - it is MOVED there, into a
    Document Picture-in-Picture window, so that every listener, every button handler and
@@ -2650,8 +2999,43 @@ const LAYOUT = {
      §17.4 makes about the mouth. At 100px it is 1.3px and at 76px it is under one, and a
      head whose mouth cannot be shut is worse than a head that stood down honestly.
      Below 120 the well still stands down, and at 1280 with the panel open it still will:
-     12px of room is not a rendering problem, it is an absence of room. */
-  PRES_W: 300, PRES_MIN: 168, PRES_MIN_COMPACT: 120, PRES_X: 0.68,
+     12px of room is not a rendering problem, it is an absence of room.
+
+     §27 PART 3 - THE SQUARE GROWS, AND THE FULL FLOOR GOES UP WITH IT.
+     PRES_W 300 -> 420. The mandate's words are "the presence becomes the dominant anchor",
+     and on this deck dominance is one number: the side of the well. 300px put the machine's
+     face at about a tenth of the glass on a 1600px window - present, docked, and smaller
+     than the answer card beside it. 420 is 1.4x on a side and 1.96x in area.
+     AND 420 AND NOT MORE, BECAUSE THE BAND IS WHAT BINDS. The well is not bounded by the
+     width; it is bounded by the vertical band between the top-right lane and the top of the
+     toast, so PRES_W only decides anything on a window tall enough to have that much band.
+     Measured on this machine with ?presence=face and nothing crowding the lane:
+       1280x800 -> 319px    1366x768 -> 287px    1600x900 -> 419px
+       1920x1080 -> 420px   2560x1440 -> 420px   1920x860 -> 379px
+     and 1600x900 with a paragraph sitting in the toast -> 345px. So 420 is the first ask
+     that a 1080-tall desk monitor actually reaches and the last one it reaches cleanly:
+     above it the constant would never bind on any window in this house, and a constant that
+     never binds is a constant that lies about what the governor is doing. Below 1080 tall
+     the band decides and the square takes what there is, which is the arrangement that has
+     always been in force - what changed is that it is no longer also capped at 300.
+     AND PRES_MIN 168 -> 192, which is a floor that had to move because the label on it moved.
+     "Full density" means CAP points; when CAP was spread over a 300px asking-size, a 168px
+     well was 56% of it and calling that full was nearly true. At a 420px asking-size a 168px
+     well is 40%, and a head at CAP points squeezed into 40% of its own design size is not a
+     full-dress face, it is an over-dense smudge that costs the GPU its full vertex count for
+     it. 192 is measured rather than chosen: at 1920x860 with the note panel open and a live
+     session card in the top-right lane - the crowded condition deck_proof walks its tier
+     ladder under - the governor leaves 213px, which clears 192 with 21px to spare.
+     THE FAILURE MODE OF 192, stated because it is the reason this is safe now and would not
+     have been in §17: if a window is one notch more crowded than the measurement, the well
+     drops to the COMPACT tier - which draws a 45%-density head - and not to nothing. Raising
+     the full floor before PRES_MIN_COMPACT existed would have traded a small face for no
+     face. Raising it now trades a too-dense face for a correctly-thinned one, and the band
+     that gets that treatment simply widens from 120-168 to 120-192.
+     PRES_MIN_COMPACT STAYS 120. Its argument is the lip parting at 0.013 of half-height and
+     nothing above has changed that arithmetic; a floor derived from the mouth does not move
+     because the square above it did. */
+  PRES_W: 420, PRES_MIN: 192, PRES_MIN_COMPACT: 120, PRES_X: 0.68,
   /* ---- THE VERTICAL BUDGET ----
      The governor has owned the WIDTH of the toast column since it was written, and the
      horizontal arrangement is a set of lanes that cannot overlap by construction. Height was
@@ -4529,8 +4913,64 @@ async function loadLib() {
       if ((out + sentences[i]).length > SPOKEN_MAX_CHARS) break;
       out += sentences[i];
     }
-    if (out.trim()) return out.trim();
-    return line.slice(0, SPOKEN_MAX_CHARS).replace(/\s+\S*$/, '') + '…';
+    /* THE QUESTION SURVIVES THE CAP, and this is a defect the chain found rather than a
+       nicety. A gate's line ends in the only sentence that matters - "Shall I execute the
+       chain?", "Shall I write that into your calendar?" - and a two-step plan whose first
+       step is a calendar entry runs to about 270 characters, twelve over the cap. Measured:
+       the loop above kept the description and dropped the question, so the butler read out a
+       plan and never asked for the word, while the card sat there waiting for one. A
+       listener with their back to the screen hears a statement and answers nothing.
+       So: if the final sentence is a question and the cap has just thrown it away, it goes
+       back on the end. Nothing under 260 characters is touched, the cap still stops a long
+       answer becoming a minute of narration, and no answer gains a question it did not
+       already end with. */
+    const last = (sentences[sentences.length - 1] || '').trim();
+    const question = /\?$/.test(last) ? last : '';
+    if (out.trim()) {
+      const body = planJoin(out.trim(), planOverflow(line, out));
+      return question && out.indexOf(last) < 0 ? (body + ' ' + question) : body;
+    }
+    const cut = line.slice(0, SPOKEN_MAX_CHARS).replace(/\s+\S*$/, '') + '…';
+    const head = planJoin(cut, planOverflow(line, cut));
+    return question ? head + ' ' + question : head;
+  }
+
+  /* A STEP THAT CANNOT FIT IS ANNOUNCED, AND NEVER VANISHES. The cap above keeps whole
+     sentences and stops; the question is then rescued onto the end. Measured on a real
+     three-step plan, that produced: "I have a three-step plan, sir. First, write 'X' into
+     your calendar. Shall I execute the chain?" - and steps two and three were GONE. Not
+     shortened, not hinted at: absent, from a sentence that had just announced there were
+     three of them. The card was right and the voice was wrong, and a listener with their
+     back to the screen would have approved two actions they never heard.
+     A truncation that removes a step is a lie about what is about to run, so the count of
+     what is missing goes back on the end. The plan opener and the ordinals are templates
+     THIS REPOSITORY COMPOSES - hands.py _plan_words() and _ORDINALS - so matching them is
+     reading our own format string and not parsing English. Nothing that is not a plan is
+     touched, which is why the opener is tested first and the function returns '' for every
+     other long answer on this page. */
+  const PLAN_OPENER = /^I have an? (?:two|three|four|\d+)-step plan, sir\./i;
+  const PLAN_STEP = /\b(?:First|Second|Third|Fourth|Then),/g;
+  const PLAN_COUNT = ['', 'one', 'two', 'three', 'four'];
+  function planOverflow(line, kept) {
+    if (!PLAN_OPENER.test(String(line || '').trim())) return '';
+    const all = (String(line || '').match(PLAN_STEP) || []).length;
+    const held = (String(kept || '').match(PLAN_STEP) || []).length;
+    const lost = all - held;
+    if (lost < 1) return '';
+    /* SPELLED, because this is read aloud and a voice saying "3" says "three" on a good
+       day and "number three" on a bad one. CHAIN_MAX_STEPS is four, so the table covers
+       every case it can be asked; the numeral is the fallback and not the intent. */
+    return 'and ' + (PLAN_COUNT[lost] || lost) + ' more step'
+           + (lost === 1 ? '' : 's') + ' on the card.';
+  }
+
+  /* Spoken, not written: the announcement is a clause and not a new sentence, so the
+     surviving step's full stop becomes a comma rather than leaving the voice to read
+     "...ninety minutes. And three more steps." with a hard stop in the middle of one
+     thought. Only the plan case reaches here with anything to join. */
+  function planJoin(kept, more) {
+    if (!more) return kept;
+    return kept.replace(/[.…]\s*$/, '') + ', ' + more;
   }
 
   /* Nothing else in the file is allowed to move the camera in response to an
@@ -4609,6 +5049,12 @@ async function loadLib() {
        from the first frame and nothing that reads this page has to wait for a show. */
     typeOut($('a-text'), text);
     answerReach();
+    /* AND THE SINGLE-SURFACE DECISION IS RE-TAKEN HERE, because the paragraph has just changed
+       under a caption that may still be up from the sentence before it. Comparing the new text
+       against the old subtitle is what makes the class honest in both directions: it releases
+       the card when the two have drifted apart, and it yields again the moment the caption for
+       THIS answer arrives. See answerYield(). */
+    if ($('caption').classList.contains('up')) answerYield(caption.text);
     $('answer').classList.toggle('err', !!isError);
     const src = $('a-src'), box = $('a-chips');
     box.innerHTML = '';
@@ -4679,6 +5125,11 @@ async function loadLib() {
        renderAnswer(), which calls this before painting anything at all. */
     $('handswash').classList.remove('live');
     $('ask-rows').innerHTML = '';
+    /* BOTH SURFACES, always. clearAskUI() runs before every paint as well as after every
+       settlement, so a plan of two followed by an ordinary proposal must not leave three
+       numbered steps sitting under one tool's rows - the numbers would be the old plan's and
+       the Yes would be the new proposal's. */
+    $('ask-steps').innerHTML = '';
     $('ask-clock').textContent = '';
   }
 
@@ -4691,22 +5142,76 @@ async function loadLib() {
 
   /* Every validated parameter, on its own row, in the schema's order - so a field the
      server dropped is visibly absent rather than quietly missing. textContent
-     throughout: a subject line is text, never markup. */
-  function showProposal(pending) {
-    clearTimeout(proposalTimer); clearInterval(proposalTicker);
-    proposal = pending;
-    const rows = $('ask-rows');
-    rows.innerHTML = '';
-    (pending.fields || []).forEach(function (f) {
+     throughout: a subject line is text, never markup.
+
+     ONE FUNCTION FOR BOTH GRIDS, the single card's rows and a step's values, because
+     "(not given)" is a claim about the server's slot and it must read identically wherever
+     it appears. A field the chain's step two omitted and a field a single proposal omitted
+     are the same absence. */
+  function paramGrid(into, fields, params) {
+    (fields || []).forEach(function (f) {
       const name = document.createElement('b');
       name.textContent = f.name;
       const val = document.createElement('span');
-      const has = Object.prototype.hasOwnProperty.call(pending.params || {}, f.name);
-      if (has) val.textContent = String(pending.params[f.name]);
+      const has = Object.prototype.hasOwnProperty.call(params || {}, f.name);
+      if (has) val.textContent = String(params[f.name]);
       else { val.innerHTML = ''; const i = document.createElement('i');
              i.textContent = '(not given)'; val.appendChild(i); }
-      rows.appendChild(name); rows.appendChild(val);
+      into.appendChild(name); into.appendChild(val);
     });
+  }
+
+  /* THE CHAIN CARD. The numbered plan in the server's own words - step["line"], filled from
+     the registry's step template - and under each one the exact parameters that step will run
+     with. So the employer reads a sentence and can audit a value, in that order.
+
+     IT IS THE SAME CARD. Same label, same two buttons, same countdown, same vignette, same
+     slot id: what changes is which of the two surfaces inside it is filled. That is not
+     economy, it is the Doorman - the voiceprint law, the TTL, the withdrawal rule and the
+     supersede rule all apply to "the pending proposal", and a second card with a second gate
+     would have been a second place for every one of those four to be got wrong.
+
+     THE PLACEHOLDER IS SHOWN BEFORE THE YES, twice: as {{step1}} in the mono values, exactly
+     as it will be sent, and as a sentence in .uses for somebody reading rather than auditing.
+     A state-passing chain nobody could see the state-passing in is a chain that says one
+     thing out loud and sends another. */
+  function renderChain(into, steps) {
+    steps.forEach(function (s) {
+      const li = document.createElement('li');
+      const what = document.createElement('div');
+      what.className = 'what';
+      what.textContent = s.line || s.name || s.tool || '';
+      li.appendChild(what);
+      const uses = (s.uses || []).slice().sort(function (a, b) { return a - b; });
+      if (uses.length) {
+        const note = document.createElement('div');
+        note.className = 'uses';
+        note.textContent = 'quoting what step ' +
+          (uses.length === 1 ? uses[0]
+                             : uses.slice(0, -1).join(', ') + ' and ' + uses[uses.length - 1]) +
+          ' returns';
+        li.appendChild(note);
+      }
+      const vals = document.createElement('div');
+      vals.className = 'vals';
+      paramGrid(vals, s.fields, s.params);
+      if (vals.children.length) li.appendChild(vals);
+      into.appendChild(li);
+    });
+  }
+
+  function showProposal(pending) {
+    clearTimeout(proposalTimer); clearInterval(proposalTicker);
+    proposal = pending;
+    const rows = $('ask-rows'), steps = $('ask-steps');
+    rows.innerHTML = ''; steps.innerHTML = '';
+    /* EXACTLY ONE OF THEM IS FILLED, and the condition is >1 step rather than the chain flag
+       alone: the server never mints a chain of one - it falls through to propose() - so the
+       length is the same fact said in a way that cannot draw a numbered list of one item if
+       that ever changes. The empty one collapses to nothing; see .steps:empty. */
+    const plan = (pending.chain && (pending.steps || []).length > 1) ? pending.steps : null;
+    if (plan) renderChain(steps, plan);
+    else paramGrid(rows, pending.fields, pending.params);
     $('ask-lbl').textContent = (pending.name || 'Awaiting your word') + ' · your word?';
     $('ask-yes').disabled = false;
     $('ask-no').disabled = false;
@@ -4748,6 +5253,26 @@ async function loadLib() {
     hideProposal();
     const line = (data && (data.answer || data.error)) ||
       'The server said nothing about that, sir, so I cannot tell you whether it ran.';
+    /* A STAR IS BORN HERE AS OF PART 8, when the hand that ran was save_note. The server
+       re-indexed in process and sent the node, the anchor and the whole link set - the
+       identical payload /remember used to return the instant it had written the file. The
+       difference is only WHEN: after a word, not instead of one.
+
+       `data.node` is the condition rather than a tool name, because the payload carrying a
+       node IS the server saying "there is a new note and here is where it goes". A chain
+       that ends in save_note arrives here too, by the same door, and gets the same birth.
+
+       The question it is rendered against is the sentence he actually said - "remember that
+       ..." - and not the "Yes" that confirmed it, which is why capture() kept it. */
+    if (data && data.node && data.ok) {
+      bornStar(data, captureSaid || question);
+      if (!speak(spokenForm(line))) idleStatus();
+      captureSaid = '';
+      censusResume();
+      return;
+    }
+    captureSaid = '';
+    census.flow = false;
     renderAnswer(question, line, !!(data && (data.error || data.ok === false)), null);
     if (!speak(spokenForm(line))) idleStatus();
     if (data && data.pending) showProposal(data.pending);   // busy: it is still pending
@@ -4763,14 +5288,27 @@ async function loadLib() {
     $('ask-yes').disabled = true; $('ask-no').disabled = true;
     $('ask-clock').textContent = 'running…';
     clearTimeout(proposalTimer); clearInterval(proposalTicker);
-    setStatus('thinking', 'running ' + asked.tool);
+    /* A PLAN IS NOT NAMED AFTER ITS FIRST HAND. `asked.tool` is step one's real registry id
+       on purpose - three things that know nothing about chains read it - but "running
+       add_calendar_event" on a strip that will sit there while an email is also sent is the
+       status line telling half the truth for the length of the chain. */
+    const plan = asked.chain ? (asked.steps || []).length : 0;
+    setStatus('thinking', plan ? 'running ' + plan + ' steps' : 'running ' + asked.tool);
     /* THE DOORMAN TRAVELS WITH THE CONSENT, and this is the door where it matters most. A
        spoken "yes" never reaches /chat: ask() recognises the word itself while a card is up and
        posts straight here, so a law written only at /chat would have been one line of code from
        being walked around by the very door it was for. The block is sent for door 'voice' only,
        it is a turn number, and the server reads the verdict it reached from audio under that
        number. `session` goes with it because the verdict lives in this session's slot. */
-    const data = await toolPost('/execute', {
+    /* AND THE PLAN GOES THROUGH ITS OWN DOOR, which is a NAME for this one. /chain/execute
+       runs the identical hands.execute() on the identical slot behind the identical
+       doorman_refusal() - so the path is here for the log and the trace to be able to say "a
+       plan was approved" without the server having to guess that from the slot. It is not a
+       way round anything: sending a chain to /execute would work, and sending a single
+       proposal to /chain/execute would work too. Neither is a hole, because both are the
+       same function; if this line were ever wrong, the failure is a mislabelled trace line
+       and not an unapproved hand. */
+    const data = await toolPost(asked.chain ? '/chain/execute' : '/execute', {
       id: asked.id, door: door || 'button', session: SESSION,
       speaker: door === 'voice' ? speakerBlock('voice') : null });
     settleProposal(data, said);
@@ -4814,6 +5352,10 @@ async function loadLib() {
   async function withdrawProposal() {
     if (!proposal) return;
     hideProposal();
+    /* AND THE INTAKE IS OVER, if a Census card was the thing withdrawn. He changed the
+       subject, which is an answer in itself: the sheet must not reappear in his face a
+       second and a half later asking him where he went to school. */
+    census.flow = false;
     const data = await toolPost('/tools', { cmd: 'withdraw' });
     if (data && data.answer) setStatus('', data.answer);
   }
@@ -4918,6 +5460,14 @@ async function loadLib() {
          that can answer it. Last, so a rail that threw could never cost the chip its
          paint - though railFrom swallows its own trouble too. */
       railFrom(data);
+      /* AND THE HOUSE REPORTS FOR DUTY, once, on the first poll that came back healthy.
+         LAST in this function on purpose: the ceremony's sentence is a claim about every
+         instrument above it, so it is spoken after each one has been told what /health
+         said - not before, and not from a fetch of its own. "Healthy" is deliberately the
+         same test paintBrain() applies: the route answered, it parsed, and it knows which
+         brain it is. A 500, a half-written JSON or a server with no model configured all
+         leave the ceremony unheld and the next poll ten seconds away. See bootCeremony(). */
+      bootCeremony(res.ok && !!(data && data.brain && data.brain.label));
     } catch (e) { /* the chip keeps whatever it last knew to be true */ }
   }
 
@@ -5242,7 +5792,23 @@ async function loadLib() {
        reads CONNECTED out of a cache while the token is dead. So it is asked when the
        sheet opens, and while consent is in flight, and at no other time. */
     { id: 'google',  key: 'G' },
+    /* CONNECTORS, directly beneath the grant, because it is the wider view of the same
+       question and the row above it is the one action inside it. It is a BOARD: pressing it
+       opens a grid and orders nothing. */
+    { id: 'connectors', key: 'C' },
     { id: 'cast',    key: 'V' },
+    /* THE WORLD CLOCK, and it is a BOARD rather than an order: pressing it does not tell the
+       machine to do anything, it opens a grid of readings. It sits here, after the two rows
+       that cost a round trip, because it costs one too - one, when it opens, and none after
+       that. The spoken answer needs no row at all: "what time is it in Tokyo" is a sentence,
+       and a sentence does not need a button. */
+    { id: 'clock',   key: 'T' },
+    /* THE CENSUS, and it is the third BOARD. Q rather than C, which the Connectors row has:
+       the glyphs are mnemonics rather than shortcuts - see cmdBuild - and Q is for the
+       questions, which is what this row opens. It sits last of the boards because it is the
+       only one that ASKS him for something rather than telling him something, and a sheet
+       whose first row wanted an answer out of him would be an order sheet that took orders. */
+    { id: 'census',  key: 'Q' },
     /* THE DOORMAN, and it lives here for a reason that is not convenience. Learning a voice is
        boss-only, and the guard is structural rather than a check: no sentence anywhere in the
        funnel reaches this action, so the only way to start an enrolment is to press this row -
@@ -5382,6 +5948,74 @@ async function loadLib() {
         line: cited
           ? cited + ' passage' + (cited === 1 ? '' : 's') + ' cited · reopen them'
           : files + ' file' + (files === 1 ? '' : 's') + ' · nothing cited yet'
+      };
+    }
+    /* THE WORLD CLOCK ROW. Three readings, and the third is the one worth having: a machine
+       with no timezone database says so, rather than opening a board of dashes. The count of
+       places is on the row because it is the one number that says what the board will and will
+       not answer, and it is read from the last /clock rather than typed here - a row claiming
+       215 places beside a module that knows 30 would be this panel lying about the thing it is
+       a door to. */
+    /* THE CONNECTORS ROW, and the LINE is a count rather than a verdict. "3 of 6 live" is a
+       summary somebody would have to trust; "6 connectors · 7 hands" is a statement about what
+       the board will show, which is the only promise a door is allowed to make. The row is
+       never OFF: the board's whole job includes reporting that nothing is connected, and a door
+       that refused to open when the news was bad would be the panel deciding what he may see. */
+    if (id === 'connectors') {
+      const r = boardRead.connectors;
+      if (!r) {
+        return { label: 'Connectors', tone: '',
+                 line: 'the grant, the hands, the voice, the eyes and the Scribe' };
+      }
+      const g = connectGrant();
+      /* COUNTED FROM THE TILES THE BOARD WOULD BUILD, not from a number typed here. connectTiles
+         is pure and touches no network, so calling it costs a repaint's worth of arithmetic and
+         buys the guarantee that this row cannot claim six while the grid shows seven. */
+      const named = connectTiles().filter(function (t) {
+        return String(t.key).indexOf('hand:') !== 0 && t.key !== 'registry';
+      }).length;
+      const hands = (r.tools || []).length;
+      return {
+        label: 'Connectors', tone: g.on ? 'live' : 'local',
+        line: named + ' connectors · ' + hands + ' hand' + (hands === 1 ? '' : 's') +
+              ' · google ' + g.word.toLowerCase()
+      };
+    }
+    if (id === 'clock') {
+      const r = boardRead.clock;
+      if (r && r.ok === false) {
+        return { label: 'World Clock', tone: 'bad', off: true,
+                 line: String(r.why || 'no zone database on this machine').slice(0, 48) };
+      }
+      if (!r) {
+        return { label: 'World Clock', tone: '',
+                 line: 'six cities and yours · read when it opens' };
+      }
+      return { label: 'World Clock', tone: 'local',
+               line: (r.tiles || []).length + ' tiles · ' + (r.places || 0) +
+                     ' places known · 0 lookups' };
+    }
+    /* THE CENSUS ROW, and its LINE is a fraction rather than a verdict, for the Connectors
+       row's reason: "mostly done" is a summary somebody would have to trust, and "4 of 17
+       answered" is a statement about what the board will show. It is never OFF - the board's
+       job includes reporting that he has answered nothing - and the count is the SERVER's,
+       read off the folder, so this row cannot claim four while notes/census holds three. */
+    if (id === 'census') {
+      const r = boardRead.census;
+      if (!r) {
+        return { label: 'Census', tone: '',
+                 line: 'seventeen questions · life, work, study · each answer a note' };
+      }
+      if (r.ok === false) {
+        return { label: 'Census', tone: 'bad',
+                 line: String(r.why || 'the Census could not read its folder').slice(0, 48) };
+      }
+      const left = Math.max(0, (r.total || 0) - (r.answered || 0));
+      return {
+        label: 'Census', tone: left ? 'local' : 'live',
+        line: (r.answered || 0) + ' of ' + (r.total || 0) + ' answered · ' +
+              (left ? left + ' still to ask' : 'all of them, in ' +
+                      String(r.folder || 'notes/census'))
       };
     }
     /* LEARN A VOICE, and it has six readings because there are six true things to say: no
@@ -5570,16 +6204,786 @@ async function loadLib() {
   function cmdView(which) {
     const el = $('cmd');
     if (!el) return;
-    cmd.view = which === 'cast' ? 'cast' : 'list';
+    cmd.view = which === 'cast' ? 'cast' : (which === 'board' ? 'board' : 'list');
     el.classList.toggle('casting', cmd.view === 'cast');
+    el.classList.toggle('boarding', cmd.view === 'board');
+    if (cmd.view !== 'board') boardStop();
     if (cmd.view === 'list') { el.classList.remove('offline'); castStop(); }
   }
+
+  /* ==================================================== THE BOARDS ====
+     THREE OF THE ORDERS OPEN A GRID INSTEAD OF DOING SOMETHING: Connectors, World Clock and
+     the Census. They share this machinery and differ only in what BOARDS[name].fill() returns,
+     which is one array of plain objects. No board holds its own DOM, none of them has a paint
+     loop of its own, and closing one empties the grid - which is how a connector that has been
+     removed from the registry cannot leave a ghost tile behind: there is no tile to leave.
+
+     WHY THE TILES ARE DATA AND NOT MARKUP. Each board's fill() is a pure function of state to
+     an array, so a harness can read `__galaxy.board.tiles()` and get exactly what is on the
+     glass without parsing any of it - and the two can never disagree, because the array IS
+     what was rendered. Every assertion in clock_proof about a day offset is made against that
+     array and then checked against the text in the DOM, so a board that rendered the right
+     data into the wrong cell still fails.
+
+     THE TICK IS LOCAL AND THE TRUTH IS THE SERVER'S. The clock board reads GET /clock once
+     when it opens, takes the OFFSET out of each row, and advances the minutes itself between
+     reads. It does not poll a route once a second to animate a digit: that would be a network
+     round trip per tile per second to compute something the page can add up, and the failure
+     mode of the honest-looking alternative is a board that freezes silently the moment the
+     server is busy. What the page can get wrong on its own is bounded by one drift: it is
+     re-anchored on every open. */
+  /* ONE READING PER BOARD, KEYED BY BOARD, and this was a single shared `read` slot until the
+     second board arrived. The bug it would have been: the World Clock ROW in the order sheet
+     paints from the clock's last reading even when no board is open, so opening Connectors and
+     closing it again left the clock row reading "0 tiles · 0 places known" - the panel lying
+     about an organ that was working perfectly. A shared slot is fine with one board and wrong
+     with two, which is the worst kind of fine. boardStop() deliberately does NOT clear these:
+     a row's last true reading is better than a dash, and its staleness is bounded by the fact
+     that it is re-read on every open. */
+  const boardRead = {};
+  const board = {
+    which: '', opens: 0, paints: 0, rows: [], at: 0, why: '',
+    /* READ-ONLY, and every board writes boardRead[its own name] by name instead. A setter here
+       would write to whichever board happened to be open when a slow fetch landed, which is
+       precisely the shared-slot bug this map exists to kill. */
+    get read() { return board.which ? (boardRead[board.which] || null) : null; },
+  };
+  let boardTimer = null;
+
+  function boardStop() {
+    clearInterval(boardTimer);
+    boardTimer = null;
+    /* A BOARD MAY HAVE SOMETHING TO PUT DOWN, and only the Census does: a half-typed answer
+       and the questions he waved away this sitting. The hook is here rather than a line of
+       census in this function because the shell must not know what any board is about - that
+       is the whole reason three subjects share it. A board without a `stop` has nothing to
+       do here, which is the case for two of the three. */
+    const spec = BOARDS[board.which];
+    if (spec && spec.stop) { try { spec.stop(); } catch (e) { /* never costs the close */ } }
+    const g = $('board-grid');
+    if (g) g.textContent = '';
+    board.which = '';
+    board.rows = [];
+  }
+
+  /* One tile. The five fields are the same five on every board, which is what lets three
+     different subjects share one stylesheet: a name, a reading, a small print line, a tone
+     out of the deck's three lights, and at most one verb.
+
+     AND FOUR MORE THAT ONLY THE CENSUS SETS - `wide`, `ask`, `input` and a second verb. They
+     are optional and they are read in that order, so a tile that sets none of them produces
+     exactly the DOM this function produced before the Census existed: same elements, same
+     order, same classes. That is deliberate rather than tidy - connectors_plate and
+     clock_proof assert against this markup, and a shared shell that changed shape for every
+     new subject would make each new board a regression in the two before it. */
+  function boardTile(t) {
+    const el = document.createElement('div');
+    el.className = 'btile' + (t.tone ? ' ' + t.tone : '') + (t.home ? ' home' : '') +
+      (t.wide ? ' wide' : '');
+    el.setAttribute('data-key', String(t.key == null ? t.name : t.key));
+    const n = document.createElement('div');
+    n.className = 'bn';
+    const b = document.createElement('b');
+    b.textContent = String(t.name == null ? '' : t.name);
+    n.appendChild(b);
+    if (t.tag) {
+      const em = document.createElement('em');
+      em.textContent = String(t.tag);
+      n.appendChild(em);
+    }
+    el.appendChild(n);
+    const v = document.createElement('span');
+    v.className = 'bv';
+    v.textContent = String(t.value == null ? '' : t.value);
+    el.appendChild(v);
+    /* THE QUESTION, in prose, above the field it is asking for. textContent rather than any
+       kind of markup: the seventeen questions are in census.py and they are sentences, and a
+       board that rendered them as HTML would be one edit of a Python string away from being
+       an injection into this page. */
+    if (t.ask) {
+      const q = document.createElement('div');
+      q.className = 'bq';
+      q.textContent = String(t.ask);
+      el.appendChild(q);
+    }
+    let field = null;
+    if (t.input) {
+      field = document.createElement('input');
+      field.className = 'bi';
+      field.type = 'text';
+      field.setAttribute('data-input', String(t.key == null ? t.name : t.key));
+      field.value = String(t.value2 == null ? '' : t.value2);
+      field.placeholder = String(t.hint == null ? '' : t.hint);
+      field.maxLength = 2000;               // census.MAX_ANSWER, said in the other language
+      /* ENTER IS THE PRIMARY VERB, because an intake you have to reach for the mouse in
+         is an intake nobody finishes. It fires the same handler the button does rather
+         than a second copy of it. */
+      field.onkeydown = function (ev) {
+        if (ev.key !== 'Enter') return;
+        ev.preventDefault();
+        if (!t.actOff && t.onAct) t.onAct(field.value);
+      };
+      /* THE DRAFT LIVES OUTSIDE THE DOM, because boardPaint() REBUILDS the grid rather than
+         diffing it - see its own comment - and a half-typed answer inside a node that is
+         about to be thrown away is a half-typed answer that vanishes the moment anything
+         else repaints. The tile hands each keystroke back to whoever built it and reads the
+         value in again through `value2` on the next paint. */
+      if (t.onType) field.oninput = function () { t.onType(field.value); };
+      el.appendChild(field);
+      /* FOCUSED WHEN THE TILE ASKS TO BE, and the only tile that asks is the one holding the
+         question he is being asked. On a timer of nought, so it happens after this whole
+         grid is in the document: focusing a node that has not been appended yet does
+         nothing at all and does it silently. */
+      if (t.focus) setTimeout(function () {
+        try { if (field.isConnected) field.focus(); } catch (e) { /* no field, no focus */ }
+      }, 0);
+    }
+    const s = document.createElement('span');
+    s.className = 'bs';
+    s.textContent = String(t.sub == null ? '' : t.sub);
+    el.appendChild(s);
+    /* THE VERBS. One goes straight onto the tile, unwrapped, exactly as it always did; two
+       go into a row. The handler is passed whatever is in the field, so a tile's action
+       never has to go looking through the DOM for its own input. */
+    const verbs = [];
+    if (t.act) verbs.push([t.act, t.actOff, t.onAct]);
+    if (t.act2) verbs.push([t.act2, t.actOff2, t.onAct2]);
+    const host = verbs.length > 1 ? document.createElement('div') : el;
+    if (verbs.length > 1) host.className = 'brow';
+    verbs.forEach(function (v2) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = String(v2[0]);
+      /* GATED HERE AS WELL AS WHEREVER IT LANDS. A disabled button with a reason in the small
+         print above it is a refusal; a button that looks pressable and does nothing is a bug
+         the employer diagnoses by pressing it repeatedly. */
+      if (v2[1]) btn.disabled = true;
+      else btn.onclick = function () { (v2[2] || function () {})(field ? field.value : ''); };
+      host.appendChild(btn);
+    });
+    if (host !== el) el.appendChild(host);
+    return el;
+  }
+
+  function boardPaint() {
+    const spec = BOARDS[board.which];
+    const g = $('board-grid'), h = $('board-head');
+    if (!spec || !g) return false;
+    let rows = [];
+    try { rows = spec.fill() || []; } catch (e) { rows = []; }
+    board.rows = rows;
+    if (h) h.innerHTML = spec.head();
+    if (g) g.classList.toggle('one', !!spec.single);
+    /* REBUILT, NOT PATCHED. A tile list that is diffed against the DOM is a second model of
+       what is on screen, and the two go out of step exactly when a row is removed - which is
+       the one case the canary in the mandate tests. Six tiles a second is nothing. */
+    g.textContent = '';
+    rows.forEach(function (t) { g.appendChild(boardTile(t)); });
+    board.paints++;
+    return true;
+  }
+
+  function boardOpen(which) {
+    const spec = BOARDS[which];
+    if (!spec) return false;
+    boardStop();
+    board.which = which;
+    board.opens++;
+    board.why = '';
+    cmdView('board');
+    /* PAINTED FIRST, from whatever is already known, then re-anchored when the read lands.
+       A board that waited for the network would show an empty grid for as long as the server
+       took, and an empty grid is indistinguishable from a broken one. */
+    boardPaint();
+    if (spec.read) {
+      spec.read().then(function () {
+        if (board.which === which) boardPaint();
+        /* AND THE ORDER SHEET BEHIND IT. The row for this board is painted from the SAME
+           reading as the grid, so a read that landed after the row was last painted leaves
+           the row saying "not read yet" about an organ whose tiles are on the screen two
+           inches above it. Painted unconditionally rather than under the `which` guard: a
+           board switched away from mid-fetch still owes its own row the number it just
+           learned, and cmdPaint() repaints every row from whatever each one can read. */
+        cmdPaint();
+      });
+    }
+    if (spec.everyMs) boardTimer = setInterval(function () {
+      if (board.which !== which) return;
+      boardPaint();
+    }, spec.everyMs);
+    return true;
+  }
+
+  /* ---------- THE WORLD CLOCK BOARD ----------
+     What it shows: his own clock first, marked as the one the others are measured against,
+     then each tile from GET /clock with the day offset beside the name. The offset is the
+     point of the board - see the mandate - so a tile whose day differs from his says so in
+     the place the eye reaches before the digits. */
+  const CLOCK_DAY_WORD = { '-1': 'yesterday', '0': '', '1': 'tomorrow' };
+
+  async function clockRead() {
+    try {
+      const r = await fetch('/clock', { cache: 'no-store' });
+      const j = await r.json();
+      /* WRITTEN TO ITS OWN SLOT BY NAME, not through board.read, because the World Clock row
+         in the order sheet reads this whether or not the clock board is the one on screen -
+         and board.read answers for whichever board is open. */
+      boardRead.clock = (j && typeof j === 'object') ? j : null;
+      board.at = Date.now();
+      if (boardRead.clock && boardRead.clock.ok === false) {
+        board.why = String(boardRead.clock.why || '');
+      }
+    } catch (e) {
+      /* NOT "the clock is broken" and not a set of dashes either: both are claims about the
+         zone database, and this is a claim about one fetch. */
+      boardRead.clock = null;
+      board.why = 'the server did not answer';
+    }
+  }
+
+  /* The local advance. Each row arrived with a UTC offset in minutes and the instant it was
+     read; the time now in that zone is the wall clock plus that offset, which is arithmetic
+     this page is allowed to do. It cannot invent a DST transition and does not try: a board
+     left open across 2 a.m. in London is re-anchored on the next open, and one minute of
+     staleness twice a year is the whole exposure. */
+  function clockNowFor(offsetMinutes) {
+    const now = new Date();
+    return new Date(now.getTime() + (now.getTimezoneOffset() + offsetMinutes) * 60000);
+  }
+
+  function clockTiles() {
+    const read = boardRead.clock;
+    if (!read || read.ok !== true || !Array.isArray(read.tiles)) {
+      return [{ key: 'none', name: 'World Clock', value: '--:--', tone: 'bad',
+                sub: board.why || 'no reading yet' }];
+    }
+    /* THE HOME DATE, computed once from the home row, because every other row's day offset is
+       measured against it and computing it per tile invites two tiles disagreeing about what
+       day it is here across a midnight. */
+    const homeRow = read.tiles.filter(function (t) { return t.home; })[0] || null;
+    const homeDate = homeRow ? clockNowFor(homeRow.offsetMinutes).toDateString() : '';
+    return read.tiles.map(function (t) {
+      const d = clockNowFor(t.offsetMinutes);
+      const hh = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+      let days = 0;
+      if (homeDate && !t.home) {
+        /* Day difference by CALENDAR DATE, the same rule the server uses, and not by dividing
+           an hour offset: Tokyo is four and a half hours from here, which rounds to nought
+           days by any arithmetic on the offset and is still tomorrow at nine in the evening. */
+        const a = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        const hd = new Date(homeDate);
+        const b = new Date(hd.getFullYear(), hd.getMonth(), hd.getDate());
+        days = Math.round((a - b) / 86400000);
+      }
+      const word = CLOCK_DAY_WORD[String(days)] || (days > 0 ? '+' + days + 'd' : days + 'd');
+      return {
+        key: t.zone, name: t.place, value: hh, tag: word, home: !!t.home,
+        tone: t.home ? '' : (days === 0 ? 'live' : 'local'),
+        sub: d.toLocaleDateString(undefined, { weekday: 'short' }) + ' · ' +
+             (t.abbrev || clockOffsetWord(t.offsetMinutes)),
+        dayOffset: days
+      };
+    });
+  }
+
+  /* "+05:30" from 330, for a zone whose database has no abbreviation to give - which is most
+     of them outside the anglophone world, where tzname() answers "+13" or nothing at all. */
+  function clockOffsetWord(mins) {
+    const sign = mins < 0 ? '-' : '+';
+    const m = Math.abs(mins);
+    return 'UTC' + sign + ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + (m % 60)).slice(-2);
+  }
+
+  /* ---------- THE CONNECTORS BOARD ----------
+     WHAT IT IS FOR. Until now, "is my calendar connected" was answerable three ways - the
+     grant row in this sheet, a sentence to the assistant, and the telemetry rail - and none of
+     them said anything about the mail, the voice, the eyes or the Scribe. This board is the one
+     place that answers the whole question, and every tile on it is READ rather than remembered:
+     from GET /google for the grant and GET /tools for the hands.
+
+     THE TWO KINDS OF TILE, and the distinction matters more than it looks:
+
+       THE SIX NAMED ONES are organs and services this house either has or does not. Their
+         status comes from live state, and the one that is most worth having on the board is
+         NOTION: it is not configured, there is no hand for it in the registry and no client for
+         it on this machine, and the tile says exactly that. A connectors board that only listed
+         the things that work would be a brochure. Nothing about Notion is scaffolded anywhere -
+         the tile is a reading of an absence, not a stub waiting for a key.
+
+       THE REGISTRY HANDS come from tools/registry.json and are NOT typed here. A hand added to
+         that file tomorrow surfaces tomorrow, which is the same law the spoken manifest already
+         obeys, and it is what makes the mandate's canary meaningful: a fake connector dropped
+         into the registry raises a tile, and taking it out leaves no ghost, because boardPaint
+         rebuilds the grid rather than diffing it.
+
+     AND NO TILE ON THIS BOARD RUNS A HAND. Pressing a grid cell must never execute a registry
+     script: the Halt Law says a hand runs on a human word after a proposal, and a board that
+     could fire one would be a second door into the executor with no gate on it. So the hand
+     tiles carry no verb at all, and the head says so in as many words.
+
+     THE EYES AND THE SCRIBE CARRY NO VERB EITHER, for a different reason. The Eyes Law is that
+     there is exactly one variable and one control that claim to know whether the camera is
+     open; a second button here could be pressed while #eye disagreed, which is the precise
+     failure that law exists to prevent. Their tiles name where their control is instead. */
+  const CONNECT_CLAIMED = {
+    add_calendar_event: 'Calendar', send_email: 'Gmail',
+    set_voice: 'Voice', save_minutes: 'Scribe'
+  };
+  let regTools = null;      // GET /tools as the page is allowed to see it, or null = not asked
+
+  async function connectRead() {
+    /* TWO READS, because the board makes two kinds of claim and one fetch could not support
+       both. They go together rather than in sequence: the grant read is the slow one and there
+       is no order between them. */
+    const grant = googRead().catch(function () { return null; });
+    const hands = fetch('/tools', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { regTools = (j && typeof j === 'object') ? j : null; })
+      .catch(function () {
+        /* A claim about the fetch, not about the registry: "no hands" and "I could not ask"
+           are different sentences and only one of them is true here. */
+        regTools = { ok: false, why: 'the server did not answer' };
+      });
+    await Promise.all([grant, hands]);
+    boardRead.connectors = {
+      ok: !!(regTools && regTools.ok !== false && goog),
+      tools: (regTools && regTools.tools) || [],
+      registryError: (regTools && regTools.error) || '',
+      at: Date.now()
+    };
+    board.why = (regTools && regTools.ok === false)
+      ? String(regTools.why || 'the registry did not answer') : '';
+    board.at = Date.now();
+  }
+
+  /* The grant, reduced to the one word each of its two services can wear. Written once because
+     Calendar and Gmail are the SAME grant: two tiles reading it independently is how one of
+     them ends up saying CONNECTED while the other says NOT, over one token. */
+  function connectGrant() {
+    if (!goog) return { word: 'ASKING', tone: '', why: 'asking the server', on: false };
+    if (goog.state === 'unknown') {
+      return { word: 'UNKNOWN', tone: 'bad', on: false,
+               why: String(goog.why || 'the server did not answer') };
+    }
+    if (goog.state === 'no-client' || goog.clientPresent === false) {
+      return { word: 'NO CLIENT', tone: 'bad', on: false,
+               why: 'secrets/google_client.json is missing' };
+    }
+    if (goog.consent && goog.consent.state === 'waiting') {
+      return { word: 'CONSENT', tone: '', on: false, why: 'finish it in the browser' };
+    }
+    if (goog.state === 'connected') {
+      return { word: 'CONNECTED', tone: 'live', on: true,
+               why: String(goog.email || 'granted') };
+    }
+    if (goog.state === 'reconnect') {
+      return { word: 'RECONNECT', tone: 'bad', on: false,
+               why: String(goog.why || 'Google will not renew it') };
+    }
+    return { word: 'CLOSED', tone: '', on: false, why: 'no grant on this machine' };
+  }
+
+  /* Does the registry hold the hand this service needs? A tile that said CONNECTED for the
+     calendar while there was no hand to write into it would be true about Google and useless
+     about the thing the employer actually wants to do. */
+  function connectHand(id) {
+    return ((regTools && regTools.tools) || []).some(function (t) { return t && t.id === id; });
+  }
+
+  function connectTiles() {
+    const g = connectGrant();
+    const handLine = function (id, what) {
+      return connectHand(id) ? what : 'no hand in the registry';
+    };
+    /* ONE ACTION, and it is the grant's. `connect` is the only verb on this board because it is
+       the only one that is both safe from a grid and not already owned by a control elsewhere.
+       It is OFF, with the reason above it, whenever pressing it could not work - and off rather
+       than absent, because a cell that vanished when it could not be used would take its
+       explanation with it. */
+    const canConnect = !!(goog && goog.state !== 'connected' && g.word !== 'NO CLIENT'
+                          && g.word !== 'ASKING' && g.word !== 'CONSENT');
+    /* AND NO VERB AT ALL ONCE THE GRANT IS OPEN. The first plate of this board showed
+       "CONNECTED" beside a dead button reading Connect, which reads as a bug in the button
+       rather than as a state of the grant. Revoking is not the missing word either: the Google
+       row already carries Disconnect, and a second revoke door on a grid of nine tiles is the
+       thing Eyes and Scribe are kept verbless to avoid. So a connected grant is a READOUT here
+       and a control there, which is the rule this whole board is built on. */
+    const connectAct = g.on ? {} : {
+      act: 'Connect', actOff: !canConnect,
+      onAct: function () { googRun(); }
+    };
+    const tiles = [
+      Object.assign({
+        key: 'calendar', name: 'Calendar', value: g.word, tone: g.tone,
+        sub: g.on ? handLine('add_calendar_event', 'can write events · ' + g.why) : g.why
+      }, connectAct),
+      Object.assign({
+        key: 'gmail', name: 'Gmail', value: g.word, tone: g.tone,
+        sub: g.on ? handLine('send_email', 'can send mail · ' + g.why) : g.why
+      }, connectAct),
+      /* NOTION, and the tile is the whole of the integration. No client, no hand, no route, no
+         placeholder waiting for a key - the honest reading of a service this house does not
+         have, which is the reading the employer needs in order to ask for it. */
+      { key: 'notion', name: 'Notion', value: 'NOT CONFIGURED', tone: 'bad',
+        sub: 'no hand in the registry and no client on this machine',
+        act: 'Connect', actOff: true },
+      {
+        key: 'voice', name: 'Voice', tone: speakEngine === 'piper' ? 'local' : 'bad',
+        value: speakEngine === 'piper' ? 'PIPER' : 'BROWSER',
+        sub: speakEngine === 'piper'
+          ? handLine('set_voice', railVoiceName((railHealth && railHealth.say
+                                                 && railHealth.say.model) || '') || 'local')
+          : 'piper offline · the browser\'s own voices',
+        act: 'Recast', actOff: speakEngine !== 'piper',
+        onAct: function () { cmdRun('cast'); }
+      },
+      {
+        key: 'eyes', name: 'Eyes',
+        value: !canSee ? 'UNSUPPORTED' : (eyesLive() ? 'LIVE' : 'CLOSED'),
+        tone: !canSee ? 'bad' : (eyesLive() ? 'live' : ''),
+        sub: !canSee ? 'no camera api in this browser'
+                     : 'the eye button is the only control · one door to one camera'
+      },
+      /* READ OFF THE FIELDS THAT EXIST, and `loading` is not one of them: /health sends it and
+         scribeHealthFrom() does not copy it onto this object, so a branch on scribe.loading
+         would have been permanently false and the tile would have read NOT READY through the
+         whole of the model's first-load second. Installed-but-not-ready IS loading, and
+         scribe.why is the sentence that says which. */
+      {
+        key: 'scribe', name: 'Scribe',
+        value: !scribe.asked ? 'ASKING'
+             : !scribe.installed ? 'NOT INSTALLED'
+             : scribe.on ? 'LISTENING'
+             : scribe.starting ? 'STARTING'
+             : scribe.ready ? 'READY' : 'LOADING',
+        tone: !scribe.asked ? '' : !scribe.installed ? 'bad' : (scribe.on ? 'live' : 'local'),
+        sub: !scribe.installed
+          ? String(scribe.why || 'faster-whisper is not on this machine')
+          : handLine('save_minutes', (scribe.model || 'whisper') +
+                     ' · can write minutes on a yes')
+      }
+    ];
+    /* AND THE HANDS, from the file. Sorted by id so the grid does not reshuffle between paints
+       - a tile that moves under the cursor is a tile that gets mis-clicked - and the four the
+       named rows above already speak for are left out rather than shown twice. */
+    const extra = ((regTools && regTools.tools) || [])
+      .filter(function (t) { return t && t.id && !CONNECT_CLAIMED[t.id]; })
+      .sort(function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
+    extra.forEach(function (t) {
+      const caps = (t.capabilities || []).length;
+      tiles.push({
+        key: 'hand:' + t.id, name: String(t.name || t.id), value: 'HAND', tone: 'local',
+        sub: caps + ' capabilit' + (caps === 1 ? 'y' : 'ies') + ' · ' +
+             (t.params || []).length + ' parameter' + ((t.params || []).length === 1 ? '' : 's')
+        /* NO VERB. See the header: the executor has one door and it has a gate on it. */
+      });
+    });
+    if (regTools && regTools.ok === false) {
+      tiles.push({ key: 'registry', name: 'The registry', value: 'UNREAD', tone: 'bad',
+                   sub: String(regTools.why || board.why || 'the server did not answer') });
+    } else if (regTools && regTools.error) {
+      tiles.push({ key: 'registry', name: 'The registry', value: 'BROKEN', tone: 'bad',
+                   sub: String(regTools.error).slice(0, 72) });
+    }
+    return tiles;
+  }
+
+  /* ---------- THE CENSUS BOARD ----------
+     WHAT IT IS FOR. The collection this galaxy shows was never his - PART 8 sent the dummy
+     cafe and the invoice importer to quarantine - and the two honest ways to grow it are
+     that he says something worth keeping or that he is ASKED. This is the asking: seventeen
+     questions in three chapters, held in census.py, and every answer becomes one note.
+
+     EVERY ANSWER GOES THROUGH THE CARD, and that is the only claim on this board worth
+     checking. Pressing File it does not write anything: it posts to /census/answer, which
+     mints a save_note proposal into notes/census/ and returns a pending card. The note is
+     written by the same hand, through the same slot, behind the same Halt Law as the
+     calendar and the email - and the star is born in settleProposal() like a capture's,
+     because it IS a capture's: one road out, not two that look alike.
+
+     WHAT THIS BOARD REMEMBERS AND WHAT IT READS. It reads `answered` off the folder, every
+     open, through GET /census - so deleting a note re-opens its question and nothing in this
+     page can claim nine of seventeen while the folder holds eight. It REMEMBERS exactly two
+     things, both of which are about this sitting rather than about his collection: which
+     chapter he asked for, and which questions he skipped just now. Those are view state and
+     they die with the board, which is why a skipped question comes back next time.
+
+     Of those two, the skips and the draft are put down when the board closes - see the stop
+     hook in boardStop - and the chapter is not: a chapter chosen once should still be the
+     chapter when the card he just approved has been written and the board comes back.
+
+     THE DRAFT IS NOT IN THE INPUT. boardPaint rebuilds the grid, so what he is typing is
+     held here and put back through `value2`. See boardTile's own note. */
+  const census = { chapter: '', skipped: [], draft: '', asked: '', busy: false,
+                   flow: false, filed: 0 };
+
+  async function censusRead() {
+    try {
+      const r = await fetch('/census', { cache: 'no-store' });
+      const j = await r.json();
+      boardRead.census = (j && typeof j === 'object') ? j : null;
+      board.at = Date.now();
+      board.why = (boardRead.census && boardRead.census.ok === false)
+        ? String(boardRead.census.why || 'the Census could not read its folder') : '';
+    } catch (e) {
+      /* A claim about one fetch, not about the intake. "he has answered nothing" and "I
+         could not ask" are different sentences and only one of them is true here. */
+      boardRead.census = null;
+      board.why = 'the server did not answer';
+    }
+  }
+
+  /* The question to put next: unanswered on the server's reading, and not one he waved away
+     a moment ago. The server offers `next` already and this only has to subtract the skips,
+     which it cannot ask the server to do - a skip is a fact about this sitting and the
+     server holds no session state for the Census on purpose. */
+  function censusNext() {
+    const read = boardRead.census;
+    if (!read || read.ok === false || !Array.isArray(read.chapters)) return null;
+    const pools = [];
+    if (census.chapter) {
+      pools.push(read.chapters.filter(function (c) { return c.id === census.chapter; }));
+    }
+    pools.push(read.chapters);
+    for (let p = 0; p < pools.length; p++) {
+      for (let i = 0; i < pools[p].length; i++) {
+        const chap = pools[p][i];
+        const rows = chap.questions || [];
+        for (let k = 0; k < rows.length; k++) {
+          if (rows[k].answered) continue;
+          if (census.skipped.indexOf(rows[k].id) >= 0) continue;
+          return Object.assign({}, rows[k], { chapter: chap.id, chapterName: chap.name,
+                                              chapterDone: chap.answered,
+                                              chapterTotal: chap.total });
+        }
+      }
+    }
+    return null;
+  }
+
+  async function censusPut(answer) {
+    const q = censusNext();
+    if (!q || census.busy) return false;
+    const said = String(answer == null ? '' : answer).trim();
+    if (!said) {
+      /* SAID ON THE TILE, not spoken and not sent. An empty field is not a refusal from the
+         server - it never got there - and the sentence has to come from whoever knew. */
+      board.why = 'there is nothing in the field yet';
+      boardPaint();
+      return false;
+    }
+    census.busy = true;
+    board.why = 'putting that to you…';
+    boardPaint();
+    let data = null;
+    try {
+      data = await toolPost('/census/answer', { id: q.id, answer: said, session: SESSION });
+    } catch (e) { data = null; }
+    census.busy = false;
+    if (!data || !data.ok || !data.pending) {
+      /* THE THREE REFUSALS AND THE DEAD SERVER, all in one place, and the line is the
+         server's own: it phrased them in character and this only has to make sure one of
+         them is read. The draft is KEPT, because a credential refusal he cannot edit is a
+         refusal that costs him the whole sentence. */
+      board.why = (data && (data.answer || data.error)) ||
+                  'the server did not answer, so nothing has been filed';
+      boardPaint();
+      return false;
+    }
+    /* THE CARD IS ON THE DECK, so the sheet gets out of its way. Closing the panel rather
+       than drawing a second gate inside it: there is one proposal surface in this page and
+       the Census does not get its own. cmdOpen(false) runs cmdView('list'), which stops the
+       board - so the draft and the skips are cleared here on purpose, by the same call. */
+    census.draft = '';
+    census.asked = q.ask;
+    census.flow = true;
+    cmdOpen(false);
+    /* Rendered against THE QUESTION, not against the answer: the answer surface then reads
+       as the intake it is - "Where do you live, and which clock do you keep?" above the line
+       the server spoke. captureSaid is the slot settleProposal() reads, and there is one of
+       it because there is one pending slot on the server. */
+    captureSaid = q.ask;
+    renderAnswer(q.ask, data.answer, false, null);
+    if (!speak(spokenForm(data.answer))) setStatus('', data.answer);
+    showProposal(data.pending);
+    return true;
+  }
+
+  /* THE INTAKE PICKS ITSELF BACK UP. Called from settleProposal() the moment a note has
+     actually been written, and it does nothing at all unless the card that landed was one
+     this board put up - `flow` is set in censusPut and cleared on every other way out, so a
+     capture he dictated never re-opens a sheet he was not in.
+
+     WHY THERE IS A DELAY. The star is born first and the camera flies to it, which is the one
+     piece of feedback that says the note is really in his collection. Re-opening the order
+     sheet on the same frame would put a panel over that flight, so this waits for it. The
+     wait is also the reason for the second guard: a card can go up in that second and a sheet
+     that opened on top of a proposal would be covering the two buttons it came for. */
+  const CENSUS_RESUME_MS = 1700;
+  function censusResume() {
+    if (!census.flow) return false;
+    census.flow = false;
+    census.filed++;
+    setTimeout(function () {
+      if (proposal) return;                 // a card is up; the sheet does not go over it
+      if ($('cmd') && $('cmd').classList.contains('open')) return;   // he opened it himself
+      cmdOpen(true);
+      boardOpen('census');
+    }, CENSUS_RESUME_MS);
+    return true;
+  }
+
+  function censusTiles() {
+    const read = boardRead.census;
+    if (!read || read.ok === false || !Array.isArray(read.chapters)) {
+      return [{ key: 'none', name: 'Census', value: '--', tone: 'bad', wide: true,
+                sub: board.why || 'no reading yet' }];
+    }
+    const q = censusNext();
+    const tiles = [];
+    if (q) {
+      tiles.push({
+        key: 'ask', name: q.chapterName, tag: q.title, wide: true, tone: 'local',
+        value: q.chapterDone + '/' + q.chapterTotal,
+        ask: q.ask, input: true, value2: census.draft, hint: q.hint, focus: true,
+        sub: board.why || 'one note, behind a card · nothing is written until you say so',
+        onType: function (v) { census.draft = v; },
+        act: 'File it', actOff: census.busy,
+        onAct: function (v) { censusPut(v); },
+        act2: 'Skip', actOff2: census.busy,
+        onAct2: function () {
+          /* A SKIP IS NOT AN ANSWER AND NOT A NOTE. It moves this sitting past the question
+             and leaves the folder exactly as it was, so the same question is put again next
+             time the board opens. Nothing is sent to the server: there is nothing to tell
+             it, and a route that recorded skips would be the Census keeping a record of
+             what he declined to say. */
+          if (census.skipped.indexOf(q.id) < 0) census.skipped.push(q.id);
+          census.draft = '';
+          board.why = '';
+          boardPaint();
+        }
+      });
+    } else {
+      const all = read.answered >= read.total;
+      tiles.push({
+        key: 'ask', name: 'Census', wide: true, tone: all ? 'live' : '',
+        value: read.answered + '/' + read.total,
+        ask: all ? 'That is the whole Census answered.'
+                 : 'Nothing left in this sitting - the rest were skipped.',
+        sub: all ? 'every question has a note in ' + String(read.folder || 'notes/census')
+                 : 'close the board and open it again to be asked them',
+        act: all ? '' : 'Ask them again',
+        onAct: function () { census.skipped = []; board.why = ''; boardPaint(); }
+      });
+    }
+    /* THE THREE CHAPTERS, and each one is a door to itself. The reading is its own progress
+       and the verb sets which chapter the question tile draws from - so "I want to do the
+       work questions now" is one press rather than sixteen skips. The chapter he is in
+       carries the accent edge, for the same reason the home clock does: it is what the tile
+       above is measured against. */
+    (read.chapters || []).forEach(function (c) {
+      const done = c.answered >= c.total;
+      tiles.push({
+        key: 'chapter:' + c.id, name: c.name, value: c.answered + '/' + c.total,
+        tone: done ? 'live' : (c.answered ? 'local' : ''),
+        home: c.id === (q ? q.chapter : census.chapter),
+        sub: done ? 'answered' : (c.total - c.answered) + ' still to ask',
+        act: done ? '' : (c.id === census.chapter ? 'Asking' : 'Ask these'),
+        actOff: done || c.id === census.chapter,
+        onAct: function () {
+          census.chapter = c.id;
+          census.draft = '';
+          board.why = '';
+          boardPaint();
+        }
+      });
+    });
+    return tiles;
+  }
+
+  /* THE REGISTRY OF BOARDS. `everyMs` is the local repaint cadence and NOT a poll: `read` is
+     called once per open and nothing else asks the server again. 1000ms on the clock because
+     the tiles show minutes and a minute that arrives up to a second late is a clock; 10000
+     would make the board visibly wrong for nine seconds at every turn of the minute.
+
+     CONNECTORS HAS NO `everyMs` AT ALL, and that is not an omission. Its facts change when
+     something happens - a consent lands, the ear opens, a hand is added to a file - and a grid
+     that repainted every second would be asking the page for six readings a second in order to
+     paint the same six words. googWatch() already re-reads the grant while consent is in
+     flight, and cmdPaint() lands here through boardPaint on every open. */
+  const BOARDS = {
+    connectors: {
+      label: 'Connectors',
+      single: false,
+      everyMs: 0,
+      read: connectRead,
+      fill: connectTiles,
+      head: function () {
+        const r = boardRead.connectors;
+        if (!r) return 'Reading the grant and the registry&hellip;';
+        const hands = (r.tools || []).length;
+        return 'Read from <b>/google</b> and <b>' + esc(String(hands)) +
+               '</b> hand' + (hands === 1 ? '' : 's') + ' in the registry. A hand runs when ' +
+               'you ask for it and say yes &mdash; never by pressing a tile here.';
+      }
+    },
+    clock: {
+      label: 'World Clock',
+      single: false,
+      everyMs: 1000,
+      read: clockRead,
+      fill: clockTiles,
+      head: function () {
+        const r = boardRead.clock;
+        if (!r || r.ok !== true) {
+          return 'The clock is not answering. <b>' +
+                 esc(board.why || 'no reading') + '</b>';
+        }
+        return 'Your clock is the marked one. Every other tile\'s day is measured ' +
+               'against it &mdash; <b>' + esc(String(r.places || 0)) +
+               '</b> places known, from <b>' + esc(String(r.source || '')) + '</b>.';
+      }
+    },
+    /* THE CENSUS. No `everyMs` for the same reason Connectors has none, and one more: this
+       board holds a text field, and a grid that rebuilt itself once a second would be a grid
+       that threw away what he was typing once a second. */
+    census: {
+      label: 'Census',
+      single: false,
+      everyMs: 0,
+      read: censusRead,
+      fill: censusTiles,
+      stop: function () {
+        /* THE SITTING ENDS. The draft is not a note and the skips are not a record: both are
+           about the last ninety seconds and neither belongs to his collection. The chapter
+           stays - see the section header. */
+        census.draft = '';
+        census.skipped.length = 0;
+        census.busy = false;
+      },
+      head: function () {
+        const r = boardRead.census;
+        if (!r) return 'Reading which of the questions your notes already answer&hellip;';
+        if (r.ok === false) {
+          return 'The Census cannot read its folder. <b>' +
+                 esc(board.why || 'no reading') + '</b>';
+        }
+        return '<b>' + esc(String(r.answered || 0)) + '</b> of <b>' +
+               esc(String(r.total || 0)) + '</b> answered, in <b>' +
+               esc(String(r.folder || 'notes/census')) + '</b>. Every answer goes to you ' +
+               'as a card first &mdash; nothing here writes a note on its own.';
+      }
+    }
+  };
 
   function cmdRun(id) {
     const s = cmdRead(id);
     if (s && s.off) return false;              // the row said why; pressing it changes nothing
     cmd.ran = id;
     if (id === 'cast') { castOpen(); return true; }
+    /* A BOARD LEAVES THE SHEET OPEN, like `links` and `presence` and unlike the orders: it is
+       a thing to look at, and closing the panel to show it would put it nowhere. */
+    if (BOARDS[id]) { boardOpen(id); return true; }
     if (id === 'links') {
       const d = $('density');
       if (d) d.click();
@@ -5948,6 +7352,11 @@ async function loadLib() {
     cmdBuild();
     const back = $('cast-back');
     if (back) back.onclick = function () { cmdView('list'); cmdPaint(); };
+    /* Its own back button rather than a shared one, because the two views' backs are wired at
+       different times and a single handler would have to ask which view it was in - which is
+       the branch that gets it wrong the first time a third view is added. */
+    const bback = $('board-back');
+    if (bback) bback.onclick = function () { cmdView('list'); cmdPaint(); };
     addEventListener('keydown', function (e) {
       const k = String(e.key || '').toLowerCase();
       if (k === 'k' && (e.ctrlKey || e.metaKey) && !e.altKey) {
@@ -5959,7 +7368,10 @@ async function loadLib() {
       if (k === 'escape' && $('cmd') && $('cmd').classList.contains('open')) {
         e.preventDefault();
         e.stopImmediatePropagation();
-        if (cmd.view === 'cast') { cmdView('list'); cmdPaint(); }
+        /* ESCAPE GOES BACK ONE LAYER, not out. A board opened on purpose and closed by the
+           same key that closes the panel would make Escape mean two things depending on how
+           deep you were, and the shallower meaning is the one you get by pressing it twice. */
+        if (cmd.view === 'cast' || cmd.view === 'board') { cmdView('list'); cmdPaint(); }
         else cmdOpen(false);
       }
     }, true);
@@ -7492,6 +8904,11 @@ async function loadLib() {
      citizen the moment this returns: it can be cited by the very next answer. */
   const CAPTURE_RE = /^\s*[\"'“‘(\[]*remember\s+that\b/i;
   let lastBirth = null;      // where the newest star was placed, and beside what
+  /* THE SENTENCE THE CARD IS STANDING FOR. A capture is now a proposal, and the answer it
+     eventually renders against must be "remember that ..." rather than the "Yes" that
+     approved it - the record is of a thought he had, not of a button he pressed. Cleared by
+     settleProposal on every outcome, so a later hand cannot inherit it. */
+  let captureSaid = '';
 
   function pulseNode(id) {
     pulseId = id;
@@ -7598,12 +9015,31 @@ async function loadLib() {
     return node;
   }
 
+  /* THE BIRTH ITSELF, lifted out of capture() in PART 8 so that two callers can reach
+     it. It used to be inline, because there was only ever one moment a star could be
+     born: the instant /remember answered. Now the note is written by a hand behind the
+     proposal card, so the moment has moved to settleProposal() - and this is the part
+     that had to be able to run from there. Nothing about the animation changed. */
+  function bornStar(data, said) {
+    const node = insertCapture(data);
+    renderAnswer(said, data.answer, false, [node.id]);
+    pulseNode(node.id);
+    lastPlan = 'born';
+    // A short beat so the star is visibly born where it belongs before the
+    // camera starts moving; the flare outlasts the flight either way.
+    setTimeout(function () { focusNode(node, true); }, 420);
+    return node;
+  }
+
   async function capture(text) {
     if (busy || !text.trim()) return;
     busy = true;
     askGate(true);
-    setStatus('thinking', 'writing that down', text);
-    renderAnswer(text, 'Writing that down…', false, null);
+    /* "PUTTING THAT TO YOU" AND NOT "WRITING THAT DOWN", because as of PART 8 nothing is
+       written here. The strip used to promise the write while the write was happening;
+       it now promises a question, which is the thing that is actually about to arrive. */
+    setStatus('thinking', 'putting that to you', text);
+    renderAnswer(text, 'One moment…', false, null);
 
     /* A capture that fails must SAY so. Every path out of here speaks a line -
        the silent one is the failure mode this whole feature has to avoid. */
@@ -7624,19 +9060,20 @@ async function loadLib() {
       if (!data) {
         fail('I could not write that down: the server replied with something that ' +
              'was not JSON (HTTP ' + res.status + ').');
-      } else if (!data.ok || !data.node) {
-        // The server already phrased this in character, including the case where
-        // the file exists but did not make it into the index.
+      } else if (!data.ok || !data.pending) {
+        /* The two refusals - nothing after the trigger, and a credential in the
+           thought - plus anything unexpected. The server phrased all of them in
+           character; this only has to make sure one of them is heard. */
         fail(data.answer || data.error || 'I could not write that down, sir.');
       } else {
-        const node = insertCapture(data);
-        renderAnswer(text, data.answer, false, [node.id]);
-        if (!speak(spokenForm(data.answer))) idleStatus();
-        pulseNode(node.id);
-        lastPlan = 'born';
-        // A short beat so the star is visibly born where it belongs before the
-        // camera starts moving; the flare outlasts the flight either way.
-        setTimeout(function () { focusNode(node, true); }, 420);
+        /* A CARD, NOT A NOTE. The same showProposal() the calendar and the email put
+           up, deliberately: one gate in this page, not a second one that happens to
+           look like it. The answer surface carries the question while the card carries
+           the parameters, and the star is born in settleProposal() if he says yes. */
+        renderAnswer(text, data.answer, false, null);
+        if (!speak(spokenForm(data.answer))) setStatus('', data.answer);
+        captureSaid = text;
+        showProposal(data.pending);
       }
     } catch (e) {
       fail('I could not write that down: the brain is not answering. Start it with ' +
@@ -9388,6 +10825,56 @@ async function loadLib() {
   const caption = { shows: 0, text: '', at: 0, fades: 0 };
   let captionTimer = null;
 
+  /* ONE SURFACE AT A TIME, and the whole of the decision is the comparison below.
+     The card's paragraph stands down only while the caption is carrying THE SAME SENTENCE,
+     read character for character with whitespace collapsed. Every case where the voice says
+     less than the card holds - the 260-character cap, a plan whose tail is "and two more steps
+     on the card", an error line softened for the ear - fails that comparison, so the paragraph
+     stays put. A rule that hid text the voice was pointing AT would be a worse defect than the
+     duplication it was cleaning up.
+     ALSO NOT WHILE THE PARAGRAPH IS A SCROLLER. layout_proof focuses #a-text and scrolls it,
+     and a display:none element takes neither focus nor a scroll; a long answer never matches
+     the spoken form anyway, so this is a belt on a brace and it is cheap.
+
+     AND ONE SENTENCE MAY BE READ WITH ANOTHER BEHIND IT, which equality alone missed and the
+     boot plates caught: before the first click, the autoplay law joins every held line into one
+     breath, so the caption reads "Good afternoon, Addi. Galaxy here - 31 notes indexed… I am
+     ready, Addi. Fully functional — every feature live." while the card holds the salutation
+     alone. Character-for-character equality says those are different sentences and leaves the
+     greeting on both surfaces - the employer reads it twice, which is the exact thing this rule
+     exists to stop. STARTS WITH is the safe direction and the only one added: the voice is
+     reading the whole of the paragraph and then going on, so nothing is hidden that is not being
+     said. The reverse - a caption SHORTER than the card - still fails, which is what keeps the
+     260-character cap, "and two more steps on the card" and a softened error on the glass while
+     the voice is pointing at them. A containment test anywhere in the middle was rejected: a
+     three-word paragraph would vanish behind any long sentence that happened to quote it. */
+  const capCollapse = (s) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+  const caption_yield = { yields: 0, releases: 0, on: false };
+  function answerYield(line) {
+    const card = $('answer'), body = $('a-text');
+    if (!card || !body) return false;
+    const held = capCollapse(body.textContent);
+    const spoken = capCollapse(line);
+    const same = !!held && (spoken === held || spoken.indexOf(held) === 0) &&
+                 body.scrollHeight <= body.clientHeight + 1;
+    if (same !== caption_yield.on) {
+      caption_yield.on = same;
+      if (same) caption_yield.yields++; else caption_yield.releases++;
+    }
+    card.classList.toggle('yield', same);
+    /* AND WHETHER THE CARD HAS ANYTHING LEFT TO SHOW. Measured off the children rather than
+       off the kind of answer, because the card gains and loses a question, a source row, a
+       thumbnail and a Yes/No pair at four different moments and a rule that guessed from the
+       route would be wrong at three of them. Read-only, and only on a caption change - twice a
+       sentence, not once a frame. See #answer.yield.bare. */
+    card.classList.toggle('bare', same && !Array.prototype.some.call(card.children,
+      function (kid) {
+        return !kid.classList.contains('a') && kid.getClientRects().length &&
+               (capCollapse(kid.textContent) || kid.querySelector('img,canvas,button'));
+      }));
+    return same;
+  }
+
   function captionShow(text) {
     const el = $('caption');
     const line = String(text == null ? '' : text).trim();
@@ -9399,6 +10886,7 @@ async function loadLib() {
     caption.shows++;
     caption.text = line;
     caption.at = Date.now();
+    answerYield(line);
     return true;
   }
 
@@ -9413,6 +10901,9 @@ async function loadLib() {
       captionTimer = null;
       el.classList.remove('up');
       caption.fades++;
+      /* AND THE CARD TAKES ITS PARAGRAPH BACK, in the same tick the subtitle goes down, so
+         there is never a frame with the sentence on neither surface. */
+      answerYield('');
     }, Math.max(0, ms == null ? CAPTION_HOLD_MS : ms));
     return true;
   }
@@ -9421,6 +10912,7 @@ async function loadLib() {
     const el = $('caption');
     clearTimeout(captionTimer);
     captionTimer = null;
+    answerYield('');                 // a cancelled subtitle gives the paragraph back at once
     if (!el) return;
     el.classList.remove('up');
   }
@@ -10265,7 +11757,17 @@ async function loadLib() {
     if (!speakPossible()) { captionFade(CAPTION_HOLD_MS); noteSaid(line, false); return false; }
     if (!audioUnlocked) {
       // Autoplay policy: hold the line and let the first real click release it.
-      pendingLine = line;
+      /* AND A SECOND LINE HELD BEFORE THE FIRST CLICK IS OWED AS WELL, not INSTEAD. This
+         window is longer than it looks - it lasts until he touches something - and two
+         sentences land in it on every single boot: the salutation, from /persona, and the
+         boot ceremony's readiness line, from the first healthy /health. A plain `=` here
+         made the second one silently eat the first, which is a defect with no symptom: the
+         page looks right, the caption reads right, and one of the two sentences simply
+         never happened. Joined in the order they were asked for, so they arrive as one
+         breath on the first gesture, and the caption is put back to the whole of what is
+         held - the glass and the queue may not disagree about what is owed. */
+      pendingLine = pendingLine ? (pendingLine + ' ' + line) : line;
+      if (pendingLine !== line) captionShow(pendingLine);
       setStatus('', 'click anywhere to hear this answer');
       captionFade(CAPTION_HOLD_MS);
       noteSaid(line, false);
@@ -10488,7 +11990,7 @@ async function loadLib() {
                            seconds while the speakers say twenty-eight characters would be a
                            face telling the truth about the wrong string.
 
-     THE THREE RULES.
+     THE FOUR RULES.
        1. MARKDOWN COMES OUT: * _ # and backticks. Stripped rather than translated - there is
           no way to say "bold" out loud that is not worse than saying nothing.
        2. AN UNSPEAKABLE TOKEN BECOMES A SENTENCE. Twelve or more characters, letters and
@@ -10503,6 +12005,20 @@ async function loadLib() {
        3. AND THE PHRASE IS SAID ONCE. An answer carrying three ids would otherwise say "the
           reference is in the card" three times in one breath, which is a new way of being
           unlistenable. Consecutive replacements collapse to one.
+       4. A DASH AND AN ELLIPSIS ARE PAUSES, NOT WORDS. Em-dash, en-dash, the spaced ASCII
+          hyphen used as a dash, and the ellipsis in both its forms become a comma mid-sentence
+          and a full stop at the end. Piper is a neural voice and it does not reliably ignore
+          a glyph it was not trained to hold: the failure is that it says the NAME of the mark
+          out loud - "dash", "hyphen", "dot" - in the middle of a sentence, and the employer
+          hears the punctuation being read to him. A comma is what the mark was standing in
+          for, so a comma is what goes to the audio bus.
+          THE HYPHEN INSIDE A WORD IS LEFT ALONE, and that is the care in this rule: "well-
+          known" and "twenty-five" are single words to a voice, and a comma inside them would
+          be a worse defect than the one being fixed. Only a hyphen with whitespace on BOTH
+          sides is a dash. "10-20" keeps its hyphen for the same reason.
+          AND IT RUNS BEFORE RULE 3 DELIBERATELY: two ids joined by an em-dash could not
+          collapse while the join pattern knew only about whitespace and commas, so turning the
+          dash into a comma first makes rule 3 more effective rather than less.
 
      IT IS PURE AND IT IS EXPORTED, so the rules can be asserted without a room, an engine or
      a sound - see __galaxy.voice.normalize(). */
@@ -10512,8 +12028,9 @@ async function loadLib() {
   function tongueNormalize(text) {
     let s = String(text == null ? '' : text);
     /* rule 1. The character class is exactly the mandate's: asterisk, underscore, hash and
-       the backtick. Nothing else is touched - an apostrophe, a dash and a full stop are all
-       things a voice needs. */
+       the backtick. Nothing else is STRIPPED here - an apostrophe and a full stop are both
+       things a voice needs, and the dash is dealt with by rule 4 below, which turns it into a
+       pause rather than deleting it. */
     s = s.replace(/[*_#`]/g, '');
     /* rule 2. \b would not do here: it treats the boundary between a letter and a hyphen as a
        word edge, so a hyphenated id would be judged in pieces and pass. The token is taken
@@ -10523,6 +12040,20 @@ async function loadLib() {
       if (!/[0-9]/.test(token)) return token;                     // an English word. See rule 2.
       return TONGUE_ID_LINE;
     });
+    /* rule 4, BEFORE rule 3 - see the header. End of string first, because an ellipsis that
+       has become ", " and then been trimmed leaves a sentence ending in a comma, and a voice
+       that trails off should come to rest rather than hang. */
+    s = s.replace(/\s*(?:…|\.\.\.+|[—–])\s*$/g, '.');
+    s = s.replace(/\s*(?:…|\.\.\.+)\s*/g, ', ');
+    s = s.replace(/\s*[—–]\s*/g, ', ');
+    /* The spaced ASCII hyphen, which is the dash this very codebase types. Whitespace on both
+       sides is the whole test: it is what separates a dash from "well-known". */
+    s = s.replace(/(\S)[ \t]+-[ \t]+(?=\S)/g, '$1, ');
+    /* A comma shoved against another mark reads as a stammer to a neural voice, and the
+       replacements above can produce one wherever the author already punctuated: "wait — ,"
+       or an em-dash straight after a comma. The surviving mark is the stronger one. */
+    s = s.replace(/,\s*([,.;:!?])/g, '$1');
+    s = s.replace(/([,.;:!?])\s*,/g, '$1');
     /* rule 3, and then the whitespace the strips left behind.
        THE JOINING WORD HAS TO BE IN THE PATTERN. Measured on the obvious case: "ids A and B
        and C" replaced to three phrases separated by " and ", which a collapse that only knew
@@ -10970,6 +12501,12 @@ async function loadLib() {
        first chunk should not be the thing that discovers whether this browser will give
        us an AudioContext. Both are one gain node; neither makes a sound by existing. */
     if (!MUTED && tonesUp()) speechBusUp();
+    /* AND THE BOOT JINGLE, IF THE CEREMONY IS STILL WAITING FOR A SPEAKER. /health nearly
+       always lands before the first click, so the ceremony fires with no audio context to
+       play into; the sentence is already held below as pendingLine, and this is the music
+       that belongs under it. Fired here rather than re-run from the health poll, so the two
+       arrive in the same gesture. bootJingle() refuses a second time on its own. */
+    if (boot.fired && !boot.reduced && !boot.jingle.played) bootJingle();
     /* speakPossible() rather than canSpeak: a machine whose browser has no speech engine
        at all can still be read to by piper, and a held line must not be dropped because
        of a capability the local voice does not need. */
@@ -12546,7 +14083,8 @@ async function loadLib() {
      speak through the cloud until it lands. He clicks once, he is heard immediately, and
      the page gets quieter about itself without ever asking him for a second click. */
   const EAR_LANG = 'en-GB';
-  const earLocal = { api: false, state: 'unknown', on: false, installing: false, why: '' };
+  const earLocal = { api: false, state: 'unknown', on: false, installing: false, why: '',
+                     tries: 0 };
 
   async function earLocalProbe() {
     if (!Recogniser || typeof Recogniser.available !== 'function') {
@@ -12592,17 +14130,58 @@ async function loadLib() {
 
   earLocalProbe().then(function () { earLocalInstall(); });
 
+  /* TAKE THE ON-DEVICE ENGINE IF IT IS THERE, and ask again every time the ear arms.
+     This used to live inside buildRecogniser alone, with a comment saying the pack "can land
+     between two turns of the same conversation" - and nothing in the page ever acted on that,
+     because the recogniser is built ONCE (see `if (!recogniser)` at the arm) and the property
+     was only ever set on a brand-new instance. So the state at the FIRST arm decided the whole
+     session, and earLocalProbe() is asynchronous: available() had not answered yet, the branch
+     was skipped, and every word of that conversation went to the cloud service.
+
+     WHO IT HURT. A person clicks the microphone some seconds after the page loads and wins that
+     race without knowing there was one. A harness clicks it at once and loses it every single
+     time - so three twelve-turn longevity runs went to a service that throttles silently and
+     raises no error, and read 11 turns heard, then 6, then 0 of 91 words, which is precisely the
+     shape of an ear degrading over a long session. It was a spent quota. The reading that caught
+     it was state "available" beside on false: the pack was installed and sitting there unused.
+
+     IT IS ALSO A PRIVACY FIX AND NOT ONLY A MEASUREMENT ONE. processLocally is what keeps the
+     words in the room, and losing a race is a poor reason to send somebody's speech to a
+     service. `on` still describes THIS recogniser and is still false until the browser confirms
+     the property took, so nothing here can claim a property the browser declined to give. */
+  function earLocalTake(r, fresh) {
+    earLocal.tries++;
+    /* A FLAG THAT CANNOT LIE IN EITHER DIRECTION. On a brand-new instance the answer is
+       recomputed from nothing. On one that has already taken the property, this returns early
+       and leaves it alone - because re-writing processLocally on a recogniser that has already
+       run a session and reading it back is a question the browser need not answer the same way
+       twice, and a false read-back there would say "the cloud has him" about a recogniser that
+       is in fact still local. Under-claiming and over-claiming are both lies; this asks once,
+       per instance, and then keeps the answer. */
+    if (!fresh && earLocal.on) return true;
+    if (fresh) earLocal.on = false;
+    /* AND IT SAYS WHICH OF THE TWO THINGS HAPPENED, because an empty `why` beside on=false was
+       ambiguous between them and cost a whole diagnosis: the branch never ran (the pack was not
+       ready at this arm) and the browser refused the write (the pack was ready and declined) are
+       opposite faults with opposite repairs, and both used to read as silence. */
+    if (earLocal.state !== 'available') {
+      earLocal.why = 'not offered: the pack read "' + earLocal.state + '" at this arm';
+      return false;
+    }
+    try {
+      r.processLocally = true;
+      earLocal.on = r.processLocally === true;
+      earLocal.why = earLocal.on ? '' : 'the browser accepted the write and read back false';
+    } catch (e) {
+      earLocal.why = 'processLocally: ' + (e && e.message ? e.message : e);
+    }
+    return earLocal.on;
+  }
+
   function buildRecogniser() {
     const r = new Recogniser();
     r.lang = EAR_LANG;
-    /* The one property, and it is set per instance because the pack can land between two
-       turns of the same conversation. earLocal.on is what the seal and the harnesses read,
-       so it always describes THIS recogniser rather than the page's hopes for it. */
-    earLocal.on = false;
-    if (earLocal.state === 'available') {
-      try { r.processLocally = true; earLocal.on = r.processLocally === true; }
-      catch (e) { earLocal.why = 'processLocally: ' + (e && e.message ? e.message : e); }
-    }
+    earLocalTake(r, true);        // fresh instance: recompute from nothing
     r.continuous = true;
     r.interimResults = true;
     r.maxAlternatives = 1;
@@ -12758,6 +14337,11 @@ async function loadLib() {
        instance all transcribe. So this line stays as it is, and the lesson is in the
        lookbook: a platform finding taken during a throttle is not a finding. */
     if (!recogniser) recogniser = buildRecogniser();
+    /* AND IF THE PACK LANDED SINCE IT WAS BUILT, TAKE IT NOW. One recogniser, restarted - so
+       without this line the instance keeps whichever engine it was born with, and the line
+       above is the only place the choice was ever made. Set before start(), never during a
+       live session, which is the only moment the browser reads it. See earLocalTake. */
+    else earLocalTake(recogniser);
     earDumpLife('.start()');
     try {
       recogniser.start();
@@ -14270,6 +15854,130 @@ async function loadLib() {
     return true;
   }
 
+  /* ---- THE BOOT CEREMONY ----
+     ONCE, WHEN THE HOUSE IS ACTUALLY READY, and every word of that is load-bearing.
+
+     WHAT IT IS. The first time /health comes back healthy in the life of this page, the
+     butler says one sentence - "I am ready, Addi. Fully functional - every feature live."
+     - over about three seconds of generated music. Declarative and unhedged, because a
+     butler who reports for duty with "I think most things are working" has told you to
+     check. The claim is safe to make at exactly this moment and no earlier: /health is the
+     route that probes piper, the transcriber, the index, the grant and the web door, so the
+     sentence is spoken from a reading rather than from optimism. That is why the trigger is
+     the health poll and not DOMContentLoaded.
+
+     ONCE PER PAGE, and the guard is a flag rather than a timestamp or a storage key. The
+     rail polls /health every ten seconds for as long as the tab is open, so "the first
+     healthy one" has to mean something after the two hundredth: `boot.fired` is set before
+     anything is scheduled, so a poll that lands mid-jingle, a forced refreshBrain() and a
+     tab coming back from hidden all find the ceremony already held. The count of healthy
+     polls is kept separately, so a harness can prove the difference between "it never fired
+     twice" and "it only ever saw one poll".
+
+     NO ASSETS. Every note is an oscillator on the chime bus, scheduled on the audio clock
+     ahead of time, stopping itself - the same engine and the same ceiling as the wake tone,
+     so a boot flourish cannot be louder than the room's own vocabulary and costs zero
+     main-thread frames next to a 60fps galaxy. An .mp3 would have been four lines shorter
+     and a network request, a decode, a cache entry and a thing to forget to ship.
+
+     AND THE MUSIC GOES UNDER THE WORDS, which needs no new code and is the reason it is on
+     this bus at all: the pump ducks the whole tone bus to a fifth of itself the moment
+     speech starts and lifts it 90ms after the queue runs dry - see toneDuck(). So the
+     jingle opens, the sentence lands on top of it, and the tail comes back up when he has
+     finished. A separate gain for the jingle would have been a second thing to duck and a
+     second thing to get wrong.
+
+     THE THREE WAYS IT IS QUIET, and they are not the same thing:
+
+       ?mute=1 HOLDS NO CEREMONY AT ALL. A muted tab has no audio engine by construction
+         and silence means silence, not "silence except for the nice bits". It is not
+         given the sentence as a caption either: this tab is a harness's tab, and a page
+         that announced itself on the glass would be changing what nine harnesses boot
+         into in order to say something none of them asked about.
+       prefers-reduced-motion DROPS THE JINGLE AND KEEPS THE SENTENCE. What the setting
+         asks for is the absence of a flourish; it does not ask the butler to stop
+         talking. The line still goes through the funnel, which raises the caption and
+         lets it fade the quiet way it always does.
+       AND AN AUDIO CONTEXT IS NOT ALLOWED YET, which is the common case rather than an
+         edge: Chrome gives no sound before a gesture. The ceremony still happens once,
+         here, and the sentence is held by the autoplay law that already exists
+         (pendingLine); the jingle is armed and fired by the same gesture that releases
+         the line, from unlockAudio(). So the two arrive together rather than the music
+         playing to an empty room at boot and the words arriving a minute later. */
+  const BOOT_LINE = 'I am ready, Addi. Fully functional — every feature live.';
+  const boot = {
+    fired: 0,              // 1 the instant the ceremony is claimed, before anything sounds
+    at: 0, healthy: 0,     // when, and how many healthy polls have landed since
+    said: false,           // the line went into the funnel
+    spoke: false,          // ...and the funnel could reach the speakers with it there and then
+    reduced: false, why: '',
+    jingle: { played: false, notes: 0, ms: 0, why: '' }
+  };
+
+  function bootReduced() {
+    try { return !!matchMedia('(prefers-reduced-motion: reduce)').matches; }
+    catch (e) { return false; }      // no matchMedia is no objection
+  }
+
+  /* Three voices, one chord, about three seconds: a low pair holding the room, a C major
+     seventh walking up through it, and the bell it lands on. Worst-case sum at any instant
+     is the pad (0.19) plus one arpeggio note (0.17) plus the bell (0.21) = 0.57 of a bus
+     whose ceiling is 0.15 - under it by design, and the duck takes all of it down together. */
+  function bootJingle() {
+    if (boot.jingle.played) return false;                     // never twice, whoever asks
+    if (!chimesAllowed()) {
+      boot.jingle.why = toneTrouble || (MUTED ? 'muted' : 'no audio context yet');
+      return false;
+    }
+    try {
+      if (actx.state === 'suspended') actx.resume();
+      const t = actx.currentTime + 0.02;
+      let notes = 0, end = t;
+      const put = function (freq, when, len, peak, type) {
+        toneNote('boot', freq, t + when, len, peak, type);
+        notes++;
+        end = Math.max(end, t + when + len);
+      };
+      put(130.81, 0, 2.90, 0.10, 'sine');                     // C3, the room
+      put(196.00, 0.06, 2.84, 0.09, 'sine');                  // G3, under it
+      [261.63, 329.63, 392.00, 493.88, 523.25].forEach(function (f, i) {
+        put(f, 0.14 + i * 0.50, 0.44, 0.17, 'triangle');      // C4 E4 G4 B4 C5, walking up
+      });
+      put(659.25, 2.48, 0.62, 0.12, 'sine');                  // E5 and B5, the landing
+      put(987.77, 2.54, 0.56, 0.09, 'sine');
+      boot.jingle = { played: true, notes: notes, ms: Math.round((end - t) * 1000), why: '' };
+      tonesPlayed.push({ at: Date.now(), kind: 'boot' });
+      while (tonesPlayed.length > 12) tonesPlayed.shift();
+      return true;
+    } catch (e) {
+      boot.jingle.why = 'jingle: ' + ((e && e.message) || 'failed');
+      return false;
+    }
+  }
+
+  function bootCeremony(healthy) {
+    if (!healthy) return false;
+    boot.healthy++;
+    if (boot.fired) return false;
+    if (MUTED) {
+      boot.why = 'muted: a tab that cannot make a sound holds no ceremony';
+      boot.fired = 1; boot.at = Date.now();
+      return false;
+    }
+    boot.fired = 1;                  // claimed FIRST: nothing below can be entered twice
+    boot.at = Date.now();
+    boot.reduced = bootReduced();
+    if (boot.reduced) boot.jingle.why = 'prefers-reduced-motion: the line, without the flourish';
+    else bootJingle();
+    /* The music first and the words second, in this order and in the same tick: the pump's
+       duck is what puts the jingle under the sentence, and it can only duck something that
+       is already scheduled. */
+    boot.said = true;
+    boot.spoke = speakLine(BOOT_LINE);
+    boot.why = boot.spoke ? 'spoken' : 'held for the first gesture, by the autoplay law';
+    return true;
+  }
+
   /* ==================================================================
      THE DECK  ·  the galaxy, with the lights on
      ==================================================================
@@ -14858,7 +16566,21 @@ async function loadLib() {
      ========================================================================== */
   const PRES = {
     MODES: ['ring', 'cube', 'face'],
-    CAP: 12000,               // the one allocation: every mode fits inside this
+    /* THE ONE ALLOCATION: every mode fits inside this, and §27 PART 3 raises it from 12000.
+       WHY IT HAD TO RISE AT ALL. The well went from a 300px square to a 420px one - 1.96x
+       the area - and a point cloud drawn at the same count over twice the pixels is a
+       SPARSER cloud, which is the opposite of the "denser volumetric cloud" the mandate
+       asks for. Holding per-pixel density exactly would need 12000 x 1.96 = 23,500 points,
+       which is over §17.2's standing ceiling of 14000 and not worth re-opening.
+       SO IT IS SPLIT, AND BOTH HALVES ARE WRITTEN DOWN. Coverage is count x sprite area:
+       13800 points is 1.15x the count, and uScale (see presResize) takes the sprite to 1.4x
+       on a side = 1.96x the area, so coverage rises 2.25x against 1.96x of glass. Slightly
+       over-covered on purpose - the 300px head was already a little airy at its silhouette,
+       which the first face plates showed and nothing had been done about.
+       13800 AND NOT 14000, with 200 points of headroom left under the ceiling deck_proof
+       reads, so the next organ that wants a role does not arrive needing the ceiling lifted
+       in the same commit that adds it. */
+    CAP: 13800,
     /* FACE: every organ that MOVES is generated explicitly so its role is exact, and the
        skull gets what is left. A lip whose points were "probably in the mouth region"
        would be a mouth that mostly opened, and a lid sampled out of a field is a lid
@@ -14908,8 +16630,68 @@ async function loadLib() {
     CUBE_N: 9, CUBE_HALF: 0.62, CUBE_PTS: 12, CUBE_JITTER: 0.055,
     CAM_Z: 3.35,              // fov 42 at z=3.35 gives 1.286 of half-height to work in
     SIZE: 2.0, DPR_MAX: 1.75, TINT: 0x7cc4ff,
+    /* ---- §27 PART 3: THE SPRITE FOLLOWS THE WELL ----
+       A 2px point sprite was a 2px point sprite at every well size this page has ever
+       drawn, which meant the head's per-pixel density was silently a function of how
+       crowded the top-right lane happened to be. SIZE_REF is the side that figure was
+       tuned at; above it the sprite grows with the square so the cloud keeps its coverage.
+       CLAMPED AT 1.0 BELOW, and that is not laziness. A sprite scaled down with the well
+       lands under two device pixels at the compact tier, and a sub-2px additive point does
+       not render dimmer - it renders INTERMITTENTLY, twinkling as the head leans. The
+       compact tier already thins by count, which is the honest lever; it must not also
+       thin by sprite. Clamped at SIZE_SCALE_MAX above so a future 900px well cannot turn
+       the face into nine large discs. */
+    SIZE_REF: 300, SIZE_SCALE_MAX: 1.45,
+    /* ---- §27 PART 3: THE RIM AND THE FRESNEL ----
+       WHAT WAS MISSING, AND IT IS NOT LIGHT. The head already had a depth cue - alpha and
+       size falling off with local Z - which is why it reads as a volume rather than a
+       sheet. What it had no trace of is the two things that make a hologram look like a
+       hologram rather than like a grey cloud: an EDGE that catches, and a FACE that is lit
+       from somewhere. Both are computed from an estimated surface normal, which a point
+       cloud on a closed shell can afford: the head is an ellipsoid to within the features,
+       so normalize(p / halfExtents) is a normal to within a few degrees everywhere it
+       matters, and a few degrees is invisible in a term that is then raised to a power.
+       RIM_DIR is up, to the viewer's left, and slightly toward the camera - the standard
+       three-quarter key, and the direction the plates at yaw -30 and +30 will read against.
+       FRESNEL_K 3.2: the exponent on (1 - |n.z|). Lower and the whole cheek glows, which
+       is a bloom and not an edge; higher and the rim is a one-point-wide line that
+       disappears at the compact tier. 3.2 puts the band at roughly the outer eighth of the
+       silhouette at a 420px well.
+       RIM_TINT is a COLOUR shift and not just a brightness: the rim runs toward white-cyan
+       while the body stays TINT, which is what "faint holographic fresnel" means in a
+       single additive pass - a tint that only moves at the edge cannot be mistaken for the
+       whole head having been turned up. */
+    RIM_DIR: [-0.52, 0.66, 0.54], RIM_GAIN: 1.15,
+    FRESNEL_K: 4.5, FRESNEL_GAIN: 0.22, RIM_TINT: 0xdcf2ff,
+    /* THE LAMBERT'S RANGE, and it is here rather than in the shader string because the first
+       cut of it was too timid to see. 0.74-1.18 is a 1.6:1 lit-to-turned ratio, which is
+       arithmetically a form and visually nothing: the plate came back the same flat oval
+       mask it had been before the term existed. 0.42-1.28 is 3:1, which is about what a
+       single key light does to a real head and is the point at which the brow, the cheek and
+       the far jaw stop being the same grey. The floor is not 0 because this is an additive
+       cloud with no ambient pass behind it - a true Lambert takes the turned-away side to
+       nothing and leaves the head looking bitten in half. */
+    LAM_LO: 0.42, LAM_HI: 1.28,
+    /* The ellipsoid the normal is estimated against: the head's widest half-width is
+       PRES_OUTLINE's 0.645 and its half-depth is about the mean of the two depth tables.
+       Named here rather than typed into the shader string so the two cannot drift. */
+    NRM_HALF: [0.645, 1.0, 0.55],
     FPS_FLOOR: 55, GRACE_MS: 3000, PROBE_MS: 2200, KEEP_RATIO: 0.9,
-    RMS_FULL: 0.22,           // the analyser RMS the mouth reads as fully open
+    /* RMS_FULL: the analyser RMS the mouth reads as fully open. MEASURED rather than chosen,
+       and the measurement is written down here because reading it off a headed harness gives
+       a different and entirely wrong answer. On a real piper read (en_US-joe-medium, one
+       sentence, the presence loop drawing at 54-60fps) the smoothed analyser RMS of this bus
+       runs: median 0.050, p90 0.139, peak 0.275. Against 0.22 that is a jaw at a quarter of
+       its hinge for most of a sentence, two thirds on the loud vowels and briefly at the
+       clamp - which is the mouth this face is meant to have.
+       THE TRAP, and it cost a round trip: the same sentence measured through a headed window
+       that something else was covering reads a peak of 0.14, because the level is a one-pole
+       written once per DRAWN frame and an occluded window drops the loop to about 14fps,
+       which undersamples every vowel. That is not a shut mouth, it is an unwatched one. A
+       harness that concludes "recalibrate" from a number like that is reporting on the
+       window manager; voice_proof now pins visibility and counts the frames it measured
+       across, so the figures above are the ones this constant answers to. */
+    RMS_FULL: 0.22,
     /* THE COMPACT TIER'S DENSITY, and it is a fraction of the POINTS and not of the
        geometry: the same three modes, the same one shader, the same one material and the
        same one allocation - setDrawRange simply stops sooner. 0.45 and not 0.22 (which is
@@ -14938,6 +16720,10 @@ async function loadLib() {
                  level: 0, from: 'rest', eye: 0, lid: 0, blink: 0,
                  jaw: 0, nod: 0, nods: 0, yawHold: null,
                  fps: 0, worst: 0, lowSince: 0, mirrors: 0, side: 0, dpr: 1,
+                 /* §27 PART 3: the sprite factor the well's size earned - 1 at SIZE_REF and
+                    below it, up to SIZE_SCALE_MAX above. Held here so a plate's texture can
+                    be read against a number rather than guessed at from the picture. */
+                 scale: 1,
                  /* THE TIER THE BUFFER IS ACTUALLY BUILT AT, and the fraction it was built
                     with. 'full' until a governor with less than PRES_MIN of glass says
                     otherwise; `compactAudit` holds that tier's own verdict once it has
@@ -15471,7 +17257,23 @@ async function loadLib() {
     'uniform float uGazeY;',
     'uniform float uGazeP;',
     'uniform float uOrgan[5];',
+    /* §27 PART 3. uScale is the well's own size, as a factor of SIZE_REF - see presResize.
+       The other four are the rim and the fresnel, and they are uniforms rather than
+       constants folded into the string because the plates are judged by the boss's eye and
+       a gain that can only be changed by editing a shader source is a gain nobody tunes. */
+    'uniform float uScale;',
+    'uniform vec3 uRimDir;',
+    'uniform float uRimGain;',
+    'uniform float uFresK;',
+    'uniform float uFresGain;',
+    'uniform vec3 uNrmHalf;',
     'varying float vA;',
+    /* THE RIM, CARRIED FORWARD AS ITS OWN NUMBER and not folded into vA. The fragment
+       shader has to shift the HUE at the edge, not merely the brightness: an edge that is
+       only brighter is a head with its exposure pushed, and a head that got 15% brighter
+       all over would be indistinguishable from one with a rim. Zero in RING and CUBE, so
+       neither of those modes can be touched by any of this. */
+    'varying float vR;',
     'mat3 rotX(float a){ float s=sin(a),c=cos(a); return mat3(1.,0.,0., 0.,c,-s, 0.,s,c); }',
     'mat3 rotY(float a){ float s=sin(a),c=cos(a); return mat3(c,0.,s, 0.,1.,0., -s,0.,c); }',
     'float organAt(float c){',
@@ -15486,6 +17288,7 @@ async function loadLib() {
     '  float t = uTime;',
     '  float a = 0.5;',
     '  float sz = uSize;',
+    '  vR = 0.0;',
     '  if (uMode < 0.5) {',
     /* RING: the gyroscopic Mind lens, at the CSS Mind's own three periods - 9.4s, 6.8s
        and 4.3s - about three different attitudes, so the three read as a gimbal and not
@@ -15548,7 +17351,16 @@ async function loadLib() {
        Faded on the LOCAL y, before any rotation, so it is anatomy and not screen position. */
     '      a = (0.26 + 0.18 * aRnd) * clamp((p.y + 1.46) / 0.34, 0.0, 1.0);',
     '    } else {',
-    '      a = 0.30 + 0.30 * aRnd;',
+    /* THE SKULL, AND THE LINE THAT WAS HIDING THE SHADING. This was 0.30 + 0.30 * aRnd - a
+       per-point random brightness spanning 2:1. The form term added below spans 3:1 across
+       the whole head, so a 2:1 RANDOM spread between neighbouring points is noise at very
+       nearly the amplitude of the signal, and the eye reads the noise: the first cut of
+       §27's Lambert went from 1.6:1 to 3:1 and the plate came back visually identical, which
+       is what sent me looking here rather than at the shading.
+       0.40 + 0.14 * aRnd is 1.35:1, which keeps the grain that makes a point cloud look like
+       a point cloud and leaves the brow, the cheek and the far jaw free to differ from each
+       other by more than their own speckle does. */
+    '      a = 0.40 + 0.14 * aRnd;',
     '    }',
     /* THE HINGE, applied after the role work so the lower lip gets both its own ripple
        and the jaw's swing. Rotation about the ear line in the YZ plane: the chin drops
@@ -15573,7 +17385,27 @@ async function loadLib() {
       PRES.YAW_IDLE.toFixed(4) + ';',
     '    float pitch = uYawHold > 0.5 ? 0.0 : uGazeP + sin(t * 0.19) * ' +
       PRES.PITCH_IDLE.toFixed(4) + ' + uNod;',
-    '    p = rotY(yaw) * rotX(pitch) * p;',
+    /* THE ATTITUDE AS A MATRIX, because §27 PART 3 needs it twice. The normal has to be
+       turned by exactly the rotation the point was turned by - estimating it after the
+       rotation, off the rotated position, would ask "where is this point" and get back the
+       answer to "which way does the shell face" in head coordinates that no longer apply,
+       so the rim would stay welded to the screen while the head leaned inside it. */
+    '    mat3 rot = rotY(yaw) * rotX(pitch);',
+    /* THE ESTIMATED NORMAL. A point cloud has no normals and does not need real ones: the
+       head is an ellipsoid to within its features, so the outward direction at p is p
+       divided by the ellipsoid's half-extents. The features displace the surface by a few
+       hundredths - see presRelief - which is a few degrees of normal, and a few degrees is
+       invisible under a power of 3.2. The epsilon is for the one point that could sit at
+       the exact origin: normalize(0) is undefined and the driver is entitled to hand back
+       anything at all.
+       OFF `position` AND NOT OFF `p`, deliberately. By this line p has had a lid folded to
+       its crease, a lip rippled and a mandible swung about the ear line; those are
+       DEFORMATIONS, and a normal estimated from a folded lid points wherever the fold left
+       it. The shell the rim belongs to is the one the head was built as, which is what
+       `position` still holds - so the rim stays on the silhouette while the mouth opens
+       underneath it, instead of crawling with the jaw. */
+    '    vec3 nrm = normalize(rot * (position / uNrmHalf + vec3(0.0, 0.0, 1e-5)));',
+    '    p = rot * p;',
     '    p *= 1.0 + 0.006 * sin(t * 0.8);',
     /* THE DEPTH CUE, and this is the line that turns a cloud into a volume. Size and
        alpha both fall away with depth, so the back of the skull is a haze behind a lit
@@ -15584,25 +17416,65 @@ async function loadLib() {
     '    float near = clamp((p.z + 0.62) / 1.45, 0.0, 1.0);',
     '    a *= 0.26 + 0.74 * near;',
     '    sz *= 0.70 + 0.48 * near;',
+    /* ---- §27 PART 3: FORM SHADING, THE RIM, AND THE FRESNEL ----
+       THE DEPTH CUE ABOVE IS NOT SHADING, and that distinction is the whole of this block.
+       It attenuates by how far away a point is, which separates the back of the skull from
+       the front - a fog, and a correct one. It says nothing about which WAY the surface
+       faces, so the lit cheek and the shadowed one came back identical and the head read as
+       a luminous fog in the shape of a man. Three terms fix that, in the order a painter
+       would put them down:
+         LAMBERT, the form. How square-on the surface is to the key, over PRES.LAM_LO to
+         PRES.LAM_HI - see there for why the range is 3:1 and why its floor is not zero.
+         THE FRESNEL, the edge. Every point whose normal has turned toward the silhouette
+         catches, whether the key can see it or not - which is what a volume of light does
+         and what a lit solid does not, and is therefore the term that says "hologram".
+         Faint on purpose: uFresGain alone is 0.28.
+         THE RIM, the edge the key can see. The same fresnel band, multiplied by the
+         Lambert, so the catch is strongest up and to the viewer's left. This is the term
+         that gives the profile plate at yaw 90 a drawn edge from brow to chin.
+       BOTH RIDE `near`, so the back of the head cannot grow a bright outline of its own
+       behind the face - without that factor the occiput's silhouette reads as a second head
+       one ring outside the first, which is exactly what the first cut of this did. */
+    '    float lam = max(0.0, dot(nrm, uRimDir));',
+    '    a *= ' + PRES.LAM_LO.toFixed(3) + ' + ' +
+      (PRES.LAM_HI - PRES.LAM_LO).toFixed(3) + ' * lam;',
+    '    float fres = pow(1.0 - abs(nrm.z), uFresK);',
+    '    vR = clamp((uFresGain * fres + uRimGain * fres * lam) * near, 0.0, 1.0);',
+    /* And the rim is a little fatter as well as a little whiter, because a one-pixel line
+       of brighter cyan at dpr 1 is a line that aliases into a dotted one the moment the
+       head leans. */
+    '    sz *= 1.0 + 0.30 * vR;',
     '  }',
     '  vA = a;',
     '  vec4 mv = modelViewMatrix * vec4(p, 1.0);',
     '  gl_Position = projectionMatrix * mv;',
     /* Size folds the alpha in, so a dim point is also a small one: fading alone leaves
        a closed eye as a grey disc the same size as an open one. */
-    '  gl_PointSize = sz * uDpr * (0.55 + 0.45 * a) * (2.6 / max(0.2, -mv.z));',
+    /* uScale is the last factor and applies in every mode, because it is a fact about the
+       CANVAS and not about the head: a 420px well and a 213px well drawing the same 2px
+       sprite are two different per-pixel densities for the same object, which is how the
+       hologram's texture came to depend on how crowded the top-right lane happened to be. */
+    '  gl_PointSize = sz * uDpr * uScale * (0.55 + 0.45 * a) * (2.6 / max(0.2, -mv.z));',
     '}'
   ].join('\n');
 
   const PRES_FRAG = [
     'uniform vec3 uTint;',
+    'uniform vec3 uRimTint;',
     'varying float vA;',
+    'varying float vR;',
     'void main(){',
     '  vec2 d = gl_PointCoord - vec2(0.5);',
     '  float r = length(d);',
     '  if (r > 0.5) discard;',
     '  float f = smoothstep(0.5, 0.06, r);',
-    '  gl_FragColor = vec4(uTint, vA * f * 0.85);',
+    /* THE HUE MOVES AT THE EDGE AND NOWHERE ELSE. vR is zero through the whole of RING and
+       CUBE and through the middle of the face, so mix() returns uTint unchanged there and
+       those two modes are byte-for-byte what they were. Where the rim catches, the colour
+       runs toward white-cyan AND the alpha is lifted - a colour shift with no brightness
+       behind it reads as a mistint, and brightness with no shift reads as overexposure. */
+    '  vec3 col = mix(uTint, uRimTint, vR);',
+    '  gl_FragColor = vec4(col, min(1.0, vA + 0.45 * vR) * f * 0.85);',
     '}'
   ].join('\n');
 
@@ -15959,8 +17831,27 @@ async function loadLib() {
      mode, do not hold opinions about it" - the same condition presBoot uses. */
   async function presCompactAudition() {
     if (pres.compactAudit || PRES_ASKED) return pres.compactAudit;
-    if (pres.mode !== 'face' || pres.degraded) return pres.compactAudit;
+    /* A FACE THAT HAS ALREADY STOOD DOWN IS ALLOWED BACK IN HERE, AND ONLY HERE. This read
+       `pres.degraded` as a reason to give up, and that was the wrong way round. The whole
+       purpose of the compact tier is to give the head a chance in a well where it costs less
+       than half as much to draw; a head that failed the floor at 13,800 points has not been
+       asked anything about 6,200. MEASURED: on this machine, with work mode on and a session
+       card up, the full face holds 52.8fps against a floor of 55 - so it stood down, and the
+       old guard then meant that narrowing the window to the tier built for exactly this case
+       left a ring on the glass for the rest of the session, with no audition ever run and
+       nothing in the notes to say why.
+       THE THRASH THIS DOES NOT REOPEN: still once per page - compactAudit is set before the
+       first await - and still never under ?presence=..., so the cost is the same 4.4 seconds
+       it always was. A boss who chose the ring HIMSELF is untouched: presDegrade is the only
+       writer of `degraded`, so a hand-picked ring reaches neither branch. */
+    if (pres.mode !== 'face' && !pres.degraded) return pres.compactAudit;
+    const wasDegraded = pres.degraded;
     pres.compactAudit = 'running';
+    /* byHand, because this IS a decision: the tier changed, so the question changed. It
+       clears the degrade and leaves the frame-rate guard live, which is the whole contract
+       of that flag - if the compact face cannot hold the floor either, presAudition below
+       stands it down again and says so. */
+    if (wasDegraded) presMode('face', true);
     presMode('ring');
     await presAudition();
     /* AND THE VERDICT ONLY COUNTS IF IT IS STILL ABOUT THE COMPACT TIER. An audition is
@@ -15972,6 +17863,12 @@ async function loadLib() {
        than keeping it means the next genuine compact episode re-asks the question. */
     if (pres.tier !== 'compact') {
       pres.compactAudit = '';
+      /* AND THE VERDICT IT ARRIVED WITH GOES BACK ON. If a degrade was cleared to ask this
+         question and the question was then abandoned, leaving the face up at FULL density is
+         leaving on the exact thing that was already judged too slow - with the sentence that
+         said so wiped. The guard would catch it again three seconds later, and three seconds
+         of a head at 52fps is the stutter this whole ladder exists to prevent. */
+      if (wasDegraded && pres.tier !== 'compact') presDegrade(wasDegraded);
       presNote('the compact audition was abandoned: the well went back to the full tier ' +
                'while the sample was still running');
       return pres.compactAudit;
@@ -16055,7 +17952,21 @@ async function loadLib() {
           uYaw: { value: 0 }, uYawHold: { value: 0 },
           uGazeY: { value: 0 }, uGazeP: { value: 0 },
           uTint: { value: new THREE.Color(PRES.TINT) },
-          uOrgan: { value: [0, 0, 0, 0, 0] }
+          uOrgan: { value: [0, 0, 0, 0, 0] },
+          /* §27 PART 3. uScale starts at 1 and is written by presResize below, which runs
+             before the first frame - so there is no frame drawn at the wrong sprite size.
+             RIM_DIR is normalised HERE rather than in the shader: it is a constant, and
+             normalising a constant once per page beats normalising it once per point per
+             frame on thirteen thousand points. */
+          uScale: { value: 1 },
+          uRimDir: { value: new THREE.Vector3(PRES.RIM_DIR[0], PRES.RIM_DIR[1],
+                                              PRES.RIM_DIR[2]).normalize() },
+          uRimGain: { value: PRES.RIM_GAIN },
+          uFresK: { value: PRES.FRESNEL_K },
+          uFresGain: { value: PRES.FRESNEL_GAIN },
+          uRimTint: { value: new THREE.Color(PRES.RIM_TINT) },
+          uNrmHalf: { value: new THREE.Vector3(PRES.NRM_HALF[0], PRES.NRM_HALF[1],
+                                               PRES.NRM_HALF[2]) }
         },
         vertexShader: PRES_VERT,
         fragmentShader: PRES_FRAG,
@@ -16085,6 +17996,12 @@ async function loadLib() {
       presCam.aspect = 1;
       presCam.updateProjectionMatrix();
       presMat.uniforms.uDpr.value = dpr;
+      /* §27 PART 3: THE SPRITE FOLLOWS THE SQUARE. Written here and not in the frame loop
+         because it changes when the box changes and at no other time - see PRES.SIZE_REF
+         for why it clamps at 1 below and at SIZE_SCALE_MAX above. */
+      pres.scale = +Math.min(PRES.SIZE_SCALE_MAX,
+                             Math.max(1, pres.side / PRES.SIZE_REF)).toFixed(3);
+      presMat.uniforms.uScale.value = pres.scale;
       /* THE TIER, AND THE REBUILD ONLY WHEN IT CHANGED. A resize happens on every panel
          toggle and every drag of a window edge; a refill walks twelve thousand points
          through rejection sampling. Gating on the tier rather than on the side means the
@@ -19013,6 +20930,30 @@ async function loadLib() {
         }
         return out;
       },
+      /* AND WHAT THE SCREEN SAYS THE PLAN IS.
+         `n` is the DOM POSITION and it is named honestly, because the rendered number cannot
+         be read: getComputedStyle on ::before returns 'counter(step) "."' with the counter
+         unresolved - measured, not assumed - so there is no API that hands back the digit the
+         employer saw. What CAN be proved is the thing worth proving: `marker` is the rule that
+         draws it, and a marker reading counter(step) means the digit is the list's own count of
+         its own children. No number is written into the markup at all, so the order on screen
+         is the order of these children and this position is that order. */
+      get steps() {
+        return Array.prototype.map.call($('ask-steps').children, function (li, i) {
+          const vals = li.querySelector('.vals'), uses = li.querySelector('.uses');
+          const out = { n: i + 1, tag: li.tagName,
+                        marker: window.getComputedStyle(li, ':before').content,
+                        what: (li.querySelector('.what') || {}).textContent || '',
+                        uses: uses ? uses.textContent : '', vals: {} };
+          if (vals) {
+            const kids = vals.children;
+            for (let i = 0; i + 1 < kids.length; i += 2) {
+              out.vals[kids[i].textContent] = kids[i + 1].textContent;
+            }
+          }
+          return out;
+        });
+      },
       get buttons() {
         return { yes: $('ask-yes').textContent, no: $('ask-no').textContent,
                  disabled: $('ask-yes').disabled };
@@ -19558,6 +21499,86 @@ async function loadLib() {
       get google() { return goog; },
       googleRead: googRead,
       googleRun: googRun,
+      /* THE BOARDS, and `tiles` is the array boardPaint() RENDERED rather than a second
+         computation of it - board.rows is assigned from fill() on the same line that feeds the
+         grid. So a harness that asserts a day offset here and then reads the same tile's
+         textContent out of the DOM is checking two halves of one thing, and a board that put
+         the right data in the wrong cell fails the second half. `dom` is that second half. */
+      board: {
+        names: Object.keys(BOARDS),
+        get which() { return board.which; },
+        get opens() { return board.opens; },
+        get paints() { return board.paints; },
+        get why() { return board.why; },
+        get read() { return board.read; },
+        get tiles() { return board.rows.slice(); },
+        get dom() {
+          return Array.prototype.map.call(
+            document.querySelectorAll('#board-grid .btile'), function (el) {
+              const n = el.querySelector('.bn b'), t = el.querySelector('.bn em'),
+                    v = el.querySelector('.bv'), s = el.querySelector('.bs'),
+                    b = el.querySelector('button'),
+                    q = el.querySelector('.bq'), f = el.querySelector('.bi');
+              return {
+                key: el.getAttribute('data-key') || '',
+                name: n ? n.textContent : '', tag: t ? t.textContent : '',
+                value: v ? v.textContent : '', sub: s ? s.textContent : '',
+                home: el.classList.contains('home'),
+                tone: el.classList.contains('bad') ? 'bad'
+                    : el.classList.contains('live') ? 'live'
+                    : el.classList.contains('local') ? 'local' : '',
+                act: b ? b.textContent : '', actOff: !!(b && b.disabled),
+                /* THE CENSUS'S THREE, read out of the same DOM by the same rule: `ask` is
+                   the question on the glass, `input` is what is in the field right now -
+                   which is how census_proof asserts that a draft survived a repaint - and
+                   `acts` is every verb rather than the first, since this is the only tile
+                   in the project that has two. `act` above still answers for the first
+                   one, unchanged, so nothing written before this reads differently. */
+                wide: el.classList.contains('wide'),
+                ask: q ? q.textContent : '',
+                input: f ? f.value : null,
+                hint: f ? f.placeholder : '',
+                acts: Array.prototype.map.call(el.querySelectorAll('button'),
+                  function (x) { return { act: x.textContent, off: !!x.disabled }; }),
+                shown: !!el.getClientRects().length
+              };
+            });
+        },
+        get head() {
+          const el = document.getElementById('board-head');
+          return el ? el.textContent : '';
+        },
+        open: boardOpen,
+        paint: boardPaint,
+        close: function () { cmdView('list'); cmdPaint(); return true; }
+      },
+      /* THE CENSUS, and `type` is here for one reason: the draft lives outside the DOM, so a
+         harness that only set the input's value would be testing the browser rather than this
+         page. type() is the same call the field's oninput makes, so asserting that a repaint
+         puts the text back is asserting the real mechanism. `put` is the File it button and
+         nothing more - it goes to /census/answer and raises a card, and there is deliberately
+         no hook anywhere in this object that writes a note. */
+      census: {
+        get state() { return boardRead.census || null; },
+        get next() { return censusNext(); },
+        get draft() { return census.draft; },
+        get skipped() { return census.skipped.slice(); },
+        get chapter() { return census.chapter; },
+        get flow() { return census.flow; },
+        get filed() { return census.filed; },
+        read: censusRead,
+        type: function (text) { census.draft = String(text == null ? '' : text); return true; },
+        put: censusPut,
+        skip: function () {
+          const q = censusNext();
+          if (!q) return false;
+          if (census.skipped.indexOf(q.id) < 0) census.skipped.push(q.id);
+          census.draft = '';
+          boardPaint();
+          return q.id;
+        },
+        pick: function (id) { census.chapter = String(id || ''); boardPaint(); return true; }
+      },
       cast: {
         get state() { return cast.data; },
         get offline() {
@@ -19596,7 +21617,7 @@ async function loadLib() {
            and therefore the floor the budget is measured down to. */
         ['panel', 'focuscard', 'facecard', 'brain', 'legend', 'presence',
          'sharing', 'watching', 'eyeing', 'brainchip', 'toprail', 'title',
-         'answer', 'a-ask', 'ask-rows', 'ask-yes', 'ask-no',
+         'answer', 'a-ask', 'ask-rows', 'ask-steps', 'ask-yes', 'ask-no',
          'scribepanel', 'caption', 'typeline', 'status', 'bar'].forEach(function (id) {
           const el = document.getElementById(id);
           if (!el) { out[id] = null; return; }
@@ -19748,7 +21769,7 @@ async function loadLib() {
          the difference between a proof and a boast. */
       get local() {
         return { api: earLocal.api, state: earLocal.state, on: earLocal.on,
-                 installing: earLocal.installing, why: earLocal.why };
+                 installing: earLocal.installing, why: earLocal.why, tries: earLocal.tries };
       },
       /* Every closer as its own regex source, so a harness can prove the list rather than
          prove four examples of it. */
@@ -19987,6 +22008,25 @@ async function loadLib() {
       get fades() { return caption.fades; },
       get at() { return caption.at; },
       get pending() { return captionTimer !== null; },
+      /* ONE SURFACE AT A TIME, where a harness can read it. `yielded` is off the card's own
+         class list rather than off the counter, so it is the state the employer's eye is in;
+         `carries` is what the two surfaces actually hold, so a harness can assert that exactly
+         one of them is showing the sentence rather than trusting a boolean about it. */
+      get yielded() {
+        const el = $('answer');
+        return !!(el && el.classList.contains('yield'));
+      },
+      get yields() { return caption_yield.yields; },
+      get releases() { return caption_yield.releases; },
+      get carries() {
+        const body = $('a-text'), el = $('caption');
+        const shown = function (n) {
+          return !!(n && n.getClientRects().length && capCollapse(n.textContent));
+        };
+        return { card: shown(body) ? capCollapse(body.textContent) : '',
+                 caption: (el && el.classList.contains('up'))
+                          ? capCollapse(el.textContent) : '' };
+      },
       fade: captionFade, clear: captionClear
     },
     typeLine: {
@@ -20639,6 +22679,10 @@ async function loadLib() {
                  tier: box ? (box.tier || (box.fits ? 'full' : 'none')) : '',
                  builtTier: pres.tier, density: pres.density,
                  min: LAYOUT.PRES_MIN, minCompact: LAYOUT.PRES_MIN_COMPACT,
+                 /* §27 PART 3: the side the governor is ASKED for, and the sprite factor
+                    the side it got has earned. Together with `side` these are the three
+                    numbers a plate's texture can be judged against. */
+                 asks: LAYOUT.PRES_W, scale: pres.scale, ref: PRES.SIZE_REF,
                  lit: !!(presHost && presHost.classList.contains('lit')),
                  nofit: !!(presHost && presHost.classList.contains('nofit')) };
       },
@@ -20685,7 +22729,19 @@ async function loadLib() {
                  gazeY: +u.uGazeY.value.toFixed(5), gazeP: +u.uGazeP.value.toFixed(5),
                  lidY: +u.uLidY.value.toFixed(4),
                  jawPivot: [+u.uJawP.value.x.toFixed(4), +u.uJawP.value.y.toFixed(4)],
-                 mode: u.uMode.value, size: u.uSize.value, dpr: +u.uDpr.value.toFixed(2) };
+                 mode: u.uMode.value, size: u.uSize.value, dpr: +u.uDpr.value.toFixed(2),
+                 /* §27 PART 3, read back off the material for the same reason uJaw is: a
+                    rim gain that lives only in a constants table is a rim nobody can prove
+                    reached the GPU, and "the head has a rim now" is exactly the kind of
+                    claim that is judged from a picture and never measured. */
+                 scale: +u.uScale.value.toFixed(3), rimGain: u.uRimGain.value,
+                 fresK: u.uFresK.value, fresGain: u.uFresGain.value,
+                 rimDir: [+u.uRimDir.value.x.toFixed(4), +u.uRimDir.value.y.toFixed(4),
+                          +u.uRimDir.value.z.toFixed(4)],
+                 rimLen: +u.uRimDir.value.length().toFixed(4),
+                 nrmHalf: [u.uNrmHalf.value.x, u.uNrmHalf.value.y, u.uNrmHalf.value.z],
+                 rimTint: '#' + u.uRimTint.value.getHexString(),
+                 tint: '#' + u.uTint.value.getHexString() };
       },
       /* ---- THE SHAPE: the one door that reads the geometry ----
          WHY THIS EXISTS. Every other reader here reports an intention or a count; the
@@ -20817,6 +22873,26 @@ async function loadLib() {
       /* What it has played, newest last. A muted tab plays nothing and this stays empty,
          which is how ?mute=1 covering the chimes is checkable without being audible. */
       get played() { return tonesPlayed.slice(); }
+    },
+    /* THE BOOT CEREMONY, as a reading rather than a sound. `fired` is 1 from the instant it
+       is claimed and `healthy` counts every healthy poll after it, so "once per session"
+       is checkable as the difference between the two - a page that held one ceremony across
+       forty polls reads {fired:1, healthy:40}. `jingle.ms` is the schedule's own length, not
+       a measurement of the speakers, and `why` says which of the three quiet paths was taken
+       when nothing was heard. */
+    boot: {
+      get fired() { return boot.fired; },
+      get at() { return boot.at; },
+      get healthy() { return boot.healthy; },
+      get said() { return boot.said; },
+      get spoke() { return boot.spoke; },
+      get reduced() { return boot.reduced; },
+      get why() { return boot.why; },
+      get line() { return BOOT_LINE; },
+      get jingle() {
+        return { played: boot.jingle.played, notes: boot.jingle.notes,
+                 ms: boot.jingle.ms, why: boot.jingle.why };
+      }
     },
     /* THE TYPEWRITER, and the one thing worth proving about it: `text` is the whole
        answer while `lit` is still climbing. If those two are ever equal only at the end,

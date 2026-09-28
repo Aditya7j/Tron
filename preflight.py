@@ -46,6 +46,9 @@ sys.dont_write_bytecode = True          # this file leaves nothing behind, __pyc
 # somebody changes FRAME_MEDIA_TYPE in one place and not the other.
 import server                                                  # noqa: E402
 import focus                                                   # noqa: E402
+# The intake's own declaration, so check 37 counts the questions the module declares rather
+# than the number seventeen written twice. Standard library only, like build.py.
+import census                                                  # noqa: E402
 # The doorman's own module, for the same reason: check 25 asks voiceprint.hygiene() rather
 # than re-implementing the store's house rules, so the rules cannot drift apart from the
 # code that enforces them. Imported softly - a machine without onnxruntime should still be
@@ -543,9 +546,51 @@ def check_model():
 
 
 def check_remember():
-    """6. /remember writes a real file and /chat can retrieve it at once."""
+    """6. /remember PROPOSES, a word writes, and /chat retrieves it at once.
+
+    IT GREW A GATE IN PART 8 and the order of the clauses is the argument. The capture used
+    to be written by /remember itself - the one write in this server that happened without a
+    word of consent - so this check used to post once and look for a file. Now:
+
+      (a) the two refusals, which cost nothing and are the cheapest thing to get wrong.
+          "remember that" with nothing after it, and a thought carrying a credential. Both
+          must leave NOTHING pending, because a half-understood capture sitting in the slot
+          is one a later "yes" could confirm.
+      (b) the proposal, and THE CAPTURES FOLDER IS UNCHANGED. This is the clause the whole
+          part is for: if the file appears here, the gate is decoration.
+      (c) the word, at /execute, through the same door as the calendar and the email.
+      (d) and only then the two original claims - the file is real, and /chat can cite it
+          with no rebuild and no restart.
+    """
     if not state["up"]:
         return FAIL, ["skipped: the server is not reachable"]
+
+    def captures_now():
+        """The set of files in notes/captures, or an empty set if there is no folder."""
+        folder = os.path.join(ROOT, "notes", server.CAPTURE_DIR)
+        try:
+            return set(os.listdir(folder))
+        except OSError:
+            return set()
+
+    # -- (a) THE TWO REFUSALS. Neither may leave anything pending.
+    before_refusals = captures_now()
+    refusals = []
+    for said, why in (("remember that", "nothing followed the trigger"),
+                      ("remember that my aws password is Tr0ub4dor3xK",
+                       "the thought carries a credential")):
+        status, _, body = post_json("/remember", {"text": said}, timeout=60)
+        got = as_json(body) or {}
+        if status == 200 or got.get("ok"):
+            return FAIL, ["%r was accepted (HTTP %s) when it should have been refused: %s"
+                          % (said, status, why)]
+        if got.get("pending"):
+            return FAIL, ["%r was refused but left a proposal in the slot, which a later "
+                          "yes could confirm" % said]
+        refusals.append(first_line(got.get("answer") or "", 60))
+    if captures_now() != before_refusals:
+        return FAIL, ["a refused capture changed notes/%s" % server.CAPTURE_DIR]
+
     canary = "zarquon" + os.urandom(3).hex()
     # Two tokens, deliberately. TITLE_WORDS takes the first eight words for the
     # title, so `canary` lands in the filename and `buried` cannot: retrieving on
@@ -557,12 +602,37 @@ def check_remember():
     notes_dir = os.path.join(ROOT, "notes", server.CAPTURE_DIR)
     captures_existed = os.path.isdir(notes_dir)
 
+    # -- (b) THE PROPOSAL, AND NOTHING WRITTEN.
+    before = captures_now()
     status, _, body = post_json("/remember", {"text": text}, timeout=120)
     data = as_json(body) or {}
     if status != 200 or not data.get("ok"):
         return FAIL, ["POST /remember returned HTTP %s: %s"
                       % (status, first_line(data.get("error") or body[:200]))]
+    pending = data.get("pending") or {}
+    if pending.get("tool") != "save_note":
+        return FAIL, ["/remember raised %r rather than a save_note proposal, so the "
+                      "capture is not going through the one gate"
+                      % (pending.get("tool") or None)]
+    if data.get("file") or captures_now() != before:
+        return FAIL, ["/remember WROTE the note instead of proposing it: %s. The card is "
+                      "decoration if the file is already on disk when it goes up"
+                      % (data.get("file") or sorted(captures_now() - before))]
+    detail = ["a capture is a proposal now: save_note pending, nothing in notes/%s, and "
+              "the two refusals leave nothing in the slot - %s / %s"
+              % (server.CAPTURE_DIR, refusals[0], refusals[1])]
 
+    # -- (c) THE WORD, at the same door the calendar and the email are confirmed at.
+    status, _, body = post_json("/execute", {"door": "button", "id": pending.get("id")},
+                                timeout=120)
+    data = as_json(body) or {}
+    if status != 200 or not data.get("ok"):
+        return FAIL, detail + ["but the word at /execute returned HTTP %s: %s"
+                               % (status, first_line(data.get("error") or body[:200]))]
+    if data.get("ran") != "save_note":
+        return FAIL, detail + ["but /execute reported ran=%r" % data.get("ran")]
+
+    # -- (d) AND THE TWO ORIGINAL CLAIMS: the file is real, and the galaxy has it.
     rel = data.get("file") or ""
     path = os.path.join(ROOT, rel.replace("/", os.sep))
     if not os.path.isfile(path):
@@ -573,8 +643,9 @@ def check_remember():
         return FAIL, ["%s exists but does not contain what was captured" % rel]
 
     new_id = (data.get("nodes") or [None])[0]
-    detail = ["wrote %s (%d bytes) as node %s, degree %s"
-              % (rel, len(written), new_id, (data.get("node") or {}).get("degree"))]
+    detail.append("a word wrote %s (%d bytes) as node %s, degree %s - and the id is "
+                  "preserved, so the star the browser is holding is still that note"
+                  % (rel, len(written), new_id, (data.get("node") or {}).get("degree")))
 
     # The part that matters: searchable NOW, with no rebuild and no restart.
     question = "What is the verdict word of preflight canary %s?" % canary
@@ -5333,8 +5404,14 @@ def check_citation_honesty():
     # lights chips or says in `uncited` why it did not. Both are honest; a turn that lit
     # nothing and gave no reason is the state this step exists to catch, because it is what
     # a build that strips everything looks like from the outside.
-    status, _, data = post_json("/chat", {"question": "what do my notes say about the "
-                                                      "invoice importer",
+    # THE QUESTION IS HIS OWN AS OF PART 8, and it had to become his or this clause went hollow.
+    # It used to ask about an invoice importer, which was a note in the demonstration corpus.
+    # Quarantining that corpus did not make this check red for the wrong reason - it made it red
+    # for exactly the right one: the sentence stopped being answerable from the collection, so it
+    # lit no chips and offered no `uncited` reason, which is the state (c) exists to catch. The
+    # cure is a question his own files hold, not a looser assertion.
+    status, _, data = post_json("/chat", {"question": "what do my notes say about why I am "
+                                                      "building you",
                                          "session": "preflight-chips"},
                                 timeout=120, label="chat a notes question")
     got = as_json(data) or {}
@@ -5360,13 +5437,1909 @@ def check_citation_honesty():
     return PASS, notes
 
 
+def check_chain_protocol():
+    """27. A plan of two is judged step by step, or it is not a plan.
+
+    The chain is the first thing here where one word starts more than one subprocess, and
+    everything that keeps that safe is a schema: the brain is TOLD to answer in a JSON array
+    of {hand, params}, and every step of every array that arrives is looked up in the registry
+    exactly and validated against that tool's own parameter list before a card is ever drawn.
+    This check is about the schema half - the reading and the refusing - and it costs no brain
+    call, because the array is posted rather than asked for.
+
+    THE ONE MEASUREMENT BEHIND CLAUSE (a). The first version of the reader was a regex ending
+    in "\\]\\]\\]" and it read NOTHING: the tag closes with "]]" and a JSON array closes with
+    "]", so a model writes "}]]" - its own bracket doing double duty as the first of the pair -
+    and the third never arrives. Nought chains out of five. json's own scanner replaced it and
+    the same five plus one gave six out of six. So (a) asserts the SHAPE of the reader, not
+    just its existence: a build that quietly went back to counting brackets would pass every
+    live assertion below, because every plan in this file is posted correctly, and would fail
+    silently in front of the employer, which is the only place it matters.
+
+      (a) THE PROTOCOL IS TAUGHT AND THE READER IS NOT A REGEX, read off disk.
+      (b) THE SCHEMA REFUSES, live, seven ways - no steps, over the cap, a step that is not an
+          object, an id the registry does not have, a required field missing, a placeholder
+          aimed at an address, and a placeholder pointing forwards - each naming its step, and
+          each leaving NOTHING pending. A refusal that left a half-read plan in the slot would
+          be a plan a later yes could confirm.
+      (c) AND IT IS NOT SIMPLY SHUT: a good plan is accepted, in the shape the model really
+          writes, with the placeholder still visible in the step it will land in; a plan of ONE
+          falls through to the ordinary single proposal rather than becoming a numbered list of
+          one item; and nothing at all is started along the way - the ledger's run counts are
+          identical either side of this check.
+
+    chain_proof.mjs is the deep instrument: the card, the click, the halt, the doorman. This is
+    the schema, in a second and a half, and it is the half that has to hold before any of that
+    is worth anything.
+    """
+    notes, warnings = [], []
+
+    # -- (a) THE PROTOCOL AND THE READER, ON DISK.
+    try:
+        with open(os.path.join(ROOT, "hands.py"), encoding="utf-8") as fh:
+            src = fh.read()
+    except OSError as exc:
+        return FAIL, ["cannot read hands.py: %s" % exc]
+    if "def chain_protocol(" not in src:
+        return FAIL, ["hands.py declares no chain_protocol(), so nothing tells the brain what "
+                      "a plan looks like and every multi-step directive is one tool at best"]
+    # THE PROTOCOL ITSELF IS CALLED, NOT GREPPED. Its source is a Python string full of
+    # escaped quotes, so `"hand"` is spelt `\"hand\"` on disk and a grep for the key the
+    # server actually reads finds nothing. The rendered sentence is also the thing that goes
+    # to the model, which is the thing this clause is about.
+    taught = server.hands.chain_protocol()
+    for wanted, why in ('"hand"', "the key the array names a tool with"), \
+                       ('"params"', "the key its details go under"), \
+                       ("[[chain:", "the tag the reader scans for"), \
+                       ("{{step", "the placeholder that passes one step's result to the next"), \
+                       ("ONE INTENT IS NOT A CHAIN", "the sentence that stops a plan of one"):
+        if wanted not in taught:
+            return FAIL, ["the chain protocol never mentions %s - %s - so what the brain is "
+                          "told and what the server reads have come apart" % (wanted, why)]
+    if "at most %d steps" % server.hands.CHAIN_MAX_STEPS not in taught:
+        return FAIL, ["the chain protocol does not tell the brain the step cap in the number "
+                      "the server enforces, so a plan of five is asked for and refused"]
+    if server.hands.registry() and taught not in server.hands.prompt_block():
+        return FAIL, ["prompt_block() does not carry the chain protocol: the protocol exists "
+                      "and is never sent, which is the failure that looks like a model that "
+                      "cannot decompose"]
+    reader = _py_block(src, "chain_tag") or ""
+    if "raw_decode" not in reader:
+        return FAIL, ["chain_tag() does not use a JSON scanner: a reader that counts brackets "
+                      "cannot see the \"}]]\" a model actually writes, and the measured cost "
+                      "of that was nought chains out of five"]
+    if re.search(r"\\\]\s*\\\]\s*\\\]", reader):
+        return FAIL, ["chain_tag() is matching three closing brackets again - the terminator "
+                      "that never arrives"]
+    cap = re.search(r"^CHAIN_MAX_STEPS\s*=\s*(\d+)\s*$", src, re.M)
+    if not cap:
+        return FAIL, ["CHAIN_MAX_STEPS is no longer a plain integer literal, so the longest "
+                      "plan one word can approve is decided somewhere this check cannot read"]
+    steps_cap = int(cap.group(1))
+    if not 2 <= steps_cap <= 6:
+        return FAIL, ["CHAIN_MAX_STEPS reads %d; a cap outside 2-6 is either no cap at all or "
+                      "not a chain" % steps_cap]
+    notes.append("the protocol is taught, appended to the prompt, and read with a JSON "
+                 "scanner; at most %d steps behind one word" % steps_cap)
+
+    if not state["up"]:
+        return WARN, notes + ["skipped the live half: the server is not reachable"]
+
+    # NOTHING MAY BE STARTED BY THIS CHECK. Read first, compared last: `refused` may move -
+    # a plan that fails validation at step two counts a refusal against that tool, which is
+    # the honest record - but ok and failed are runs, and there must be none.
+    def started():
+        try:
+            with open(os.path.join(ROOT, "tools-ledger.json"), encoding="utf-8") as fh:
+                rows = (json.load(fh) or {}).get("tools") or {}
+        except (OSError, ValueError):
+            return {}
+        return {k: int(v.get("ok") or 0) + int(v.get("failed") or 0)
+                for k, v in rows.items() if isinstance(v, dict)}
+    before = started()
+
+    def chain(payload, label):
+        body = dict(payload)
+        body["cmd"] = "chain"
+        body.setdefault("door", "curl")
+        status, _, data = post_json("/tools", body, timeout=60, label="chain %s" % label)
+        return status, (as_json(data) or {})
+
+    good = [{"hand": "selftest", "params": {"token": "PREFLIGHT"}},
+            {"hand": "save_minutes",
+             "params": {"title": "Preflight chain", "overwrite": True,
+                        "minutes": "Step one said: {{step1}}"}}]
+
+    # -- (b) SEVEN REFUSALS, EACH NAMING ITS STEP AND LEAVING NOTHING BEHIND.
+    long_plan = [{"hand": "selftest", "params": {"token": "T%d" % i}}
+                 for i in range(steps_cap + 1)]
+    battery = [
+        ("no steps at all", {"steps": []}, "chain-empty", None),
+        ("%d steps, over the cap" % len(long_plan), {"steps": long_plan},
+         "chain-too-long", None),
+        ("a step that is not an object",
+         {"steps": [good[0], "send the email"]}, "chain-bad-step", 2),
+        ("an id the registry does not have",
+         {"steps": [good[0], {"hand": "send_telegram", "params": {"to": "a"}}]},
+         "chain-unknown-tool", 2),
+        ("a required field missing at step two",
+         {"steps": [good[0], {"hand": "save_minutes", "params": {"title": "No minutes"}}]},
+         "chain-step-missing", 2),
+        ("a placeholder aimed at an address",
+         {"steps": [good[0], {"hand": "send_email",
+                              "params": {"to": "{{step1}}", "subject": "Hello",
+                                         "body": "Anything"}}]},
+         "chain-ref-field", 2),
+        ("a placeholder pointing forwards",
+         {"steps": [{"hand": "save_minutes",
+                     "params": {"title": "Too soon", "overwrite": True,
+                                "minutes": "Step two will say: {{step2}}"}}, good[0]]},
+         "chain-ref-order", 1),
+    ]
+    for label, payload, key, at in battery:
+        status, got = chain(payload, label)
+        if status == 200 or got.get("ok"):
+            return FAIL, notes + ["a plan with %s was ACCEPTED (%d): the schema is not the "
+                                  "gate it is written as" % (label, status)]
+        if str(got.get("refused") or "") != key:
+            return FAIL, notes + ["a plan with %s was refused as %r and the documented key is "
+                                  "%r - the refusals have drifted from the shapes they name"
+                                  % (label, got.get("refused"), key)]
+        if got.get("pending") is not None:
+            return FAIL, notes + ["a plan with %s left something PENDING: a half-read plan in "
+                                  "the slot is a plan a later yes could confirm" % label]
+        if at is not None and int(got.get("at") or 0) != at:
+            return FAIL, notes + ["a plan with %s did not say which step was wrong (at=%r, "
+                                  "expected %d): 'it would not work' is uselessly ambiguous "
+                                  "about a plan" % (label, got.get("at"), at)]
+        if not str(got.get("answer") or "").strip():
+            return FAIL, notes + ["a plan with %s was refused silently" % label]
+    notes.append("%d malformed plans refused, each naming its step, none left pending"
+                 % len(battery))
+
+    # -- (c) AND NOT SIMPLY SHUT. The good plan arrives as the model really writes it: the
+    # array's own "]" doing double duty as the first of the tag's pair.
+    said = "Right away, sir. [[chain: %s]" % json.dumps(good)
+    status, got = chain({"said": said}, "the model's own text")
+    if status != 200 or not got.get("ok") or not got.get("chain"):
+        return FAIL, notes + ["a well-formed two-step plan in the shape a model actually "
+                              "writes was not accepted (%d, %r): the reader cannot see the "
+                              "terminator that really arrives"
+                              % (status, first_line(got.get("error") or got.get("answer"), 70))]
+    slot = got.get("pending") or {}
+    shown = slot.get("steps") or []
+    if len(shown) != 2 or [s.get("tool") for s in shown] != ["selftest", "save_minutes"]:
+        return FAIL, notes + ["the accepted plan came back as %r, not the two steps it was "
+                              "sent" % [s.get("tool") for s in shown]]
+    if "{{step1}}" not in json.dumps((shown[1].get("params") or {})):
+        return FAIL, notes + ["the placeholder is gone from the card's own parameters: state "
+                              "passing the employer cannot see before saying yes is state "
+                              "passing that says one thing and sends another"]
+    if shown[1].get("uses") != [1]:
+        return FAIL, notes + ["step two does not declare that it quotes step one (uses=%r), "
+                              "so the card cannot say so in words" % (shown[1].get("uses"),)]
+    if not str(slot.get("chainId") or "").startswith("c"):
+        return FAIL, notes + ["the accepted plan carries no chain id, so the ledger cannot "
+                              "record it as one transaction"]
+    # AND IT IS PUT DOWN AGAIN. Preflight leaves no proposal standing: the next thing to say
+    # yes in this house must not find this one waiting.
+    status, _, data = post_json("/tools", {"cmd": "cancel", "door": "curl"}, timeout=30,
+                                label="cancel the preflight plan")
+    if (as_json(data) or {}).get("pending") is not None:
+        warnings.append("the preflight plan would not cancel, so something is still pending")
+
+    # A CHAIN OF ONE IS NOT A CHAIN.
+    status, got = chain({"steps": [good[0]]}, "a plan of one")
+    if status != 200 or not got.get("ok"):
+        return FAIL, notes + ["a plan of one step was refused (%d): it is supposed to fall "
+                              "through to the ordinary proposal" % status]
+    if got.get("chain") or (got.get("pending") or {}).get("chain"):
+        return FAIL, notes + ["a plan of one came back as a chain: a numbered list of one "
+                              "item is ceremony, and it would take the single card's rows "
+                              "away for nothing"]
+    if (got.get("pending") or {}).get("tool") != "selftest":
+        return FAIL, notes + ["a plan of one proposed %r"
+                              % (got.get("pending") or {}).get("tool")]
+    post_json("/tools", {"cmd": "cancel", "door": "curl"}, timeout=30,
+              label="cancel the plan of one")
+    notes.append("a good plan is accepted in the shape a model writes it, with the "
+                 "placeholder visible; a plan of one falls through to the single card")
+
+    # -- (d) THE CLEAN MOUTH, over the fuzz set, and the draft.
+    #
+    # chain_tag() has four refusal paths and every one of them returns the model's text
+    # UNTOUCHED, which is right for a decision and wrong for a mouth; and the ordinary answer
+    # path recorded that a chain tag was seen without ever taking one out. So a model that
+    # wrote a plan while answering a question about the notes put [[chain: [{"hand": ... on
+    # the screen and into the voice. hands.clean_mouth() is the cure and this is its proof.
+    #
+    # THE CONTROL IS HALF THE CLAUSE. A blanket sweep of "{{", "}}" and bracketed arrays
+    # would pass every fuzz case below and mangle an honest answer about JSON, so the last
+    # fixture must come back BYTE-IDENTICAL. Without it this clause would be satisfied by a
+    # function that deleted every brace on the page.
+    fuzz = [
+        ("truncated JSON",
+         'Very good, sir. [[chain: [{"hand": "selftest", "params": {"token": "A"}}, {"hand"'),
+        ("a missing terminator",
+         'Right away. [[chain: [{"hand": "selftest", "params": {}}, '
+         '{"hand": "selftest", "params": {}}]'),
+        ("a doubled terminator",
+         'Right away. [[chain: [{"hand": "selftest", "params": {}}]]]] and that is the plan.'),
+        ("a tag with no array after it", 'Certainly, sir. [[chain: nothing at all here]]'),
+        ("an array with no tag around it",
+         'Here is the plan: [{"hand": "selftest", "params": {"token": "A"}}, '
+         '{"hand": "save_minutes", "params": {"minutes": "{{step1}}"}}]'),
+        ("a stray placeholder", "I shall put {{step1}} into the minutes, sir."),
+        ("a malformed tool tag", 'One moment. [[tool: send_email | {"to": "a@b.com", "sub'),
+    ]
+    # '[{"' IS THE BRACKET ARRAY ITSELF, and it is listed separately from '"hand":' because
+    # the two catch different survivals: a step array stripped of its "hand" keys would still
+    # be a wall of JSON on the answer surface, and the mandate forbids the bracket array and
+    # not merely the key inside it. It is safe to forbid here and NOT in the control below,
+    # which is checked on its own and is allowed its brackets because it is ABOUT them.
+    forbidden = ("{{", "}}", '"hand":', "[[chain", "[[tool", '[{"')
+    for name, text in fuzz:
+        out = server.hands.clean_mouth(text)
+        left = [mark for mark in forbidden if mark in out]
+        if left:
+            return FAIL, notes + ["%s survived the mouth: %s still on the answer surface in "
+                                  "%r - this is the text the page prints and the voice reads "
+                                  "out" % (name, ", ".join(left), first_line(out, 60))]
+        if not out:
+            return FAIL, notes + ["%s cleaned down to nothing and the caller would have had "
+                                 "to invent a sentence: every fixture here carries prose "
+                                 "around the tag on purpose" % name]
+    control = ('JSON is written like this, sir: {"name": "Addi", "roles": [{"a": 1}, '
+               '{"b": 2}]} - braces for objects, brackets for arrays.')
+    if server.hands.clean_mouth(control) != control:
+        return FAIL, notes + ["THE CONTROL WAS MANGLED. An answer that is legitimately about "
+                              "JSON came back changed: %r. The mouth is meant to remove this "
+                              "protocol and nothing else, and a blanket brace sweep would "
+                              "pass every fuzz case above and break every honest answer about "
+                              "a data format" % first_line(server.hands.clean_mouth(control), 70)]
+    notes.append("the fuzz set (%d shapes) leaves no tag, brace pair, \"hand\" key or bracket "
+                 "array on any answer surface; the control answer about JSON is byte-identical"
+                 % len(fuzz))
+
+    # AND THE STATE PASSING, INTO A DRAFT, WITH NOTHING SENT. save_minutes already proves a
+    # placeholder end to end into a file; the field that matters more is send_email's body,
+    # and that one can never be proven by running it. So it is proven the way send_email.py's
+    # own note says the draft probe does it: _paste() substitutes exactly as the runner will,
+    # and build() - the same function the real send serializes with - turns it into the bytes
+    # that would travel. No transport is called, no token is read, nothing leaves. What is
+    # asserted is that the canary from step one is IN those bytes and the placeholder is not.
+    #
+    # build() IS IMPORTED AND CALLED IN PROCESS, not run as a subprocess, and that is safe
+    # for one reason worth stating: it takes four strings and returns RFC 2822 bytes. It
+    # reads no config, opens no socket and touches no token - main() does all of that, and
+    # main() is not called. Importing the module runs its top level, which is imports and
+    # two compiled patterns.
+    mail = next((t for t in server.hands.registry() if t["id"] == "send_email"), None)
+    if not mail:
+        return FAIL, notes + ["the registry has no send_email, so the draft cannot be proven"]
+    try:
+        import importlib.util
+        _spec = importlib.util.spec_from_file_location(
+            "_preflight_send_email", os.path.join(ROOT, "tools", "send_email.py"))
+        _mod = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+    except Exception as exc:                                   # noqa: BLE001
+        return FAIL, notes + ["tools/send_email.py would not import: %s" % exc]
+    if not hasattr(_mod, "build"):
+        return FAIL, notes + ["tools/send_email.py has no build(), so the draft the real send "
+                              "serializes cannot be the one this check inspects"]
+    canary = "DRAFT-CANARY-%d" % int(time.time())
+    filled, pasted = server.hands._paste(
+        {"to": "team@example.com", "subject": "Yesterday's minutes",
+         "body": "As promised, the self test said: {{step1}} - and nothing was sent."},
+        mail["params"], {1: "Self test passed, token %s" % canary})
+    if pasted != 1 or canary not in filled["body"]:
+        return FAIL, notes + ["a placeholder in send_email's BODY did not take step one's "
+                              "result: %r" % first_line(filled.get("body"), 70)]
+    if "{{" in filled["body"]:
+        return FAIL, notes + ["the placeholder is still in the body after substitution, so "
+                              "this machine's own markup would have gone out in a letter"]
+    raw = _mod.build(filled["to"], filled["subject"], filled["body"],
+                     "galaxy@example.invalid")
+    # READ BACK THE WAY THE RECIPIENT WOULD, and this is a correction rather than a nicety.
+    # The first draft of this clause searched the RAW bytes for the canary and failed a
+    # perfectly good draft: set_content() encodes and soft-wraps at 78 columns, so a long
+    # token arrives split across an "=\n" and is not in the bytes as a substring at all.
+    # What the clause is about is what LANDS, so the payload is decoded first.
+    import email as _email
+    parsed = _email.message_from_bytes(raw)
+    landed = parsed.get_payload(decode=True) or b""
+    draft = landed.decode("utf-8", "replace")
+    if canary not in draft:
+        return FAIL, notes + ["the substituted body did not survive serialization: the draft "
+                              "that would travel does not contain step one's result (%d bytes "
+                              "decoded from %d)" % (len(landed), len(raw))]
+    if "{{step1}}" in draft or "{{step1}}" in raw.decode("utf-8", "replace"):
+        return FAIL, notes + ["the serialized draft still carries {{step1}}"]
+    if parsed.get("Subject") != filled["subject"]:
+        return FAIL, notes + ["the draft's Subject header reads %r" % parsed.get("Subject")]
+    notes.append("state passing lands in a DRAFT as well as in minutes: step one's result is "
+                 "in the serialized bytes, the placeholder is not, and no transport was "
+                 "called - nothing was sent")
+
+    after = started()
+    moved = sorted(k for k in set(before) | set(after)
+                   if after.get(k, 0) != before.get(k, 0))
+    if moved:
+        return FAIL, notes + ["something RAN while this check only ever proposed: %s moved "
+                              "in the ledger" % ", ".join(moved)]
+    notes.append("and nothing was started: every run count in the ledger is where it was")
+
+    if warnings:
+        return WARN, notes + warnings
+    return PASS, notes
+
+
+def check_context_budget():
+    """28. THE LAW OF GROWING SESSIONS: a cap, an order, and a machine that knows it forgot.
+
+    This check exists because of one answer. Asked at turn 17 of an instrumented session what
+    it had been asked FIRST that day, this machine said - with complete confidence and in its
+    own voice - that the first question had been about where the employer lived, and that the
+    barista training plan had come second. Those were turns 9 and 14. They were also, exactly,
+    the two oldest pairs still inside a four-pair window, and nothing in the prompt said there
+    had been eight turns before them.
+
+    THE MODEL DID NOT INVENT ANYTHING. It answered honestly about the only history it was
+    given, and the history was the lie - by omission. Every cure aimed at the brain would have
+    missed, which is why PART 0 names the layer before curing it.
+
+    So the cap is declared, the order is fixed, eviction is a rule instead of five copies of
+    one `del`, and what falls out of the window is SUMMARISED rather than dropped. Seven
+    clauses, each naming what goes wrong without it:
+
+      (a) THE CAP EXISTS AND IS ABOVE THE FLOOR. CONTEXT_FLOOR is what the protected blocks
+          alone can demand - top-k notes, retrieved chunks, the manifest, the persona. A cap
+          below it would be a cap that evicts the retrieval to fit the retrieval.
+      (b) THE ORDER IS THE ONE DECLARED, and the protected set is exactly the blocks that may
+          never be evicted. A build that quietly moved `retrieval` out of that set would pass
+          every size assertion and lose citations on long sessions only.
+      (c) THE PROMPT IS COMPOSED, NOT CONSTRUCTED TWICE. prompt_block() must equal
+          manifest + "\\n" + protocol, because the budget measures the parts and the wire
+          carries the whole, and two functions composing one string can disagree.
+      (d) EVERY BLOCK IS ACCOUNTED: the sum of the measured blocks equals the characters
+          really on the wire. This is the clause that catches a block nobody charged for -
+          the base system prompt was 2,327 unaccounted characters when the budget first ran.
+      (e) THE FIRST PAIR IS PINNED FOR THE LIFE OF THE SESSION, because turn 1 is precisely
+          the question the machine got wrong.
+      (f) NOTHING IS CUT MID-SENTENCE. Every cut in this mechanism falls on a sentence or a
+          whole line, so a summary cannot end halfway through a claim and read as a different
+          claim.
+      (g) AND THE SUMMARY SAYS WHAT IT IS. A model handed a summary that does not announce
+          itself treats it as the transcript and quotes from it.
+    """
+    notes = []
+    dump = server
+    # -- (a) and (b), read off the SERVER and not off a copy of the numbers.
+    status, _head, data = http_call("GET", "/session/dump?session=preflight-28&limit=1",
+                                    timeout=30, label="the session dump")
+    live = as_json(data) or {}
+    if status != 200 or not live.get("ok"):
+        return FAIL, ["GET /session/dump did not answer (%d): the budget cannot be asserted "
+                      "against the numbers the server is really using, only against a second "
+                      "copy of them" % status]
+    cap, floor = live.get("cap"), live.get("floor")
+    if not isinstance(cap, int) or not isinstance(floor, int):
+        return FAIL, ["the dump declares no cap and floor (%r, %r)" % (cap, floor)]
+    if cap <= floor:
+        return FAIL, ["MAX_CONTEXT %d is not above CONTEXT_FLOOR %d: the protected blocks "
+                      "alone can ask for more than the cap allows, so the only way to fit "
+                      "would be to evict the retrieval that was the point of the turn"
+                      % (cap, floor)]
+    if (cap, floor) != (dump.MAX_CONTEXT, dump.CONTEXT_FLOOR):
+        return FAIL, ["the wire says cap %d floor %d and the module says %d/%d"
+                      % (cap, floor, dump.MAX_CONTEXT, dump.CONTEXT_FLOOR)]
+    notes.append("the cap is %d characters against a floor of %d, declared on the wire and "
+                 "not only in a comment (%d%% headroom)"
+                 % (cap, floor, round(100.0 * (cap - floor) / cap)))
+
+    order = list(live.get("order") or [])
+    if order != list(dump.CONTEXT_BLOCKS):
+        return FAIL, notes + ["the assembly order on the wire is %r and the module's is %r"
+                              % (order, list(dump.CONTEXT_BLOCKS))]
+    for wanted in ("persona", "manifest", "chain-protocol", "retrieval"):
+        if wanted not in (live.get("protected") or []):
+            return FAIL, notes + ["%r is not in the protected set, so eviction is allowed to "
+                                  "take it: the retrieval hits are the grounding and the "
+                                  "persona is the voice, and a session long enough to evict "
+                                  "either would answer in a stranger's words from no source"
+                                  % wanted]
+    if order.index("retrieval") > order.index("recent-turns"):
+        return FAIL, notes + ["the retrieval sits after the recent turns in the precedence "
+                              "order, so a long history outranks the passages the answer is "
+                              "supposed to cite"]
+    notes.append("the order is %s, and %s can never be evicted"
+                 % (" -> ".join(order), ", ".join(live.get("protected") or [])))
+
+    # -- (c) ONE STRING, TWO FUNCTIONS, ASSERTED RATHER THAN TRUSTED.
+    manifest, protocol = dump.hands.prompt_parts()
+    whole = dump.hands.prompt_block()
+    if not manifest or not protocol:
+        return FAIL, notes + ["prompt_parts() returned an empty half (%d, %d): the budget "
+                              "cannot charge for a block that is not there"
+                              % (len(manifest), len(protocol))]
+    if whole != manifest + "\n" + protocol:
+        return FAIL, notes + ["prompt_block() is no longer manifest + newline + protocol "
+                              "(%d vs %d): the budget measures the parts and the wire carries "
+                              "the whole, so the two would disagree by however much this has "
+                              "drifted" % (len(whole), len(manifest) + 1 + len(protocol))]
+    notes.append("the hands block is a composition: manifest %d + protocol %d = the %d bytes "
+                 "it always was" % (len(manifest), len(protocol), len(whole)))
+
+    # -- (d) EVERY CHARACTER ON THE WIRE IS CHARGED TO A BLOCK.
+    messages, plan = dump.assemble(system="A persona of some length, sir. " * 8,
+                                   manifest=manifest, protocol=protocol,
+                                   ask="what do my notes say about why I am building you",
+                                   heading="Notes and documents you may use, and nothing else:",
+                                   evidence="A passage. " * 40,
+                                   history=[{"role": "user", "content": "one"},
+                                            {"role": "assistant", "content": "two"}],
+                                   older="\n\nEARLIER IN THIS CONVERSATION. 3 turn(s).\n",
+                                   label="preflight-28")
+    wire = sum(len(str(m.get("content") or "")) for m in messages)
+    if plan.get("chars") != wire:
+        unaccounted = wire - int(plan.get("chars") or 0)
+        return FAIL, notes + ["the budget accounts for %d characters and the wire carries %d, "
+                              "%d of them charged to nothing. A block nobody counts is a block "
+                              "eviction cannot protect and the cap cannot see"
+                              % (plan.get("chars"), wire, unaccounted)]
+    if plan.get("overCap"):
+        return FAIL, notes + ["an ordinary assembly reports itself over the cap"]
+    notes.append("an assembly of %d characters is accounted to the character: every block on "
+                 "the wire is charged to one of the %d" % (wire, len(order)))
+
+    # -- (e) (f) (g) THE EVICTION RULE, exercised on its own session and then forgotten.
+    #
+    # SIXTEEN SYNTHETIC PAIRS AND NO MODEL CALL. summarise_pairs() is deliberately rule-based:
+    # a summariser is a language model, a language model can invent, and an invention written
+    # into the history is a FALSE MEMORY this machine will then cite for the rest of the
+    # session and never be able to detect. So the summary is built from the turns themselves,
+    # which is also why it can be asserted here for nothing.
+    session = "preflight-28-%d" % int(time.time())
+    hist = []
+    for i in range(1, 17):
+        hist += [{"role": "user", "content": "Question number %d, sir. It has two sentences. "
+                                             "This is the second one." % i},
+                 {"role": "assistant", "content": "Answer number %d. Also two sentences. "
+                                                  "Here is the second." % i}]
+        dump.evict_history(hist, session)
+    summary = dump.older_block(session)
+    try:
+        if len(hist) != dump.HISTORY_TURNS * 2:
+            return FAIL, notes + ["after sixteen pairs the window holds %d messages and the "
+                                  "rule says %d" % (len(hist), dump.HISTORY_TURNS * 2)]
+        if "Question number 1," not in summary:
+            return FAIL, notes + ["THE FIRST PAIR IS NOT PINNED. Turn 1 has fallen out of the "
+                                  "summary, which is the exact question this check exists for: "
+                                  "asked what it was asked first, the machine would again "
+                                  "answer confidently about the oldest thing it happened to "
+                                  "still be holding"]
+        if len(summary) > dump.OLDER_MAX:
+            return FAIL, notes + ["the summary is %d characters against a cap of %d"
+                                  % (len(summary), dump.OLDER_MAX)]
+        for line in summary.splitlines():
+            line = line.strip()
+            if not line or not line[0].isdigit():
+                continue
+            if not line.endswith((".", "!", "?")):
+                return FAIL, notes + ["a summary line ends mid-sentence: %r. Every cut in this "
+                                      "mechanism is supposed to fall on a sentence boundary, "
+                                      "because half a claim reads as a different claim"
+                                      % first_line(line, 70)]
+        # SIXTEEN PAIRS WENT IN AND THE WINDOW KEEPS HISTORY_TURNS OF THEM, so the summary
+        # stands for the difference and not for sixteen. Computed rather than written down,
+        # because the first draft of this clause asserted "16" and failed a correct summary.
+        stood_for = 16 - dump.HISTORY_TURNS
+        if "SUMMARY" not in summary or "%d turn(s)" % stood_for not in summary:
+            return FAIL, notes + ["the summary does not announce that it IS a summary, or does "
+                                  "not say it stands for %d turns. A model handed an "
+                                  "unlabelled summary treats it as the transcript: %r"
+                                  % (stood_for, first_line(summary, 70))]
+        if "no longer quoted" not in summary:
+            return FAIL, notes + ["the summary counts the turns it dropped but never says they "
+                                  "were dropped, so there is no sentence for the machine to "
+                                  "say 'I no longer hold that' from"]
+        notes.append("sixteen pairs leave a %d-pair window and a %d-character summary: turn 1 "
+                     "pinned, the middle counted but not quoted, no line cut mid-sentence, and "
+                     "the heading says it is a summary"
+                     % (dump.HISTORY_TURNS, len(summary)))
+    finally:
+        # THIS CHECK LEAVES NO CONVERSATION BEHIND. A synthetic session in the summary store
+        # would be sixteen invented turns the next real question could be grounded in.
+        dump.forget_older(session)
+    if dump.older_block(session):
+        return FAIL, notes + ["the synthetic session survived forget_older()"]
+    return PASS, notes
+
+
+def check_grounding_audit():
+    """29. EVERY ANSWER CARRIES A GROUNDING CLASS, AND A CLASS IS NOT A ROUTE.
+
+    notes, web, persona, state, refusal, chain. The class names what the sentence STANDS ON,
+    and it is a separate field from `kind` because the hunt found two turns where the two
+    disagreed and both were filed as hallucinations by a rule that read `kind`:
+
+      "what is my home address" came back kind=notes with no cited passage - and the reading
+        that settles it is opened=false, semOpened=false. NEITHER HALF OF THE RETRIEVAL EVER
+        OPENED. The notes were not consulted and found wanting; they were never read. The
+        answer was a refusal, grounded in an absence, and correct.
+      "what did I ask you about first today" was also kind=notes with nothing opened, and it
+        stood on the summarised-history block. Its ground is this conversation - state.
+
+    So `kind` names the door and `grounds` names the ground, and this check asserts the
+    distinction holds live, on the four classes a typed call can reach without a browser, a
+    voice or a card. The rest - a chain's class, and the judge's half - belong to
+    session_proof.mjs and chain_proof.mjs, which have the instruments for them.
+
+      (a) THE SIX ARE DECLARED ON THE WIRE, so a harness cannot carry a stale copy of the list.
+      (b) A REAL NOTES QUESTION IS CLASSED notes AND HAS SOMETHING TO SHOW FOR IT - a cited
+          passage or a door that opened. This is the clause that makes the class a claim.
+      (c) AN IDENTITY QUESTION IS classed persona WITH ZERO LOOKUPS, and a connection question
+          is classed state, because it read the live grant. The two cannot swap: a persona
+          answer that claimed live state would be asserting a reading it never took.
+      (d) A WEB ANSWER CARRIES FETCHED SOURCES or it is not classed web. A web class with no
+          source is the shape of a hallucination with a citation chip on it.
+      (e) AND NO ANSWER IS CLASSED notes OR web WITH NOTHING BEHIND IT. Those two classes
+          assert a source; the others do not. A red here is a claim with no ground.
+    """
+    notes = []
+    session = "preflight-29-%d" % int(time.time())
+    post_json("/reset", {"session": session}, timeout=30, label="a clean room for 29")
+
+    def ask(question, label):
+        status, _head, data = post_json("/chat", {"question": question, "session": session},
+                                        timeout=180, label=label)
+        return status, (as_json(data) or {})
+
+    def graded(want_n):
+        status, _head, data = http_call(
+            "GET", "/session/dump?session=%s&limit=12" % session, timeout=30,
+            label="the graded turns")
+        rows = ((as_json(data) or {}).get("turns") or []) if status == 200 else []
+        return rows[-want_n:] if rows else []
+
+    status, _head, data = http_call("GET", "/session/dump?session=%s&limit=1" % session,
+                                    timeout=30, label="the class list")
+    declared = (as_json(data) or {}).get("groundingClasses") or []
+    if sorted(declared) != sorted(server.GROUNDING_CLASSES):
+        return FAIL, ["the dump declares %r and the module has %r"
+                      % (declared, list(server.GROUNDING_CLASSES))]
+    notes.append("the six classes are declared on the wire: %s" % ", ".join(declared))
+
+    fixtures = [
+        # HIS OWN QUESTION AS OF PART 8 - see check 26 for why the old one had to go. This one
+        # draws two nodes and four citations off his two captures, so `notes` is the class the
+        # ground actually supports rather than the class the door was named after.
+        ("what do my notes say about why I am building you", "notes", "a real notes question"),
+        ("who are you", "persona", "an identity question"),
+        ("is my calendar connected", "state", "a live-state question"),
+    ]
+    for question, want, why in fixtures:
+        status, got = ask(question, why)
+        if status != 200:
+            return FAIL, notes + ["%s did not answer (%d)" % (why, status)]
+    rows = graded(len(fixtures))
+    if len(rows) != len(fixtures):
+        return FAIL, notes + ["the dump returned %d graded turns for %d questions"
+                              % (len(rows), len(fixtures))]
+    for row, (question, want, why) in zip(rows, fixtures):
+        got = row.get("grounds") or "(none)"
+        scores = row.get("scores") if isinstance(row.get("scores"), dict) else {}
+        if got != want:
+            return FAIL, notes + ["%s was classed %r and should be %r - kind was %r, route %r. "
+                                  "A class that follows the door instead of the ground is the "
+                                  "bug this check exists for"
+                                  % (why, got, want, row.get("kind"), row.get("route"))]
+        if want == "notes" and not (row.get("cited") or scores.get("opened")
+                                    or scores.get("semOpened")):
+            return FAIL, notes + ["a turn classed notes has no cited passage and no door that "
+                                  "opened: the class asserts a source it cannot show"]
+        if want == "persona" and row.get("cited"):
+            return FAIL, notes + ["an identity answer cited %d passage(s): it is answered from "
+                                  "the block and reaches the notes exactly never"
+                                  % len(row.get("cited") or [])]
+        if want in ("persona", "state") and row.get("sources"):
+            return FAIL, notes + ["a %s answer carried fetched web sources" % want]
+    notes.append("a notes question is classed notes and shows a passage; an identity question "
+                 "is classed persona with nothing cited; a connection question is classed "
+                 "state because it read the live grant")
+
+    # -- (d) and (e). The web turn is last because it is the slow one, and its class is the
+    # one that must never be worn without a source behind it.
+    status, got = ask("what is the current price of bitcoin", "a web question")
+    if status != 200:
+        return FAIL, notes + ["the web question did not answer (%d)" % status]
+    row = (graded(1) or [{}])[0]
+    if got.get("kind") == "web" and got.get("sources"):
+        if row.get("grounds") != "web":
+            return FAIL, notes + ["a fetched web answer is classed %r" % row.get("grounds")]
+        if not row.get("sources"):
+            return FAIL, notes + ["the graded turn kept no sources, so nothing downstream can "
+                                  "check the class against what was fetched"]
+        notes.append("the web answer is classed web and carries %d fetched source(s)"
+                     % len(row.get("sources") or []))
+    else:
+        # A SEARCH THAT FOUND NOTHING IS NOT A FAILING CHECK. What matters is that it did not
+        # then wear the class: an unsourced answer claiming `web` is a hallucination with a
+        # citation chip on it, and that is the assertion, either way the search went.
+        if row.get("grounds") == "web":
+            return FAIL, notes + ["the search fetched nothing and the answer is STILL classed "
+                                  "web: the class asserts a source that does not exist"]
+        notes.append("the search found nothing this time and the answer did not wear the web "
+                     "class for it (classed %r)" % (row.get("grounds") or "left to the judge"))
+
+    reds = [r.get("n") for r in graded(6)
+            if r.get("grounds") in ("notes", "web")
+            and not (r.get("cited") or r.get("sources")
+                     or (r.get("scores") or {}).get("opened")
+                     or (r.get("scores") or {}).get("semOpened"))]
+    if reds:
+        return FAIL, notes + ["turn(s) %s claim a source class with nothing behind them" % reds]
+    notes.append("and no answer in this session wears notes or web with nothing behind it")
+    return PASS, notes
+
+
+def check_world_clock():
+    """30. THE CLOCK COSTS NOTHING, KNOWS WHAT DAY IT IS THERE, AND REFUSES WHAT IT CANNOT PLACE.
+
+    Before this class existed, "what time is it in Tokyo" was a WEB SEARCH: a round trip, a rate
+    limit and a citation chip, spent computing a subtraction. So the first clause of this check is
+    about cost, and the second is about the thing the subtraction gets wrong.
+
+      (a) THE ROUTE IS READY AND NAMES ITS DATABASE. Naming it is not decoration. stdlib
+          `zoneinfo` IMPORTS SUCCESSFULLY ON A MACHINE WITH NO TIMEZONE DATA - which is this
+          machine - so a module that trusted the import would have fallen back to something
+          hand-written, read identically right for six months, and been an hour out every March.
+          The source string is how that failure becomes visible while it is still cheap.
+      (b) IT IS TRIED AFTER THE FOUR, NEVER INSTEAD OF THEM. PROTECTED_CLASSES is still exactly
+          the four the mandate named; the clock lives in UNPAID_CLASSES beside them. This is
+          asserted structurally because the cheap way to add a fifth class is to append it to
+          the four, and that edits a list the mandate says not to touch.
+      (c) A CLOCK QUESTION COSTS NOTHING: route clock, zero nodes, zero lookups, and no chip to
+          show. An answer with a source chip on it here would mean the funnel fell through.
+      (d) THE DAY IS COMPUTED, NOT INFERRED FROM THE OFFSET. Apia and Pago Pago are a hundred
+          miles apart at +13 and -11: they read THE SAME MINUTE ON DIFFERENT DAYS, always. A day
+          offset derived from the hour difference makes them identical, and the sentence that
+          says "tomorrow" then says it about the wrong island. So the two are asked live and
+          their day words are required to DIFFER - which needs no fixed instant, because the
+          twenty-four hours between them never closes.
+      (e) A PLACE THAT DOES NOT EXIST IS REFUSED, WITH NO TIME IN THE REFUSAL. A nearest-match
+          guess reads exactly like a right answer, and a clock confidently in the wrong
+          hemisphere is worse than no clock at all.
+      (f) AND THE CLASS IS NOT A DRAGNET. "what time did I write that note" has an answer in his
+          notes and must not be taken by the clock. A protected class that grew one word too far
+          answers the wrong question confidently and for free, which is harder to notice than a
+          slow right answer.
+    """
+    notes = []
+    if getattr(server, "worldclock", None) is None:
+        return FAIL, ["server.py imported no worldclock module at all"]
+
+    status, _head, data = http_call("GET", "/clock", timeout=30, label="the clock route")
+    if status != 200:
+        return FAIL, ["GET /clock answered %d" % status]
+    clock = as_json(data) or {}
+    if clock.get("ok") is not True:
+        return FAIL, ["there is no usable timezone database on this machine: %r"
+                      % clock.get("why")]
+    source = str(clock.get("source") or "")
+    places = int(clock.get("places") or 0)
+    if not source:
+        return FAIL, ["the route will not say which zone database answered, so a silent "
+                      "fallback to a hand-written offset table would be invisible until March"]
+    if places < 100:
+        return FAIL, ["it knows only %d places; a table that refuses Paris is a refusal the "
+                      "employer reads as a broken feature" % places]
+    if clock.get("lookups") != 0 or (clock.get("nodes") or []) != []:
+        return FAIL, ["the route declares %r lookups and %d nodes; it is meant to cost nothing"
+                      % (clock.get("lookups"), len(clock.get("nodes") or []))]
+    notes.append("the clock reads %s, knows %d places, and the route costs nothing"
+                 % (source, places))
+
+    # -- (b) the four are untouched, and the fifth stands beside them rather than inside them.
+    if tuple(server.PROTECTED_CLASSES) != ("confirmation", "meta", "identity", "directive"):
+        return FAIL, notes + ["PROTECTED_CLASSES is now %r - the four the mandate named have "
+                              "been edited" % (tuple(server.PROTECTED_CLASSES),)]
+    if tuple(server.UNPAID_CLASSES) != tuple(server.PROTECTED_CLASSES) + ("clock",):
+        return FAIL, notes + ["UNPAID_CLASSES is %r; the clock is meant to be tried after all "
+                              "four have declined" % (tuple(server.UNPAID_CLASSES),)]
+    notes.append("the four protected classes are as the mandate wrote them and the clock is "
+                 "tried after them, not among them")
+
+    session = "preflight-30-%d" % int(time.time())
+    post_json("/reset", {"session": session}, timeout=30, label="a clean room for 30")
+
+    def ask(question, label):
+        status, _head, data = post_json("/chat", {"question": question, "session": session},
+                                        timeout=180, label=label)
+        return status, (as_json(data) or {})
+
+    # -- (c) one ordinary clock question, and what it did NOT spend.
+    status, tokyo = ask("what time is it in Tokyo", "the clock question")
+    if status != 200:
+        return FAIL, notes + ["the clock question did not answer (%d)" % status]
+    if tokyo.get("route") != "clock" or tokyo.get("clock") is not True:
+        return FAIL, notes + ["'what time is it in Tokyo' was routed %r, which means it is "
+                              "being paid for somewhere else" % tokyo.get("route")]
+    if tokyo.get("clockPlace") != "Tokyo":
+        return FAIL, notes + ["it resolved the place as %r" % tokyo.get("clockPlace")]
+    if (tokyo.get("nodes") or []) or tokyo.get("lookups") or (tokyo.get("sources") or []):
+        return FAIL, notes + ["the clock answer carried %d node(s), %r lookup(s) and %d "
+                              "source(s): this sentence used to be a web search and the whole "
+                              "point of the class is that it no longer is"
+                              % (len(tokyo.get("nodes") or []), tokyo.get("lookups"),
+                                 len(tokyo.get("sources") or []))]
+    said = str(tokyo.get("answer") or "")
+    if not re.search(r"\d{1,2}:\d\d|o'clock|noon|midnight", said):
+        return FAIL, notes + ["the sentence carries no clock at all: %r" % said]
+    if re.search(r"\b\d{1,2}\s+\d\d\b", said):
+        return FAIL, notes + ["the time is written as two loose numbers in %r, which a neural "
+                              "voice reads as two numbers rather than one time" % said]
+    notes.append("a clock question answers from a table on this disk: 0 nodes, 0 lookups, "
+                 "0 sources - %s" % said)
+
+    # -- (d) the date line. Asked live and in either order; the twenty-four hours between these
+    # two never closes, so no fixed instant is needed to make the claim.
+    days = {}
+    for place in ("Apia", "Pago Pago"):
+        status, got = ask("what time is it in %s" % place, "the clock in %s" % place)
+        if status != 200 or got.get("clockPlace") != place:
+            return FAIL, notes + ["%s did not resolve (%d, %r)"
+                                  % (place, status, got.get("clockPlace"))]
+        word = re.search(r"\b(yesterday|today|tomorrow)\b", str(got.get("answer") or ""), re.I)
+        if not word:
+            return FAIL, notes + ["the reading for %s carries no day word: %r - and a clock "
+                                  "reading with the day left off is the half of the answer "
+                                  "that causes the missed call" % (place, got.get("answer"))]
+        days[place] = word.group(1).lower()
+    if days["Apia"] == days["Pago Pago"]:
+        return FAIL, notes + ["Apia and Pago Pago both read %r. They are at +13 and -11: the "
+                              "same minute on different days, always. Equal day words mean the "
+                              "offset is being divided instead of the dates compared"
+                              % days["Apia"]]
+    notes.append("the date line holds: Apia is %s and Pago Pago is %s, against his own clock"
+                 % (days["Apia"], days["Pago Pago"]))
+
+    # -- (e) a place that is not a place.
+    status, fake = ask("what time is it in Narnia", "a place that does not exist")
+    if status != 200:
+        return FAIL, notes + ["the made-up place did not answer (%d)" % status]
+    refusal = str(fake.get("answer") or "")
+    if fake.get("clock") is not True or fake.get("clockPlace"):
+        return FAIL, notes + ["Narnia was handled as %r/%r rather than refused by the clock; "
+                              "falling through means a search engine is asked what time it is "
+                              "in Narnia, and it will answer something"
+                              % (fake.get("route"), fake.get("clockPlace"))]
+    if not re.search(r"i do not know where", refusal, re.I):
+        return FAIL, notes + ["the refusal does not say plainly that it does not know: %r"
+                              % refusal]
+    if re.search(r"\d{1,2}:\d\d|o'clock|noon|midnight", refusal):
+        return FAIL, notes + ["there is a TIME in the refusal: %r. A nearest-match guess reads "
+                              "exactly like a right answer" % refusal]
+    if (fake.get("nodes") or []) or fake.get("lookups"):
+        return FAIL, notes + ["the refusal still spent %d node(s) and %r lookup(s)"
+                              % (len(fake.get("nodes") or []), fake.get("lookups"))]
+    notes.append("a place it cannot find is refused plainly, with no time in the refusal and "
+                 "nothing spent on it - %s" % refusal)
+
+    # -- (f) and it takes only the questions that are about a clock.
+    for question in ("what time did I write that note", "how much time is left",
+                     "what is the weather in Tokyo"):
+        status, got = ask(question, "a question the clock must decline")
+        if status != 200:
+            return FAIL, notes + ["%r did not answer (%d)" % (question, status)]
+        if got.get("clock") is True:
+            return FAIL, notes + ["%r was taken by the clock (place %r). A dragnet class answers "
+                                  "the wrong question confidently and for free"
+                                  % (question, got.get("clockPlace"))]
+    notes.append("and it declines the three sentences that only look like clock questions")
+    return PASS, notes
+
+
+def check_connectors_board():
+    """31. THE CONNECTORS BOARD READS TWO ROUTES, AND CANNOT RUN A HAND.
+
+    The board is the first thing in the deck that puts the registry and the Google grant side by
+    side on one grid. That is useful and it is also the two places this round could leak from, so
+    every clause here is about a thing the board must NOT be able to do.
+
+      (a) THE TWO ROUTES ANSWER, AND NEITHER HANDS THE BROWSER A CREDENTIAL. /google and /tools
+          are now read by a grid that will be screenshotted into a lookbook. A route that
+          started carrying an access token, a refresh token or a client secret would put it on
+          that grid and into that plate, and nothing in the page would be wrong. So the payloads
+          are searched here, where the failure is cheap.
+      (b) AND /tools STILL HIDES THE SCRIPT PATH. The public registry is meant to publish
+          id/name/capabilities/params/timeout and nothing else: a page that learned
+          `send_email.py` learned the name of a file it might one day be persuaded to ask for.
+      (c) EVERY NAMED TILE SPEAKS FOR A HAND THAT EXISTS. The four ids the board claims by name
+          are the four it leaves out of the hand grid, so an id that drifted - a hand renamed in
+          registry.json, the constant left alone - would show the hand TWICE: once as a named
+          tile reading "no hand in the registry" and once as its own tile. Both true, together
+          incoherent.
+      (d) NO HAND TILE CARRIES A VERB. The Halt Law gives the executor one door with a gate on
+          it: a proposal, a spoken yes, one run. A button on a grid of nine tiles is a second
+          door, and a second door is the whole law gone. Asserted against the tile-building code
+          with the comments stripped, so the paragraph that promises it cannot satisfy it.
+      (e) NO SHARED READING SLOT. Two boards briefly wrote one `board.read`, which left the
+          World Clock row reporting "0 places known" about an organ that was working - the row
+          was reading the Connectors board's answer. Each board writes its own slot by name and
+          `board.read` is a getter, so this cannot come back quietly.
+      (f) AND THE ROW IS PAINTED FROM THE SAME READING AS THE GRID. boardOpen's read callback
+          repaints the order sheet as well as the board; without that the row keeps its
+          not-read-yet line under a grid full of answers.
+      (g) POST /tools RUNS NOTHING. The registry is a readable list and not an executor.
+    """
+    notes = []
+
+    # -- (a) the two routes, and what they must not carry.
+    status, _head, data = http_call("GET", "/google", timeout=30, label="the grant the board reads")
+    if status != 200:
+        return FAIL, ["GET /google answered %d" % status]
+    grant_text = data.decode("utf-8", "replace") if isinstance(data, bytes) else str(data)
+    grant = as_json(data) or {}
+    status, _head, tdata = http_call("GET", "/tools", timeout=30, label="the registry the board reads")
+    if status != 200:
+        return FAIL, ["GET /tools answered %d" % status]
+    tools_text = tdata.decode("utf-8", "replace") if isinstance(tdata, bytes) else str(tdata)
+    tools = (as_json(tdata) or {}).get("tools") or []
+    for label, text in (("/google", grant_text), ("/tools", tools_text)):
+        leak = re.search(r'"(?:access_token|refresh_token|client_secret|token|secret|api_key)"'
+                         r'\s*:\s*"[^"]+"|ya29\.[A-Za-z0-9_\-]{10,}', text)
+        if leak:
+            return FAIL, ["%s carries %r to the browser, and the connectors board renders that "
+                          "payload onto a grid" % (label, leak.group(0)[:40])]
+    notes.append("the board's two routes answer and neither carries a token or a secret to the "
+                 "browser (%d hand(s), grant %r)" % (len(tools), grant.get("state")))
+
+    # -- (b) the public registry publishes no script path and no trigger.
+    forbidden = sorted({k for t in tools if isinstance(t, dict) for k in t
+                        if k in ("script", "triggers", "path", "cmd")})
+    if forbidden:
+        return FAIL, notes + ["GET /tools publishes %r; the page is not meant to learn the name "
+                              "of a file it could ask for" % forbidden]
+    notes.append("and /tools still publishes no script path and no trigger word")
+
+    # -- the page, with its comments taken out, so a law is asserted about the code.
+    try:
+        with open(os.path.join(ROOT, "viewer", "index.html"), encoding="utf-8") as fh:
+            src = _js_source(fh.read())
+    except OSError as exc:
+        return FAIL, notes + ["cannot read viewer/index.html: %s" % exc]
+
+    # -- (c) the four claimed ids against the registry's own.
+    claimed_block = re.search(r"const CONNECT_CLAIMED\s*=\s*\{(.*?)\}", src, re.S)
+    if not claimed_block:
+        return FAIL, notes + ["viewer/index.html declares no CONNECT_CLAIMED, so the board has no "
+                              "way to know which hands its named tiles already speak for"]
+    claimed = re.findall(r"([A-Za-z_][A-Za-z0-9_]*)\s*:", claimed_block.group(1))
+    have = {t.get("id") for t in tools if isinstance(t, dict)}
+    missing = [c for c in claimed if c not in have]
+    if missing:
+        return FAIL, notes + ["the board claims to speak for %r, which the registry does not "
+                              "have: that hand would appear twice, once as a named tile saying "
+                              "it has no hand and once as its own tile" % missing]
+    notes.append("each of the %d named tiles speaks for a hand the registry actually validates: "
+                 "%s" % (len(claimed), ", ".join(claimed)))
+
+    # -- (d) the Halt Law, on the grid.
+    push = re.search(r"tiles\.push\(\{\s*key:\s*'hand:'(.*?)\}\s*\)\s*;", src, re.S)
+    if not push:
+        return FAIL, notes + ["the registry hands no longer reach the grid through a "
+                              "`key: 'hand:'` tile, so this check cannot see what they carry"]
+    if re.search(r"\bact(?:Off)?\s*:", push.group(1)):
+        return FAIL, notes + ["A HAND TILE NOW CARRIES A VERB. The executor has one door with a "
+                              "gate on it; a button here is a second door: %r"
+                              % push.group(1).strip()[:120]]
+    notes.append("and not one hand tile carries a verb, so the grid cannot become a second door "
+                 "into the executor")
+
+    # -- (e) one reading slot per board, and board.read a reader.
+    if "const boardRead = {}" not in src:
+        return FAIL, notes + ["viewer/index.html has no boardRead map; if the boards share one "
+                              "slot again, a row reports another board's answer as its own"]
+    writes = re.findall(r"\bboard\.read\s*=[^=]", src)
+    if writes:
+        return FAIL, notes + ["board.read is assigned %d time(s); it is meant to be a getter over "
+                              "boardRead[board.which], so that no board can write another's "
+                              "reading" % len(writes)]
+    if "boardRead.clock" not in src or "boardRead.connectors" not in src:
+        return FAIL, notes + ["one of the two boards does not write its own named slot"]
+    notes.append("each board writes its own reading by name and board.read only reads, so the "
+                 "World Clock row cannot report the Connectors board's answer")
+
+    # -- (f) the row is painted from the reading that filled the grid.
+    body = re.search(r"function boardOpen\(which\)\s*\{(.*?)\n  \}", src, re.S)
+    if not body:
+        return FAIL, notes + ["boardOpen() is not where it was, so this check cannot read it"]
+    if "cmdPaint()" not in body.group(1):
+        return FAIL, notes + ["boardOpen repaints the grid when the read lands but not the order "
+                              "sheet, so the row under a full grid still says it has not read "
+                              "anything yet"]
+    notes.append("and the row behind a board is repainted from the same reading as the grid")
+
+    # -- (g) the registry is a list, not an executor.
+    status, _head, _data = http_call("POST", "/tools", body=b"{}", timeout=30,
+                                     label="the registry as an executor")
+    if status == 200:
+        return FAIL, notes + ["POST /tools answered 200: the registry route is meant to be a "
+                              "readable list and nothing else"]
+    notes.append("and POST /tools runs nothing (%d)" % status)
+    return PASS, notes
+
+
+def check_one_surface():
+    """The answer is on one surface, and the card keeps the record.
+
+    A sentence that is in the speakers and on two screens at once is read twice, and the
+    employer's eye is asked to pick. So while the caption carries the answer, the card's
+    paragraph stands down - and the whole of this check is about the four ways that could
+    become a worse bug than the duplication it cleans up:
+
+      (a) the stand-down is a CLASS on the card, hiding one child, and it is CSS -
+          `#answer.yield>.a{display:none}`. A yield done by writing the paragraph would
+          take the record with it, and eleven harnesses read #a-text.
+      (b) answerYield() writes nothing into the DOM but that class: no textContent, no
+          innerHTML, no removeChild anywhere inside it.
+      (c) the subtitle's THREE down-paths all give the paragraph back - the fade timer, the
+          cancel, and a new answer rendered under an old caption. A missing one leaves the
+          card blank with nothing speaking, which is invisible in a screenshot taken a
+          second too early.
+      (d) the quoted utterance survives. #a-q is the visible evidence of the antecedent
+          memory law, which is not ours to alter, and the rule hides `>.a` only - so the
+          question stays on the card while the answer is in the voice.
+    """
+    notes = []
+    try:
+        with open(os.path.join(ROOT, "viewer", "index.html"), encoding="utf-8") as fh:
+            raw = fh.read()
+    except OSError as exc:
+        return FAIL, ["cannot read viewer/index.html: %s" % exc]
+    src = _js_source(raw)
+
+    # -- (a) the law is one CSS rule, and it hides rather than moves.
+    rule = re.search(r"#answer\.yield\s*>\s*\.a\s*\{([^}]*)\}", raw)
+    if not rule:
+        return FAIL, notes + ["no `#answer.yield>.a` rule: nothing makes the card stand down, so "
+                              "an answer being read is on the caption AND on the card"]
+    body = rule.group(1).replace(" ", "")
+    if "display:none" not in body:
+        return FAIL, notes + ["the yield rule does not hide the paragraph, it does %r - a card "
+                              "faded to zero still takes the layout and the focus" % body]
+    if "transition" in body or "animation" in body:
+        return FAIL, notes + ["the yield rule animates (%r): this fires on every sentence of a "
+                              "streamed read, and the deck's own law is transform and opacity "
+                              "only" % body]
+    notes.append("the card stands down by one CSS rule on one child (%s), so the yield costs no "
+                 "frame and moves nothing" % body)
+
+    # -- (b) and it writes nothing else.
+    fn = re.search(r"function answerYield\(line\)\s*\{(.*?)\n  \}", src, re.S)
+    if not fn:
+        return FAIL, notes + ["answerYield() is not where it was, so this check cannot read what "
+                              "it writes"]
+    inner = fn.group(1)
+    for bad in ("textContent =", "textContent=", "innerHTML", "removeChild", "remove()"):
+        if bad in inner:
+            return FAIL, notes + ["answerYield() contains %r: the paragraph is the record of the "
+                                  "answer and a yield that edits it destroys what it was hiding"
+                                  % bad]
+    if "classList.toggle('yield'" not in inner:
+        return FAIL, notes + ["answerYield() no longer toggles the `yield` class, so whatever it "
+                              "does now is not the rule above"]
+    notes.append("and answerYield() writes that class and nothing else - no textContent, no "
+                 "innerHTML, no removal: the record survives being hidden")
+
+    # -- (b2) and the comparison is equality or a PREFIX, never a containment.
+    #    The boot plates caught the case equality misses: before the first click the autoplay
+    #    law joins the held lines, so the caption reads the salutation AND the readiness line
+    #    while the card holds the salutation alone. `startsWith` covers it and stays safe -
+    #    the voice is saying the whole paragraph and going on. `indexOf(...) >= 0` would not:
+    #    a three-word paragraph would vanish behind any sentence that happened to quote it.
+    if "indexOf(held) === 0" not in inner:
+        return FAIL, notes + ["answerYield() no longer yields when the caption BEGINS with the "
+                              "paragraph: the boot ceremony's joined line reads the salutation "
+                              "and then the readiness line, so the greeting stands on the card "
+                              "and the caption at once and is read twice"]
+    if re.search(r"indexOf\(held\)\s*>", inner) or "includes(held)" in inner:
+        return FAIL, notes + ["answerYield() hides the paragraph when the caption contains it "
+                              "ANYWHERE: a three-word answer then disappears behind any long "
+                              "sentence that quotes it, with nothing pointing at it"]
+    notes.append("and the comparison is equality or a prefix and never a containment, so a "
+                 "capped answer, a plan with steps on the card and a softened error all stay "
+                 "readable while the voice says less than they hold")
+
+    # -- (c) three ways down, and all three hand the paragraph back.
+    for name, pat in (("captionShow", r"function captionShow\(text\)\s*\{(.*?)\n  \}"),
+                      ("captionFade", r"function captionFade\(ms\)\s*\{(.*?)\n  \}"),
+                      ("captionClear", r"function captionClear\(\)\s*\{(.*?)\n  \}")):
+        m = re.search(pat, src, re.S)
+        if not m:
+            return FAIL, notes + ["%s() is not where it was" % name]
+        if "answerYield(" not in m.group(1):
+            return FAIL, notes + ["%s() does not call answerYield(): the subtitle changes state "
+                                  "there and the card is not told, so the paragraph is hidden "
+                                  "with nothing speaking" % name]
+    render = re.search(r"function renderAnswer\(question, text, isError, ids, sources, cites\)"
+                       r"\s*\{(.*?)\n  \}", src, re.S)
+    if not render or "answerYield(" not in render.group(1):
+        return FAIL, notes + ["renderAnswer() does not re-take the decision, so a new answer "
+                              "painted under the previous sentence's caption inherits its yield "
+                              "and shows nothing"]
+    notes.append("and all four state changes tell the card: raised, faded, cancelled, and a new "
+                 "answer painted under an old subtitle")
+
+    # -- (d) the quoted utterance is not what stood down.
+    if "$('a-q').textContent = question" not in src:
+        return FAIL, notes + ["renderAnswer no longer writes the quoted utterance into #a-q; the "
+                              "antecedent memory law is visible on the card and is not ours to "
+                              "retire"]
+    if re.search(r"#answer\.yield\s*>?\s*(?:\.q|#a-q)", raw):
+        return FAIL, notes + ["the yield rule reaches the quoted utterance: the question is not "
+                              "the thing in the speakers and hiding it takes the antecedent with "
+                              "it"]
+    notes.append("while the quoted utterance stays on the card: the yield reaches the answer "
+                 "paragraph and nothing above it")
+    return PASS, notes
+
+
+def check_boot_ceremony():
+    """He reports for duty once, with music he generates, and three ways of being quiet.
+
+    The ceremony is one flag, two branches and nine oscillators, and every one of the
+    clauses below is here because of a way it could go wrong that NOTHING ELSE WOULD
+    CATCH - a boot that announces itself twice is caught by a harness, but a boot that
+    announces itself on the two-hundredth poll is caught by nobody who is not still
+    watching after thirty-four minutes:
+
+      (a) THE FLAG IS CLAIMED FIRST. `if (boot.fired) return false` guards the whole of
+          it, and `boot.fired = 1` is set BEFORE anything is scheduled - not after. The
+          rail polls /health every ten seconds for as long as the tab is open, and a
+          ceremony that set its flag on the way out would fire again on any poll that
+          landed inside the 3.1 seconds the jingle takes: two butlers, in a round.
+      (b) NO ASSETS, NO NETWORK. Every note is an oscillator through the existing
+          toneNote() on the chime bus. A fetch, an <audio>, a .src or a decode inside
+          the jingle would be a request to forget to ship, a cache entry, and a sound
+          this page's mute law does not cover.
+      (c) AND THROUGH THE EXISTING BUS, which is what puts the music under the words: the
+          pump ducks the whole tone bus when speech starts. A jingle on a gain node of
+          its own would be a second thing to duck and would sit ON TOP of the sentence
+          it is supposed to be under.
+      (d) A MUTED TAB HOLDS NOTHING AND SAYS WHY. It claims the flag, records a reason,
+          and returns before the line and before the music - so the ceremony is not left
+          armed to go off mid-answer the moment audio becomes possible.
+      (e) REDUCED MOTION DROPS THE FLOURISH AND KEEPS THE SENTENCE. The setting asks for
+          less motion, not for less information, so the jingle is skipped with a reason
+          recorded and speakLine(BOOT_LINE) is reached on BOTH branches - and the gesture
+          that releases a held line checks `!boot.reduced` before it plays the music the
+          quiet machine already declined.
+      (f) AND THE CLAIM IS MADE FROM A READING. The trigger is the health poll's own
+          verdict, so "fully functional" is spoken from the route that probes piper, the
+          index and the web door, and never from optimism.
+    """
+    notes = []
+    try:
+        with open(os.path.join(ROOT, "viewer", "index.html"), encoding="utf-8") as fh:
+            raw = fh.read()
+    except OSError as exc:
+        return FAIL, ["cannot read viewer/index.html: %s" % exc]
+    src = _js_source(raw)
+
+    cer = re.search(r"function bootCeremony\(healthy\)\s*\{(.*?)\n  \}", src, re.S)
+    jin = re.search(r"function bootJingle\(\)\s*\{(.*?)\n  \}", src, re.S)
+    red = re.search(r"function bootReduced\(\)\s*\{(.*?)\n  \}", src, re.S)
+    if not cer or not jin or not red:
+        return FAIL, ["the boot ceremony is not where it was: bootCeremony/bootJingle/"
+                      "bootReduced could not be read, so none of this can be checked"]
+    body, jingle = cer.group(1), jin.group(1)
+
+    # -- (a) the flag guards everything, and is claimed before anything sounds.
+    if not re.search(r"if \(boot\.fired\) return false;", body):
+        return FAIL, notes + ["bootCeremony has no `if (boot.fired) return false` guard: the "
+                              "health poll runs every ten seconds forever, so this is a "
+                              "ceremony per poll, not per session"]
+    # The LAST claim, not the first: the muted branch sets the same flag several lines
+    # earlier, and a find() here reads THAT one - which would call a jingle scheduled
+    # before the real claim "already guarded" and let the defect through untouched.
+    claim = body.rfind("boot.fired = 1")
+    if claim < 0:
+        return FAIL, notes + ["nothing in bootCeremony sets boot.fired, so the guard above can "
+                              "never be true and the flag is decoration"]
+    for after in ("bootJingle(", "speakLine("):
+        where = body.find(after)
+        if where >= 0 and where < claim:
+            return FAIL, notes + ["bootCeremony calls %s before it claims boot.fired: a /health "
+                                  "reading landing during the 3s ceremony enters it a second "
+                                  "time, and the two overlap" % after]
+    notes.append("the flag is claimed before the first sound (boot.fired at %d, the jingle at "
+                 "%d), and it guards the whole function - so the two-hundredth healthy poll is "
+                 "as quiet as the second" % (claim, body.find("bootJingle(")))
+    if "if (boot.jingle.played) return false" not in jingle:
+        return FAIL, notes + ["bootJingle() will play a second time if anything asks it twice - "
+                              "and the first gesture does ask, from unlockAudio()"]
+
+    # -- (b) generated, not fetched. Nothing here is a file.
+    for bad in ("fetch(", "new Audio", "XMLHttpRequest", ".src =", ".src=", "decodeAudioData",
+                "createBufferSource", "import("):
+        if bad in jingle:
+            return FAIL, notes + ["bootJingle() contains %r: the boot flourish is generated on "
+                                  "this machine, and an asset is a network request, a decode, a "
+                                  "cache entry and a thing to forget to ship" % bad]
+    if not re.search(r"toneNote\(\s*'boot'", jingle):
+        return FAIL, notes + ["no note in bootJingle() goes through toneNote('boot', ...), so "
+                              "whatever it plays is not on the chime bus and not in the ring "
+                              "the harnesses read"]
+    # Counted so this line can be read against boot_proof's own runtime count of 9: the
+    # frequencies are the literals above 80Hz, which leaves out the peaks (0.09-0.21) and
+    # the note lengths (0.44-2.90) without needing to know which is which.
+    freqs = [f for f in re.findall(r"\b(\d{2,4}\.\d+)\b", jingle) if float(f) >= 80]
+    notes.append("every note is an oscillator through the existing toneNote() - %d scheduled "
+                 "frequencies, no fetch, no <audio>, no decode, nothing to ship" % len(freqs))
+
+    # -- (c) on the bus that already ducks, not a graph of its own.
+    for bad in ("createGain", "createDynamicsCompressor", "destination"):
+        if bad in jingle:
+            return FAIL, notes + ["bootJingle() builds its own %s: the sentence goes UNDER the "
+                                  "music because the pump ducks the whole tone bus, and a "
+                                  "private graph is a second thing to duck" % bad]
+    if not re.search(r"function toneDuck\(", src):
+        return FAIL, notes + ["toneDuck() is gone, so nothing lowers the bus the jingle plays "
+                              "on and the flourish will sit on top of the readiness line"]
+    notes.append("and it plays on the bus toneDuck() already lowers, which is the whole of "
+                 "\"ducked beneath the voice\" - no second gain to get wrong")
+
+    # -- (d) the muted branch: a reason, a flag, and an early return.
+    mute = re.search(r"if \(MUTED\) \{(.*?)\n    \}", body, re.S)
+    if not mute:
+        return FAIL, notes + ["bootCeremony has no MUTED branch: a tab that cannot make a sound "
+                              "would hold the ceremony anyway and the harnesses' nine tabs would "
+                              "each announce themselves"]
+    if "return false" not in mute.group(1):
+        return FAIL, notes + ["the MUTED branch does not return: a silent tab falls through into "
+                              "the line and the music"]
+    if "boot.why" not in mute.group(1) or "boot.fired = 1" not in mute.group(1):
+        return FAIL, notes + ["the MUTED branch does not both record a reason and claim the "
+                              "flag - one way round it is silent for no stated cause, the other "
+                              "it goes off the moment the tab is unmuted mid-answer"]
+    notes.append("a muted tab claims the ceremony, says why in words, and returns before the "
+                 "line and the music both")
+
+    # -- (e) reduced motion: the flourish goes, the sentence stays.
+    if "prefers-reduced-motion" not in red.group(1):
+        return FAIL, notes + ["bootReduced() no longer reads prefers-reduced-motion, so the "
+                              "quiet form is decided by something else"]
+    quiet = re.search(r"if \(boot\.reduced\) (.*?)\n    else bootJingle\(\);", body, re.S)
+    if not quiet or "jingle.why" not in quiet.group(1):
+        return FAIL, notes + ["the reduced branch does not skip bootJingle() with a reason "
+                              "recorded: a jingle that plays anyway ignores the setting, and a "
+                              "silent one with no `why` reads as broken"]
+    said = body.find("speakLine(BOOT_LINE)")
+    if said < 0 or said < body.find("if (boot.reduced)"):
+        return FAIL, notes + ["speakLine(BOOT_LINE) is not reached after the reduced branch: the "
+                              "setting asks for less MOTION, and dropping the sentence with the "
+                              "flourish tells a quiet machine less than it asked for"]
+    unlock = re.search(r"function unlockAudio\(\)\s*\{(.*?)\n  \}", src, re.S)
+    if not unlock or not re.search(r"boot\.fired && !boot\.reduced && !boot\.jingle\.played",
+                                   unlock.group(1)):
+        return FAIL, notes + ["the first gesture does not check `!boot.reduced` before firing the "
+                              "held jingle, so the quiet machine gets the flourish anyway on its "
+                              "first click - one gate is not a law if the other door is open"]
+    notes.append("prefers-reduced-motion drops the flourish and keeps the sentence, and the "
+                 "gesture that releases a held line checks the same setting before it plays")
+
+    # -- (f) and the claim is made from a reading, not from optimism.
+    if not re.search(r"bootCeremony\(res\.ok && !!\(data && data\.brain && data\.brain\.label\)\)",
+                     src):
+        return FAIL, notes + ["bootCeremony is no longer called with the health poll's own "
+                              "verdict: \"fully functional\" has to be spoken from the route "
+                              "that probes piper, the index and the web door, or it is optimism"]
+    notes.append("and it fires on the first HEALTHY /health - the sentence is read off the probe "
+                 "rather than off DOMContentLoaded, which knows nothing")
+    return PASS, notes
+
+
+def check_face_shading():
+    """The head is large, it is shaded, and it is still one object and one allocation.
+
+    §27 PART 3 grows the governor's square from 300px to 420px and puts form shading, a rim
+    and a fresnel on the face. Every clause here guards a failure that the deck harness
+    cannot see, and the reason it cannot see them is worth stating once:
+
+        A GLSL LINK FAILURE DOES NOT THROW IN THIS PAGE. three.js logs the driver's error
+        and draws nothing. `presence.shader` stays true because it is a test of the
+        material's CLASS; `objects` stays 1; the fps floor is met with room to spare
+        because an empty well is cheap. So deck_proof goes green over a blank square. The
+        only defence against that is to assert the shading is WIRED - declared, assigned
+        from a constant, and consumed - in the source, which is what this does.
+
+      (a) ONE OBJECT, ONE MATERIAL, ONE ALLOCATION. The four attribute buffers are sized
+          PRES.CAP once at build time and the mode switch moves setDrawRange. A buffer
+          reallocated per switch is the defect this arrangement exists to prevent, and it
+          would show up as a slow leak nobody would attribute to the face.
+      (b) AND THE CAP RESPECTS THE MANDATE'S CEILING. 14000 points is the boss's number.
+          CAP may grow to fill a bigger well; it may not cross that.
+      (c) THE FLOORS ARE DECLARED AND ORDERED. A full-tier floor above the compact floor,
+          both present. PRES_MIN was raised to 192 against a measured 213px at a crowded
+          1920x860 - the failure mode of getting this wrong is not a small face, it is NO
+          face, because a well that cannot meet the full floor and has no compact tier
+          beneath it draws nothing at all.
+      (d) THE RIM AND THE FRESNEL REACH THE GPU. Declared in the vertex program, assigned
+          from PRES.* rather than from a literal, and actually read in the shader body. A
+          gain that lives only in a constants table is a gain nobody can prove arrived -
+          which is exactly how the first three rounds of this tuning were lost.
+      (e) THE NORMAL IS TAKEN OFF `position`, NOT OFF `p`. By the time the shading runs, p
+          has had a lid folded to its crease, a lip rippled and a mandible swung about the
+          ear line. Those are deformations, not anatomy: a normal estimated from them
+          shades the ANIMATION, so the cheek would change brightness as the jaw opened.
+      (f) AND BOTH EDGE TERMS RIDE `near`. Without that factor the occiput catches its own
+          fresnel and the head grows a second bright outline one ring outside the first -
+          measured, and the reason `near` is in that expression at all.
+      (g) THE SPRITE FOLLOWS THE WELL. uScale multiplies gl_PointSize, so a 420px well and
+          a 213px well are the same object at two sizes rather than two different per-pixel
+          densities - the texture of the hologram stopped depending on how crowded the
+          top-right lane happened to be.
+    """
+    notes = []
+    try:
+        with open(os.path.join(ROOT, "viewer", "index.html"), encoding="utf-8") as fh:
+            raw = fh.read()
+    except OSError as exc:
+        return FAIL, ["cannot read viewer/index.html: %s" % exc]
+    src = _js_source(raw)
+
+    # -- (a) one allocation, at CAP, and a draw range rather than a rebuild.
+    allocs = re.findall(r"new Float32Array\(PRES\.CAP(?:\s*\*\s*\d+)?\)", src)
+    if len(allocs) != 4:
+        return FAIL, ["the presence geometry is not four buffers allocated once at PRES.CAP "
+                      "(found %d): position, aRole, aRnd and aCell are sized to the CAP at "
+                      "build time so a mode switch is a setDrawRange and never a realloc"
+                      % len(allocs)]
+    if not re.search(r"setDrawRange\(", src):
+        return FAIL, notes + ["nothing calls setDrawRange: if the cloud is resized by "
+                              "reallocating the buffers then the one-allocation claim the deck "
+                              "harness reports is false"]
+    notes.append("four attribute buffers allocated once at PRES.CAP and a setDrawRange for the "
+                 "mode switch - one object, one material, no realloc when the face arrives")
+
+    # -- (b) the cap respects the mandate's ceiling.
+    cap = re.search(r"\bCAP:\s*(\d+)", src)
+    if not cap:
+        return FAIL, notes + ["PRES.CAP is not where it was, so the ceiling cannot be checked"]
+    if int(cap.group(1)) > 14000:
+        return FAIL, notes + ["PRES.CAP is %s, over the mandate's ceiling of 14000 points"
+                              % cap.group(1)]
+    notes.append("PRES.CAP is %s, inside the mandate's 14000-point ceiling with %d to spare"
+                 % (cap.group(1), 14000 - int(cap.group(1))))
+
+    # -- (c) the floors are declared, ordered, and the compact tier survives.
+    mins = re.search(r"PRES_MIN:\s*(\d+)", src)
+    minc = re.search(r"PRES_MIN_COMPACT:\s*(\d+)", src)
+    if not mins or not minc:
+        return FAIL, notes + ["LAYOUT.PRES_MIN / PRES_MIN_COMPACT are not both declared: the "
+                              "full floor without a compact tier under it is a well that draws "
+                              "NOTHING the first time a window is a notch more crowded"]
+    if int(minc.group(1)) >= int(mins.group(1)):
+        return FAIL, notes + ["the compact floor (%s) is not below the full floor (%s), so the "
+                              "tier beneath is not a tier" % (minc.group(1), mins.group(1))]
+    notes.append("a full floor at %spx over a compact floor at %spx, in that order - so a "
+                 "crowded window gets a smaller face and never no face"
+                 % (mins.group(1), minc.group(1)))
+
+    # -- (d) the rim and the fresnel are declared, assigned from constants, and consumed.
+    for uni, const in (("uRimDir", "RIM_DIR"), ("uRimGain", "RIM_GAIN"),
+                       ("uFresK", "FRESNEL_K"), ("uFresGain", "FRESNEL_GAIN"),
+                       ("uRimTint", "RIM_TINT"), ("uNrmHalf", "NRM_HALF")):
+        if not re.search(r"'uniform [a-z0-9]+ %s;'" % uni, src):
+            return FAIL, notes + ["%s is not declared in the presence vertex program, so the "
+                                  "shading cannot be reading it" % uni]
+        if not re.search(r"%s:\s*\{[^}]*PRES\.%s" % (uni, const), src):
+            return FAIL, notes + ["%s is not assigned from PRES.%s: a rim tuned by editing a "
+                                  "shader source string is a rim nobody tunes, and a uniform "
+                                  "wired to a literal cannot be read back and proved"
+                                  % (uni, const)]
+    if not re.search(r"float lam = max\(0\.0, dot\(nrm, uRimDir\)\);", src):
+        return FAIL, notes + ["the Lambert term is gone from the vertex program: uRimDir may be "
+                              "reaching the GPU but nothing is shading with it"]
+    if not re.search(r"uFresGain \* fres \+ uRimGain \* fres \* lam", src):
+        return FAIL, notes + ["the rim and the fresnel are no longer both in vR: the fresnel is "
+                              "the term that catches whether the key can see the edge or not, "
+                              "and the rim is the same band multiplied by the key - dropping "
+                              "either one leaves a head the boss will call flat"]
+    if not re.search(r"vec3 col = mix\(uTint, uRimTint, vR\);", src):
+        return FAIL, notes + ["the fragment no longer mixes uRimTint by vR: a brighter edge in "
+                              "the SAME hue is an exposure push and not a rim light"]
+    notes.append("the rim and the fresnel are declared, assigned from PRES.* and read in both "
+                 "programs - measured on the plates at 0.69->1.11, 0.90->1.88, 1.07->1.75 and "
+                 "1.74->2.89 keyed-arc over away-arc, at yaw -30/0/30/90")
+
+    # -- (e) the normal comes off the undeformed attribute.
+    if not re.search(r"vec3 nrm = normalize\(rot \* \(position / uNrmHalf", src):
+        return FAIL, notes + ["the shading normal is no longer estimated from `position`: taken "
+                              "off `p` it is a normal of the ANIMATION - a lid already folded, a "
+                              "lip already rippled, a mandible already swung - so the cheek "
+                              "would change brightness every time the jaw opened"]
+    notes.append("the normal is estimated from the undeformed `position` attribute, so the "
+                 "shading is of the anatomy and not of the animation")
+
+    # -- (f) both edge terms ride the depth factor.
+    vr = re.search(r"vR = clamp\((.*?)\);", src)
+    if not vr or "* near" not in vr.group(1):
+        return FAIL, notes + ["vR no longer rides `near`: the back of the skull then catches its "
+                              "own fresnel and the head wears a second bright outline one ring "
+                              "outside the first, which is what the first cut of this did"]
+    notes.append("and both edge terms ride `near`, so the occiput cannot draw a second outline "
+                 "behind the face")
+
+    # -- (g) the sprite follows the well.
+    if not re.search(r"gl_PointSize = sz \* uDpr \* uScale", src):
+        return FAIL, notes + ["gl_PointSize no longer carries uScale: the same 2px sprite in a "
+                              "420px well and in a 213px well is two different per-pixel "
+                              "densities, so the hologram's texture would depend on how crowded "
+                              "the top-right lane happened to be"]
+    if not re.search(r"uniforms\.uScale\.value = pres\.scale", src):
+        return FAIL, notes + ["nothing assigns uScale from pres.scale on resize, so the sprite "
+                              "factor is a constant and the well's size does not reach it"]
+    notes.append("uScale is set from the well's own side on every resize and multiplies "
+                 "gl_PointSize, so a big well and a small one are one object at two sizes")
+    return PASS, notes
+
+
+def check_his_corpus():
+    """The collection is his, the quarantine is unindexed by BOTH walkers, and the palette fits.
+
+    §27 PART 8 turns the demonstration corpus out and leaves the employer's own notes behind.
+    Every clause here guards a failure that looks like success from the outside:
+
+    (a) THE GRAPH AND THE DISK AGREE, as sets and not as counts. Two off-by-one errors that
+        cancel leave the count right and the galaxy wrong, so the filenames are compared.
+
+    (b) THE CLUSTERS ARE THE FOLDERS. "clusters == folders" is a §27 clause in its own words,
+        and a note at the root of notes/ is the case that breaks a naive version: it has no
+        folder and is grouped as "unfiled", which is a real cluster with no directory.
+
+    (c) NOTHING QUARANTINED IS A STAR, by path and not by title.
+
+    (d) THE STORE HOLDS EXACTLY THE INDEXABLE FILES ON DISK, recomputed here. This is the
+        clause that would have caught the mistake this part actually made: "quarantine" went
+        into build.py's SKIP_DIRS and not into ingest.py's, so the galaxy stopped showing the
+        thirty café notes WHILE THE BRAIN WENT ON CITING THEM. The graph looked cured. Nothing
+        visible was wrong. A citation is the strongest claim this machine makes and all thirty
+        were still available to it.
+
+    (e) AND THE NAME IS IN BOTH LISTS, asserted in the source of both files, because (d) tests
+        today's tree and this tests the rule. The two lists cannot be merged - build.py's
+        galaxy half is standard library only and ingest.py needs chromadb - so the only thing
+        keeping them in step is a comment, and a comment is not a check.
+
+    (f) THE PALETTE CAN COLOUR EVERY CLUSTER. Held over from PART 5 on purpose, because it
+        belongs to the corpus and not to the deck: colorOf wraps on PALETTE.length, so the
+        cluster after the last jewel silently SHARES a colour with the first, and the legend's
+        one promise - that a colour in the corner and a colour in the sky are the same claim -
+        stops being true. It has now happened twice, both times because the employer filed
+        something new, and both times it was deck_proof that found it: a full headless browser
+        run, minutes long, for arithmetic on two numbers. The palette is a function of HIS
+        corpus, so every folder he creates spends a jewel, and the next one should warn here
+        rather than redden a harness. It WARNS at exactly enough and fails only when short,
+        because "enough" is the property that matters and a spare jewel is not a defect.
+    """
+    notes = []
+    suffixes = (".md", ".markdown", ".txt", ".pdf", ".docx")
+    skip = {".git", ".svn", ".hg", "node_modules", "viewer", "__pycache__", "vector-store",
+            ".obsidian", ".trash", ".vscode", ".idea", "venv", ".venv", "env", "say-cache",
+            "quarantine"}
+
+    def walk(top):
+        found = []
+        for dirpath, dirnames, filenames in os.walk(top):
+            dirnames[:] = [d for d in dirnames if d not in skip and not d.startswith(".")]
+            for name in filenames:
+                if name.lower().endswith(suffixes):
+                    found.append(os.path.relpath(os.path.join(dirpath, name), ROOT)
+                                 .replace("\\", "/"))
+        return found
+
+    index_path = os.path.join(ROOT, "notes-index.json")
+    try:
+        with open(index_path, encoding="utf-8") as handle:
+            index = json.load(handle)
+    except Exception as exc:                                   # noqa: BLE001
+        return FAIL, ["notes-index.json will not load (%s), so the galaxy has no data" % exc]
+    listed = sorted(n.get("file", "") for n in index.get("notes") or [])
+    groups = sorted(index.get("meta", {}).get("groups") or [])
+
+    # -- (a) the graph is the disk.
+    on_disk = sorted(f for f in walk(os.path.join(ROOT, "notes"))
+                     if f.lower().endswith((".md", ".markdown")))
+    if listed != on_disk:
+        missing = [f for f in on_disk if f not in listed]
+        extra = [f for f in listed if f not in on_disk]
+        return FAIL, ["the galaxy and notes/ disagree: %d note(s) on disk are not stars (%s), "
+                      "%d star(s) have no file (%s) - run build.py"
+                      % (len(missing), ", ".join(missing[:3]) or "none",
+                         len(extra), ", ".join(extra[:3]) or "none")]
+    notes.append("worlds == notes: %s and no star lacks a file"
+                 % ("the one note on disk is a star" if len(on_disk) == 1
+                    else "all %d notes on disk are stars" % len(on_disk)))
+
+    # -- (b) the clusters are the folders, with "unfiled" standing in for the root.
+    folders = sorted(d for d in os.listdir(os.path.join(ROOT, "notes"))
+                     if os.path.isdir(os.path.join(ROOT, "notes", d))
+                     and d not in skip and not d.startswith("."))
+    rooted = [f for f in on_disk if f.count("/") == 1]
+    want = sorted(folders + (["unfiled"] if rooted else []))
+    if groups != want:
+        return FAIL, notes + ["clusters != folders: the index groups are %s and notes/ holds "
+                              "the folders %s%s" % (groups, folders,
+                                                    " plus %d note(s) at the root" % len(rooted)
+                                                    if rooted else "")]
+    notes.append("clusters == folders: %s%s"
+                 % (", ".join(folders) or "no folders",
+                    " plus \"unfiled\" for the %d note(s) at the root of notes/" % len(rooted)
+                    if rooted else ""))
+
+    # -- (c) nothing quarantined is a star.
+    dirty = [f for f in listed if "quarantine" in f.lower()]
+    if dirty:
+        return FAIL, notes + ["%d quarantined file(s) are stars in his galaxy: %s"
+                              % (len(dirty), ", ".join(dirty[:3]))]
+
+    # -- (d) the store holds exactly the indexable files the walk finds.
+    indexable = sorted(set(walk(os.path.join(ROOT, "notes")))
+                       | set(walk(os.path.join(ROOT, "archive"))))
+    health = as_json(http_call("GET", "/health", timeout=20)[2]) or {}
+    held = (health.get("vectors") or {}).get("files")
+    if held is None:
+        notes.append("/health reports no vector file count, so the store could not be compared")
+    elif held != len(indexable):
+        return FAIL, notes + [
+            "the store holds %s file(s) and the walk finds %d indexable on disk. A quarantined "
+            "folder that is skipped by build.py and NOT by ingest.py looks exactly like this: "
+            "the galaxy is clean and the brain can still cite every word of it"
+            % (held, len(indexable))]
+    else:
+        notes.append("the store holds %d file(s), which is exactly what the walk finds "
+                     "indexable - nothing under a quarantine is retrievable or citable" % held)
+
+    # -- (e) and the name is in BOTH skip lists, in the source.
+    for who, path in (("build.py (the graph)", "build.py"), ("ingest.py (the vectors)",
+                                                             "ingest.py")):
+        try:
+            with open(os.path.join(ROOT, path), encoding="utf-8") as handle:
+                body = handle.read()
+        except Exception as exc:                               # noqa: BLE001
+            return FAIL, notes + ["cannot read %s (%s)" % (path, exc)]
+        block = re.search(r"SKIP_DIRS\s*=\s*\{(.*?)\}", body, re.S)
+        if not block or "quarantine" not in block.group(1):
+            return FAIL, notes + [
+                "%s does not have \"quarantine\" in SKIP_DIRS, so half the law is missing. The "
+                "two lists are deliberately separate and only a comment links them" % who]
+    notes.append("\"quarantine\" is in SKIP_DIRS in build.py AND ingest.py, so one name takes "
+                 "a folder out of the graph and out of the vectors together")
+
+    # -- (f) the palette can colour every cluster.
+    try:
+        with open(os.path.join(ROOT, "viewer", "index.html"), encoding="utf-8") as handle:
+            viewer = handle.read()
+    except Exception as exc:                                   # noqa: BLE001
+        return FAIL, notes + ["cannot read the viewer (%s)" % exc]
+    jewels = re.search(r"const PALETTE = \[(.*?)\]", viewer, re.S)
+    if not jewels:
+        return FAIL, notes + ["no const PALETTE array in the viewer, so no colour is promised "
+                              "to any cluster"]
+    count = len(re.findall(r"#[0-9A-Fa-f]{6}", jewels.group(1)))
+    if count < len(groups):
+        return FAIL, notes + [
+            "%d jewels in PALETTE for %d clusters, so colorOf wraps and cluster %d shares a "
+            "colour with the first. The legend then says two folders are one"
+            % (count, len(groups), count + 1)]
+    if count == len(groups):
+        notes.append("%d jewels for %d clusters - EXACTLY enough, so the next folder he files "
+                     "wraps the palette. Add a jewel before it does" % (count, len(groups)))
+        return WARN, notes
+    notes.append("%d jewels in PALETTE for %d cluster%s, so every folder gets its own colour "
+                 "with %d spare" % (count, len(groups), "" if len(groups) == 1 else "s",
+                                    count - len(groups)))
+    return PASS, notes
+
+
+def check_scribe_skin():
+    """The minutes panel is the Scribe's own, and it still collapses to its 34px strip.
+
+    §27 PART 5 gives the transcript panel log paper, a stamp gutter, a ruled baseline, its own
+    accent and a header seal. Most of that is a matter for the eye and a plate, and those are
+    in the lookbook. What is asserted here is the part a plate CANNOT show, and each clause
+    guards a failure that a screenshot taken seven seconds into a meeting looks fine under:
+
+      (a) THE PANEL DECLARES ITS OWN PROPERTIES. Five custom properties scoped to
+          #scribepanel. They are the mechanism by which the skin is ADDED ALONGSIDE the deck's
+          vocabulary rather than replacing any of it - nothing outside this panel is touched
+          and no relied-on class was renamed.
+      (b) AND THE ACCENT IS NOT EITHER DECK CYAN. This is the whole point of the part, stated
+          as a number. The panel is the one surface on the glass that is not the butler
+          talking but a RECORD OF WHAT THE ROOM SAID, and the Scribe privacy law rests on a
+          reader being able to tell those apart at a glance. An accent that drifted back to
+          #22e0ff or #7fe9ff would leave it looking like another readout.
+      (c) THE STAMP GUTTER IS A GRID TRACK, AND A FIXED ONE. Every transcript line is its own
+          grid container - there is no grid shared across entries - so the only thing holding
+          the stamps in a column is that the first track is the same absolute width in all of
+          them. min-content would give each line the gutter its own stamp needs and the column
+          would stagger. And it must be a GRID: with the stamp floated or margined instead,
+          the second visual line of a long utterance wraps back underneath it and the column
+          loses its left edge, which only shows up on an entry long enough to wrap.
+      (d) AND THE LINES THAT CARRY NO STAMP GET A SINGLE TRACK. scribeAppend() writes
+          <span class="t"> for speech only; a note and a refusal have no .t at all. Under a
+          two-track template their words are auto-placed into the STAMP COLUMN, 62px wide,
+          straddling the margin rule. The override plus a padding-left of the same gutter is
+          what puts every kind of line on one left edge.
+      (e) THE SEAL IS A PSEUDO-ELEMENT AND A GRADIENT. ::before, so no markup was added and
+          no harness gained a node; a gradient and never a url(), because an image is a
+          request, a cache entry and a thing to forget to ship - the no-webfont law's own
+          argument applied to a texture.
+      (f) AND THE STRIP GETS NONE OF IT. The head's new underline is 1px of border over 8px
+          of padding, and the collapsed strip is a PUBLISHED vertical budget: LAYOUT.STRIP_H
+          is 34 and layout_proof asserts the panel measures no more than STRIP_H + 1. The
+          untreated head measures 36px in strip mode. So both the underline and the seal are
+          struck off under .strip, and the failure mode of forgetting either is a decorative
+          rule breaking a governor's budget - which is exactly the kind of thing that gets
+          shipped because it looks right in the state anyone thinks to screenshot.
+      (g) THE STAMP CANNOT ESCAPE. The stamp is right-aligned in a fixed track, and
+          scribeStamp() does not pad the minutes or roll over to hours - so a long enough
+          meeting writes a stamp wider than its track, and a right-aligned overflow escapes
+          to the LEFT, out through the panel's padding and onto the glass. Measured: six
+          characters ink 42.2px into 48px of room and seven characters want 49.2px. The
+          overflow:hidden is the guard, and it must not be removed on the grounds that
+          today's stamps fit.
+    """
+    notes = []
+    try:
+        with open(os.path.join(ROOT, "viewer", "index.html"), encoding="utf-8") as fh:
+            raw = fh.read()
+    except OSError as exc:
+        return FAIL, ["cannot read viewer/index.html: %s" % exc]
+
+    # THE COMMENTS COME OUT FIRST, and this is not tidiness. The rules below are explained in
+    # prose that NAMES the very things being asserted - "a gradient and never a url()", "the
+    # overflow:hidden on .t" - so a check run against the commented text would pass on the
+    # explanation of a rule that had been deleted. Every needle here has to land on a
+    # declaration.
+    bare = re.sub(r"/\*.*?\*/", " ", raw, flags=re.S)
+    start = bare.find("#scribepanel{")
+    end = bare.find("#brain.gated #caption")
+    if start < 0 or end < 0 or end <= start:
+        return FAIL, ["the #scribepanel stylesheet block is not where it was, so none of the "
+                      "PART 5 clauses can be located - the region runs from #scribepanel{ to "
+                      "#brain.gated #caption"]
+    css = bare[start:end]
+
+    # -- (a) the panel's own properties, scoped to it.
+    want = ["--sc-accent", "--sc-ink", "--sc-rule", "--sc-faint", "--sc-gutter"]
+    missing = [p for p in want if not re.search(re.escape(p) + r"\s*:", css)]
+    if missing:
+        return FAIL, ["the minutes panel does not declare its own %s, so its skin is not scoped "
+                      "to it and anything it sets is being taken from the deck's own vocabulary"
+                      % ", ".join(missing)]
+    notes.append("the panel scopes five properties of its own (%s) - added alongside the deck's "
+                 "vocabulary, replacing none of it" % ", ".join(want))
+
+    # -- (b) and the accent is its own hue, not either deck cyan.
+    accent = re.search(r"--sc-accent\s*:\s*([^;}]+)", css)
+    hue = accent.group(1).strip().lower()
+    if re.sub(r"[#\s]", "", hue) in ("22e0ff", "7fe9ff", "22e0ff", "78e8ff"):
+        return FAIL, notes + ["--sc-accent is %s, which is the deck's own cyan: the minutes panel "
+                              "would read as another readout of what the butler thinks rather "
+                              "than as a record of what the room said" % hue]
+    if not re.search(r"\.lbl\{[^}]*color:\s*var\(--sc-accent\)", css):
+        return FAIL, notes + ["the panel's label does not take colour from --sc-accent, so the "
+                              "hue is declared and not used - the one thing a constants table "
+                              "cannot prove is that the value arrived"]
+    notes.append("its accent is %s and the label actually resolves to it, so the Scribe's "
+                 "surface is legibly not a state readout" % hue)
+
+    # -- (c) the stamp gutter is a fixed grid track.
+    grid = re.search(r"\.lines p\{([^}]*)\}", css)
+    if not grid:
+        return FAIL, notes + ["the transcript line rule is gone, so the stamp gutter cannot be "
+                              "checked"]
+    body = grid.group(1)
+    if "display:grid" not in body.replace(" ", ""):
+        return FAIL, notes + ["a transcript line is no longer a grid: with the stamp floated or "
+                              "margined instead, the SECOND visual line of a long utterance "
+                              "wraps back under the stamp and the column loses its left edge"]
+    if not re.search(r"grid-template-columns:\s*var\(--sc-gutter\)\s+1fr", body):
+        return FAIL, notes + ["the transcript line's first track is not var(--sc-gutter): every "
+                              "line is its own grid container, so only an identical ABSOLUTE "
+                              "first track holds the stamps in one column - min-content or "
+                              "max-content would stagger it line by line"]
+    if not re.search(r"border-bottom:\s*1px solid var\(--sc-rule\)", body):
+        return FAIL, notes + ["the entries are no longer ruled off from one another; the rule is "
+                              "per ENTRY on purpose, because a repeating gradient at the line "
+                              "pitch drifts against any font fallback or zoom"]
+    notes.append("a transcript line is a grid whose first track is the declared gutter, and each "
+                 "entry is ruled off beneath itself")
+
+    # -- (d) and a line with no stamp gets one track, padded to the gutter.
+    solo = re.search(r"p\.note,[^{]*p\.bad\{([^}]*)\}", css)
+    if not solo:
+        return FAIL, notes + ["nothing overrides the grid for p.note and p.bad. scribeAppend() "
+                              "writes a .t span for SPEECH ONLY, so under the two-track template "
+                              "a note's words are auto-placed into the 62px stamp column and "
+                              "written across the margin rule"]
+    if not re.search(r"grid-template-columns:\s*1fr", solo.group(1)) or \
+       not re.search(r"padding-left:\s*var\(--sc-gutter\)", solo.group(1)):
+        return FAIL, notes + ["the unstamped lines are overridden but not to ONE track padded to "
+                              "the gutter, which is what puts a note, a refusal and a spoken "
+                              "line on the same left edge: %s" % solo.group(1).strip()[:160]]
+    notes.append("the unstamped lines - a note and a refusal - get one track padded to the same "
+                 "gutter, so every kind of line shares one left edge and none crosses the rule")
+
+    # -- (e) the seal is a pseudo-element and a gradient, and nothing here fetches an asset.
+    seal = re.search(r"\.head::before\{([^}]*)\}", css)
+    if not seal:
+        return FAIL, notes + ["the header seal is gone. It is a ::before on purpose: a "
+                              "pseudo-element of a flex container is a flex item, so the seal "
+                              "cost no markup and gave no harness a new node to trip over"]
+    if "content:''" not in seal.group(1).replace(" ", "") or \
+       "gradient" not in seal.group(1):
+        return FAIL, notes + ["the seal is not a generated gradient box: %s"
+                              % seal.group(1).strip()[:160]]
+    if "url(" in css:
+        return FAIL, notes + ["the minutes panel now fetches something with url(). The paper, the "
+                              "rules and the seal are gradients precisely so that there is no "
+                              "request, no cache entry and no asset to forget to ship - the same "
+                              "argument as the no-webfont privacy law"]
+    notes.append("the seal is a generated gradient on .head::before - no markup added, no url() "
+                 "anywhere in the panel, so nothing about this skin is a request")
+
+    # -- (f) AND THE STRIP GETS NONE OF IT. This is the clause that guards a published budget.
+    strip_head = re.search(r"\.strip \.head\{([^}]*)\}", css)
+    if not strip_head:
+        return FAIL, notes + ["the strip no longer restyles .head, so the head's new underline "
+                              "and its 8px of padding are carried into the collapsed strip"]
+    sh = strip_head.group(1).replace(" ", "")
+    if "border-bottom:0" not in sh or "padding-bottom:0" not in sh:
+        return FAIL, notes + ["the strip does not strike off the head's underline and its "
+                              "padding. The strip is a PUBLISHED budget - LAYOUT.STRIP_H is 34 "
+                              "and layout_proof asserts the panel measures no more than "
+                              "STRIP_H + 1 - and the underlined head measures 36px: %s" % sh[:160]]
+    if not re.search(r"\.strip \.head::before\{[^}]*display:\s*none", css):
+        return FAIL, notes + ["the seal is not hidden in strip mode. At 312px, with the note "
+                              "panel open, the label already ellipsizes and drops its "
+                              "letter-spacing; 16px of seal plus 10px of gap comes out of the "
+                              "one word on the strip that says MINUTES"]
+    notes.append("and the collapsed strip is given none of it - underline, padding and seal are "
+                 "all struck off, so the 34px budget layout_proof asserts is untouched")
+
+    # -- (g) the stamp cannot escape its track.
+    stamp = re.search(r"\.lines p \.t\{([^}]*)\}", css)
+    if not stamp or "overflow:hidden" not in stamp.group(1).replace(" ", ""):
+        return FAIL, notes + ["the stamp has lost its overflow guard. It is right-aligned in a "
+                              "fixed track and scribeStamp() neither pads the minutes nor rolls "
+                              "over to hours, so a long enough meeting writes a stamp wider than "
+                              "its track - and a right-aligned overflow escapes to the LEFT, out "
+                              "through the panel's padding and onto the glass. Six characters "
+                              "ink 42.2px into 48px of room; seven want 49.2px"]
+    notes.append("the stamp is clipped rather than allowed to escape left out of its own track, "
+                 "which is the direction a right-aligned overflow actually goes")
+    return PASS, notes
+
+
+def check_census():
+    """37. Seventeen questions, an answered-state read off the disk, and three refusals.
+
+    §27 PART 8's intake. The Census is the one feature in this project whose entire claim is
+    about what does NOT happen: it asks the employer seventeen questions about his own life
+    and it must not write a single word of any answer until he has given one. census_proof.mjs
+    proves the board and the card in a real browser; this proves the ORGAN, at the wire, on
+    every run, and it writes nothing at all - not even a probe note to delete afterwards.
+
+      (a) THE SHAPE AGREES WITH ITSELF. Three chapters, seventeen questions, every id unique
+          and every SLUG unique. The slugs matter more than the ids: the slug is the filename
+          an answer lands under, so two questions sharing one would have the second overwrite
+          the first - or, because save_note steps aside to -2, file it where the reader of
+          `answered` will never look for it. A duplicate id is a typo; a duplicate slug is a
+          lost answer.
+
+      (b) AND `answered` IS READ, NEVER REMEMBERED. Every question's flag is recomputed here
+          from the folder on disk and compared with what /census said. THE FAILURE MODE THIS
+          NAMES is a progress figure kept in the process: it survives his notes being moved,
+          restored or edited by hand, and it is wrong from the first restart - the board then
+          asks him a question he has already answered, or worse, stops asking one he has not.
+          A note the employer deletes himself must put its question back in the queue.
+
+      (c) THE THREE REFUSALS MINT NO SLOT. An id that is not one of the seventeen, an answer
+          that is only whitespace, and an answer carrying a credential. Each must come back
+          400 with nothing pending afterwards - because a near-miss that leaves a slot behind
+          is a slot a later "yes", meant for something else entirely, can confirm. The
+          credential refusal is checked twice over: it must NAME the kind, and the value must
+          appear nowhere in the payload. A scanner that quotes what it found has copied the
+          secret into the record that exists to prove it was kept out.
+
+      (d) AND A GOOD ANSWER IS STILL ONLY A PROPOSAL. The gate: a real answer to a real
+          question mints one pending save_note whose `folder` parameter is census, and the
+          folder on disk is unchanged. Then it is CANCELLED, so this check ends with the disk
+          exactly as it found it and nothing pending for the next check to trip over.
+
+      (e) AND THE FOLDER IS A WORD IN AN ALLOWLIST, not a path. save_note.py takes `folder`
+          from a model-facing registry parameter, so the only safe shape for it is a key in a
+          table - asserted in the source, because census.FOLDER agreeing with the allowlist
+          today is not the same claim as the allowlist being an allowlist.
+    """
+    notes = []
+    folder = os.path.join(ROOT, "notes", census.FOLDER)
+
+    def listing():
+        try:
+            return sorted(n for n in os.listdir(folder) if n.lower().endswith(".md"))
+        except OSError:
+            return []                       # an absent folder is an empty one, not an error
+
+    before = listing()
+
+    def pending():
+        # GET, not a POST with an unknown cmd: the refusal path also carries `pending`, and a
+        # check that reads its state out of an error response is one route change from
+        # reporting "nothing pending" because the error shape moved.
+        _status, _head, data = http_call("GET", "/tools", timeout=20,
+                                         label="GET /tools (census pending)")
+        return (as_json(data) or {}).get("pending") or None
+
+    def put_down(why):
+        post_json("/tools", {"cmd": "cancel", "door": "curl"}, timeout=20,
+                  label="POST /tools (cancel: %s)" % why)
+
+    # -- (a) the shape.
+    status, _, data = http_call("GET", "/census", timeout=25, label="GET /census")
+    snap = as_json(data) or {}
+    if status != 200 or not snap.get("ok"):
+        return FAIL, ["GET /census answered %s, so the intake cannot be read: %s"
+                      % (status, str(snap)[:160])]
+    chapters = snap.get("chapters") or []
+    rows = [q for c in chapters for q in (c.get("questions") or [])]
+    ids = [str(q.get("id") or "") for q in rows]
+    slugs = [str(q.get("slug") or "") for q in rows]
+    if len(chapters) != len(census.CHAPTERS) or len(rows) != census.TOTAL:
+        return FAIL, ["/census reads %d chapter(s) and %d question(s); the module declares "
+                      "%d and %d" % (len(chapters), len(rows), len(census.CHAPTERS),
+                                     census.TOTAL)]
+    if len(set(ids)) != len(ids) or len(set(slugs)) != len(slugs):
+        dup_id = sorted({i for i in ids if ids.count(i) > 1})
+        dup_slug = sorted({s for s in slugs if slugs.count(s) > 1})
+        return FAIL, ["the questions are not distinct: id(s) %s, slug(s) %s. Two questions "
+                      "sharing a slug share a filename, and the second answer lands where "
+                      "nothing will read it" % (dup_id or "none", dup_slug or "none")]
+    notes.append("%d questions in %d chapters (%s), every id and every slug distinct"
+                 % (len(rows), len(chapters),
+                    ", ".join(str(c.get("name") or c.get("id")) for c in chapters)))
+
+    # -- (b) answered is read off the folder, not carried.
+    stems = [n[:-3].lower() for n in before]
+    wrong = []
+    for q in rows:
+        slug = str(q.get("slug") or "").lower()
+        on_disk = any(s == slug or s.startswith(slug + "-") for s in stems)
+        if bool(q.get("answered")) != on_disk:
+            wrong.append("%s (says %s, disk says %s)"
+                         % (q.get("id"), bool(q.get("answered")), on_disk))
+    if wrong:
+        return FAIL, notes + [
+            "%d question(s) disagree with notes/%s: %s. The answered-state is being remembered "
+            "rather than read, so a note he moves or deletes leaves the board lying about what "
+            "it has already asked him" % (len(wrong), census.FOLDER, "; ".join(wrong[:3]))]
+    done = sum(1 for q in rows if q.get("answered"))
+    if snap.get("answered") != done:
+        return FAIL, notes + ["/census totals %s answered but %d question rows say answered"
+                              % (snap.get("answered"), done)]
+    notes.append("answered = %d of %d, and every flag matches the %d file(s) in notes/%s - "
+                 "read off the folder on this call, not carried in the process"
+                 % (done, census.TOTAL, len(before), census.FOLDER))
+
+    # -- (c) the three refusals.
+    put_down("clearing the slot before the census refusals")
+    SECRET = "Tr0ub4dor3xK9z"               # not a credential; a shape secretscan objects to
+    probes = (
+        ("an id that is not one of the seventeen",
+         {"id": "life-favourite-biscuit", "answer": "a rich tea, obviously"}, None),
+        ("an answer that is only whitespace", {"id": ids[0], "answer": "   \t  "}, None),
+        ("an answer carrying a credential",
+         {"id": ids[0], "answer": "put it in the notes, the api key is " + SECRET},
+         "credential"),
+    )
+    for label, payload, refused in probes:
+        status, _, data = post_json("/census/answer", payload, timeout=30,
+                                    label="POST /census/answer (%s)" % label)
+        body = as_json(data) or {}
+        raw = json.dumps(body)
+        if status != 400 or body.get("pending") or body.get("id"):
+            return FAIL, notes + ["%s answered %s and offered %s - a refusal that mints a slot "
+                                  "leaves something a later yes can confirm: %s"
+                                  % (label, status, body.get("pending") or body.get("id"),
+                                     raw[:160])]
+        if refused and body.get("refused") != refused:
+            return FAIL, notes + ["%s was refused without naming it as a %s (refused=%r), so "
+                                  "the page cannot tell him WHY it will not be written"
+                                  % (label, refused, body.get("refused"))]
+        if SECRET in raw:
+            return FAIL, notes + ["the refusal quotes the value it objected to, which copies "
+                                  "the secret into the record that exists to prove it was kept "
+                                  "out of the note"]
+        still = pending()
+        if still:
+            put_down("a refusal left a slot")
+            return FAIL, notes + ["%s left %s pending afterwards"
+                                  % (label, still.get("tool") or still.get("id"))]
+    if listing() != before:
+        return FAIL, notes + ["notes/%s changed during the three refusals: %s -> %s"
+                              % (census.FOLDER, before, listing())]
+    notes.append("three refusals - an unknown question, a blank answer and a credential - each "
+                 "400, each naming itself, none minting a slot, and notes/%s untouched by all "
+                 "three" % census.FOLDER)
+
+    # -- (d) a good answer proposes and does not write.
+    nxt = snap.get("next") or {}
+    qid = str(nxt.get("id") or ids[0])
+    status, _, data = post_json("/census/answer",
+                               {"id": qid,
+                                "answer": "This sentence was put here by preflight to prove the "
+                                          "gate holds, and it is cancelled rather than filed."},
+                               timeout=45, label="POST /census/answer (the gate)")
+    body = as_json(data) or {}
+    slot = body.get("pending") or body
+    try:
+        if status != 200 or not slot.get("id"):
+            return FAIL, notes + ["a good answer to %s did not propose (%s): %s"
+                                  % (qid, status, json.dumps(body)[:200])]
+        if slot.get("tool") != "save_note":
+            return FAIL, notes + ["the Census proposed %r rather than save_note"
+                                  % slot.get("tool")]
+        params = slot.get("params") or {}
+        asked = str(params.get("folder") or "")
+        if asked != census.FOLDER:
+            return FAIL, notes + ["the proposal would file into %r and not %r, so a Census "
+                                  "answer would land among his passing thoughts"
+                                  % (asked, census.FOLDER)]
+        if listing() != before:
+            return FAIL, notes + ["a file appeared in notes/%s at PROPOSAL time, before any "
+                                  "word was given: %s" % (census.FOLDER, listing())]
+        notes.append("a real answer mints ONE pending save_note into notes/%s, with the question "
+                     "in the title (%r), and the folder is still %d file(s) - nothing is written "
+                     "until a word is given"
+                     % (census.FOLDER, str(body.get("title") or "")[:48], len(before)))
+    finally:
+        put_down("the gate proposal")
+    if pending() or listing() != before:
+        return FAIL, notes + ["the gate proposal would not cancel cleanly, or it wrote: %s"
+                              % listing()]
+
+    # -- (e) the folder is a word in an allowlist.
+    try:
+        with open(os.path.join(ROOT, "tools", "save_note.py"), encoding="utf-8") as handle:
+            hand = handle.read()
+    except Exception as exc:                                   # noqa: BLE001
+        return FAIL, notes + ["cannot read tools/save_note.py (%s)" % exc]
+    table = re.search(r"FOLDERS\s*=\s*\{(.*?)\}", hand, re.S)
+    if not table or census.FOLDER not in table.group(1):
+        return FAIL, notes + [
+            "save_note.py has no FOLDERS allowlist containing %r. `folder` arrives from a "
+            "registry parameter a model fills in, and a parameter a model fills in with a PATH "
+            "is a traversal waiting for a bad day" % census.FOLDER]
+    notes.append("and save_note.py takes the folder from a %d-word allowlist rather than a path, "
+                 "so %r is a key and not a directory a model can steer"
+                 % (len(re.findall(r"\"[a-z]+\"\s*:", table.group(1))), census.FOLDER))
+    return PASS, notes
+
+
 CHECKS = [
     ("the server is up and serving the viewer", check_server),
     ("the graph data loads and has nodes", check_graph),
     ("/chat answers a real question, with nodes", check_chat),
     ("the key in config.json is valid", check_credentials),
     ("the configured model is reachable", check_model),
-    ("/remember writes a note /chat can find at once", check_remember),
+    ("/remember proposes a note, a word writes it, and /chat finds it at once",
+     check_remember),
     ("/see answers a real JPEG", check_see),
     ("the served files match the files on disk", check_served_files),
     ("config.json is not reachable from the browser", check_config_unreachable),
@@ -5387,6 +7360,27 @@ CHECKS = [
     ("a turn resets once, and one hand writes the arm", check_reset_contract),
     ("the voiceprints stay in their folder, embeddings only", check_speaker_store),
     ("a chip is a claim about the sentence above it", check_citation_honesty),
+    ("a plan of two is a schema, and a plan that breaks it never pends",
+     check_chain_protocol),
+    ("the prompt has a cap, an order, and a memory of what it dropped",
+     check_context_budget),
+    ("every answer carries a grounding class, and a class is not a route",
+     check_grounding_audit),
+    ("the clock costs nothing and knows what day it is there", check_world_clock),
+    ("the connectors board reads two routes and cannot run a hand",
+     check_connectors_board),
+    ("an answer being read is on one surface, and the card keeps the record",
+     check_one_surface),
+    ("he reports for duty once, with music he makes, and is quiet three ways",
+     check_boot_ceremony),
+    ("the head is large and shaded, and still one object and one allocation",
+     check_face_shading),
+    ("the minutes are on the Scribe's own paper, and the strip is still 34px",
+     check_scribe_skin),
+    ("the collection is his, the quarantine is unindexed, and the palette fits the clusters",
+     check_his_corpus),
+    ("seventeen questions, an answered-state read off the disk, and three refusals",
+     check_census),
 ]
 
 

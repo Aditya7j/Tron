@@ -53,18 +53,18 @@
  *
  * Headed, GPU-backed, and NOT muted: the subject is what comes out of the speakers on the
  * machine in front of you. IT WILL TALK OUT LOUD FOR ABOUT THREE MINUTES. It asks the server
- * for audio and for nothing else - no mail, no diary, no model, and it never WRITES
+ * for audio and for one clock question - no mail, no diary, no model, no web, and it never WRITES
  * config.json: the casting door is proved by its refusals and by a digest, because a test
  * that rewrote the file holding the employer's keys to see whether it could would be a worse
  * thing than the bug it was looking for.
  *
  * Usage:  python server.py 2> server-trace.log   then   node voice_proof.mjs
  */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 
 const GALAXY = 'http://127.0.0.1:4700';
 const PORT = 9238;
@@ -217,6 +217,104 @@ async function waitFor(page, expr, ms = 10000) {
   for (let i = 0; i < ms / 150; i++) {
     try { if (await page.evaluate(expr)) return true; } catch { }
     await sleep(150);
+  }
+  return false;
+}
+
+/* AND KEPT THERE, WHICH bringToFront CANNOT DO.
+   Page.bringToFront raises the window for an instant; Windows then gives the foreground back
+   to whatever the employer was using, the window is covered, Chrome calls it hidden and this
+   page - correctly - stands its hologram down. Measured across seven runs on this desktop the
+   mouth section was watching a stood-down well more often than not, and no threshold can
+   rescue a reading of a loop that is not running.
+   So the window is made TOPMOST, once, with SetWindowPos and SWP_NOACTIVATE: above the other
+   windows so nothing can cover it, and WITHOUT taking the focus, so the employer keeps typing
+   into whatever he was typing into. It is scoped to THIS harness's own browser by matching
+   the temporary profile directory on the process command line - never by window title, and
+   never a bare "chrome" - so the real browser on 9222 is untouched. Chrome exits with the run
+   and the topmost flag dies with the window; nothing is left set on the desktop. */
+function topmost(profile) {
+  const ps = [
+    /* THE PROFILE'S BASENAME, not its path: a Windows path in a PowerShell string is a
+       thicket of backslashes that [regex]::Escape then doubles again, and "voice-a1b2c3" is
+       unique to this run's own temporary directory anyway. */
+    '$p = Get-CimInstance Win32_Process -Filter "Name=\'chrome.exe\'" |',
+    '  Where-Object { $_.CommandLine -match \'' + basename(profile) + '\' };',
+    'if (-not $p) { "no chrome for this profile"; exit }',
+    'Add-Type -Namespace W -Name P -MemberDefinition \'',
+    '[DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr a,',
+    '  int x, int y, int cx, int cy, uint f);\';',
+    '$n = 0;',
+    'foreach ($q in $p) {',
+    '  $h = (Get-Process -Id $q.ProcessId).MainWindowHandle;',
+    '  if ($h -ne 0) { [W.P]::SetWindowPos($h, [IntPtr](-1), 0, 0, 0, 0, 0x0013) | Out-Null;',
+    '                  $n++ }',
+    '}',
+    '"topmost: $n window(s)"',
+  ].join(' ');
+  try {
+    const r = spawnSync('powershell.exe', ['-NoProfile', '-Command', ps],
+                        { encoding: 'utf8', timeout: 30000 });
+    return ((r.stdout || '') + (r.stderr || '')).trim().split(/\r?\n/).pop() || 'no answer';
+  } catch (e) { return 'powershell: ' + e.message; }
+}
+
+/* AND THE REAL CULPRIT, WHICH TOOK A PROBE TO NAME: THE WINDOW IS BEING MINIMISED.
+   Not covered - minimised, by something on this desktop, within about two seconds of the
+   window appearing, and again later if it is restored. Read off CDP rather than guessed:
+   Browser.getWindowForTarget answers `windowState: "minimized"` at 10,10 1200x818 while the
+   page reports visibilityState 'hidden', the presence well stands down to side 0 and the draw
+   loop freezes at whatever frame it reached. That is the whole family of "the mouth peaked at
+   0.14" readings, and neither bringToFront nor SetWindowPos(HWND_TOPMOST) does anything for a
+   minimised window - the first raises a window that is not there and the second reorders one
+   nobody can see.
+   So the state is watched and PUT BACK for the length of the run: every two seconds, and only
+   when it reads minimised, so a window nobody is fighting over is never touched. Restored
+   WITHOUT bringToFront, deliberately: this runs for eleven minutes on somebody else's desktop
+   and a harness that grabs the foreground every two seconds is worse than one that measures
+   nothing. The interval is unref'd, so it can never be the reason node stays alive. */
+function keepFront(page, every = 2000) {
+  let puts = 0;
+  const t = setInterval(async () => {
+    try {
+      const { result } = await page.send('Browser.getWindowForTarget');
+      if (result && result.bounds && result.bounds.windowState === 'minimized') {
+        await page.send('Browser.setWindowBounds',
+          { windowId: result.windowId, bounds: { windowState: 'normal' } });
+        puts++;
+      }
+    } catch (e) { /* a closing browser has no window; the run is ending anyway */ }
+  }, every);
+  if (t.unref) t.unref();
+  return { stop: () => clearInterval(t), count: () => puts };
+}
+
+/* THE WINDOW, ASKED FOR THE FRONT AND THEN CHECKED FOR IT.
+   Chrome reports a fully covered window as document.visibilityState 'hidden', and this page
+   answers a hidden tab by standing the presence well DOWN - side 0, built false, nothing
+   drawn, a hologram nobody can see being no use to anybody. That is the right behaviour on
+   the glass and it is fatal to a measurement: `level`, `from` and `frames` all keep whatever
+   they last were, so a mouth that works perfectly reads as a stopped clock.
+   Page.bringToFront is a REQUEST, not a guarantee - Windows may refuse to move the foreground
+   for a process that does not own it, and a single call returned "visible" in one run of three
+   on this desktop. So it is asked several times, the window is un-minimised as well, and the
+   answer is read off the page rather than assumed; a caller that still cannot get the front is
+   told so and says so, rather than reporting a red against a mouth nothing was watching. */
+async function front(page, tries = 6) {
+  for (let i = 0; i < tries; i++) {
+    try { await page.send('Page.bringToFront'); } catch (e) { /* noted by the caller */ }
+    try {
+      const { result } = await page.send('Browser.getWindowForTarget');
+      const id = result && result.windowId;
+      /* ONLY A MINIMISED WINDOW IS RESTORED. Sending windowState 'normal' unconditionally
+         would un-maximise a maximised one, shrink the well the governor measured and change
+         the very layout the section is about. */
+      if (id && result.bounds && result.bounds.windowState === 'minimized') {
+        await page.send('Browser.setWindowBounds',
+          { windowId: id, bounds: { windowState: 'normal' } });
+      }
+    } catch (e) { /* a headless or detached browser has no window; the poll decides */ }
+    if (await waitFor(page, 'document.visibilityState === "visible"', 1200)) return true;
   }
   return false;
 }
@@ -503,15 +601,33 @@ async function main() {
   profiles.push(profile);
   /* NOT muted, and headed: ?mute=1 would make every check below a check about bookkeeping.
      The autoplay flag is NOT set - the whole point is that the real gesture works. */
+  /* AND THE WINDOW IS NOT ALLOWED TO GO BLIND BEHIND ANOTHER ONE. Chrome computes native
+     window occlusion on Windows and reports a fully covered window as visibilityState
+     'hidden'; this page answers that by standing the presence well down and stopping the
+     draw loop, which is correct on the glass and ruinous to a measurement - three runs on
+     this desktop read a mouth peak of 0.14, 0.22 and 0.98 for the same sentence on the same
+     voice, the differences being entirely what else happened to be in front at the time.
+     CalculateNativeWinOcclusion off, and occluded windows not backgrounded, so the tab this
+     harness is measuring stays visible whatever the desktop does. Nothing else about the
+     page changes: the flags are about what Chrome tells the page, and the LAW being tested
+     - "a hidden tab stops painting" - is asserted where it belongs and without needing the
+     desktop's help, by deck_proof spoofing document.visibilityState over the accessor. */
   const chrome = spawn(exe, [
     '--remote-debugging-port=' + PORT, '--user-data-dir=' + profile,
     '--no-first-run', '--no-default-browser-check',
+    '--disable-features=CalculateNativeWinOcclusion',
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding',
     '--window-size=1200,820', '--new-window', GALAXY,
   ], { detached: true, stdio: 'ignore' });
   procs.push(chrome);
 
   for (let i = 0; i < 80; i++) { try { await cdp('/json/version'); break; } catch { await sleep(250); } }
   note('chrome: ' + ((await cdp('/json/version')).Browser || '?'));
+  /* ONCE, HERE, AND IT LASTS THE RUN - see topmost(). Everything this harness measures about
+     the presence is a measurement of a page that is being painted, and this is what keeps it
+     painted while ten minutes of real speech go by on somebody else's desktop. */
+  note('the window: ' + topmost(profile) + ' (above the others, focus left where it was)');
   let target = null;
   for (let i = 0; i < 40; i++) {
     const l = await cdp('/json/list');
@@ -525,6 +641,7 @@ async function main() {
   await page.send('Runtime.enable');
   await page.send('Page.enable');
   try { await page.send('Page.bringToFront'); } catch (e) { note('bringToFront: ' + e.message); }
+  const keeper = keepFront(page);
   ok(await waitFor(page, '!!(window.__galaxy && window.__galaxy.voice)', 30000),
      'the viewer is up and exposes the voice');
 
@@ -747,6 +864,63 @@ async function main() {
      await page.evaluate('__galaxy.audio.state + " / built " + __galaxy.audio.built'));
   ok(await page.evaluate('__galaxy.speech.muted === false'),
      'and this run is NOT muted - what follows is a measurement of the speakers');
+
+  /* ---- 4b. THE BOOT CEREMONY, WHICH IS WHAT THAT CLICK JUST RELEASED --------
+     The house reports for duty once, on the first healthy /health, and on this machine
+     /health always lands before anybody has clicked anything - so the sentence is held by
+     the autoplay law and the music is armed to the same gesture that releases it. That is
+     the moment being sampled here, and it is sampled rather than read afterwards for the
+     duck: the bus is ducked only while something is actually speaking, and by the time the
+     queue is dry the ramp has already lifted it back. A reading taken after the fact would
+     be a reading of silence, and it would pass. */
+  const CEREMONY = '({ boot: __galaxy.boot, ducked: __galaxy.audio.ducked,' +
+    ' gain: __galaxy.audio.gain, duckTo: __galaxy.audio.duckTo,' +
+    ' ceiling: __galaxy.audio.CEILING, draining: __galaxy.voice.draining,' +
+    ' queue: __galaxy.voice.queue, caption: __galaxy.caption.text,' +
+    ' kinds: __galaxy.audio.played.map(function (t) { return t.kind; }),' +
+    ' said: __galaxy.speech.said.map(function (s) { return s.text; }) })';
+  const cer = [];
+  for (let i = 0; i < 400; i++) {
+    const s = await page.json(CEREMONY);
+    cer.push(s);
+    if (i > 2 && s.draining === false && s.queue === 0) break;
+    await sleep(120);
+  }
+  const bc = cer[cer.length - 1].boot;
+  const heard = cer.flatMap((s) => s.said).concat(cer.map((s) => s.caption));
+  const underneath = cer.filter((s) => s.draining === true && s.ducked === true &&
+                                       s.gain <= s.duckTo + 0.0005);
+  note('the ceremony: ' + JSON.stringify(bc));
+  ok(bc.fired === 1 && bc.said === true && bc.why === 'held for the first gesture, by the ' +
+     'autoplay law',
+     'THE HOUSE REPORTED FOR DUTY ONCE, and this gesture is what released it: the sentence ' +
+     'was claimed at the first healthy /health and held by the autoplay law until a human ' +
+     'touched something',
+     JSON.stringify(bc));
+  ok(bc.jingle.played === true && bc.jingle.notes >= 7 &&
+     bc.jingle.ms >= 2500 && bc.jingle.ms <= 3500,
+     'AND IT CAME WITH MUSIC THIS MACHINE GENERATED: ' + bc.jingle.notes + ' oscillators ' +
+     'over ' + bc.jingle.ms + 'ms, inside the 2.5-3.5s the spec names',
+     'failure mode: an .mp3 would report 0 notes and a length nobody scheduled - the count ' +
+     'is the evidence that there is no asset here at all: ' + JSON.stringify(bc.jingle));
+  ok(cer.some((s) => s.kinds.indexOf('boot') >= 0),
+     'played through the CHIME BUS and logged beside the wake tone, so the boot flourish ' +
+     'sits under the same absolute ceiling as every other sound in the room',
+     JSON.stringify(cer[cer.length - 1].kinds));
+  ok(underneath.length > 0,
+     'AND IT WENT UNDER THE WORDS, measured while both were sounding: the tone bus held ' +
+     underneath[0].gain + ' against a ' + underneath[0].ceiling + ' ceiling for ' +
+     underneath.length + ' of ' + cer.length + ' samples - 80% off, by the same duck that ' +
+     'keeps a chime off a sentence',
+     'failure mode: a jingle on its own gain node would read ducked:false here and would be ' +
+     'competing with the line it is meant to be under: ' +
+     JSON.stringify(cer.map((s) => ({ d: s.draining, k: s.ducked, g: s.gain })).slice(0, 6)));
+  ok(heard.some((t) => /Fully functional/.test(t)) &&
+     heard.some((t) => /Galaxy here/.test(t)),
+     'and BOTH held sentences survived the wait: the salutation and the readiness line ' +
+     'arrived as one breath rather than one of them quietly replacing the other in the ' +
+     'single slot the autoplay law holds',
+     JSON.stringify(heard.filter(Boolean).slice(-2)));
   /* WAITED FOR, NOT SLEPT THROUGH. This was `sleep(1500)` with a comment saying "let the
      boot greeting finish speaking", and 1500 is a guess about how long a local voice takes
      to read one sentence on a machine nobody has measured. When piper is busy the greeting
@@ -1111,11 +1285,45 @@ async function main() {
      This is also where the lookbook's speaking plate is taken, because it is the only
      moment in the suite where a real voice is coming out of a real read. */
   note('the mouth: one short line, sampled from inside the page at 60ms…');
+  /* THE WINDOW IS ASKED FOR THE FRONT FIRST, and this is the one section in the file that
+     needs it. Chrome reports a fully covered window as document.visibilityState 'hidden',
+     the presence loop deliberately stops drawing when it is - a hologram nobody can see is
+     not worth a GPU - and a stopped loop leaves `level` and `from` at whatever they last
+     were. Measured that way, two runs in three read "0 frames drawn, level 0.1383 from the
+     analyser" and failed the mouth section for a mouth that was working perfectly: the
+     stopped clock this very comment block warns about, arriving through the window manager
+     rather than through the governor. bringToFront cannot KEEP the window in front, so the
+     reading below still checks that frames were drawn - it just stops the harness losing a
+     measurement because something else was focused when it got here. Every other headed
+     harness in the suite already opens this way. */
+  /* THE FRONT FIRST, AND THEN CHECKED FOR - see front(). A covered window stands the whole
+     well down (side 0, built false, nothing drawn), so everything below this line would be
+     measuring a page that had deliberately stopped painting: two runs in three read "0 frames
+     drawn, level 0.1383 from the analyser" and failed a mouth that was working perfectly.
+     The presence is then waited for and put into FACE mode - waited for, because the well is
+     rebuilt from nothing when the window comes back and set("face") on a presence that does
+     not exist yet is a no-op that leaves the section measuring a RING and writing ring plates
+     into the lookbook under a face caption. */
+  const builtBy = Date.now();
+  const upFront = await front(page);
+  if (!upFront) note('THE WINDOW WOULD NOT COME TO THE FRONT: something else owns the ' +
+                     'desktop, this page has stood its own hologram down, and every reading ' +
+                     'below is of a well that is not being painted');
+  const cameBack = await waitFor(page, '__galaxy.presence.built === true', 12000);
+  if (!cameBack) note('and the presence never came back with it - the assertions below will ' +
+                      'say so rather than explaining it away');
+  await page.evaluate('__galaxy.presence.built && __galaxy.presence.set("face")');
+  await waitFor(page, '__galaxy.presence.built === true && __galaxy.presence.mode === "face"',
+                12000);
+  note('   the desktop has minimised this window ' + keeper.count() + ' time(s) so far, and ' +
+       'it has been put back each time');
+  note('   the window is ' + (upFront ? 'in front' : 'STILL COVERED') + ', the well ' +
+       (cameBack ? 'rebuilt with it' : 'DID NOT come back') + ' and was put into FACE mode, ' +
+       'in ' + (Date.now() - builtBy) + 'ms');
   const mouthPres = await page.json('({built: __galaxy.presence.built,' +
     ' mode: __galaxy.presence.mode, analyser: __galaxy.presence.analyser,' +
     ' degraded: __galaxy.presence.degraded})');
-  if (mouthPres.built) { await page.evaluate('__galaxy.presence.set("face")'); }
-  await sleep(1000);
+  await sleep(600);
   const mouthWell = await page.json('__galaxy.layout.rects.presence');
   /* WAITED BACK TO REST, not assumed to be there: the section above this one had him
      talking, and a mouth that is still closing is not a mouth that failed to close. What is
@@ -1159,16 +1367,34 @@ async function main() {
     note('wrote voice-face-idle.png (FACE mode, nothing speaking, lips at rest)');
   }
   /* Sampled INSIDE the page, like the indicator above and for the same reason: the peak of
-     a mouth is milliseconds wide and a round trip over a WebSocket is not. */
+     a mouth is milliseconds wide and a round trip over a WebSocket is not.
+     THE FLOOR IS WHAT A WATCHED MOUTH DOES, and it was 0.15 with a count above 0.12 because
+     that is what this harness used to measure: three runs of the same sentence on the same
+     voice read peaks of 0.14, 0.22 and 0.98, and the differences were entirely which window
+     had the front. Measured with the window pinned and the loop at 60fps, the level runs
+     median 0.23, p90 0.63 and briefly at the clamp - so the floor is 0.30 and an open mouth
+     is 0.20, which the quietest voice on this machine clears three times over while every
+     failure the old line caught still fails: a stopped clock reads 0, a mouth wired to
+     nothing reads 0, a cadence lie names itself in `from`, and an unwatched window is now
+     its own red rather than a quiet halving of the numbers. */
+  const MOUTH_OPEN = 0.20;                 // what counts as an open mouth, of a 1.0 hinge
   await page.evaluate(`(function(){
     window.__mouth = { n: 0, max: 0, from: {}, above: 0, peakAt: 0, samples: [],
-                       jmax: 0, pairs: [] };
+                       jmax: 0, pairs: [], f0: __galaxy.presence.frames, f1: 0, down: 0,
+                       vis: {} };
     window.__mouth.timer = setInterval(function () {
       var p = __galaxy.presence, l = p.level;
       var m = window.__mouth;
       m.n++;
+      /* THE LOOP IS COUNTED ALONGSIDE THE LEVEL, and it has to be: the level is a one-pole
+         written once per DRAWN frame, so a loop throttled to eight frames a second by a
+         window that went behind something reports a peak roughly half the true one - which
+         is a quiet, plausible, entirely wrong number, and the worst kind. */
+      m.f1 = p.frames;
+      if (!p.built) m.down++;
+      m.vis[document.visibilityState] = (m.vis[document.visibilityState] || 0) + 1;
       m.from[p.from] = (m.from[p.from] || 0) + 1;
-      if (l > 0.12) m.above++;
+      if (l > ${MOUTH_OPEN}) m.above++;
       if (l > m.max) { m.max = l; m.peakAt = Date.now(); }
       if (m.samples.length < 140) m.samples.push([+l.toFixed(3), p.from]);
       /* PART G CRITERION 5. The jaw is read back off the MATERIAL, not off the
@@ -1197,11 +1423,32 @@ async function main() {
   await page.evaluate('clearInterval(window.__mouth.timer)');
   const mouth = await page.json('window.__mouth');
   const fromNames = Object.keys(mouth.from).filter((k) => k !== 'rest');
+  const drew = (mouth.f1 || 0) - (mouth.f0 || 0);
   note('mouth: ' + mouth.n + ' samples · peak ' + mouth.max + ' · ' + mouth.above +
-       ' over 0.12 · sources ' + JSON.stringify(mouth.from));
-  ok(mouth.max > 0.15 && mouth.above >= 3,
-     'THE MOUTH MOVED WHILE HE SPOKE: it peaked at ' + mouth.max + ' and stood above 0.12 ' +
-     'on ' + mouth.above + ' of ' + mouth.n + ' samples',
+       ' over ' + MOUTH_OPEN + ' · sources ' + JSON.stringify(mouth.from) + ' · the loop drew ' +
+       drew + ' frames across it, window ' + JSON.stringify(mouth.vis));
+  /* THE MEASUREMENT IS QUALIFIED BEFORE IT IS BELIEVED, and the thing to qualify it against
+     is THE WELL rather than the window or the frame rate. Five runs of the same sentence on
+     the same voice, with the loop drawing 0, 54, 95, 181 and 53 frames across it, reported
+     peaks of 0.14, 0.9135, 0.9135, 0.8547 and 0.98: every run in which the well was UP agreed
+     to within a tenth whatever the rate, and the only wild reading is the run where the well
+     had stood down and `level` was simply the last number anybody wrote to it. So the
+     criterion is that the well stayed up and the loop advanced - not that Chrome called the
+     window visible, which it declines to do on this desktop even with
+     CalculateNativeWinOcclusion disabled, while the compositor goes on drawing at fifteen
+     frames a second and the readings stay true. A frozen well reads exactly like a working
+     mouth, which is the whole reason this line exists. */
+  ok(drew > 20 && mouth.down === 0,
+     'AND IT WAS WATCHED WHILE IT MOVED: the presence loop drew ' + drew + ' frames across ' +
+     'the sentence and the well was up for all ' + mouth.n + ' samples (Chrome called the ' +
+     'window ' + JSON.stringify(mouth.vis) + ') - a well that stood down would report the ' +
+     'last level it wrote, and a stopped clock reads exactly like a working mouth',
+     JSON.stringify({ drew: drew, down: mouth.down, vis: mouth.vis }));
+  ok(mouth.max > 0.30 && mouth.above >= 3,
+     'THE MOUTH MOVED WHILE HE SPOKE, AND BY AN AMOUNT THE EYE CAN SEE: it peaked at ' +
+     mouth.max + ' of the hinge (' + (mouth.max * 0.20 * 57.2958).toFixed(1) + ' degrees) ' +
+     'and stood open, above ' + MOUTH_OPEN + ', on ' + mouth.above + ' of ' + mouth.n +
+     ' samples',
      JSON.stringify({ max: mouth.max, above: mouth.above,
                       head: mouth.samples.slice(0, 12) }));
   ok(fromNames.length > 0 &&
@@ -1274,14 +1521,30 @@ async function main() {
      be the precise failure this section exists to rule out. The ceiling is what makes it an
      assertion - eight seconds of a moving mouth over a silent bus fails here. */
   const restBy = Date.now();
+  /* AND THE FRONT IS ASKED FOR AGAIN, because a mouth that is asserted to have CLOSED is the
+     one assertion a frozen loop passes for the wrong reason in reverse: a well that stood
+     down mid-sentence keeps the level it last wrote, and this line then reads 0.7557 and
+     reports a mouth that stayed wide open for nine seconds. So the window is brought back,
+     the frames are counted across the wait, and the two cases are told apart in words - a
+     mouth that would not close is a defect in this page, a loop that stopped drawing is a
+     fact about the desktop, and reporting either as the other is worthless. */
+  await front(page);
+  const restF0 = await page.evaluate('__galaxy.presence.frames');
   await waitFor(page, MOUTH_REST, 8000);
   const rest1 = await page.json('({level: __galaxy.presence.level,' +
-    ' from: __galaxy.presence.from})');
+    ' from: __galaxy.presence.from, frames: __galaxy.presence.frames,' +
+    ' vis: document.visibilityState})');
+  const restDrew = rest1.frames - restF0;
   ok(rest1.from === 'rest' && rest1.level < 0.08,
      'AND IT WENT STILL AGAIN when the voice stopped: level ' + rest1.level + ' from "' +
      rest1.from + '" - the signal ended and the lips closed with it, ' +
-     (Date.now() - restBy) + 'ms after the queue emptied',
-     JSON.stringify(rest1));
+     (Date.now() - restBy) + 'ms after the queue emptied' +
+     (rest1.from === 'rest' ? '' : (restDrew < 10
+       ? ' - AND THE LOOP HAD STOPPED: ' + restDrew + ' frames drawn while waiting, window "' +
+         rest1.vis + '", so this is the well standing down and not a mouth that would not shut'
+       : ' - and the loop was drawing throughout (' + restDrew + ' frames), so this is the ' +
+         'mouth itself')),
+     JSON.stringify({ rest: rest1, drew: restDrew }));
 
   /* ---- 6. ONE FORCED FAILURE, AND THE QUEUE STILL FINISHES ---------------- */
   if (r.engine === 'piper') {
@@ -1699,7 +1962,17 @@ async function main() {
     words: __galaxy.voice.normalize('Your understanding of the extraordinary transcription.'),
     many: __galaxy.voice.normalize('Ids 7s0h4k9m2n3p5q6r8t1v and 9a8b7c6d5e4f3g2h1i0j.'),
     digits: __galaxy.voice.normalize('The number 123456789012 is in there.'),
-    short: __galaxy.voice.normalize('Short ones like abc123 stay.')
+    short: __galaxy.voice.normalize('Short ones like abc123 stay.'),
+    em: __galaxy.voice.normalize('Quite well, Addi — fully functional.'),
+    tight: __galaxy.voice.normalize('Quite well, Addi—fully functional.'),
+    en: __galaxy.voice.normalize('It is ten past three – nearly tea.'),
+    dots: __galaxy.voice.normalize('Well, sir... I would not.'),
+    hellip: __galaxy.voice.normalize('Well, sir… I would not.'),
+    trail: __galaxy.voice.normalize('I was going to say…'),
+    hyphen: __galaxy.voice.normalize('He is well-known for twenty-five years.'),
+    range: __galaxy.voice.normalize('The range is 10-20 units.'),
+    spaced: __galaxy.voice.normalize('A pause - then another - then the end.'),
+    stammer: __galaxy.voice.normalize('Three things, — and one more.')
   })`));
   note('the tongue on eight strings: ' + JSON.stringify(rules));
   ok(rules.bold === 'Yes sir, that is quite right.' && rules.marks.indexOf('#') < 0 &&
@@ -1725,6 +1998,39 @@ async function main() {
      'RULE 3 - AND THE PHRASE IS SAID ONCE: two ids joined by "and" collapse to one "' +
      rules.line + '" rather than saying it twice in one breath: "' + rules.many + '"',
      JSON.stringify(rules));
+  /* RULE 4, IN THREE ASSERTIONS RATHER THAN ONE, because the rule has three separable claims
+     and a single green tick over all of them would not say which one a future edit broke. */
+  ok(rules.em === 'Quite well, Addi, fully functional.' &&
+     rules.tight === 'Quite well, Addi, fully functional.' &&
+     rules.en === 'It is ten past three, nearly tea.' &&
+     rules.spaced === 'A pause, then another, then the end.',
+     'RULE 4a - A DASH IS A PAUSE: em-dash, en-dash and the spaced hyphen all become a comma ' +
+     'on the audio bus, spaced or tight against the words: "' + rules.em + '"',
+     JSON.stringify(rules));
+  ok(rules.dots === 'Well, sir, I would not.' &&
+     rules.hellip === 'Well, sir, I would not.' &&
+     rules.trail === 'I was going to say.' &&
+     rules.stammer === 'Three things, and one more.',
+     'RULE 4b - AND SO IS AN ELLIPSIS: both forms become a comma mid-sentence and a full stop ' +
+     'at the end, and a comma already there is not doubled: "' + rules.trail + '"',
+     JSON.stringify(rules));
+  /* THE ONE THAT WOULD BE A DISASTER, and the reason 4a is not written as "replace every
+     hyphen": a comma inside "well-known" is a worse defect than the one rule 4 fixes. */
+  ok(rules.hyphen === 'He is well-known for twenty-five years.' &&
+     rules.range === 'The range is 10-20 units.',
+     'AND A HYPHEN INSIDE A WORD IS NOT A DASH: "well-known", "twenty-five" and "10-20" keep ' +
+     'their hyphens, because only whitespace on BOTH sides makes a mark a dash',
+     JSON.stringify(rules));
+  /* THE NAMES OF THE MARKS, NEVER SPOKEN. The mandate names the failure directly, so this
+     asserts the absence of the three words across every fixture above rather than trusting
+     that a comma implies it. A normalizer that replaced the em-dash with the WORD "dash"
+     would pass 4a's shape and fail here, which is the point. */
+  const spokenAll = [rules.em, rules.tight, rules.en, rules.dots, rules.hellip, rules.trail,
+                     rules.hyphen, rules.range, rules.spaced, rules.stammer].join(' | ');
+  ok(!/\b(dash|hyphen|dot|ellipsis|emdash|endash)\b/i.test(spokenAll),
+     'AND PIPER IS NEVER HANDED THE NAME OF A MARK: no "dash", "hyphen" or "dot" appears in ' +
+     'any of the ten normalized fixtures - the marks became pauses, not words',
+     spokenAll);
 
   /* ---- (b) AND NOW OUT LOUD, THROUGH THE REAL FUNNEL ---- */
   /* LONG ENOUGH TO CUT, AND CUT SO THAT THE ID IS NOT IN THE FIRST CHUNK. SPEAK_MAX is 180
@@ -1735,10 +2041,15 @@ async function main() {
      the id in the last, the id is carried by a chunk sayFetch() ordered from /say while the
      first was still playing: the exact seam the accessor was put at. */
   const TONGUE_ID = '7s0h4k9m2n3p5q6r8t1v';              // twenty characters, letters and digits
+  /* THE MARKS RIDE ALONG. An em-dash and an ellipsis are in the middle sentence rather than
+     in their own fixture, because rule 4's claim is not "the function works" - that is proved
+     above, without a room - but that the SPLIT holds for them too: pause on the bus, glyph on
+     the glass. Both are single characters (… rather than three dots) so the splitter's
+     sentence detection is untouched and the id stays in a later chunk. */
   const TONGUE_LINE = 'Yes sir, that is *quite* right, and I have put the whole of it on the ' +
-                      'card for you. The reading is deliberately plain, because an identifier ' +
-                      'spelled out loud is nine seconds nobody wanted. The event id is ' +
-                      TONGUE_ID + ', and it is on the card in full.';
+                      'card for you. The reading is deliberately plain — an identifier ' +
+                      'spelled out loud is nine seconds nobody wanted… and nobody asked. ' +
+                      'The event id is ' + TONGUE_ID + ', and it is on the card in full.';
   const cut = await page.json('__galaxy.voice.split(' + JSON.stringify(TONGUE_LINE) + ')');
   ok(TONGUE_ID.length === 20 && cut.length >= 2 && cut[0].indexOf('*') >= 0 &&
      cut[0].indexOf(TONGUE_ID) < 0 && cut.some((c) => c.indexOf(TONGUE_ID) >= 0),
@@ -1764,8 +2075,24 @@ async function main() {
     ' return {text: __galaxy.caption.text, up: __galaxy.caption.up,' +
     '         said: __galaxy.speech.said.slice(-1)}; })()');
   const ledger = (onScreen.said[0] && onScreen.said[0].text) || '';
-  ok(await waitFor(page, '__galaxy.voice.draining === false && __galaxy.voice.queue === 0',
-                   90000),
+  /* THE CAPTION IS SAMPLED THROUGHOUT THE READ, and not only before the first chunk and after
+     the last, because the defect the mandate names is invisible at both ends. A caption node
+     written with `+=` instead of `=` shows the correct line while chunk one plays and a doubled
+     one from chunk two onward - "Quite well, AddiQuite well, Addi" - and a harness that read the
+     start and the end would find the start right and the end merely long. So the drain wait
+     below IS the sampler: one read of the glass every 150ms for the whole sentence, and the
+     samples are judged afterwards. Reading __galaxy.caption.text reads the DOM node's own
+     textContent, which is the thing the employer sees rather than a variable that agrees. */
+  const capSamples = [];
+  let drained = false;
+  for (let i = 0; i < 700; i++) {
+    const s = await page.json('({ text: __galaxy.caption.text, shows: __galaxy.caption.shows,' +
+      ' done: (__galaxy.voice.draining === false && __galaxy.voice.queue === 0) })');
+    capSamples.push({ text: String(s.text || ''), shows: s.shows });
+    if (s.done) { drained = true; break; }
+    await sleep(150);
+  }
+  ok(drained,
      'the sentence was read to its last word, out loud, on the engine this run cast');
   const tongue = await page.json('__galaxy.voice.chunks');
   const queued = tongue.map((c) => c.text).join(' ');
@@ -1792,6 +2119,17 @@ async function main() {
      'WHILE THE CHUNK LOG KEPT BOTH RAW: the record of what the queue was asked to read still ' +
      'carries the asterisks and the id, so nothing was normalised on the way IN and the ' +
      'evidence of what was asked for survives the reading of it', JSON.stringify(queued));
+  /* RULE 4, THROUGH THE REAL FUNNEL. The same split as the asterisks and the id: the marks
+     are gone from the audio bus and still on the glass. Asserted on the em-dash and the
+     ellipsis separately from 4a/4b above because those two ran on a pure function and this
+     one runs on the prefetching pump, which is where a read-time rule can be skipped. */
+  ok(aloud.indexOf('—') < 0 && aloud.indexOf('…') < 0 &&
+     !/\b(dash|hyphen|dot)\b/i.test(aloud) && queued.indexOf('—') >= 0 &&
+     queued.indexOf('…') >= 0,
+     'NO DASH AND NO ELLIPSIS REACHED THE ENGINE: neither mark is in what was spoken and ' +
+     'neither mark\'s NAME is either, while the chunk log still carries both raw - the pause ' +
+     'went to the speakers and the glyph stayed in the record',
+     JSON.stringify({ aloud: aloud, queued: queued }));
   ok(onScreen.up === true && collapse(onScreen.text || '') === collapse(TONGUE_LINE),
      'AND THE CAPTION SHOWS BOTH, VERBATIM: the subtitle is up and is the raw line character ' +
      'for character, asterisks and id included, while the speakers carry neither - an id you ' +
@@ -1800,6 +2138,156 @@ async function main() {
      'AND THE LEDGER KEPT THE RAW LINE TOO: __galaxy.speech.said records what the page was ' +
      'asked to say and not what came out of the speakers, so the brain, the scribe and every ' +
      'harness reading it still see the id', JSON.stringify(onScreen.said));
+
+  /* ---- CAPTION HYGIENE, over the whole streamed read ----
+     ONE SURFACE, ONE COPY OF THE SENTENCE. The mandate's clause is about a node written with
+     `+=`: every chunk appends, and the employer reads "AddiAddi" or the whole line twice. The
+     detector is deliberately blind to this fixture - it looks for ANY adjacent repeat of eight
+     characters or more, so it would catch a doubling this harness never anticipated, and it is
+     run on every sample rather than on the last. Eight is the floor because English does repeat
+     short runs (" the the " is a typo, "aa" is a word in a name), and a doubled phrase long
+     enough to be a caption bug is long enough to clear it. */
+  const doubledIn = (s) => {
+    const m = collapse(s).match(/(.{8,}?)\1/);
+    return m ? m[1] : '';
+  };
+  const shown = capSamples.filter((s) => s.text);
+  const doubles = shown.map((s, i) => ({ i, at: doubledIn(s.text), text: s.text }))
+                       .filter((d) => d.at);
+  ok(shown.length > 0,
+     'the caption was up for ' + shown.length + ' of the ' + capSamples.length + ' samples ' +
+     'taken across the read, so there is something to judge',
+     'failure mode: a caption that never came up makes every clause below pass on empty strings');
+  ok(doubles.length === 0,
+     'AND NOT ONE SAMPLE CARRIES A DOUBLED PHRASE across the whole streamed read: ' +
+     shown.length + ' reads of the caption node, ' + tongue.length + ' chunks, zero adjacent ' +
+     'repeats of eight characters or more',
+     doubles.length ? 'doubled at sample ' + doubles[0].i + ': ' +
+       JSON.stringify(doubles[0].at) + ' in ' + JSON.stringify(doubles[0].text) : '');
+  ok(shown.every((s) => collapse(s.text) === collapse(TONGUE_LINE)),
+     'and every sample is the WHOLE line exactly once - not a chunk, not a growing prefix, not ' +
+     'two copies: a caption is what is being said and not a transcript of it',
+     JSON.stringify(Array.from(new Set(shown.map((s) => collapse(s.text).slice(0, 80)))).slice(0, 4)));
+  ok(new Set(shown.map((s) => s.shows)).size === 1,
+     'and the caption was raised ONCE for the whole sentence, not once per chunk: shows held ' +
+     'at ' + shown[0].shows + ' through ' + tongue.length + ' chunks',
+     JSON.stringify(Array.from(new Set(shown.map((s) => s.shows)))));
+
+  /* AND A SECOND LINE REPLACES THE FIRST, spoken while the first caption is still up - inside
+     CAPTION_HOLD_MS, so the node is not merely being rewritten after a fade. This is the direct
+     test of `=` against `+=`: an appending node holds both sentences here, and both would be
+     true, which is what makes it a bad defect rather than an obvious one. */
+  const SECOND_LINE = 'Quite well, Addi.';
+  const second = await page.json('(function(){' +
+    ' var was = __galaxy.caption.text, n = __galaxy.caption.shows;' +
+    ' __galaxy.speech.speakLine(' + JSON.stringify(SECOND_LINE) + ');' +
+    ' return { was: was, wasUp: __galaxy.caption.up, text: __galaxy.caption.text,' +
+    '          grew: __galaxy.caption.shows - n }; })()');
+  ok(second.text === SECOND_LINE,
+     'AND THE NEXT LINE REPLACES THE LAST ONE OUTRIGHT: the caption reads ' +
+     JSON.stringify(second.text) + ' and nothing else, with the previous sentence still ' +
+     (second.wasUp ? 'on the glass' : 'fading') + ' when it arrived',
+     'failure mode: a node written with += would read ' +
+     JSON.stringify(collapse(second.was).slice(0, 24) + '…' + SECOND_LINE) + ' - both sentences ' +
+     'true, one surface, and the employer reading a chat log with a fade on it');
+  ok(second.grew === 1 && doubledIn(second.text) === '',
+     'raised exactly once more for it, and with no doubling in the new line either: shows +' +
+     second.grew, JSON.stringify(second));
+  await waitFor(page, '__galaxy.voice.draining === false && __galaxy.voice.queue === 0', 30000);
+
+  /* ==================== ONE VOICE, ONE SURFACE ====================================
+     THE CLAIM: while the butler is reading an answer, the sentence is on ONE surface - the
+     transient caption - and the card holds the question, the chips and the record without
+     repeating the words out of the speakers. And the moment the subtitle goes down, the
+     paragraph is back, because the card is the record and a record that disappeared would be
+     a worse deck than a duplicated one.
+
+     ASKED WITH A CLOCK QUESTION, deliberately. This harness does not spend the employer's
+     model on a fixture and does not need to: the clock class is answered from a table on this
+     disk, with zero lookups and zero sources (see clock_proof and preflight 30), and it renders
+     a real card through the real funnel and speaks it through the real bus. It is the cheapest
+     honest way to have a card and a caption carrying the same sentence at the same instant.
+
+     AND THE INVERSE IS ASSERTED TOO, because "the card yielded" is only half the law: the card
+     must yield to ITS OWN sentence and to nothing else. A second line spoken over the same card
+     must leave the paragraph exactly where it is, or a capped answer, a plan with steps on the
+     card, or a softened error would hide text the voice is pointing at. */
+  console.log('');
+  console.log('  ---- one voice, one surface ' + '-'.repeat(45));
+  await page.evaluate('void __galaxy.ask("what time is it in Tokyo")');
+  const carried = await waitFor(page,
+    '(function(){var c = __galaxy.caption.carries;' +
+    ' return __galaxy.caption.up && c.caption.indexOf("Tokyo") >= 0;})()', 60000);
+  const one = await page.json('({ yielded: __galaxy.caption.yielded,' +
+    ' carries: __galaxy.caption.carries,' +
+    ' cardText: document.getElementById("a-text").textContent.trim(),' +
+    ' cardShown: document.getElementById("answer").getClientRects().length > 0,' +
+    ' qShown: (document.getElementById("a-q").textContent || "").length > 0,' +
+    ' srcShown: getComputedStyle(document.getElementById("a-src")).display !== "none",' +
+    ' panelOpen: document.getElementById("panel").classList.contains("open") })');
+  console.log('  caption: ' + JSON.stringify(one.carries.caption));
+  console.log('  card   : ' + JSON.stringify(one.carries.card) + '   (textContent kept: ' +
+              JSON.stringify(one.cardText.slice(0, 40)) + '…)');
+  console.log('  ' + '-'.repeat(73));
+  ok(carried && one.carries.caption.length > 0,
+     'the answer is on the caption, in the voice\'s own words: ' +
+     JSON.stringify(one.carries.caption),
+     'failure mode: with no caption up, every clause below would pass on two empty strings');
+  ok(one.carries.card === '' && one.yielded === true,
+     'AND ON NOTHING ELSE: the card\'s paragraph has stood down for exactly as long as the ' +
+     'subtitle carries the same sentence, so the employer reads it once',
+     JSON.stringify(one));
+  ok(one.cardShown && one.cardText.length > 0 && one.qShown,
+     'while the card itself is still on the glass with the question above it and the answer ' +
+     'still in its DOM: ' + JSON.stringify(one.cardText.slice(0, 60)) + ' - the record was ' +
+     'never emptied, only hidden while the voice had it',
+     'failure mode: a surface law implemented by deleting the text would take the record with ' +
+     'it, and eleven harnesses read that node');
+  ok(!one.srcShown && !one.panelOpen,
+     'and the side source panel is NOT up, because this answer consumed no sources: ' +
+     JSON.stringify({ sources: one.srcShown, panel: one.panelOpen }));
+  /* THE INVERSE. A different sentence over the same card: the paragraph must come straight
+     back, because what is on the glass is no longer what is in the speakers. */
+  const foreign = await page.json('(function(){' +
+    ' __galaxy.speech.speakLine("A different sentence entirely, Addi.");' +
+    ' return { yielded: __galaxy.caption.yielded, carries: __galaxy.caption.carries,' +
+    '          releases: __galaxy.caption.releases }; })()');
+  ok(foreign.yielded === false && foreign.carries.card.length > 0 &&
+     foreign.carries.caption !== foreign.carries.card,
+     'AND THE CARD YIELDS TO ITS OWN SENTENCE AND NOTHING ELSE: a different line in the ' +
+     'speakers puts the paragraph straight back, which is what keeps a capped answer, a plan ' +
+     'with steps "on the card" and a softened error readable while they are being read',
+     JSON.stringify(foreign));
+  await waitFor(page, '__galaxy.voice.draining === false && __galaxy.voice.queue === 0', 60000);
+  await page.evaluate('__galaxy.caption.fade(0)');
+  ok(await waitFor(page, '__galaxy.caption.yielded === false && ' +
+                   '__galaxy.caption.carries.card.length > 0', 8000),
+     'and when the subtitle goes down the paragraph is back on the card, four seconds after ' +
+     'his voice ends: one surface again, and it is the record',
+     JSON.stringify(await page.json('__galaxy.caption.carries')));
+
+  /* AND THE CEREMONY IS STILL A CEREMONY, minutes and a great many health polls later. This
+     is the other half of "once per session" and it can only be asked at the END of a long
+     run: the rail polls /health every ten seconds for as long as the tab is open, so a guard
+     that was a timestamp, a debounce or a "has the page been up five seconds" would have
+     held for the first minute and then started announcing itself over the answers.
+     Forced rather than waited for: the rail's ten-second poll returns early while the tab is
+     not visible, so "how many polls have landed" is a fact about the window manager unless
+     the harness asks for them itself. Three more, by the same door the brain chip uses. */
+  for (let i = 0; i < 3; i++) {
+    /* Awaited inside the page, not fired and forgotten: refreshBrain is async and the count
+       lands after its /health round trip. */
+    await page.evaluate('__galaxy.brain.refresh().then(function () { return 1; })');
+    await sleep(400);
+  }
+  const bootEnd = await page.json('__galaxy.boot');
+  ok(bootEnd.fired === 1 && bootEnd.healthy >= 4 && bootEnd.jingle.notes === bc.jingle.notes &&
+     bootEnd.at === bc.at,
+     'ONCE PER SESSION, AND NOT ONCE PER POLL: ' + bootEnd.healthy + ' healthy /health ' +
+     'readings have landed, three of them demanded just now, and the ceremony has fired ' +
+     'exactly once - same timestamp, same ' + bootEnd.jingle.notes + ' notes it scheduled ' +
+     'minutes ago',
+     JSON.stringify(bootEnd));
 
   /* AND THE FILE IS AS IT WAS. The last word of the run, and the one that matters most:
      three auditions, two sabotaged reads and four minutes of speech later, config.json holds

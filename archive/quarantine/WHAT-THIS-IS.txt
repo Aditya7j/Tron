@@ -1,0 +1,54 @@
+WHAT THIS IS, AND WHY IT IS NOT INDEXED
+=======================================
+
+Moved here Monday 28 September 2026, under PART 8 of the section 27 mandate.
+
+The thirty .md files under this folder are the DEMONSTRATION CORPUS this console was built
+and tested against: a coffee business - roasting schedules, a wholesale book, a pricing
+strategy, a payroll policy. Thirty notes across seven folders. None of it is the employer's.
+Not one fact in any of these files came from him.
+
+They were useful and they are not thrown away. A harness that needed a question with a real
+answer asked one of these; the galaxy needed enough stars to prove a layout; the retrieval
+threshold was tuned against them. They are kept for exactly that, and they are kept READABLE:
+a text editor opens them, and nothing here is encrypted, compressed or renamed.
+
+WHY "UNINDEXED" IS THE WHOLE POINT
+---------------------------------
+The assistant answers questions about "your notes" and puts a CITATION under the answer. A
+citation is the strongest claim this machine makes: it says a passage exists, in his
+collection, saying this. If these files stay reachable, that claim becomes false thirty times
+over - it cites a coffee business he does not own, in a voice that says "your notes", and it
+cites it accurately, which is what makes it hard to catch.
+
+Moving them out of notes/ was not enough on its own, and this is worth writing down because
+it is not obvious: archive/ IS INDEXED FOR VECTORS. That is deliberate - the archive is the
+filing cabinet, where a scanned contract nobody will ever wikilink can still be found. So a
+file parked in archive/ stops being a star in the galaxy and stays fully searchable and fully
+citable. Half a quarantine.
+
+The folder name is what does it. "quarantine" is in SKIP_DIRS in BOTH build.py (the graph) and
+ingest.py (the vectors) - two separate lists, for two separate walkers, and the first attempt
+put the name in only one of them. The result was the bad case in its purest form: the galaxy
+correctly stopped showing these notes while the brain went on citing all thirty of them.
+
+HOW TO CHECK IT IS STILL TRUE
+-----------------------------
+    python build.py
+      -> "vectors : 9 files" - his three notes and the six documents in archive/samples.
+         Not 39. If a quarantined file appears in that log as "+ ... 1 chunk", the law broke.
+
+    ask the assistant: "what do my notes say about coffee churn"
+      -> it should say the shelf is bare. On 28 September 2026 it answered:
+         "Nothing in your collection touches on coffee churn, Addi - the shelf is bare on
+         that one." No citations, no search, no invention.
+
+HOW TO PUT ONE BACK
+-------------------
+Move the file into notes/ under whatever folder it belongs in and run build.py. Nothing else
+is needed; there is no list of quarantined files anywhere to keep in step. That is why this
+was done by folder name rather than by a manifest.
+
+DO NOT re-file any of it as his. The rule these were in the way of is the plain one: no
+personal fact enters any note except through the Census, the remember hand, or the Scribe's
+minutes. A coffee business that is not his is thirty notes' worth of exactly that.

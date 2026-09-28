@@ -107,9 +107,18 @@ ROOTS = ("notes", "archive")
 
 SUFFIXES = (".md", ".markdown", ".txt", ".pdf", ".docx")
 
+# THERE ARE TWO OF THESE LISTS AND THEY ARE NOT THE SAME LIST. build.py has its own, because
+# the galaxy half of build.py is standard library only and must not import this file to get at a
+# set of names - ingest needs chromadb, and a stdlib-only guarantee that depends on an optional
+# dependency is not a guarantee. So the duplication is deliberate, and this comment is the only
+# thing linking them: A NAME ADDED TO ONE MUST BE ADDED TO THE OTHER. It cost a rebuild to learn
+# that - "quarantine" went into build.py alone, the graph dropped the notes as intended, and the
+# vector walk indexed all thirty of them out of archive/quarantine/ anyway. Half a law is worse
+# than none here: the galaxy stopped showing them while the brain could still cite them.
 SKIP_DIRS = {
     ".git", ".svn", ".hg", "node_modules", "viewer", "__pycache__", "vector-store",
     ".obsidian", ".trash", ".vscode", ".idea", "venv", ".venv", "env", "say-cache",
+    "quarantine",
 }
 
 # THE CHUNK. 500 tokens with 50 of overlap, as specified - and the arithmetic that

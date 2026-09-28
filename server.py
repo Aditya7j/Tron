@@ -7,9 +7,16 @@ server.py - Knowledge Galaxy server + brain.
   GET  /persona     the boot greeting wording, for the viewer to fill in
   POST /chat        {"question": "...", "session": "..."}
                  -> {"answer": "...", "nodes": [...], "kind": "notes"|"chat"}
-  POST /remember    {"text": "remember that ..."} - writes a real markdown file
-                    into <notes>/captures/, re-indexes in-process, and returns the
-                    new node plus the whole link set for the viewer to splice in
+  POST /remember    {"text": "remember that ..."} - PROPOSES a markdown note into
+                    <notes>/captures/ and returns the pending card. A word of consent
+                    at /execute runs tools/save_note.py, and the server then re-indexes
+                    in-process and returns the new node plus the whole link set for the
+                    viewer to splice in. Nothing is written by this route.
+  GET  /census      the three chapters, every question, and which of them his own notes
+                    already answer - read off <notes>/census/ on every call
+  POST /census/answer {"id": "life-home", "answer": "..."} - the same gate as /remember:
+                    a save_note proposal into <notes>/census/, and nothing on disk until
+                    a word is given.
   POST /see         ?q=<question>, body = ONE JPEG frame of the user's screen,
                     Content-Type: image/jpeg  ->  {"answer", "kind": "screen"}
   POST /reset       forgets the conversation history for a session
@@ -36,6 +43,7 @@ Python 3, standard library only - no boto3.
 
 import base64
 import configparser
+import datetime
 import hashlib
 import hmac
 import json
@@ -95,6 +103,18 @@ import search as websearch
 # no tool outside tools/registry.json exists, and nothing runs without a human word.
 import hands
 
+# DOES THIS TEXT CARRY A CREDENTIAL? One opinion, shared with tools/save_note.py and with
+# preflight, because three copies of that regex would be three chances to fix two of them.
+# Consulted at proposal time so a password is refused before a card goes up - see
+# remember(). Stdlib only, no state, no disk.
+import secretscan
+
+# THE SEVENTEEN QUESTIONS. The Census's question bank and nothing else: it holds no
+# answers, writes no files and keeps no progress counter - "which of these has he
+# answered" is read off notes/census/ every time it is asked. Imported here because the
+# two routes below are the only callers, and stdlib-only for the same reason build.py is.
+import census
+
 # THE GOOGLE GRANT. The OAuth loopback flow, the token on disk and the two APIs the
 # hands reach through. It is imported here for exactly one purpose - the state line and
 # the two buttons in the Command Panel - and NOT to pass a credential anywhere: the
@@ -148,14 +168,47 @@ def _hand_resolved(payload):
     """
     if not isinstance(payload, dict):
         return
-    tool = str(payload.get("ran") or payload.get("tool")
-               or payload.get("lapsed") or "")
-    if not tool:
-        return
-    try:
-        focus.MANAGER.hand_outcome(tool, "done" if payload.get("ran") else "no")
-    except Exception:                                          # noqa: BLE001
-        pass
+    ran = payload.get("ran")
+    # A CHAIN REPORTS `ran` AS A LIST, so this reads one or many without caring which. It
+    # matters because str() of a list is "['summon_tab']", which matches no tool this session
+    # has ever heard of - the lock would have sat waiting for an outcome that had already
+    # happened, and the card would have gone on saying it was waiting.
+    tools = list(ran) if isinstance(ran, list) else [ran or payload.get("tool")
+                                                    or payload.get("lapsed") or ""]
+    for tool in tools:
+        if not str(tool or ""):
+            continue
+        try:
+            focus.MANAGER.hand_outcome(str(tool), "done" if ran else "no")
+        except Exception:                                      # noqa: BLE001
+            pass
+
+    # AND IF A NOTE WAS JUST WRITTEN, THE GALAXY GAINS A STAR. Here rather than in the
+    # /execute route because this function is the one place every door converges - the
+    # button, the spoken yes, /chain/execute, and the two /tools verbs - and a star that
+    # appears only when you click is the same lie to the ear the paragraph above is about.
+    # Only on `ran`: a refused or lapsed proposal wrote nothing to fold in.
+    if ran and "save_note" in [str(t) for t in tools]:
+        try:
+            landed = capture_landed()
+        except Exception as exc:                               # noqa: BLE001
+            landed = {"ok": False, "error": "indexing failed (%s)" % exc,
+                      "answer": CAPTURE_LINES["unindexed"].format(reason=str(exc)[:120])}
+        if landed.get("ok"):
+            # The script's stdout stays the answer - that is this project's law about
+            # hands - and the graph payload rides alongside it for the page to splice.
+            for key, value in landed.items():
+                if key not in ("ok", "answer"):
+                    payload[key] = value
+            payload["kind"] = "capture"
+        else:
+            # ON DISK BUT NOT IN THE GALAXY, which is a real and distinct outcome and must
+            # not be rounded up. The script's sentence is kept and the warning is ADDED to
+            # it: the note genuinely was written, so replacing "Noted and filed" with a
+            # failure would be the opposite lie.
+            payload["indexError"] = landed.get("error")
+            payload["answer"] = ("%s %s" % (str(payload.get("answer") or "").strip(),
+                                            landed.get("answer") or "")).strip()
 
 
 focus.ASK_HAND = _focus_ask_hand
@@ -200,6 +253,16 @@ try:
 except Exception as _voiceprint_exc:                           # noqa: BLE001
     voiceprint = None
     sys.stderr.write("voiceprint: unavailable - %s\n" % _voiceprint_exc)
+
+# THE CLOCK. Its own file because it owns a table - the editorial mapping from a word a person
+# says to a key in the IANA database - and because the one thing it must never do is reach a
+# network. Imported in a try like the three above: a machine with no timezone database at all
+# must leave a working server working, with the clock refusing plainly instead of guessing.
+try:
+    import worldclock
+except Exception as _worldclock_exc:                           # noqa: BLE001
+    worldclock = None
+    sys.stderr.write("worldclock: unavailable - %s\n" % _worldclock_exc)
 
 # =============================================================================
 #  THE PERSONA - everything the character is, lives in this one block.
@@ -529,6 +592,12 @@ CAPTURE_LINES = {
     "unindexed": "I have it on paper but not yet in the galaxy, sir, so do not rely "
                  "on it: {reason}",
     "empty": "You said \"remember that\" and then thought better of it, sir.",
+    # THE PRIVACY REFUSAL, and it names the kind and never the value - the line is spoken
+    # aloud and written to a log, so quoting the secret would copy it into the record that
+    # exists to prove it was kept out. "Say it again without the value" because the thought
+    # around the credential is usually worth keeping; it is the credential that is not.
+    "secret": "I will not write that down, sir: {reason}, and a note is indexed and read "
+              "back. Say it again without the value and I shall keep the rest.",
 }
 
 # Spoken when a screen question cannot even reach the model. Also not written by the
@@ -1318,6 +1387,9 @@ TEMPERATURE = None
 TOP_K = 6                 # most notes ever handed to the model
 TITLE_WEIGHT = 3.5        # a hit in the title counts far more than one in the body
 CONTEXT_CHARS = 1500      # per note, sent to the model
+# Moved up here from the semantic-recall section to sit beside its sibling: CONTEXT_FLOOR is
+# the sum of both and needs them both defined before it. Used by build_semantic_context().
+SEM_CONTEXT_CHARS = 1200  # per retrieved chunk, sent to the model
 HISTORY_TURNS = 4         # user+assistant pairs kept per session
 PRIOR_WEIGHT = 0.4        # how much the previous question steers retrieval
 REQUEST_TIMEOUT = 60
@@ -1774,6 +1846,47 @@ SELF_RE = re.compile(r"""(?:
   )""", re.IGNORECASE | re.VERBOSE)
 
 
+# A QUESTION ABOUT THIS CONVERSATION, which is SELF_RE's argument applied to the session: the
+# web has never met this machine, and it has never met this conversation either.
+#
+# HOW IT WAS FOUND, because it says something about how well the thinness gate is hidden. PART 0's
+# eviction probe asks "what did I ask you about first today". It passed for weeks. Then PART 8
+# quarantined the demonstration corpus, the collection went from thirty-three notes to his three,
+# and the same question came back "According to current web sources...". Nothing about the router
+# had changed. With thirty-three notes the question scraped a weak retrieval hit and was answered
+# from the prompt - which holds the summary, and therefore holds the answer. With three notes it
+# scores nothing, and scoring nothing is the exact condition "thin" exists for, so the gate opened
+# and a search engine was asked what the employer had said earlier in the room. It answered
+# confidently. A test of "what did I say?" was passing on retrieval noise from notes that had
+# nothing to do with the question.
+#
+# THE ANSWER IS IN THE PROMPT, ALWAYS - that is what older_block() and the recent turns ARE. So
+# this is not a lookup that fails, it is a lookup that CANNOT be right, and a veto above the score
+# is the only place that fact can be stated: below the score the question has already been called
+# thin, and it is not thin. It is fully answerable from the one source the web cannot see.
+#
+# DELIBERATELY BROAD, because the cost is asymmetric and worth naming. A false positive here means
+# a question that might have wanted the web is answered from the conversation instead - the
+# sentences this matches ("what did we discuss", "what was my first question") are ones no search
+# engine could ever help with. A false negative means the machine goes to a stranger to be told
+# what its employer said to it. "what did we talk about yesterday" matching is not a bug for the
+# same reason: it is turned back to the notes, where the minutes of yesterday actually live.
+ABOUT_SESSION_RE = re.compile(r"""(?:
+      \b what \s+ (?: did | have ) \s+ (?: i | we ) \s+ (?: just \s+ )?
+        (?: ask | asked | say | said | tell | told | talk | talked
+          | discuss | discussed | cover | covered | mention | mentioned ) \b
+    | \b what \s+ (?: was | were ) \s+ (?: my | our | the ) \s+
+        (?: first | last | previous | earlier | original ) \b
+    | \b (?: my | the | your ) \s+ (?: first | last | previous ) \s+
+        (?: question | answer | words? ) \b
+    | \b (?: this | our ) \s+ conversation \b
+    | \b earlier \s+ (?: in \s+ (?: this | our ) \s+ (?: conversation | chat | session )
+                       | today | on ) \b
+    | \b how \s+ many \s+ (?: questions | things ) \s+ have \s+ i \b
+    | \b (?: do | can ) \s+ you \s+ (?: still \s+ )? remember \s+ what \s+ i \b
+  )""", re.IGNORECASE | re.VERBOSE)
+
+
 # ------------------------------------------------------------------- the third door
 #
 # TASKS ARE NOT RESEARCH. "Draft an email to the landlord", "translate this into French",
@@ -2025,6 +2138,15 @@ def task_intent(question):
 # these subjects is in the same character as the fixed ones.
 
 PROTECTED_CLASSES = ("confirmation", "meta", "identity", "directive")
+
+# AND A FIFTH THING THAT COSTS NO LOOKUP, WHICH IS NOT ONE OF THE FOUR. The clock is answered
+# from a table on this disk, so it belongs above the retrieval for exactly the reason the four
+# above it do - but it is not a sentence about this machine, it is arithmetic about the world,
+# and the tuple above is the mandate's own list and is left as the mandate wrote it. So: the
+# four are unaltered and still in their order, and `clock` is tried only after all four have
+# declined. See the last branch of protected_answer(). A harness that wants "is this one of the
+# four" reads PROTECTED_CLASSES; one that wants "did this cost a lookup" reads `lookups`.
+UNPAID_CLASSES = PROTECTED_CLASSES + ("clock",)
 
 
 def _addressless(question):
@@ -2359,6 +2481,11 @@ def protected_answer(question, cfg=None, ear_open=False, offer_standing=False):
     line = ""
     name = ""
     gstate = ""
+    # None means "the clock did not answer", which is a different thing from "" - the empty
+    # string is what his OWN clock answers with, having no place in it. A sentinel rather than
+    # a `"gclock" in locals()` test, which was the first draft and which turns a typo in the
+    # branch below into a field that silently never appears.
+    gclock = None
     if said_it(META_RE):
         name = "meta"
         # FROM LIVE STATE, not from a hopeful fixed string. He is asking whether the ear
@@ -2389,12 +2516,57 @@ def protected_answer(question, cfg=None, ear_open=False, offer_standing=False):
         # make two network trips for one question - and could answer the two from different
         # readings if the grant expired between them.
         line, gstate = spoken_connection(cfg)
+
+    # ---- THE CLOCK, AND IT IS LAST ON PURPOSE -------------------------------------------
+    # THE FOUR FUNNEL CLASSES ABOVE ARE UNTOUCHED. This branch is reached only when all four
+    # have declined, it cannot shadow any of them, and PROTECTED_CLASSES still names the four
+    # it has always named - see its comment. What it adds is a fifth ROUTE, "clock", carried
+    # the same way `googleState` is carried: as an extra field on a class that already exists,
+    # so nothing that reads the funnel's shape reads a different shape.
+    #
+    # WHY IT BELONGS UP HERE AT ALL, above the notes and the web. "What time is it in Tokyo"
+    # is arithmetic on a table that is on this disk, and before this branch existed it went to
+    # a search engine: a round trip, a rate limit and a page of advertising to compute a
+    # subtraction, with the result that the one question in the house with a certain answer was
+    # also the one that could fail. Zero lookups, like the four above it, for the same reason.
+    if not name and worldclock is not None:
+        try:
+            how, place = worldclock.asked(forms[-1] if forms else "")
+            if not how:
+                # AND THE UNPEELED FORM TOO. The peel takes "so" and "just" off the front,
+                # which helps, but it also eats "hey" out of the middle - and a city called
+                # nothing in particular can survive that. Both rungs are read for the same
+                # reason _addressless_forms exists at all: a fixed phrase is still a fixed
+                # phrase whichever rung it is recognised on.
+                how, place = worldclock.asked(forms[0] if forms else "")
+            if how == "where":
+                name = "clock"
+                gclock = place
+                line = worldclock.spoken(place, who["boss_call"])
+            elif how == "here":
+                name = "clock"
+                gclock = ""
+                line = worldclock.here_now(who["boss_call"])
+        except Exception as exc:                                   # noqa: BLE001
+            # A CLOCK THAT THROWS SAYS NOTHING. Falling through leaves the ordinary funnel to
+            # answer, which is a worse answer than the clock's and a better one than a 500.
+            sys.stderr.write("worldclock: %s\n" % exc)
+
     if not name:
         return None, None
     said = {"ok": True, "kind": "chat", "nodes": [], "answer": line,
             "route": name, "lookups": 0, "protected": name}
     if gstate:
         said["googleState"] = gstate
+    if gclock is not None:
+        # WHAT A HARNESS READS INSTEAD OF PARSING THE SENTENCE BACK. `clockPlace` is empty for
+        # his own clock, the canonical LABEL for a city that resolved, and empty for one that
+        # did not - so a refusal is the pair (clockAsked non-empty, clockPlace empty), which is
+        # a fact a proof can assert without matching English.
+        said["clock"] = True
+        said["clockPlace"] = (worldclock.resolve(gclock)[0] or "") if gclock else ""
+        said["clockAsked"] = gclock
+        said["clockSource"] = worldclock.source()
     return name, said
 
 
@@ -2543,10 +2715,11 @@ def talk_about_proposal(question, session, pending, cfg=None):
         cfg = load_config()[0]
     with _lock:
         history = list(_history.get(session, []))
-    messages = ([{"role": "system",
-                  "content": SMALLTALK_PROMPT + hands.prompt_block()
-                             + proposal_context(pending)}]
-                + history + [{"role": "user", "content": question.strip()}])
+    manifest, protocol = hands.prompt_parts()
+    messages, _plan = assemble(system=SMALLTALK_PROMPT, manifest=manifest,
+                               protocol=protocol, offer=proposal_context(pending),
+                               history=history, older=older_block(session),
+                               ask=question.strip(), label="standing-offer")
     answer, error = call_model(cfg, messages)
     if error:
         return 502, {"error": error, "nodes": [], "kind": "chat",
@@ -2559,11 +2732,7 @@ def talk_about_proposal(question, session, pending, cfg=None):
         # model wrote around the tag is dropped, as it is everywhere else - one voice.
         sys.stderr.write("  tool: the offer was AMENDED in conversation -> %s\n" % wanted)
         return hands.propose(wanted, tool_facts(wanted, params), door="tag")
-    with _lock:
-        hist = _history.setdefault(session, [])
-        hist.append({"role": "user", "content": question.strip()})
-        hist.append({"role": "assistant", "content": answer})
-        del hist[:max(0, len(hist) - HISTORY_TURNS * 2)]
+    record_turn(session, question, answer)
     return 200, {"answer": answer, "nodes": [], "kind": "chat", "route": "proposal",
                  "lookups": 0, "pending": hands.pending_public()}
 
@@ -2858,9 +3027,11 @@ def web_intent(question, confidence, prior="", in_scope=True):
                   classified out of scope.
 
     THE GATE, in one sentence: a question reaches the web when it is SUBSTANTIAL and the
-    notes CANNOT ANSWER IT. The two vetoes above the score are what makes the first half
-    true - small talk and questions about this machine are turned back before any number
-    is consulted at all, so "good morning" still costs nothing and touches nothing.
+    notes CANNOT ANSWER IT. The vetoes above the score are what makes the first half
+    true - small talk, questions about this machine and questions about this conversation
+    are turned back before any number is consulted at all, so "good morning" still costs
+    nothing and touches nothing. They share one shape: a low score is not evidence of
+    thinness when the answer was never going to be in the collection in the first place.
 
     `in_scope` is the out-of-scope half of "cannot answer", and folding it in here is the
     whole repair: it used to be the case that an out-of-scope question was classified
@@ -2892,6 +3063,17 @@ def web_intent(question, confidence, prior="", in_scope=True):
     bare = _bare(question)
     if SELF_RE.search(bare):
         return ""                  # about this machine; the web has never met it
+    # AND THE SAME ARGUMENT FOR THE SESSION, one line lower because it is one line's worth of
+    # difference: the web has never met this conversation either. ABOVE the world trigger on
+    # purpose - "what did I say earlier today about the weather" matches both patterns, and the
+    # question is what HE said, not what the sky is doing. See ABOVE ABOUT_SESSION_RE for how
+    # this surfaced: PART 8's quarantine took away thirty notes of retrieval noise that had been
+    # accidentally covering it, and the eviction probe started answering "according to current
+    # web sources" about what its own employer had asked it ten minutes earlier.
+    if ABOUT_SESSION_RE.search(bare):
+        sys.stderr.write("  no lookup: %r is about this conversation, which is in the prompt\n"
+                         % str(question).strip()[:60])
+        return ""
     if REALWORLD_RE.search(bare):
         return "world"
     # THE LAST CLAUSE OF THE FUNNEL, and it only ever narrows "thin". A question about the
@@ -2940,6 +3122,584 @@ def classify_question(question, best_score, prior="", confidence=1.0):
 _lock = threading.Lock()
 _history = {}          # session id -> [ {role, content}, ... ]
 _index = {"notes": [], "docs": [], "df": {}, "mtime": 0.0, "meta": {}}
+
+
+# =============================================================================
+#  THE ASSEMBLY, AND THE INSTRUMENT THAT WATCHES IT
+#
+#  Two things live here and they are one thing: the single place a prompt is
+#  built, and the record of what was built. They are together because an
+#  assembly nobody can read afterwards is an assembly nobody can be held to.
+#
+#  WHY THIS EXISTS AT ALL. Before it, five sites in this file each concatenated
+#  their own message list and each trimmed the history with its own copy of the
+#  same `del hist[:...]` line. Nothing anywhere declared how big a prompt was
+#  allowed to get, nothing named the pieces it was made of, and the oldest turns
+#  of a long conversation were DELETED - not summarised, not mentioned, just
+#  gone. That is a machine that gets quietly worse the longer you talk to it,
+#  and "quietly" is the part that makes it a hallucination question rather than
+#  a memory question: a brain that has lost the turn its pronoun refers to does
+#  not say so, it guesses.
+#
+#  THE ORDER IS DECLARED, NOT DISCOVERED. CONTEXT_ORDER below is the mandate's
+#  order, written down once, so that "the order is stable" is a thing a test can
+#  ask rather than a thing a reader has to reconstruct from five call sites.
+# =============================================================================
+
+# Each entry is (name, protected, where).
+#
+#   protected - eviction may never shorten or drop this block. Four of the seven
+#     are, and each for a different reason: the persona is the character and a
+#     nameless butler is a different machine; the manifest and the protocol are
+#     what he is allowed to DO, and a brain that has lost them either refuses
+#     work it can do or invents work it cannot; the retrieval hits are the only
+#     thing standing between a cited answer and an invented one, which is why
+#     the mandate says top-k NEVER DROPPED and why dropping them would turn a
+#     grounded answer into a confident one.
+#   where - the wire slot. This file talks to a chat-completions shape, so the
+#     seven named blocks land in three places, and two of them are not where a
+#     naive reading of the order would put them:
+#       "persona" is prepended inside call_model by wear_persona(), which is a
+#         property worth having rather than an accident - the persona is added
+#         AFTER every decision about what to evict, so no budget arithmetic
+#         anywhere in this file can reach it.
+#       "retrieval" rides in the FINAL user turn, immediately under the
+#         question, rather than ahead of the turns where the order names it.
+#         That is deliberate and it is a deviation: evidence works by being the
+#         nearest thing to the question it answers, and the heading that binds
+#         it - "...and nothing else" - only binds what follows it in the same
+#         message. The ORDER here is the precedence ladder the mandate asks for
+#         and the thing eviction obeys; `where` is the geometry. Both are
+#         declared, and both are asserted.
+CONTEXT_ORDER = (
+    ("persona",        True,  "preamble"),
+    ("manifest",       True,  "system"),
+    ("chain-protocol", True,  "system"),
+    ("guest",          True,  "system"),
+    # The offer standing on the card, shown only on the one path that can amend it. It is
+    # protected because a turn that amends an offer and has lost the offer amends nothing:
+    # the model would answer "make it five instead" as a fresh instruction with no subject.
+    ("standing-offer", True,  "system"),
+    ("retrieval",      True,  "user"),
+    ("recent-turns",   False, "turns"),
+    ("older-turns",    False, "system"),
+    ("question",       True,  "user"),
+)
+CONTEXT_BLOCKS = tuple(name for name, _p, _w in CONTEXT_ORDER)
+PROTECTED_BLOCKS = frozenset(name for name, protected, _w in CONTEXT_ORDER if protected)
+
+# ============================= THE CONTEXT BUDGET ============================
+#
+# CONTEXT_FLOOR is what a turn costs when nothing can be given up: every protected block at
+# the largest size the constants above allow. It is ARITHMETIC, not a guess, and it is
+# written as a sum so that raising TOP_K or CONTEXT_CHARS moves it by itself:
+#
+#   TOP_K * CONTEXT_CHARS       every keyword note the retrieval may send, at full length
+#   5 * SEM_CONTEXT_CHARS       every semantic passage (ingest.TOP_K is 5), at full length
+#   2000                        the question, at the cap /chat already truncates it to
+#   12000                       persona + preamble + manifest + protocol + the headings,
+#                               measured at 6947 + 3609 + 1471 + ~150 and rounded up
+#
+# MAX_CONTEXT is the cap, and it is chosen against two numbers rather than one. It must be
+# COMFORTABLY ABOVE CONTEXT_FLOOR, because a cap below the floor would be a cap that a
+# perfectly ordinary notes question breaks every time; and it must be near enough to the
+# measured distribution to bite before a model's own limit does. The twenty-turn hunt of
+# PART 0 measured 4,532 to 26,132 characters on the wire, with the largest being a notes
+# answer carrying eight thousand characters of passages and four pairs of history. So:
+#
+#   floor  29,000    the most a turn can cost with nothing left to give up
+#   worst  26,132    the largest prompt twenty real turns actually produced
+#   cap    48,000    about twelve thousand tokens; 65% headroom over the floor
+#
+# WHY IT IS IN CHARACTERS AND NOT TOKENS. Every number in this file that could be compared
+# with it is in characters, nothing here tokenises, and a budget expressed in a unit the
+# code cannot measure is a budget that gets estimated. Divide by four for tokens.
+CONTEXT_FLOOR = TOP_K * CONTEXT_CHARS + 5 * SEM_CONTEXT_CHARS + 2000 + 12000
+MAX_CONTEXT = 48000
+
+# ------------------------- THE SUMMARY OF WHAT WENT -------------------------
+# Three numbers, and the middle one is the whole of PART 0's cure.
+#
+#   OLDER_KEEP        how many evicted pairs are kept as a line of their own, newest of the
+#                     old first. Beyond that they are counted, not quoted.
+#   SUMMARY_PAIR_MAX  the budget per side of one summarised pair. WHOLE SENTENCES ONLY - see
+#                     whole_sentences(), which is where "never mid-sentence" is enforced.
+#   OLDER_MAX         the whole block's ceiling. Lines go from the OLDEST end when it is
+#                     exceeded, and they go whole; the pinned first turn never goes at all.
+OLDER_KEEP = 8
+SUMMARY_PAIR_MAX = 200
+OLDER_MAX = 4000
+SENTENCE_RE = re.compile(r"[^.!?\n]+(?:[.!?]+|\n|$)")
+
+
+def whole_sentences(text, budget):
+    """As many whole sentences from the start of `text` as fit in `budget`. Never part of one.
+
+    THE ONE PLACE "NEVER MID-SENTENCE" IS A FACT RATHER THAN AN INTENTION. A summary that cut
+    at a character count would produce lines like "I answered: The margin is 82% because the"
+    - and a model handed that finishes the thought for it, which is a fabrication this
+    machine built itself out of its own history. So the loop takes sentences, and the one
+    concession is deliberate: if the FIRST sentence alone is over budget it is kept whole
+    anyway, over budget, because the alternative is cutting it. The block's own ceiling
+    (OLDER_MAX) then drops WHOLE LINES from the oldest end, so every cut anywhere in this
+    mechanism falls on a sentence boundary or a line boundary and never inside either.
+
+    AND IT RETURNS A PREFIX, NEVER A REJOIN. This is the one bug this function has ever had and
+    it was live until today. SENTENCE_RE ends a sentence AT the full stop, so any closing mark
+    that belongs to that sentence - a quote, a bracket, the second half of a markdown emphasis -
+    falls outside the match, and the old `" ".join(kept)` then put a space in front of it:
+
+        '"Good evening" in French: **Bonsoir.**'  ->  '"Good evening" in French: **Bonsoir. **'
+        'He said "stop." Then nothing.'           ->  'He said "stop. " Then nothing.'
+
+    The second one is the frightening one, because it is not about markdown: EVERY quoted
+    sentence in his history came out of here with its closing quote pushed off the end of the
+    quotation. The summariser was allowed to QUOTE and to COUNT, and it was EDITING - which is
+    the precise thing the whole of summarise_pairs() is written to refuse, since a model handed
+    an altered quote has no way to know it was altered and will cite it all session.
+
+    So the budget decides HOW MUCH to keep and the return value is then a PREFIX OF THE TEXT
+    ITSELF, sliced at the end of the last sentence kept. That is lossless by construction: a
+    prefix cannot gain a character that was not there or lose one that was, so no rejoining
+    rule has to be got right. The rejoin was only ever a way of reconstructing separators that
+    were already in the string.
+
+    A WORDLESS FRAGMENT IS NOT A SENTENCE either, and needs saying because the budget would
+    otherwise stop in front of one: a match with no letter and no digit is that closing mark,
+    so it extends the prefix without being counted as a sentence and without consulting the
+    budget - for the same reason the first sentence may exceed it. A line ending in an unclosed
+    emphasis or an unclosed quotation is a worse lie than two characters of overrun.
+    """
+    said = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not said:
+        return ""
+    has_word = re.compile(r"[^\W_]", re.U)
+    end, used, taken = 0, 0, 0
+    for match in SENTENCE_RE.finditer(said):
+        one = match.group(0).strip()
+        if not one:
+            continue
+        if taken and not has_word.search(one):
+            end, used = match.end(), used + len(one)   # this sentence's own closing mark
+            continue
+        if taken and used + 1 + len(one) > budget:
+            break
+        used += (1 if taken else 0) + len(one)
+        taken += 1
+        end = match.end()
+    # AND THE CUT ITSELF MUST NOT ORPHAN A CLOSING MARK. Where the budget stopped, the very next
+    # characters may be the closing half of something the kept text opened - and they are only
+    # outside the prefix because SENTENCE_RE handed them to the FOLLOWING sentence, which was
+    # dropped. 'He said "stop." Then nothing.' cut at the boundary gives 'He said "stop.', an
+    # unclosed quotation, and a model cannot see where the quotation was meant to end. Absorbed
+    # only when they sit flush against the cut with no space, which is the only arrangement in
+    # which they can belong to the sentence being kept rather than to the one being dropped.
+    orphan = re.match(r"[\"')\]*_’”]+", said[end:])
+    if orphan:
+        end += orphan.end()
+    return said[:end].strip()
+
+
+# session -> {"first": line or "", "pairs": [line, ...], "n": how many pairs summarised}
+_older = {}
+
+
+def summarise_pairs(session, gone):
+    """Fold evicted messages into the session's summary, by RULE and with no model call.
+
+    A MODEL CALL WAS CONSIDERED AND REJECTED, and the reason is the subject of this whole
+    section: a summariser is a language model, a language model can invent, and an invention
+    written into the history is a false memory this machine will then cite for the rest of the
+    session. Every later turn would be grounded in it and none of them could tell. A rule
+    cannot invent; it can only quote or count, and it costs nothing and never fails.
+
+    THE FIRST PAIR IS PINNED FOREVER. That is not symmetry, it is the cure for the exact
+    failure PART 0 reproduced: asked what it had been asked first, this machine named the
+    oldest message still in its window - honestly, and wrongly, because nothing told it there
+    had been anything before that. One pinned line answers that question for the life of the
+    session, and it is one sentence long.
+    """
+    slot = _older.setdefault(session, {"first": "", "pairs": [], "n": 0})
+    for i in range(0, len(gone) - 1, 2):
+        user, assistant = gone[i], gone[i + 1]
+        if user.get("role") != "user":
+            continue
+        slot["n"] += 1
+        line = ("%d. You asked: %s  I answered: %s"
+                % (slot["n"],
+                   whole_sentences(user.get("content"), SUMMARY_PAIR_MAX) or "(nothing)",
+                   whole_sentences(assistant.get("content"), SUMMARY_PAIR_MAX)
+                   or "(nothing)"))
+        if not slot["first"]:
+            slot["first"] = line
+        else:
+            slot["pairs"].append(line)
+    del slot["pairs"][:max(0, len(slot["pairs"]) - OLDER_KEEP)]
+    return slot["n"]
+
+
+def older_block(session):
+    """The summarised history as one system block, or "" when nothing has been evicted yet.
+
+    Headed with a sentence that says what it IS, because the failure it exists to prevent is
+    a model treating a summary as the whole conversation - and counted, because "23 earlier
+    turns" is the difference between a machine that has forgotten and a machine that knows it
+    has forgotten. The second one can say so.
+    """
+    slot = _older.get(session)
+    if not slot or not slot["first"]:
+        return ""
+    lines = [slot["first"]] + list(slot["pairs"])
+    # "the most recent turns" and never "above" or "below". This block lives in the system
+    # message, so the turns it defers to are BELOW it on the wire while the heading is above
+    # them - the first draft said "above" and was pointing the model at the persona.
+    head = ("\n\nEARLIER IN THIS CONVERSATION. %d turn(s) before the most recent turns you "
+            "hold in full have been summarised to single lines. This is a SUMMARY and not "
+            "the transcript: if they ask for wording you no longer hold, say that you have "
+            "the gist of it rather than quoting it.\n" % slot["n"])
+    if slot["n"] > len(lines):
+        head += ("  (turns %d to %d are counted but no longer quoted)\n"
+                 % (2, slot["n"] - len(slot["pairs"])))
+    # WHOLE LINES, FROM THE OLDEST END, AND NEVER THE FIRST. index 0 is the pinned turn 1.
+    while len(lines) > 1 and len(head) + sum(len(one) + 3 for one in lines) > OLDER_MAX:
+        lines.pop(1)
+    return head + "".join("  %s\n" % one for one in lines)
+
+
+def forget_older(session=None):
+    if session:
+        _older.pop(session, None)
+    else:
+        _older.clear()
+
+# THE INSTRUMENT. A ring of the last few turns, in RAM, and the rules it keeps are the
+# Scribe's rules for the same reason: this holds the employer's own sentences.
+#
+#   IT IS NEVER WRITTEN TO DISK. No file, no log line, no ledger. server-trace.log gets
+#     sizes and kinds from the lines already there and never a question or an answer.
+#   IT IS SMALL AND IT FORGETS. TURN_DUMP_MAX turns, oldest out first.
+#   THE RESET BUTTON EMPTIES IT, because the forget button that left a transcript behind
+#     would not be a forget button - the same argument that already clears _last_ask.
+#   AND THE PASSAGES ARE EXCERPTED. A dump carrying whole retrieved passages would be a
+#     second copy of the archive in memory; TURN_EXCERPT_MAX is enough for a judge to
+#     check whether a sentence in the answer is in the evidence, which is the only
+#     question anybody asks it.
+TURN_DUMP_MAX = 40
+TURN_EXCERPT_MAX = 400
+_turns = []                    # the ring, newest last
+_turn_seq = {}                 # session -> how many turns it has had
+_turn_local = threading.local()  # the turn this thread is in the middle of
+
+
+def turn_begin(session, question, spoken=False, heard=""):
+    """Open a record for this turn. Returns it, and it is also the thread's current one.
+
+    `heard` is the transcript as the ear delivered it and `question` is what actually
+    arrived at the door. They are recorded SEPARATELY and never reconciled here, because
+    the first thing the hunt has to be able to ask is whether they differ - a machine that
+    answered a sentence nobody said is the ear's failure and no amount of reading the
+    brain's output will find it.
+    """
+    with _lock:
+        n = _turn_seq.get(session, 0) + 1
+        _turn_seq[session] = n
+    rec = {"n": n, "session": str(session or "default")[:120],
+           "at": time.strftime("%H:%M:%S"), "asked": str(question or "")[:2000],
+           "heard": str(heard or "")[:2000], "spoken": bool(spoken),
+           "kind": "", "route": "", "answer": "", "calls": [], "plan": None,
+           # scores is a dict every time it is written (turn_note(scores={...})); it was
+           # initialised to [] and that empty list reached grounding_class(), which asks it
+           # for .get("opened"). Every slot here now has its written-to type.
+           "scores": {}, "cited": [], "sources": [], "chainTag": None, "toolTag": None,
+           "pending": None, "grounds": ""}
+    _turn_local.rec = rec
+    return rec
+
+
+def turn_note(**fields):
+    """Add to the open record, if there is one. A no-op off the /chat path.
+
+    Deliberately forgiving: every caller below is a line inside a long function with a
+    dozen exits, and an instrument that raised when it was not armed would be an
+    instrument that took the server down on the one path nobody tested.
+    """
+    rec = getattr(_turn_local, "rec", None)
+    if rec is not None:
+        rec.update(fields)
+    return rec
+
+
+def turn_call(label, messages, raw, error=""):
+    """One model call, recorded: what went in, how big, and what came back RAW.
+
+    RAW MATTERS AND IS THE POINT. Everything downstream of call_model strips tags,
+    rescues prose and substitutes canned lines, so by the time an answer reaches the
+    employer there is no way to tell a model that wrote a clean sentence from one that
+    wrote a chain tag on an ordinary question and had it quietly removed. That second
+    thing is chain-protocol bleed, it is one of the four mechanisms the hunt must be able
+    to see, and this is the only place it is visible.
+    """
+    rec = getattr(_turn_local, "rec", None)
+    if rec is None:
+        return
+    sizes = [{"role": m.get("role"), "chars": len(str(m.get("content") or ""))}
+             for m in messages if isinstance(m, dict)]
+    rec["calls"].append({
+        "label": label, "msgs": len(sizes),
+        "chars": sum(s["chars"] for s in sizes), "sizes": sizes,
+        "raw": str(raw or "")[:2000], "error": str(error or "")[:200]})
+
+
+# ---- THE GROUNDING CLASS, section 26 PART 3 -------------------------------------------
+#
+# Every answer carries one of six: notes, web, persona, state, refusal, chain. The class
+# names WHAT THE SENTENCE STANDS ON, and the whole reason it exists as a separate field is
+# that `kind` does not: kind names the DOOR the question was routed to, and the hunt found
+# two turns where the door and the ground disagreed.
+#
+#   Turn 9, "what is my home address": kind "notes", zero cited passages, and the reading
+#     that settles it is opened=false, semOpened=false - NEITHER HALF OF THE RETRIEVAL EVER
+#     OPENED. The notes were not consulted and then found wanting; they were never read.
+#     The answer ("not a thing the notes record") is a refusal and grounded in an absence.
+#   Turn 17, "what did I ask you about first today": kind "notes", nothing opened either,
+#     and the answer stood on the summarised-history block that was on the wire. Its ground
+#     is this conversation - state - and it was correct.
+#
+# Both were reds under a rule that read kind, and neither was a hallucination. So:
+#
+# WHAT THIS FUNCTION WILL AND WILL NOT DECIDE. It decides only the classes the machine can
+# prove from its own instruments - a card on the table, a protected class, fetched sources,
+# a passage over threshold. Where the class turns on what the SENTENCE claims, it returns
+# "" and says nothing, because the alternative is a regex over prose deciding whether an
+# English sentence was a refusal, and a classifier that guesses would launder exactly the
+# hallucinations this audit exists to catch. "" means THE JUDGE DECIDES, and the judge is
+# given the mechanical facts below to decide against - never a free hand.
+GROUNDING_CLASSES = ("notes", "web", "persona", "state", "refusal", "chain")
+
+
+def grounding_class(rec, payload):
+    """One of GROUNDING_CLASSES, or "" for "not mechanically decidable - ask the judge"."""
+    payload = payload if isinstance(payload, dict) else {}
+    scores = rec.get("scores") if isinstance(rec.get("scores"), dict) else {}
+    chain, tool = (rec.get("chainTag") or {}), (rec.get("toolTag") or {})
+    # A PROPOSAL OF HANDS, whether it is one hand or four. The mandate's class list has no
+    # "tool" beside "chain", and a single card is the same claim as a chain of four - that
+    # these hands exist and these parameters are valid - so it is judged by the same law.
+    if rec.get("pending") or chain.get("accepted") or tool.get("id"):
+        return "chain"
+    if rec.get("route") in ("identity", "meta"):
+        # googleState is set only when spoken_connection() actually read the grant, so it
+        # is the existing, untouched signal that separates a live-state answer from one
+        # read off the persona block. PROTECTED_CLASSES is fixed at four and stays four.
+        return "state" if payload.get("googleState") else "persona"
+    if rec.get("kind") == "web":
+        return "web" if rec.get("sources") else ""
+    if rec.get("cited") or scores.get("opened") or scores.get("semOpened"):
+        return "notes"
+    return ""
+
+
+def turn_end(payload):
+    """File the open record into the ring, reading what it can off the answer itself."""
+    rec = getattr(_turn_local, "rec", None)
+    _turn_local.rec = None
+    if rec is None:
+        return
+    if isinstance(payload, dict):
+        rec["kind"] = str(payload.get("kind") or "")
+        # THE ROUTE IS NOT OVERWRITTEN IF SOMETHING ALREADY KNEW IT. answer_question() records
+        # which half of the retrieval opened the door - "semantic" and "keyword" are the
+        # distinction the hunt needs and no payload carries it - and the first draft of this
+        # line read `or ""` off the payload and erased that on every single turn. A reading
+        # taken at decision time beats a reading reconstructed from the reply.
+        rec["route"] = str(payload.get("route") or rec.get("route") or "")
+        rec["answer"] = str(payload.get("answer") or payload.get("error") or "")[:2000]
+        cites = payload.get("citations")
+        if isinstance(cites, list) and cites and not rec["cited"]:
+            rec["cited"] = [{"what": str(c)[:120]} for c in cites[:8]]
+        src = payload.get("sources")
+        rec["sources"] = [{"title": str((s or {}).get("title") or "")[:120],
+                           "url": str((s or {}).get("url") or "")[:200]}
+                          for s in (src if isinstance(src, list) else [])[:8]]
+        pend = payload.get("pending")
+        if isinstance(pend, dict):
+            rec["pending"] = {"tool": pend.get("tool"), "chain": bool(pend.get("chain")),
+                              "steps": len(pend.get("steps") or [])}
+        # LAST, because it reads everything above it. A site that knew better already wrote
+        # grounds via turn_note and is not second-guessed here - the same rule as `route`.
+        rec["grounds"] = rec.get("grounds") or grounding_class(rec, payload)
+    with _lock:
+        _turns.append(rec)
+        del _turns[:max(0, len(_turns) - TURN_DUMP_MAX)]
+    return rec
+
+
+def turn_dump(session=None, limit=TURN_DUMP_MAX):
+    with _lock:
+        rows = [dict(r) for r in _turns
+                if session in (None, "", r.get("session"))]
+    return rows[-max(1, int(limit or 1)):]
+
+
+def forget_turns(session=None):
+    with _lock:
+        if session:
+            _turns[:] = [r for r in _turns if r.get("session") != session]
+            _turn_seq.pop(session, None)
+        else:
+            _turns[:] = []
+            _turn_seq.clear()
+
+
+def record_turn(session, question, answer):
+    """The conversation grows by one pair, and the oldest pairs are dealt with by RULE.
+
+    ONE FUNCTION, WHERE THERE WERE FIVE COPIES. The five sites that used to hold their own
+    `del hist[:max(0, len(hist) - HISTORY_TURNS * 2)]` are all here now, and the reason is
+    not tidiness: eviction is a decision about what this machine is allowed to forget, and
+    a decision taken in five places is a decision that will shortly be taken differently in
+    five places. See evict_history() for the rule itself.
+    """
+    said = str(question or "").strip()
+    with _lock:
+        hist = _history.setdefault(session, [])
+        hist.append({"role": "user", "content": said})
+        hist.append({"role": "assistant", "content": str(answer or "")})
+        dropped, summarised = evict_history(hist, session)
+    if dropped:
+        turn_note(evicted=dropped, summarised=summarised)
+    return dropped
+
+
+def evict_history(hist, session):
+    """Trim a session's turns in place. Returns (messages evicted, pairs summarised).
+
+    THE RULE, IN ONE SENTENCE: the last HISTORY_TURNS pairs are kept in full, and everything
+    older is SUMMARISED rather than deleted - one line a pair, whole sentences only, with the
+    very first pair pinned for the life of the session.
+
+    WHAT IT USED TO DO, AND WHAT THAT COST. It deleted. Five copies of one `del` statement,
+    no summary, no record, no mention to the model that anything had gone - and PART 0
+    reproduced the consequence on the first attempt. Asked at turn 17 what it had been asked
+    FIRST, this machine answered with complete confidence about turn 9, because turn 9 was
+    the oldest message still inside the window and nothing in the prompt said there had been
+    eight turns before it. The model was not guessing and it was not lying; it answered
+    correctly about the only history it was given. THE HISTORY WAS THE LIE, by omission, and
+    a machine that cannot say "I no longer hold that" will always say something else instead.
+
+    Called under _lock, and it is the caller's lock: _older is written here too.
+    """
+    over = max(0, len(hist) - HISTORY_TURNS * 2)
+    if not over:
+        return 0, 0
+    gone = hist[:over]
+    del hist[:over]
+    return over, summarise_pairs(session, gone)
+
+
+def assemble(*, system, manifest="", protocol="", guest="", offer="", history=None,
+             ask="", heading="", evidence="", older="", label="chat", cap=None):
+    """(messages, plan) - the ONE place a prompt is built, in the ONE declared order.
+
+    Every argument is a NAMED BLOCK from CONTEXT_ORDER, and the plan that comes back names
+    every one of them with its size, whether it was protected, and whether it is absent
+    because nobody had one or absent because something took it away. That distinction is
+    the whole value of the return: "the web synthesis has no history" and "the history was
+    evicted" look identical in a message list and mean opposite things.
+
+    IT DOES NOT CHOOSE ANYTHING. Which blocks a given turn gets is the caller's judgement
+    and stays where it was - the web synthesis deliberately carries no notes and no turns,
+    because never blending has to be structural to be true. This function's whole job is to
+    put whatever it is given in the declared order, measure it, and say what it did.
+
+    IT DOES ENFORCE THE CAP, which is the one decision it owns. MAX_CONTEXT is a promise
+    about the whole prompt and only this function can see the whole prompt, so the trim
+    happens here - in reverse precedence order, taking the summary of the old turns first and
+    then the recent turns from the oldest end, both of them WHOLE MESSAGES. A protected block
+    is never touched and never truncated: if the protected blocks alone are over the cap, the
+    plan comes back `overCap` and the log says so, because a prompt that cannot be made to fit
+    honestly is a thing to be told about rather than a thing to be quietly cut in half.
+    """
+    turns = [dict(m) for m in (history or []) if isinstance(m, dict)]
+    older = str(older or "")
+    cap = int(cap or MAX_CONTEXT)
+    # ---- THE TRIM. Measured on the four pieces, not on the assembled string, so that
+    # dropping something is one list operation rather than a rebuild.
+    fixed = (len(str(system or "")) + (len(manifest) + 1 + len(protocol) if manifest else 0)
+             + len(str(offer or "")) + len(str(guest or ""))
+             + len("Question: \n\n\n\n") + len(str(ask or "")) + len(str(heading or ""))
+             + len(str(evidence or "")))
+    turn_chars = lambda: sum(len(str(m.get("content") or "")) for m in turns)  # noqa: E731
+    cut_older, cut_turns = 0, 0
+    if fixed + len(older) + turn_chars() > cap and older:
+        older, cut_older = "", 1
+    # OLDEST FIRST, AND IN PAIRS, because dropping a user message and leaving the answer to
+    # it turns the window into a monologue by a machine answering nothing.
+    while fixed + turn_chars() > cap and len(turns) >= 2:
+        del turns[:2]
+        cut_turns += 2
+    over_cap = fixed + len(older) + turn_chars() > cap
+    if cut_older or cut_turns or over_cap:
+        sys.stderr.write("  budget: %s cap %d - dropped %s%d recent message(s)%s\n"
+                         % (label, cap, "the summary and " if cut_older else "",
+                            cut_turns, "; STILL OVER CAP on protected blocks alone"
+                            if over_cap else ""))
+    hands_block = (manifest + "\n" + protocol) if manifest else ""
+    system_text = str(system or "") + hands_block + str(offer or "") + str(guest or "")
+    if older:
+        system_text += older
+    # THE HEADING DECIDES, NOT THE EVIDENCE. A retrieval that came back thin still gets its
+    # frame, because "and nothing else" is a sentence about what the model may use and it is
+    # most load-bearing exactly when there is least to use. Framing on `evidence` instead
+    # would have silently unframed the one turn where the frame matters, so the condition
+    # names the heading: a caller that passes one is asking for the frame.
+    user_text = ("Question: %s\n\n%s\n\n%s" % (ask, heading, evidence)
+                 if (heading or evidence) else str(ask or ""))
+    messages = ([{"role": "system", "content": system_text}] + turns +
+                [{"role": "user", "content": user_text}])
+    # EVERY CHARACTER ON THE WIRE BELONGS TO EXACTLY ONE NAMED BLOCK, and that is a stronger
+    # claim than it looks. A budget whose parts do not add up to the whole is a budget with a
+    # hiding place in it: the sum comes out under the cap while the thing actually sent does
+    # not. So the arithmetic below is exact rather than approximate, and three of the entries
+    # are written the way they are only to make it exact:
+    #
+    #   "persona" carries the BASE PROMPT TOO - SMALLTALK_PROMPT, SYSTEM_PROMPT, WEB_PROMPT,
+    #     whichever the caller passed - and not only the preamble wear_persona() adds later.
+    #     They are one block because they are one thing: who this machine is and how it
+    #     speaks. Splitting them would have produced a nameless eighth block that happened
+    #     to be the largest protected one in the file.
+    #   "chain-protocol" is charged the newline that joins it to the manifest, because that
+    #     newline exists if and only if there is a manifest to join it to.
+    #   "question" is measured as WHAT IS LEFT OF THE USER TURN once the evidence is taken
+    #     out, so the frame - "Question: ", the heading, the blank lines between them - is
+    #     charged to the asking rather than silently dropped. Sixteen characters, and a
+    #     sixteen-character hole would have made the identity below inexact forever.
+    #
+    # The identity: sum(sizes) == systemChars + userChars + recent-turns, asserted in
+    # preflight and again in session_proof against the bytes call_model actually sent.
+    sizes = {"persona": len(str(system or "")), "manifest": len(manifest or ""),
+             "chain-protocol": (len(protocol or "") + 1) if manifest else 0,
+             "guest": len(guest or ""),
+             "standing-offer": len(offer or ""), "retrieval": len(evidence or ""),
+             "recent-turns": sum(len(str(m.get("content") or "")) for m in turns),
+             "older-turns": len(older or ""),
+             "question": len(user_text) - len(evidence or "")}
+    plan = {"label": label, "order": list(CONTEXT_BLOCKS),
+            "blocks": [{"block": name, "protected": protected, "where": where,
+                        "chars": sizes[name], "present": bool(sizes[name])}
+                       for name, protected, where in CONTEXT_ORDER],
+            "turns": len(turns), "chars": sum(sizes.values()),
+            "systemChars": len(system_text), "userChars": len(user_text),
+            # `evicted` here is what THE CAP took off this one prompt, which is a different
+            # number from the `evicted` on the turn record - that one is what the WINDOW RULE
+            # took off the session's history when the last answer was filed. Two mechanisms,
+            # two counts, and conflating them would have made a busy session look like a
+            # broken budget. How many pairs the session holds in SUMMARY is a fact about the
+            # session rather than about this prompt, so it is on the turn record and not here.
+            "evicted": cut_turns + cut_older, "droppedSummary": bool(cut_older),
+            "cap": cap, "overCap": over_cap, "floor": CONTEXT_FLOOR}
+    turn_note(plan=plan)
+    return messages, plan
 
 # THE MEMORY: one question back, and what kind of thing it turned out to be. That is the
 # whole of it, and the smallness is the point - the only reader is resolve_followup(),
@@ -3237,7 +3997,8 @@ def build_context(picked):
 #  with no rebuild, and an archived PDF nobody has ever wikilinked is findable by the
 #  semantic half. Neither of those two facts is true of either index alone.
 
-SEM_CONTEXT_CHARS = 1200      # per chunk, sent to the model
+# SEM_CONTEXT_CHARS lives up with CONTEXT_CHARS now - CONTEXT_FLOOR sums the two and is
+# declared above this line, so both have to exist before it.
 
 
 # THE LOOKUP COUNTER, and it counts only what is actually SPENT: an embedding query put to
@@ -3895,6 +4656,34 @@ def doorman_refusal(data, session, word):
         if spoken and isinstance(verdict, dict):
             _speaker_spend(session)
         return None, seal
+    # ---- NEVER A SILENT GUEST FOR THE BOSS. Two refusals, and they refuse identically: nothing
+    # is executed, no hand is unlocked, the card stands untouched and the law above is the same
+    # law. What differs is what is SAID, and the difference is the mandate's.
+    #
+    # A voice in the near band is one the doorman could not be sure of, whose closest row is the
+    # hands-privileged one - see voiceprint.NEAR_THRESHOLD. Telling that person "I take orders
+    # from one voice in this house, and it is not speaking just now" is telling the employer he
+    # is a stranger in his own house, and it hands him no way forward: he does not know whether
+    # he was misheard, whether the room was loud, or whether the machine has forgotten him. So
+    # this branch names the doubt and names both doors out of it - say it again, or press the Yes
+    # that is already on the screen. LOUDLY, because the alternative is a machine that appears
+    # to be ignoring him.
+    #
+    # THE VERBATIM LINE BELOW IS NOT TOUCHED. It is the mandate's sentence for an actual stranger
+    # and it stays exactly as it was written, which is why this is a branch above it rather than
+    # a condition inside it.
+    if isinstance(verdict, dict) and verdict.get("unverified"):
+        sys.stderr.write("  route: confirmation - a spoken %s in the near band (cosine %.3f), "
+                         "refused and said so\n" % (word or "word", verdict.get("score") or 0.0))
+        return {
+            "ok": False, "kind": "tool", "nodes": [],
+            "answer": ("I could not be sure that was you, so I have not acted on it. Say it "
+                       "once more, a little longer, or press Yes on the card."),
+            # A DIFFERENT REASON CODE, so that a harness and a log can tell the two refusals
+            # apart without reading the prose - and so that this one can never be mistaken for
+            # the "not-the-boss" it deliberately does not say.
+            "refused": "unverified-voice", "route": "confirmation", "lookups": 0, "seal": seal,
+        }, seal
     sys.stderr.write("  route: confirmation - a spoken %s from a voice without hands, "
                      "refused at the doorman\n" % (word or "word"))
     return {
@@ -4367,13 +5156,42 @@ def call_model(cfg, messages, image=None):
     encode it themselves, because they disagree about the shape and agree about
     nothing except the media type.
     """
-    messages = wear_persona(cfg, messages)
+    worn = wear_persona(cfg, messages)
+    # THE PERSONA'S SIZE IS MEASURED HERE AND NOWHERE ELSE, because here is where it is
+    # added. That ordering is the property, not the measurement: the persona block goes on
+    # AFTER every eviction decision this file makes, so no budget arithmetic anywhere can
+    # reach it. `plan` is completed rather than built - assemble() owns the other seven
+    # blocks and this one owns the one it can see.
+    plan = (getattr(_turn_local, "rec", None) or {}).get("plan")
+    if isinstance(plan, dict):
+        grew = sum(len(str(m.get("content") or "")) for m in worn if m.get("role") == "system") \
+            - sum(len(str(m.get("content") or "")) for m in messages if m.get("role") == "system")
+        for entry in plan["blocks"]:
+            if entry["block"] == "persona":
+                # ADDED, NOT ASSIGNED. assemble() already charged the base prompt to this
+                # block - see the sizes comment there - and the first version of this line
+                # assigned instead, which silently took two and a half thousand characters
+                # of SYSTEM_PROMPT out of the budget at the exact moment the budget was
+                # completed. The preamble's own size is kept beside it so the two halves of
+                # the persona can still be told apart.
+                entry["chars"] += max(0, grew)
+                entry["preambleChars"] = max(0, grew)
+                entry["present"] = entry["chars"] > 0
+        plan["chars"] += max(0, grew)
+        # THE WHOLE, MEASURED OFF THE THING ACTUALLY SENT, so that `chars == wireChars` is a
+        # test of the arithmetic rather than a restatement of it. They are computed from
+        # different objects by different code and must agree to the character.
+        plan["wireChars"] = sum(len(str(m.get("content") or "")) for m in worn)
+        plan["accounted"] = plan["chars"] == plan["wireChars"]
     provider = provider_of(cfg)
     if provider == "openrouter":
-        return call_openrouter(cfg, messages, image)
-    if provider == "openai":
-        return call_openai(cfg, messages, image)
-    return call_bedrock(cfg, messages, image)
+        answer, error = call_openrouter(cfg, worn, image)
+    elif provider == "openai":
+        answer, error = call_openai(cfg, worn, image)
+    else:
+        answer, error = call_bedrock(cfg, worn, image)
+    turn_call((plan or {}).get("label") or "model", worn, answer, error)
+    return answer, error
 
 
 def credentials_error(cfg):
@@ -4841,18 +5659,35 @@ def brain_tag(answer):
 
 # --------------------------------------------------------------------- capturing
 #
-# "remember that X" writes a real markdown file and folds it into the live index.
+# "remember that X" PROPOSES a real markdown file, and a word of consent writes it.
 #
-# Two rules this section exists to enforce:
+# THE GATE ARRIVED IN PART 8 AND IT CLOSED THE LAST HOLE IN THIS SERVER'S OWN LAW.
+# Everything else that touches the world here - the calendar, the email, the voice, the
+# minutes - goes through one slot, one TTL and one Doorman, and is spoken as a proposal
+# before it happens. The capture did not. "remember that the deposit is forty thousand"
+# was heard and WRITTEN, in the same breath, with no card and no chance to say no, into a
+# collection that is indexed and quoted back. It was the oldest write in the project, which
+# is the whole reason it predated the law rather than being exempt from it.
 #
-#   1. Writing a file is not indexing it. Every capture re-reads the corpus through
+# So remember() now mints a proposal for the save_note hand and returns; tools/save_note.py
+# does the writing, after a yes, through hands.execute() like every other hand. What is
+# left in this section is the part that is NOT the write: reading the trigger off the
+# sentence, titling the thought, and - once the hand has run - folding the new file into the
+# live index. Three rules it still exists to enforce:
+#
+#   1. Writing a file is not indexing it. A completed capture re-reads the corpus through
 #      build.py's OWN functions and rewrites both notes-index.json and
 #      graph-data.js, so the new note is retrievable by /chat on the very next
 #      question with no rebuild step. Nothing here reimplements build.py's linking
-#      rules - it imports them, so the two can never drift apart.
+#      rules - it imports them, so the two can never drift apart. This is also why the
+#      re-index could not move into the script: it must happen IN THIS PROCESS, keeping
+#      every node id the browser is already holding.
 #   2. A capture never fails quietly. Every path below returns a spoken line, and
 #      "written but not indexed" is reported as its own distinct failure rather
 #      than being rounded up to success.
+#   3. NO CREDENTIAL ENTERS A NOTE. secretscan's opinion is taken here, at proposal time,
+#      so he is told before a card goes up - and taken AGAIN by the script, because the
+#      server is not the only thing that can call a hand.
 
 CAPTURE_RE = re.compile(r"""^[\s"'“‘(\[]*remember\s+that\b[\s,:;.\-–—]*""",
                         re.IGNORECASE)
@@ -4893,40 +5728,12 @@ def capture_title(body):
     return build.label_from_filename("-".join(words))
 
 
-def write_capture(body, title):
-    """Write the markdown file. Returns (relative_path, error)."""
-    folder = os.path.join(notes_root(), CAPTURE_DIR)
-    try:
-        os.makedirs(folder, exist_ok=True)
-    except Exception as exc:                                   # noqa: BLE001
-        return None, "could not create %s (%s)" % (CAPTURE_DIR, exc)
-
-    stem = build.slugify(title) or "capture"
-    now = time.localtime()
-    path = os.path.join(folder, stem + ".md")
-    # Never overwrite an earlier capture: the same thought twice is two notes.
-    suffix = 2
-    while os.path.exists(path):
-        path = os.path.join(folder, "%s-%d.md" % (stem, suffix))
-        suffix += 1
-        if suffix > 200:
-            return None, "too many notes already named like that"
-
-    text = ("# %s\n\n"
-            "Captured %s.\n\n"
-            "%s\n" % (title, time.strftime("%A %d %B %Y at %H:%M", now), body))
-    try:
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write(text)
-        # Read it back. "The write returned without raising" is not the same claim
-        # as "the note is on disk", and this is the one place that difference bites.
-        with open(path, "r", encoding="utf-8") as fh:
-            if body.split(".")[0][:40] not in fh.read():
-                return None, "the file was written but came back empty"
-    except Exception as exc:                                   # noqa: BLE001
-        return None, "could not write %s (%s)" % (os.path.basename(path), exc)
-
-    return os.path.relpath(path, ROOT).replace("\\", "/"), None
+# THE WRITE USED TO BE HERE, in a function called write_capture(), and it is gone rather
+# than kept behind a flag. It moved to tools/save_note.py, which is the only place a note is
+# made now, because two writers is how a gate gets walked around: the day somebody calls the
+# in-process one "just for this case", the card stops being the thing that decides. The
+# slug, the -2 suffix, the read-back and the containment check all went with it, unchanged
+# in substance. Nothing calls it, so nothing is left of it. See the section header above.
 
 
 def reindex_preserving_ids():
@@ -4984,52 +5791,101 @@ def pick_anchor(new_id, links, title, body):
 
 
 def remember(text):
-    """Capture a thought. Returns (status, payload) and never raises."""
+    """"remember that X" -> a PROPOSAL for the save_note hand. (status, payload), never raises.
+
+    THE THREE WAYS OUT, and the order is the argument:
+
+      NOTHING FOLLOWED THE TRIGGER. "remember that" and then a change of heart. Refused
+        before anything else, because there is no thought here to put on a card. This is the
+        one refusal that predates the gate and it is unchanged.
+      IT CARRIES A CREDENTIAL. Refused at PROPOSAL time, so he hears why before a card goes
+        up rather than after approving one. secretscan's opinion, which tools/save_note.py
+        takes again for itself - see the section header for why both.
+      OTHERWISE A CARD. hands.propose() mints it into the same single slot the calendar and
+        the email use, with the same TTL and the same Doorman behind it. Nothing is on disk
+        when this returns, and that sentence is the whole of PART 8's remember hand.
+
+    WHAT IT DOES NOT DO ANY MORE: write. The capture was the last write in this server that
+    happened without a word of consent, and it is not one now.
+    """
     body = capture_body(text)
     if not body:
         return 400, {"ok": False, "answer": CAPTURE_LINES["empty"],
                      "error": "nothing followed \"remember that\"",
                      "nodes": [], "kind": "capture"}
 
+    hits = secretscan.found(body)
+    if hits:
+        # The KIND and never the value, in a line he will hear and a log that keeps it.
+        return 400, {"ok": False, "answer": CAPTURE_LINES["secret"].format(
+                         reason=secretscan.reason(hits)),
+                     "error": "the thought carries a credential",
+                     "refused": "credential", "nodes": [], "kind": "capture"}
+
     ensure_index()
     title = capture_title(body)
+    status, payload = hands.propose("save_note", {"title": title, "body": body},
+                                    door="capture")
+    # `kind` is what the page routes on, and a capture that is now a proposal must still
+    # arrive labelled as one: the capture path speaks its own lines and draws its own star.
+    payload["kind"] = "capture"
+    payload.setdefault("nodes", [])
+    payload["title"] = title
+    return status, payload
 
-    rel, error = write_capture(body, title)
-    if error:
-        return 500, {"ok": False, "error": error, "nodes": [], "kind": "capture",
-                     "answer": CAPTURE_LINES["failed"].format(reason=error)}
 
+def capture_landed():
+    """The save_note hand has run. Fold the new file into the live index. (payload or None).
+
+    WHY THIS IS NOT IN THE SCRIPT, and it is the only reason the write and the indexing are
+    in two different processes: the ids must be preserved IN THIS ONE. The browser on screen
+    is holding node ids and so is the camera, and reindex_preserving_ids() keeps them by
+    reordering the walk to match the index we already have. A subprocess cannot do that; it
+    would renumber every note that sorts after captures/ and the star the employer is
+    looking at would quietly become a different note.
+
+    HOW IT KNOWS WHICH FILE IS NEW, without parsing the script's sentence. The set of files
+    in the index BEFORE the rebuild is taken first; the new one is the difference. That is
+    one fact read from two snapshots of our own state, rather than a filename scraped out of
+    a line of prose that exists to be spoken to a person.
+
+    Returns the graph payload the page needs to splice the star in, or a dict carrying
+    `error` when the file is on disk but did not make it into the galaxy - which is a real
+    and distinct failure, never rounded up.
+    """
+    with _lock:
+        before = {n.get("file") for n in _index["notes"]}
     try:
         nodes, links = reindex_preserving_ids()
-    except Exception as exc:                                   # noqa: BLE001
+    except Exception as exc:                                    # noqa: BLE001
         reason = "indexing failed (%s)" % exc
-        return 500, {"ok": False, "error": reason, "file": rel, "nodes": [],
-                     "kind": "capture",
-                     "answer": CAPTURE_LINES["unindexed"].format(reason=reason)}
+        return {"ok": False, "error": reason,
+                "answer": CAPTURE_LINES["unindexed"].format(reason=reason)}
 
-    node = next((n for n in nodes if n["file"] == rel), None)
-    with _lock:
-        indexed = {n.get("file") for n in _index["notes"]}
-    if node is None or rel not in indexed:
-        # The distinct failure the whole section exists to catch: on disk, invisible
-        # to /chat. Reported as a failure, never rounded up to success.
+    fresh = [n for n in nodes if n["file"] not in before]
+    if not fresh:
+        # THE DISTINCT FAILURE THIS WHOLE SECTION EXISTS TO CATCH: on disk, invisible to
+        # /chat. The hand said it wrote a file and the galaxy does not have it.
         reason = "the note is on disk but did not make it into the index"
-        return 500, {"ok": False, "error": reason, "file": rel, "nodes": [],
-                     "kind": "capture",
-                     "answer": CAPTURE_LINES["unindexed"].format(reason=reason)}
+        return {"ok": False, "error": reason,
+                "answer": CAPTURE_LINES["unindexed"].format(reason=reason)}
+    # A rebuild could in principle turn up more than one unseen file - somebody dropped a
+    # note in by hand while the card was up. The capture is the newest of them.
+    node = max(fresh, key=lambda n: os.path.getmtime(
+        os.path.join(ROOT, n["file"].replace("/", os.sep)))
+        if os.path.exists(os.path.join(ROOT, n["file"].replace("/", os.sep))) else 0)
 
     degree = 0
     for link in links:
         if node["id"] in (link["source"], link["target"]):
             degree += 1
 
-    return 200, {
+    return {
         "ok": True,
-        "answer": CAPTURE_LINES["saved"].format(title=title),
-        "kind": "capture",
-        "file": rel,
-        "title": title,
-        "anchor": pick_anchor(node["id"], links, title, body),
+        "file": node["file"],
+        "title": node["label"],
+        "anchor": pick_anchor(node["id"], links, node["label"],
+                              str(node.get("excerpt") or "")),
         "nodes": [node["id"]],
         # Graph shape, matching graph-data.js exactly, so the viewer can drop it
         # straight into GRAPH.nodes.
@@ -5046,6 +5902,111 @@ def remember(text):
         "noteCount": len(nodes),
         "linkCount": len(links),
     }
+
+
+# ----------------------------------------------------------------------- the census
+#
+# SEVENTEEN QUESTIONS, THREE CHAPTERS, AND NOT ONE WORD OF INFERENCE.
+#
+# The corpus this galaxy was built to show was never his: a dummy cafe, an invoice
+# importer, a cold brew recipe. PART 8 moved that to quarantine and left three true notes
+# behind, and the two honest ways to grow it from there are that he says something worth
+# keeping - the remember hand, above - or that he is ASKED. This is the asking.
+#
+# THE WHOLE ROUTE IS A PROPOSAL, and that is the only interesting thing about it. An
+# intake form that wrote seventeen files as fast as they were typed would be the capture
+# defect again, seventeen times over, and in a folder that is indexed and quoted back. So
+# /census/answer ends in hands.propose("save_note", ..., folder="census") and returns a
+# card. The Census has no writer of its own, no route that writes, and no way to get one:
+# there is exactly one thing in this project that makes a note, and it is a registry hand
+# behind the Halt Law.
+#
+# THREE REFUSALS, IN THIS ORDER, and the order is the argument:
+#
+#   NOT ONE OF THE SEVENTEEN. An id off the list is refused before the answer is even
+#     read. The bank is the boundary of what this house asks about a person, and a route
+#     that filed an answer to a question nobody wrote would move that boundary to
+#     whatever the caller typed.
+#   NOTHING SAID. A skipped question is a skipped question - it is not a note saying
+#     nothing - and it stays unanswered so the board can offer it again.
+#   A CREDENTIAL. secretscan's opinion, at proposal time, so he hears why before a card
+#     goes up; tools/save_note.py takes it again for itself. "What are you learning at
+#     the moment" is not a question anybody expects to produce a password, which is
+#     exactly why the scan is here rather than only where it was expected to be needed.
+#
+# AND THE ANSWERED-STATE IS READ, NEVER REMEMBERED. census.state() lists the folder and
+# matches filenames against each question's slug. So deleting a note re-opens its
+# question, writing one by hand closes it, and the board cannot claim nine of seventeen
+# while the folder holds eight. The failure mode of the alternative - a counter in this
+# process - is a progress bar that is wrong until the next restart.
+CENSUS_LINES = {
+    "unknown": "That is not one of the Census questions, sir, so I have nothing to file "
+               "it under. Open the Census and it will put the next one to you.",
+    "empty": "You have not answered it yet, sir. Say the word and I shall put it to you "
+             "again, or leave it and I shall ask about something else.",
+    "secret": "I will not write that down, sir: {reason}, and a Census note is indexed "
+              "and read back. Say it again without the value.",
+    "done": "That is the whole Census answered, sir - all seventeen. Anything further "
+            "goes in as a thought you had rather than a question I asked.",
+}
+
+
+def census_snapshot():
+    """The whole intake as the board reads it, plus the question to put next.
+
+    ensure_index() first, because notes_root() is taken out of the index's own metadata -
+    the Census must file into the folder build.py actually indexed and not into a second
+    `notes` directory that happens to sit beside it.
+    """
+    ensure_index()
+    root = notes_root()
+    snap = census.state(root)
+    nxt = census.next_question(root)
+    snap["next"] = nxt
+    snap["ok"] = True
+    snap["kind"] = "census"
+    snap["nodes"] = []
+    snap["line"] = CENSUS_LINES["done"] if nxt is None else str(nxt["ask"])
+    return snap
+
+
+def census_answer(qid, answer):
+    """One answer -> a save_note PROPOSAL into notes/census/. (status, payload).
+
+    Never raises and never writes. The payload is the pending card the page puts up, with
+    `kind` set to "census" so the viewer can tell a Census answer from a spoken capture
+    when the star is born - the two take the same road out of settleProposal().
+    """
+    got = census.question(qid)
+    if not got:
+        return 400, {"ok": False, "answer": CENSUS_LINES["unknown"],
+                     "error": "%r is not a Census question" % str(qid)[:40],
+                     "nodes": [], "kind": "census"}
+
+    title, body = census.note_for(got["id"], answer)
+    if not title:
+        return 400, {"ok": False, "answer": CENSUS_LINES["empty"],
+                     "error": body, "question": got["id"],
+                     "nodes": [], "kind": "census"}
+
+    hits = secretscan.found(body)
+    if hits:
+        # The KIND and never the value, in a line he will hear and a log that keeps it.
+        return 400, {"ok": False, "answer": CENSUS_LINES["secret"].format(
+                         reason=secretscan.reason(hits)),
+                     "error": "the answer carries a credential",
+                     "refused": "credential", "question": got["id"],
+                     "nodes": [], "kind": "census"}
+
+    status, payload = hands.propose("save_note",
+                                    {"title": title, "body": body, "folder": census.FOLDER},
+                                    door="census")
+    payload["kind"] = "census"
+    payload.setdefault("nodes", [])
+    payload["title"] = title
+    payload["question"] = got["id"]
+    payload["chapter"] = got["chapter"]
+    return status, payload
 
 
 # ----------------------------------------------------------------------- seeing
@@ -5576,6 +6537,31 @@ def answer_question(question, session, guest=False):
     cited = sem["cited"] if (kind == "notes" and sem.get("opens")) else []
     cites = ingest.citations(cited) if (ingest is not None and cited) else []
 
+    # THE READING, TAKEN HERE BECAUSE HERE IS WHERE BOTH RETRIEVALS HAVE FINISHED AND
+    # NOTHING HAS BEEN ANSWERED YET. The hunt's question is never "what did it say" on its
+    # own; it is "what did it have in front of it when it said that", and the only honest
+    # answer to that is the scores and the passages AS THEY WERE AT DECISION TIME. Note the
+    # two lists are different things and both are recorded: `hits` is every passage the
+    # meaning search ranked, with its cosine, which is what shows a grounded-looking answer
+    # standing on a 0.31; `cited` is the subset that cleared the dial and will actually be
+    # pasted into the prompt. An answer with citations and an empty `cited` is a fabrication
+    # with chips on it, and that is one comparison, not an investigation.
+    turn_note(route=("semantic" if sem_opened else ("keyword" if kind == "notes" else kind)),
+              scores={"keywordBest": round(float(best_score or 0.0), 4),
+                      "confidence": round(float(confidence or 0.0), 4),
+                      "semanticBest": round(float(sem.get("best") or 0.0), 4),
+                      "semanticBest3": round(float(sem.get("best3") or 0.0), 4),
+                      "threshold": float(sem.get("threshold") or 0.0),
+                      "opened": bool(sem.get("opens")), "semOpened": sem_opened,
+                      "webGate": str(reason or ""),
+                      "hits": [{"name": str(h.get("name") or "?"),
+                                "score": round(float(h.get("score") or 0.0), 4)}
+                               for h in (sem.get("hits") or [])[:8]]},
+              cited=[{"what": str(h.get("name") or "?"),
+                      "score": round(float(h.get("score") or 0.0), 4),
+                      "text": str(h.get("text") or "")[:TURN_EXCERPT_MAX]}
+                     for h in (cited or [])[:6]])
+
     # Notes and archive light different things, so the two are merged rather than chosen
     # between: a keyword note keeps its planet, a semantic hit in notes/ earns the planet
     # it came from, and a semantic hit in archive/ earns no node at all because there is
@@ -5638,10 +6624,42 @@ def answer_question(question, session, guest=False):
     # to the ordinary lookup below, one model call the poorer and no harm done.
     if (hands.hands_wanted(question) and substantial_question(question, prior)
             and not address_only(question)):
-        messages = [{"role": "system", "content": SMALLTALK_PROMPT + hands.prompt_block()},
-                    {"role": "user", "content": question.strip()}]
+        # NO HISTORY ON THIS ONE, DELIBERATELY, and the plan records it as absent rather
+        # than evicted: this prompt asks one question - "is this an instruction, and which
+        # one?" - and a previous turn in front of it is how a model comes to propose the
+        # tool the LAST message wanted.
+        manifest, protocol = hands.prompt_parts()
+        messages, _plan = assemble(system=SMALLTALK_PROMPT, manifest=manifest,
+                                   protocol=protocol, ask=question.strip(),
+                                   label="hands-offer")
         said, hands_error = call_model(cfg, messages)
         if not hands_error:
+            # THE CHAIN TAG IS READ FIRST, and the order costs nothing: a chain tag contains
+            # no [[tool: ]] and a tool tag contains no array, so the two cannot both match.
+            # First because the failure of the other order is silent - a model that sent a
+            # plan and was read for a single tool would have proposed nothing and fallen
+            # through to a web search for "add a meeting and email the team".
+            plan, why, _prose = hands.chain_tag(said)
+            # WHAT THE PROBE SAW, recorded before anything is done about it. This is the one
+            # reading that separates "the model proposed a chain" from "the model wrote a
+            # chain tag and the server threw it away": `chainTag` is true for both, `steps`
+            # is None for the second. Mechanism (c), chain-protocol bleed, is exactly the
+            # case where this is true on a turn whose final kind is chat or notes.
+            turn_note(chainTag={"seen": bool(hands.CHAIN_TAG_AT.search(said or "")),
+                                "accepted": plan is not None,
+                                "steps": len(plan) if plan is not None else None,
+                                "why": str(why or "")[:200]})
+            if plan is not None:
+                sys.stderr.write("  tool: a chain tag, %s\n" % why)
+                # propose_chain() falls through to propose() for a plan of one, and
+                # tool_facts is handed in rather than applied here so it reaches EVERY step.
+                return hands.propose_chain(plan, door="tag", facts=tool_facts)
+            if why:
+                # A chain tag that arrived malformed is NOT quietly turned into a search: the
+                # employer asked for two things and the model tried to say so. It is logged
+                # and the turn falls through to the ordinary tag below, which will find
+                # nothing, and then to prose - never to a lookup dressed up as an answer.
+                sys.stderr.write("  tool: a chain tag was refused before proposing - %s\n" % why)
             wanted, params, _prose = hands.tool_tag(said)
             if wanted is not None:
                 # The prose is DISCARDED and the proposal is composed from the registry
@@ -5669,8 +6687,13 @@ def answer_question(question, session, guest=False):
     if task_intent(question) and kind != "notes":
         sys.stderr.write("  no lookup: %r is a task; composed, not searched\n"
                          % question.strip()[:60])
-        messages = ([{"role": "system", "content": COMPOSE_PROMPT}] + history +
-                    [{"role": "user", "content": question.strip()}])
+        # NO MANIFEST AND NO PROTOCOL HERE, and the plan says absent rather than evicted:
+        # the hands were already offered above and declined the message, so teaching the
+        # tags again to the prompt that writes the letter would only let a letter ask for
+        # a tool. The turns DO travel - "make it shorter" needs the draft it is about.
+        messages, _plan = assemble(system=COMPOSE_PROMPT, history=history,
+                                   older=older_block(session),
+                                   ask=question.strip(), label="compose")
         answer, error = call_model(cfg, messages)
         if error:
             return 502, {"error": error, "nodes": [], "kind": "compose"}
@@ -5685,11 +6708,7 @@ def answer_question(question, session, guest=False):
             sys.stderr.write("  tool: a tool tag came back from the COMPOSE prompt; "
                              "stripped and ignored\n")
             answer = cleaned or hands.LINES["instead"]
-        with _lock:
-            hist = _history.setdefault(session, [])
-            hist.append({"role": "user", "content": question.strip()})
-            hist.append({"role": "assistant", "content": answer})
-            del hist[:max(0, len(hist) - HISTORY_TURNS * 2)]
+        record_turn(session, question, answer)
         return 200, {"answer": answer, "nodes": [], "kind": "compose"}
 
     # ---- THE PII SHIELD, the last thing between a private identifier and a search box.
@@ -5785,11 +6804,13 @@ def answer_question(question, session, guest=False):
         # neither does the history - a previous turn about the employer's own pricing
         # note is exactly the sort of thing a model will happily fold into a paragraph
         # about today's gold price. "Never blend" has to be structural to be true, so
-        # this message list is the shortest one in the file.
-        user_msg = ("Question: %s\n\nLive web results you may use, and nothing else:"
-                    "\n\n%s" % (query, build_web_context(web)))
-        messages = [{"role": "system", "content": WEB_PROMPT},
-                    {"role": "user", "content": user_msg}]
+        # this message list is the shortest one in the file - and the plan it produces says
+        # so in the one way that matters: `recent-turns` absent because nobody passed any,
+        # not absent because a budget took them.
+        messages, _plan = assemble(system=WEB_PROMPT, ask=query,
+                                   heading="Live web results you may use, and nothing "
+                                           "else:",
+                                   evidence=build_web_context(web), label="web")
         answer, error = call_model(cfg, messages)
         sources = web_sources(web)
         backend = web[0].get("backend")
@@ -5814,11 +6835,7 @@ def answer_question(question, session, guest=False):
             sys.stderr.write("  tool: a tool tag came back from the WEB prompt; "
                              "stripped and ignored\n")
             answer = cleaned or WEB_SILENT_LINE
-        with _lock:
-            hist = _history.setdefault(session, [])
-            hist.append({"role": "user", "content": question.strip()})
-            hist.append({"role": "assistant", "content": answer})
-            del hist[:max(0, len(hist) - HISTORY_TURNS * 2)]
+        record_turn(session, question, answer)
         # `nodes` is empty and that is the point: nothing in the galaxy lit this answer,
         # so nothing in the galaxy may be shown as having done so. The viewer pulses
         # cyan on `kind` alone and holds the camera exactly where it was.
@@ -5837,11 +6854,7 @@ def answer_question(question, session, guest=False):
         # followed by a canned line about the web says sorry twice for one failure, and a
         # SMALLTALK refusal alone hides the fact that a search was run on the employer's
         # behalf - which is a cost they paid and were not told about.
-        with _lock:
-            hist = _history.setdefault(session, [])
-            hist.append({"role": "user", "content": question.strip()})
-            hist.append({"role": "assistant", "content": WEB_SILENT_LINE})
-            del hist[:max(0, len(hist) - HISTORY_TURNS * 2)]
+        record_turn(session, question, WEB_SILENT_LINE)
         return 200, dict({"answer": WEB_SILENT_LINE, "nodes": [], "kind": "chat",
                           "searched": reason, "webSilent": True},
                          **sent_fields(query, rewrote))
@@ -5856,7 +6869,11 @@ def answer_question(question, session, guest=False):
     # persona block so that the block stays exactly as it was, and so the sentences the
     # brain is shown are generated from the same registry the executor reads.
     offer_hands = substantial_question(question, prior) and not address_only(question)
-    block = hands.prompt_block() if offer_hands else ""
+    # SPLIT AT THE SEAM, not because this site needs two strings - it concatenates them
+    # again a few lines down - but because the budget has to be able to name the block it
+    # would cut. prompt_block() == manifest + "\n" + protocol, asserted in preflight.
+    manifest, protocol = hands.prompt_parts() if offer_hands else ("", "")
+    guest_block = ""
 
     # THE GUEST'S PROMPT LINE, and it is the SOURCE half of a law whose enforcement half is
     # deaddress() on the way out of /chat. Both halves exist because they fail differently: a
@@ -5871,24 +6888,26 @@ def answer_question(question, session, guest=False):
     # introduced to them.
     if guest:
         who = persona(cfg)
-        block += ("\n\nWHO YOU ARE SPEAKING TO JUST NOW\n"
-                  "- The person who asked this is NOT %s. You do not know who they "
-                  "are, and you do not guess.\n"
-                  "- So use NO form of address at all in your reply: no name, no "
-                  "\"sir\", no \"madam\". Not the wrong one and not a neutral one - "
-                  "none. Write the sentence as though it had never occurred to you "
-                  "to name anybody.\n"
-                  "- Stay entirely courteous and conversational. A guest is a guest, "
-                  "not an intruder, and nothing about your manner changes except the "
-                  "name you do not use.\n" % who["boss_call"])
+        guest_block = ("\n\nWHO YOU ARE SPEAKING TO JUST NOW\n"
+                       "- The person who asked this is NOT %s. You do not know who they "
+                       "are, and you do not guess.\n"
+                       "- So use NO form of address at all in your reply: no name, no "
+                       "\"sir\", no \"madam\". Not the wrong one and not a neutral one - "
+                       "none. Write the sentence as though it had never occurred to you "
+                       "to name anybody.\n"
+                       "- Stay entirely courteous and conversational. A guest is a guest, "
+                       "not an intruder, and nothing about your manner changes except the "
+                       "name you do not use.\n" % who["boss_call"])
 
     # THE EVIDENCE, KEPT BY NAME so the citation-honesty test below can be asked about the
     # exact text the brain was shown rather than about a reconstruction of it. Empty on a
     # chat turn, which is correct: nothing was shown, so nothing can have been consumed.
     evidence = ""
     if kind == "chat":
-        messages = ([{"role": "system", "content": SMALLTALK_PROMPT + block}] + history +
-                    [{"role": "user", "content": question.strip()}])
+        messages, _plan = assemble(system=SMALLTALK_PROMPT, manifest=manifest,
+                                   protocol=protocol, guest=guest_block, history=history,
+                                   older=older_block(session),
+                                   ask=question.strip(), label="chat")
     else:
         # THE UNION, AND THE PASSAGES GO FIRST. Two retrievals ran; whatever either of
         # them found is evidence, and the model is shown both under one heading rather
@@ -5906,10 +6925,13 @@ def answer_question(question, session, guest=False):
         context = build_context(picked)
         both = "\n\n".join(b for b in (passages, context) if b)
         evidence = both
-        user_msg = ("Question: %s\n\nNotes and documents you may use, and nothing else:"
-                    "\n\n%s" % (question.strip(), both))
-        messages = ([{"role": "system", "content": SYSTEM_PROMPT + block}] + history +
-                    [{"role": "user", "content": user_msg}])
+        messages, _plan = assemble(system=SYSTEM_PROMPT, manifest=manifest,
+                                   protocol=protocol, guest=guest_block, history=history,
+                                   older=older_block(session),
+                                   ask=question.strip(),
+                                   heading="Notes and documents you may use, and nothing "
+                                           "else:",
+                                   evidence=both, label=kind)
 
     answer, error = call_model(cfg, messages)
     if error:
@@ -5933,6 +6955,13 @@ def answer_question(question, session, guest=False):
     # proposal is not a turn of conversation - it is a question put back to the employer,
     # and what they say next is answered by the gate rather than by the brain.
     asked, params, prose = hands.tool_tag(answer)
+    # AND WHAT THE ORDINARY ANSWER CARRIED. A tag on this path is a tag on a turn that was
+    # NOT a hands probe - the model was answering a question about the notes and reached for
+    # a hand, or wrote an array because it had just been taught one. `offered` is recorded
+    # beside it because the two together name the failure: a tag the model was never offered
+    # hands for is bleed, and it is silently replaced with prose four lines down.
+    turn_note(toolTag={"id": asked, "offered": bool(offer_hands),
+                       "chainSeen": bool(hands.CHAIN_TAG_AT.search(answer or ""))})
     if asked is not None:
         if offer_hands:
             return hands.propose(asked, params, door="tag")
@@ -5943,13 +6972,24 @@ def answer_question(question, session, guest=False):
                          "offered to; ignored\n")
         answer = prose or hands.LINES["instead"]
 
-    with _lock:
-        hist = _history.setdefault(session, [])
-        # Store the bare question, not the injected note context: history is for
-        # follow-ups ("why?"), and re-sending old excerpts would blow up the prompt.
-        hist.append({"role": "user", "content": question.strip()})
-        hist.append({"role": "assistant", "content": answer})
-        del hist[:max(0, len(hist) - HISTORY_TURNS * 2)]
+    # ---- THE CLEAN MOUTH. Above this line the ordinary path handled the [[tool:]] tag and
+    # RECORDED that a chain tag was seen without ever taking one out, so a model that wrote
+    # a plan while answering a question about the notes put "[[chain: [{"hand": ..." on the
+    # screen and into the voice. hands.clean_mouth() removes the four protocol shapes and
+    # leaves everything else alone - an answer about JSON keeps its braces.
+    #
+    # BEFORE record_turn AND NOT AFTER, because history is prompt text: a tag stored in the
+    # transcript is a tag taught back to the model on the next turn as an example of what
+    # this conversation sounds like, which is how one stray tag becomes a habit.
+    mouth = hands.clean_mouth(answer)
+    if mouth != answer:
+        sys.stderr.write("  mouth: protocol removed from an ordinary answer (%d -> %d chars)\n"
+                         % (len(answer or ""), len(mouth)))
+    answer = mouth or hands.LINES["instead"]
+
+    # Store the bare question, not the injected note context: history is for follow-ups
+    # ("why?"), and re-sending old excerpts would blow up the prompt.
+    record_turn(session, question, answer)
 
     # THE CITATION TRAVELS BESIDE THE ANSWER, NOT INSIDE IT. `citations` is a list the
     # panel renders as "Q3_Contract.pdf · page 4"; the prose is left exactly as the model
@@ -6196,6 +7236,54 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
         if route == "/focus/stream":
             return self._focus_stream()
 
+        if route == "/clock":
+            # THE BOARD'S TRUTH ANCHOR, and it is not an animation frame. The page ticks its
+            # own tiles between reads using the offsets in this payload, so the cadence of this
+            # route has nothing to do with the cadence of the seconds on screen - which is why
+            # it can be read once when the board opens and then left alone.
+            #
+            # ZERO LOOKUPS AND NO NETWORK, asserted by clock_proof rather than promised here.
+            # ?at= is for the harness: a fixed ISO instant makes the date-line pair reproducible
+            # in a way "run it and see" cannot be, since the pair's whole point is that it
+            # depends on what time it is.
+            if worldclock is None or not worldclock.ready():
+                return self._send_json(200, {
+                    "ok": False, "kind": "clock", "nodes": [], "tiles": [], "lookups": 0,
+                    "source": "", "places": 0,
+                    "why": ("there is no timezone database on this machine"
+                            if worldclock is not None else "the clock module did not load")})
+            q = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            at = None
+            raw = (q.get("at") or [""])[0].strip()
+            if raw:
+                try:
+                    at = datetime.datetime.fromisoformat(raw)
+                except ValueError:
+                    # A BAD STAMP IS REFUSED, not quietly read as now. "run it at a fixed
+                    # instant" and "run it now" are different measurements, and a harness that
+                    # asked for the first and silently got the second would assert a date-line
+                    # pair against whatever today happens to be.
+                    return self._send_json(400, {
+                        "ok": False, "kind": "clock", "nodes": [], "tiles": [],
+                        "why": "at= is not an ISO instant"})
+            return self._send_json(200, {
+                "ok": True, "kind": "clock", "nodes": [], "lookups": 0,
+                "source": worldclock.source(), "places": worldclock.places_known(),
+                "home": worldclock.home()[0], "tiles": worldclock.board(at=at)})
+
+        if route == "/census":
+            # READ EVERY TIME, and the listdir is the whole cost. See the section above
+            # census_snapshot(): a progress figure held in this process is a second model
+            # of a fact the folder already holds, and the two disagree the first time he
+            # deletes a note.
+            try:
+                return self._send_json(200, census_snapshot())
+            except Exception as exc:                           # noqa: BLE001
+                return self._send_json(200, {
+                    "ok": False, "kind": "census", "nodes": [], "chapters": [],
+                    "answered": 0, "total": census.TOTAL, "next": None,
+                    "why": "the Census could not read its folder (%s)" % exc})
+
         if route == "/focus/diag":
             # THE INSTRUMENT. Booleans, small integers and words out of fixed sets -
             # see focus.DIAG_KEYS, which this payload is copied through and which has
@@ -6211,6 +7299,54 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             return self._send_json(200, {
                 "ok": True, "kind": "focus", "nodes": [], "answer": "",
                 "diag": focus.MANAGER.diag()})
+
+        if route == "/session/dump":
+            # THE HUNT'S ONE WINDOW, and it is a READ of the live process for the same
+            # reason /focus/diag is: a harness that reconstructed a turn by re-asking the
+            # question would be measuring a second turn, and the whole question is what THIS
+            # one had in front of it.
+            #
+            # WHY IT IS ON BY DEFAULT AND STILL HAS A SWITCH. Everything in it is already in
+            # the browser that asked - its own questions, its own answers - and this server
+            # binds 127.0.0.1 only, so there is no reader here who did not write the contents.
+            # A default of OFF was written first and taken out again for one reason: turning
+            # it on would mean editing config.json, a harness may never write config.json,
+            # and an instrument the regression suite cannot arm is an instrument that stops
+            # being run. So the switch is a KILL switch - `"session_dump": false` silences it
+            # - and the absence of the key means on.
+            #
+            # NO CREDENTIAL CAN REACH IT either way: the dump's fields are the ones
+            # turn_begin() writes - questions, answers, sizes, scores, kinds - and nothing
+            # here reads config.json for anything but this one boolean.
+            cfg = load_config()[0]
+            if (cfg or {}).get("session_dump") is False:
+                return self._send_json(404, {
+                    "ok": False, "kind": "session", "nodes": [], "answer": "",
+                    "error": "The session dump is switched off in config.json."})
+            query = urllib.parse.parse_qs(self.path.split("?", 1)[1]
+                                          if "?" in self.path else "")
+            want = (query.get("session") or [""])[0][:120]
+            try:
+                limit = int((query.get("limit") or ["0"])[0] or 0)
+            except ValueError:
+                limit = 0
+            rows = turn_dump(want or None, limit or TURN_DUMP_MAX)
+            return self._send_json(200, {
+                "ok": True, "kind": "session", "nodes": [], "answer": "",
+                "order": list(CONTEXT_BLOCKS),
+                "protected": sorted(PROTECTED_BLOCKS),
+                "historyTurns": HISTORY_TURNS, "dumpMax": TURN_DUMP_MAX,
+                # THE BUDGET, DECLARED ON THE WIRE and not only in a comment, so that a
+                # harness asserts against the number the server is really using rather than
+                # against a copy of it that can drift. Same argument as the tuning block
+                # on /stuck.
+                "cap": MAX_CONTEXT, "floor": CONTEXT_FLOOR, "olderKeep": OLDER_KEEP,
+                "olderMax": OLDER_MAX, "pairChars": SUMMARY_PAIR_MAX,
+                # The six the judge may choose from, on the wire for the same reason: a
+                # harness carrying its own copy of the list would not notice a seventh.
+                "groundingClasses": list(GROUNDING_CLASSES),
+                "summary": older_block(want or "default"),
+                "turns": rows})
 
         if route == "/stuck":
             # The windows and the purse, with no frame and no model call. The page asks
@@ -6405,9 +7541,16 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             status, payload = 500, {
                 "ok": False, "error": reason, "nodes": [], "kind": "capture",
                 "answer": CAPTURE_LINES["failed"].format(reason=reason)}
-        note = "captured" if payload.get("ok") else "CAPTURE FAILED"
-        sys.stderr.write("  %s: %s\n" % (note, payload.get("file")
-                                         or payload.get("error")))
+        # THE TRACE SAYS "PROPOSED", NOT "CAPTURED", and that distinction is the feature.
+        # Nothing is on disk when this returns; the log line that used to name a file now
+        # names a title on a card. A trace that still read "captured" here would be the one
+        # place somebody reading the log could be told the write had happened.
+        if payload.get("ok"):
+            note = "capture proposed, awaiting a word: %s" % payload.get("title")
+        else:
+            note = "CAPTURE REFUSED: %s" % (payload.get("refused")
+                                            or payload.get("error"))
+        sys.stderr.write("  %s\n" % note)
         return status, payload
 
     def _hands_gate(self, question, session="default", ear_open=False, body=None):
@@ -6943,8 +8086,28 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                         if payload.get(key):
                             payload[key] = deaddress(payload[key], load_config()[0])
                     payload["speakerSeal"] = "GUEST"
+                # AND THE INSTRUMENT CLOSES HERE, on the LAST line of the one funnel every
+                # answer this door sends already goes through. Not at the bottom of the
+                # route, because there are eight returns above it and an instrument that
+                # records seven of them is worse than none - the missing turn looks like a
+                # turn that never happened. After the de-address rather than before, because
+                # the sentence the dump records must be the sentence that was sent; and
+                # turn_end() clears the thread's slot, so a second call cannot double-file.
+                turn_end(payload)
                 return payload
 
+            # THE INSTRUMENT OPENS, above the gate and above all four protected classes,
+            # because "which turns does the hunt not see" must have the answer "none". A
+            # protected answer, a refused yes and a focus timer are all turns of this
+            # conversation, and a dump that held only the ones that reached the brain would
+            # be evidence about the brain rather than about the machine.
+            #
+            # `heard` IS THE UNTRIMMED BODY and `asked` is what the door works with. They are
+            # the same string on nearly every turn, and the turns where they are not are
+            # mechanism (a) - so they are stored apart and compared by the judge, never
+            # reconciled here.
+            turn_begin(session, question, spoken=spoken,
+                       heard=str(data.get("question") or ""))
             gate_status, gated = self._hands_gate(question, session, ear_open, data)
             if gate_status is not None:
                 return self._send_json(gate_status, voiced(gated))
@@ -7026,6 +8189,26 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                     "nodes": [], "kind": "capture"})
             text = str(data.get("text") or data.get("question") or "")[:4000]
             return self._send_json(*self._capture(text))
+
+        if route == "/census/answer":
+            data = self._read_json()
+            if not isinstance(data, dict):
+                return self._send_json(400, {
+                    "ok": False, "kind": "census", "nodes": [],
+                    "error": "Send a JSON body like {\"id\": \"...\", \"answer\": \"...\"}.",
+                    "answer": CENSUS_LINES["unknown"]})
+            qid = str(data.get("id") or "")[:60]
+            said = str(data.get("answer") or data.get("text") or "")[:4000]
+            status, payload = census_answer(qid, said)
+            # THE TRACE SAYS "PROPOSED", for the same reason _capture()'s does: a log line
+            # reading "filed" at this point would be the one place a reader could be told
+            # the write had happened when nothing is on disk at all.
+            sys.stderr.write("  census %s: %s\n" % (
+                qid or "?",
+                ("proposed %r, awaiting a word" % payload.get("title"))
+                if payload.get("pending") else
+                ("REFUSED: %s" % str(payload.get("error"))[:80])))
+            return self._send_json(status, payload)
 
         if route == "/see":
             # The body IS the frame: one JPEG, declared as image/jpeg, with the
@@ -7304,6 +8487,51 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 payload.get("focus", {}).get("state", "?")))
             return self._send_json(status, payload)
 
+        if route == "/chain/execute":
+            # THE CHAIN'S DOOR, and it is a NAME rather than a second way in. Every line
+            # below is the same as /execute's, deliberately and by delegation: the same
+            # doorman_refusal() above the same hands.execute(), which dispatches to the halt
+            # law only because the slot it claimed happens to hold steps.
+            #
+            # WHY NOT A PARALLEL EXECUTOR. Because the guards are what this file is for. A
+            # /chain/execute that claimed the slot itself would have needed its own copy of
+            # the stale-id check, the TTL check, the busy refusal and the Doorman - four
+            # guards, re-derived, at the one door where the mistake runs several hands
+            # instead of one. So it refuses to be more than a label: it is here because the
+            # mandate names it and because a page posting a plan should say so, and it can do
+            # nothing /execute could not.
+            #
+            # IT DOES NOT CHECK THAT THE SLOT IS A CHAIN, on purpose. A tab that posted a
+            # plan to the wrong door has still given consent to the thing that is actually
+            # pending, and refusing it would mean the employer pressing Yes twice for
+            # reasons that are none of his business.
+            data = self._read_json() or {}
+            if not isinstance(data, dict):
+                data = {}
+            door = str(data.get("door") or "button")[:16].lower()
+            if door not in ("button", "voice", "curl"):
+                door = "button"
+            refusal, _seal = doorman_refusal(data, str(data.get("session")
+                                                       or "default")[:120], "yes")
+            if refusal is not None:
+                refusal["pending"] = hands.pending_public()
+                return self._send_json(403, refusal)
+            try:
+                status, payload = hands.execute(
+                    door=door, proposal_id=str(data.get("id") or "")[:40] or None)
+            except Exception as exc:                            # noqa: BLE001
+                status, payload = 500, {
+                    "ok": False, "kind": "tool", "nodes": [], "pending": None,
+                    "error": "The chain hit an unexpected error: %s" % exc,
+                    "answer": hands.LINES["failed"].format(reason=str(exc)[:160])}
+            _hand_resolved(payload)
+            sys.stderr.write("  chain: %s -> %s, stopped at %s\n"
+                             % (payload.get("chainId") or "(not a chain)",
+                                payload.get("chainStatus") or payload.get("refused")
+                                or payload.get("failed") or "?",
+                                payload.get("stoppedAt")))
+            return self._send_json(status, payload)
+
         if route == "/execute":
             # THE ONE DOOR THAT RUNS ANYTHING, and it carries consent and nothing else.
             # The tool, the script and the parameters all come from the pending slot the
@@ -7355,6 +8583,30 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                     status, payload = hands.propose(
                         data.get("tool"),
                         tool_facts(data.get("tool"), data.get("params")), door=door)
+                elif cmd == "chain":
+                    # THE PLAN DOOR, and it is the exact sibling of "propose" above: it asks
+                    # for a proposal and it cannot run one. Every guard the /chat path gets -
+                    # find(), validate(), the reference rules, the cap, the readings - is
+                    # inside propose_chain(), so a plan that arrives here is judged by the
+                    # same code that judges a plan the model sent, and consent is still only
+                    # ever given at /execute or /chain/execute under the doorman.
+                    #
+                    # IT TAKES THE MODEL'S OWN TEXT IF IT IS OFFERED, which is why `said` is
+                    # read before `steps`: chain_tag() is the part of this feature that a
+                    # regression test cannot reach any other way, and it is the part that was
+                    # measured wrong first - the "}}]]" terminator. A harness posting a
+                    # ready-made array would prove propose_chain() and leave the scanner,
+                    # which is where the bug was, untested for ever.
+                    plan = data.get("steps")
+                    if isinstance(data.get("said"), str):
+                        plan, why, _rest = hands.chain_tag(data.get("said"))
+                        if plan is None:
+                            status, payload = 400, {
+                                "ok": False, "kind": "tool", "nodes": [], "pending": None,
+                                "error": "That carried no chain: %s." % (why or "no chain tag"),
+                                "answer": hands.LINES["chainempty"], "why": why or "no tag"}
+                            return self._send_json(status, payload)
+                    status, payload = hands.propose_chain(plan, door=door, facts=tool_facts)
                 elif cmd == "cancel":
                     # AND THE SAME AT THE NO. A guest's no cancels a proposal the boss made
                     # and is waiting on, which is a decision about his business, not an
@@ -7396,7 +8648,7 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                     state = hands.state()
                     status, payload = 400, {
                         "ok": False, "kind": "tool", "nodes": [],
-                        "error": "cmd must be propose, cancel, withdraw or lapse.",
+                        "error": "cmd must be propose, chain, cancel, withdraw or lapse.",
                         "answer": "", "pending": state["pending"]}
             except Exception as exc:                            # noqa: BLE001
                 status, payload = 500, {
@@ -7420,6 +8672,17 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             # could be confirmed by a "yes" belonging to a conversation that, as far as
             # the employer is concerned, never happened.
             dropped = hands.clear_pending("the reset button")
+            # AND THE INSTRUMENT IS PART OF THE CONVERSATION TOO, which is the Scribe's law
+            # applied to a thing that did not exist when it was written: the turn ring holds
+            # the employer's own sentences, in RAM, and a forget button that left forty of
+            # them behind for a harness to read would be a forget button with an exception.
+            # The turn counter goes with them, so the next question is turn 1 again.
+            forget_turns(session)
+            # AND THE SUMMARY OF WHAT WAS ALREADY FORGOTTEN ONCE. The whole point of the
+            # summary is that it outlives the window, so it is the one piece of the
+            # conversation a reset would otherwise leave standing - and a pinned first
+            # question surviving a forget button would be the loudest bug in the file.
+            forget_older(session)
             return self._send_json(200, {"ok": True, "forgotten": session,
                                          "proposalDropped": dropped})
 
