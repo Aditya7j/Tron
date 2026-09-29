@@ -1152,6 +1152,66 @@ DEFAULT_CONFIG = {
     "openrouter_api_key": "",
     "openrouter_model": "openai/gpt-6-astra",
 
+    # ---- GROQ. FOUR CAPABILITIES BEHIND ONE KEY AND ONE BASE URL, and every one of them
+    # OFF by default: the four flags below all name today's behaviour, so adding this block
+    # to config.json changes nothing at all until a human changes a flag. That is the point.
+    # An engine that arrives switched on is an engine that has to be switched off during an
+    # incident, by somebody who did not know it existed.
+    #
+    # THE KEY IS READ HERE AND NOWHERE ELSE. It never reaches the browser (the server serves
+    # only viewer/), never enters a log, a receipt, the hands ledger or the lookbook, and the
+    # only thing this process will ever print about it is its length and a sha256 prefix -
+    # see groq_digest(). The failure mode that law exists for: a key pasted into a support
+    # thread because it was sitting in a trace file somebody thought was harmless.
+    # EMPTY HERE, ALWAYS. DEFAULT_CONFIG is source, source is tracked, and a key in a tracked
+    # file is a key in the history forever - removing it later deletes the line and not the
+    # leak. The real one lives in config.json, which is gitignored, and this process will only
+    # ever say a length and a sha256 prefix about it. A live key WAS found on this line on
+    # 2026-09-28 and taken out; the same key is in config.json, so nothing was lost.
+    "groq_api_key": "",
+    # THE SLUGS ARE CONFIGURATION AND NOT CODE, deliberately, because Groq retires model ids
+    # on a published schedule and a slug compiled into server.py is a feature that dies
+    # silently one Tuesday. Each of these is the id as the docs print it; a dead one comes
+    # back as a plain 404 naming this field rather than as a fallback, so the boss is told
+    # which word to change instead of quietly getting a different model's opinion.
+    #
+    # AND THESE FOUR WERE RESOLVED AGAINST THE LIVE CATALOGUE, not copied out of the docs.
+    # GET /openai/v1/models with this account's key answers eleven ids, and the two slugs the
+    # mandate named are not among them - measured on 2026-09-28:
+    #   llama-3.3-70b-versatile        404 "does not exist or you do not have access to it"
+    #   llama-3.2-90b-vision-preview   400 "has been decommissioned and is no longer supported"
+    # So the defaults are the ids this key can actually reach, each one exercised once:
+    #   qwen/qwen3.8-27b        chat 200 in 121ms ("ready") AND vision 200 in 484ms (it read a
+    #                           red square as "Red"). One slug, two capabilities, which is
+    #                           exactly the shape the one client was built for.
+    #   openai/gpt-oss-120b     served and stronger, and NOT the default on purpose: it answers
+    #                           with a `reasoning` field the boss never hears, and it spends the
+    #                           MAX_ANSWER_TOKENS ceiling on it - at max_tokens 24 it came back
+    #                           with content='' (which this server reads as "an empty answer",
+    #                           and correctly refuses rather than falls back). It is one word in
+    #                           config.json away for anybody who wants it and raises the ceiling.
+    # FAILURE MODE THIS COMMENT EXISTS TO NAME: a default slug that 404s is a feature that is
+    # dead on arrival and blames the key. Whoever changes one of these should spend one curl
+    # on it first.
+    "groq_model": "qwen/qwen3.8-27b",
+    "groq_stt_model": "whisper-large-v3-turbo",
+    "groq_vision_model": "qwen/qwen3.8-27b",
+    # Orpheus, resolved from the text-to-speech page: canopylabs/orpheus-v1-english, whose
+    # English voices are autumn, diana, hannah, austin, daniel and troy. The voice is a
+    # separate field because /audio/speech requires one and refuses the request without it.
+    "groq_tts_model": "canopylabs/orpheus-v1-english",
+    "groq_tts_voice": "austin",
+
+    # ---- THE FOUR ENGINE FLAGS, each defaulting to what this machine already does.
+    # "provider" above is the chat one and already exists; these three complete the set.
+    # Flipping one changes ONE engine's source and nothing else - not the gate, not the
+    # Doorman, not the ledger, not the other three engines.
+    #   ear_stt        "browser" (Web Speech, as today) or "groq" (whisper-large-v3-turbo)
+    #   vision_engine  "bedrock" (as today) or "groq"
+    #   voice_engine   "piper" (as today), "web", or "orpheus"
+    "ear_stt": "browser",
+    "vision_engine": "bedrock",
+
     # ---- PINNED NAMES. What you may SAY, nailed to one exact id, in the one file
     # you own. Every form of a name you actually use out loud belongs here, because a
     # pin is the opposite of a guess: the catalogue can grow a "-mini" or a "-pro"
@@ -1378,7 +1438,46 @@ def is_swap_request(text):
 _brain = None
 _brain_lock = threading.Lock()
 
+# THE SECOND OVERRIDE, AND WHY IT IS NOT THE FIRST ONE WITH A WIDER TYPE. `_brain` holds an
+# OpenRouter model id and load_config() turns it into provider="openrouter" - that is a swap
+# BETWEEN MODELS on one provider, and every refusal, alias and pinned name in the resolver
+# below is built on that assumption. Groq is a swap between PROVIDERS, so it gets its own
+# variable under the same lock, and the two are mutually exclusive by construction: whichever
+# is set clears the other, and "back to your normal brain" clears both.
+# The failure mode this keeps out: widening `_brain` to a tuple, and discovering which of the
+# nine places that read it assumed a string only when one of them formats it into a sentence
+# the boss hears. `None` still means "whatever config.json says", which is what a restart
+# means, which is why neither of these is ever written to disk.
+_chat_engine = None
+
+# THE OTHER THREE, AND THEY EXIST BECAUSE "FLIPPING BACK IS INSTANT AND LOSSLESS" IS A CLAIM
+# ABOUT A RUNNING SERVER. ear_stt, vision_engine and voice_engine are config.json fields, and a
+# flag you can only change by editing a file and restarting is a flag nobody can flip mid-turn,
+# nobody can flip back when the cloud goes quiet, and no harness can exercise without writing
+# the boss's own config.json - which is forbidden here for good reason: a harness that rewrites
+# config.json and then dies leaves his house configured by a test.
+#
+# So each of the three gets the same treatment `_brain` has had since the first swap: an
+# in-memory override, None meaning "whatever config.json says", never written to disk, and
+# therefore gone on restart. config.json stays the thing that decides what this house does when
+# it wakes up; these three decide what it is doing right now.
+_engines = {"ear": None, "vision": None, "voice": None}
+
 OPENAI_URL = "https://api.openai.com/v1/chat/completions"
+
+# GROQ, ONE BASE AND FOUR PATHS. OpenAI-compatible, which is the whole reason this is five
+# lines and not a client library: /chat/completions is the shape call_chat_completions()
+# already speaks, so chat and vision differ by a model string and nothing else.
+# RESEARCHED against console.groq.com rather than remembered - the paths, the field names and
+# the Orpheus slug are all quoted in the §28 lookbook addendum with the page they came from.
+GROQ_BASE = "https://api.groq.com/openai/v1"
+GROQ_CHAT_URL = GROQ_BASE + "/chat/completions"
+GROQ_STT_URL = GROQ_BASE + "/audio/transcriptions"
+GROQ_SPEECH_URL = GROQ_BASE + "/audio/speech"
+# The audio a transcription may carry. Groq's own ceiling is 25 MB on the free tier; this is
+# lower on purpose, because the thing that arrives here is one spoken utterance and a request
+# to transcribe forty minutes is a mistake, not a feature.
+GROQ_STT_MAX_BYTES = 8 * 1024 * 1024
 MAX_ANSWER_TOKENS = 400   # the butler is brief; this is a ceiling, not a target
 # None means "whatever the model's own default is", and that is deliberate: the
 # newer models reject `temperature` outright ("deprecated for this model"), so
@@ -2146,7 +2245,15 @@ PROTECTED_CLASSES = ("confirmation", "meta", "identity", "directive")
 # four are unaltered and still in their order, and `clock` is tried only after all four have
 # declined. See the last branch of protected_answer(). A harness that wants "is this one of the
 # four" reads PROTECTED_CLASSES; one that wants "did this cost a lookup" reads `lookups`.
-UNPAID_CLASSES = PROTECTED_CLASSES + ("clock",)
+#
+# AND A SIXTH, §29's, ADDED FOR THE SAME REASON AND STANDING IN THE SAME PLACE. "go full screen"
+# is an INSTRUCTION and the deck can obey it from state; before this route existed all five of
+# its phrasings reached the notes door and paid a retrieval each to explain that the assistant
+# had no such lever. It sits here rather than in the tuple above for exactly the clock's reason:
+# the four are the mandate's own list. It is tried BELOW all four and ABOVE the clock - below the
+# four because they are fixed, above the clock because worldclock.asked() scans for place names
+# and a town called Fulscreen must never stop the deck obeying.
+UNPAID_CLASSES = PROTECTED_CLASSES + ("clock", "fullscreen")
 
 
 def _addressless(question):
@@ -2336,6 +2443,138 @@ CONNECTION_DEICTIC_RE = re.compile(r"""^(?:
   )$""" % {"state": _CONNECT_STATE}, re.IGNORECASE | re.VERBOSE)
 
 
+# ============================ §29: THE ROOM, ASKED FOR ================================
+#
+# A SIXTH ROUTE, CARRIED THE WAY THE CLOCK'S IS. PROTECTED_CLASSES still names four and is not
+# touched; this adds a route and two payload fields, exactly as `clock` added a route and three.
+# It belongs above the retrieval for the same reason the four above it do, and it is the
+# clearest case of the lot: "go full screen" is an instruction to this window. There is nothing
+# in the notes about it and nothing on the web about it, and before this branch existed the
+# sentence fell through the whole funnel to the web gate and came back with somebody's article
+# about F11 in Microsoft Edge.
+#
+# WHY "full screen" IS SPELT THREE WAYS. The boss says it; a recogniser writes it down. On-device
+# Web Speech returns "full screen", the cloud recogniser returns "fullscreen", and a keyboard
+# produces "full-screen" about a third of the time. One hyphen between the two halves is not a
+# different intent, and a page that obeys two of the three spellings is a page that works
+# intermittently for no reason the boss can see.
+_FULL = r"full[\s-]*screen(?:\s+mode)?"
+
+# THE DIRECTION IS PART OF THE MATCH, and this is the one design decision in the section worth
+# arguing about. The mandate says each variant "calls the same toggle Ctrl+A calls", and a toggle
+# is a blind flip - but "exit full screen" said while already windowed would then PUT IT ON, and
+# "go full screen" said twice would take it away again. Both are the machine doing the opposite
+# of what it was plainly told. So the sentence carries what was ASKED FOR - on, off - and there
+# is still exactly ONE path into the Fullscreen API: see fullAsked() in viewer/index.html, which
+# calls fullToggle() and only when the room is not already the way it was asked to be. A second
+# requestFullscreen() call site is what this avoids, and that is what the mandate's sentence is
+# protecting.
+FULLSCREEN_ON_RE = re.compile(r"""^(?:
+      (?:switch|change|flip|put\s+(?:it|this)|take\s+(?:it|this)|set\s+(?:it|this))
+        \s+(?:to|in\s*to|on\s*to)\s+(?:the\s+)?%(full)s
+    | (?:go|goto|go\s+to|going)\s+(?:to\s+)?(?:the\s+)?%(full)s
+    | make\s+(?:it|this|that|the\s+(?:deck|screen|window|galaxy))\s+%(full)s
+    | fill\s+(?:the|my|up\s+the)\s+(?:screen|display|monitor|room|glass|whole\s+screen)
+    | %(full)s(?:\s+please|\s+it|\s+now)?
+    | (?:turn|switch)\s+on\s+(?:the\s+)?%(full)s
+    | (?:enter|start|begin|open)\s+(?:the\s+)?%(full)s
+    | maximi[sz]e\s+(?:the\s+)?(?:deck|screen|window|galaxy|view)
+  )$""" % {"full": _FULL}, re.IGNORECASE | re.VERBOSE)
+
+FULLSCREEN_OFF_RE = re.compile(r"""^(?:
+      (?:exit|leave|quit|stop|end|close|cancel)\s+(?:the\s+)?%(full)s
+    | (?:get|come|back)\s+out\s+of\s+(?:the\s+)?%(full)s
+    | drop\s+out\s+of\s+(?:the\s+)?%(full)s
+    | (?:turn|switch)\s+off\s+(?:the\s+)?%(full)s
+    | (?:go\s+back|back)\s+to\s+(?:the\s+)?(?:window|windowed(?:\s+mode)?|normal(?:\s+size)?)
+    | (?:un)?maximi[sz]e\s+(?:the\s+)?(?:deck|screen|window|galaxy|view)
+    | give\s+me\s+(?:the\s+)?window\s+back
+    | (?:make|put)\s+(?:it|this)\s+(?:small(?:er)?|normal|windowed)\s*(?:again)?
+  )$""" % {"full": _FULL}, re.IGNORECASE | re.VERBOSE)
+
+# WHAT MUST NOT MATCH, and it is asserted rather than hoped for - routing_proof carries it as a
+# control and preflight's funnel check carries it too. "What is full screen mode?" is an ORDINARY
+# QUESTION that happens to contain the words, and it is owed a real answer with its honest chips.
+# The anchors are what make this true: every alternative above is ^...$ on the whole addressless
+# utterance, so a sentence with a question stem in front of it cannot reach any of them.
+# FAILURE MODE IF THE ANCHORS ARE EVER LOOSENED to bare `search` semantics: every sentence the
+# boss says about fullscreen silently becomes a command, including the ones asking what it is.
+
+
+def fullscreen_asked(question):
+    """"on", "off", or "" for a message that is not about the room at all."""
+    for form in _addressless_forms(question):
+        # OFF IS TESTED FIRST, because "exit full screen" contains "full screen" and one
+        # careless alternative in the ON list that matched a trailing phrase rather than the
+        # whole utterance would turn every exit into an entry. Ordering costs nothing and
+        # removes a whole class of mistake from the list above.
+        if FULLSCREEN_OFF_RE.match(form):
+            return "off"
+        if FULLSCREEN_ON_RE.match(form):
+            return "on"
+    return ""
+
+
+# THE LINE THE MANDATE WROTE, and it is stored once so that the page, the server and the proof
+# cannot drift apart on it. It carries an address form; a guest never receives one, because
+# _strip_address() takes the vocative off every sentence leaving this server for a voice it
+# could not name - so the boss would never see this line at all, and what actually reaches the
+# guest is "Only the boss fills the room." That is the existing peel doing its job and it is
+# not special-cased here. Measured, not assumed: routing_proof asserts the string the guest
+# receives rather than the string written on this line.
+FULLSCREEN_REFUSAL = "Only the boss fills the room, Addi."
+
+
+def fullscreen_allowed(spoken, seal):
+    """(True, "") if this voice may fill the room, else (False, the refusal).
+
+    THE DOORMAN, AT A THIRD DOOR, and reusing his DECISION rather than his code: doorman_refusal()
+    spends the speaker slot when it admits somebody, because the gate it guards turns a word into
+    an email leaving the house and a number that authorises twice is a number worth stealing.
+    Filling the screen sends nothing, writes nothing and is undone by one press of Escape, so
+    spending the boss's verdict on it would make his next spoken "yes" need a fresh sentence to
+    be measured from - a real cost, paid for a cosmetic action. Hence a separate, narrower gate,
+    and hence this docstring, so the next reader does not "simplify" the two into one.
+
+    BOSS OR A NAME, which is the mandate's own phrase and is looser than the Hands gate on
+    purpose: an enrolled colleague may fill the screen, and may not send mail. GUEST and
+    UNVERIFIED are refused - UNVERIFIED included, because the alternative is a stranger in the
+    near band filling the boss's screen, and the cost of being wrong the other way is that the
+    boss says it again or presses Ctrl+A, which is in front of him.
+
+    THE KEYBOARD IS ALWAYS THE BOSS'S. A typed message has no `speaker` block at all, so
+    `spoken` is False and this returns True - "typing the phrase behaves as speech would for the
+    boss", and the Ctrl+A guard is untouched either way.
+
+    WITH NOBODY ENROLLED THE LAW STANDS DOWN SILENTLY, exactly as the Hands doorman does:
+    has_hands_voice() is the whole of the switch. Without this clause a house that has never
+    taught the machine a voice would have every spoken command refused, because identify()
+    answers "GUEST" when the roster is empty - the same seal a real stranger gets, for an
+    entirely different reason.
+
+    AND AN EMPTY SEAL ON A SPOKEN TURN IS REFUSED, which is the case that is easiest to write
+    by accident and hardest to see: it means the message came through the ear and this process
+    could NOT say whose voice it was - a stale turn number, one it never issued, or a page that
+    asked nothing. _speaker_turn() fails closed there and so does this, for the same reason,
+    which is that "somebody spoke and we do not know who" is not an identification.
+    """
+    if not spoken:
+        return True, ""
+    if voiceprint is None:
+        return True, ""
+    try:
+        if not voiceprint.has_hands_voice():
+            return True, ""
+    except Exception:                                          # noqa: BLE001
+        # A store that will not read is not a reason to refuse the boss his own screen. This is
+        # the opposite of the Hands gate's choice on the same failure, and deliberately so: there
+        # the cost of being wrong is an email nobody authorised, here it is a bigger window.
+        return True, ""
+    if str(seal or "") and str(seal) not in ("GUEST", "UNVERIFIED"):
+        return True, ""
+    return False, FULLSCREEN_REFUSAL
+
+
 def _google_row():
     """(label, line, state) for the Command Panel's Google row, computed server-side.
 
@@ -2456,8 +2695,14 @@ def spoken_capabilities(cfg=None):
     return _MANIFEST["spoken"]
 
 
-def protected_answer(question, cfg=None, ear_open=False, offer_standing=False):
+def protected_answer(question, cfg=None, ear_open=False, offer_standing=False,
+                     spoken=False, seal=""):
     """(class, payload) for a message that is about this machine, else (None, None).
+
+    `spoken` and `seal` are §29's, and they are read by ONE branch - the fullscreen one, which
+    is the only thing in this funnel that does something to the room rather than saying
+    something about it. Both default to the typed case, so every existing caller and every
+    preflight call is unchanged in behaviour: see fullscreen_allowed().
 
     Classes 2 and 3 only. Class 1 lives above this in _hands_gate(), where the pending
     offer is, and class 4 is the Third Door and the registry, which answer_question()
@@ -2486,6 +2731,10 @@ def protected_answer(question, cfg=None, ear_open=False, offer_standing=False):
     # a `"gclock" in locals()` test, which was the first draft and which turns a typo in the
     # branch below into a field that silently never appears.
     gclock = None
+    # Same sentinel discipline as gclock's, one line up: None means "the room was not asked
+    # about", "" is impossible, and "on"/"off" are the two answers.
+    gfull = None
+    grefused = ""
     if said_it(META_RE):
         name = "meta"
         # FROM LIVE STATE, not from a hopeful fixed string. He is asking whether the ear
@@ -2516,6 +2765,49 @@ def protected_answer(question, cfg=None, ear_open=False, offer_standing=False):
         # make two network trips for one question - and could answer the two from different
         # readings if the grant expired between them.
         line, gstate = spoken_connection(cfg)
+
+    # ---- §29: THE ROOM, AND IT IS ABOVE THE CLOCK ---------------------------------------
+    # ABOVE THE CLOCK AND BELOW ALL FOUR, and each half of that placement is a decision:
+    #   below the four, because PROTECTED_CLASSES is fixed by the mandate and nothing new may
+    #     shadow a sentence one of them already catches. Checked: none of the four's patterns
+    #     can match a fullscreen phrase, so in practice the order is moot - but "in practice"
+    #     is not a guarantee and the four keep their precedence anyway.
+    #   above the clock, because worldclock.asked() reads a sentence looking for a PLACE, and
+    #     the places are a long table. "go full screen" has no city in it today; a table that
+    #     one day lists a town called Fulscreen is not a reason for the deck to stop obeying,
+    #     and the cheap way to make that permanently true is to ask about the room first.
+    if not name:
+        want = fullscreen_asked(question)
+        if want:
+            name = "fullscreen"
+            allowed, refusal = fullscreen_allowed(spoken, seal)
+            if allowed:
+                gfull = want
+                # WHAT IS SAID IS SHORT ON PURPOSE. The boss asked for the screen, not for a
+                # sentence about the screen; the confirmation he wants is the room changing.
+                # It is not empty either, because preflight requires every classed payload to
+                # carry a line and because a silent obey is indistinguishable from a drop.
+                #
+                # AND THE ADDRESS FORM IS THE BOSS'S ALONE. The Doorman above admits BOSS **or a
+                # name**, as the mandate says - so an enrolled colleague may fill the screen, and
+                # the first draft of this line then called her "Addi", because boss_call is the
+                # only address form in the persona block. deaddress() would not have caught it:
+                # it runs on the GUEST path, and a named voice is not a guest. A colleague gets
+                # the same courtesy and no borrowed name.
+                mine = (not spoken) or str(seal or "") == "BOSS"
+                line = (("Filling the screen, %s." if want == "on"
+                         else "Back to the window, %s.") % who["boss_call"]) if mine else (
+                    "Filling the screen." if want == "on" else "Back to the window.")
+            else:
+                # THE STATE IS UNTOUCHED, which is the whole of the refusal: gfull stays None,
+                # so the payload carries no instruction and the page has nothing to act on.
+                # A refusal that said no and set the field anyway would be a refusal in prose
+                # only, and that is exactly the bug this shape cannot have.
+                grefused = "not-the-boss"
+                line = refusal
+                sys.stderr.write("  route: fullscreen - asked to go %s by a voice sealed %r, "
+                                 "refused at the doorman; the room is untouched\n"
+                                 % (want, seal or "?"))
 
     # ---- THE CLOCK, AND IT IS LAST ON PURPOSE -------------------------------------------
     # THE FOUR FUNNEL CLASSES ABOVE ARE UNTOUCHED. This branch is reached only when all four
@@ -2558,6 +2850,17 @@ def protected_answer(question, cfg=None, ear_open=False, offer_standing=False):
             "route": name, "lookups": 0, "protected": name}
     if gstate:
         said["googleState"] = gstate
+    if gfull is not None:
+        # THE TWO FIELDS THE PAGE ACTS ON, and they are only ever present when the Doorman
+        # admitted the voice. `fullscreenWant` is "on" or "off" and never "toggle": see
+        # FULLSCREEN_ON_RE's comment for why a blind flip is the wrong instruction to send.
+        said["fullscreen"] = True
+        said["fullscreenWant"] = gfull
+    if grefused:
+        # A REASON CODE, so a harness and a log can tell this refusal from the Hands gate's two
+        # without reading English, and so that the page can be certain there is nothing to do.
+        said["refused"] = grefused
+        said["fullscreen"] = False
     if gclock is not None:
         # WHAT A HARNESS READS INSTEAD OF PARSING THE SENTENCE BACK. `clockPlace` is empty for
         # his own clock, the canonical LABEL for a city that resolved, and empty for one that
@@ -3411,6 +3714,13 @@ def turn_begin(session, question, spoken=False, heard=""):
            # initialised to [] and that empty list reached grounding_class(), which asks it
            # for .get("opened"). Every slot here now has its written-to type.
            "scores": {}, "cited": [], "sources": [], "chainTag": None, "toolTag": None,
+           # WHICH ENGINE SERVED WHICH CAPABILITY, added in §28 as a NEW list rather than as
+           # fields on the `calls` rows. Two reasons, and the second is the one that matters:
+           # a fallback is not a model call, it is a DECISION about model calls, and a turn
+           # that fell back has two calls and one decision; and `calls` already has readers -
+           # session_proof and the grounding judge - for whom a new key on every row is a
+           # shape change. See turn_engine().
+           "engines": [],
            "pending": None, "grounds": ""}
     _turn_local.rec = rec
     return rec
@@ -3448,6 +3758,51 @@ def turn_call(label, messages, raw, error=""):
         "label": label, "msgs": len(sizes),
         "chars": sum(s["chars"] for s in sizes), "sizes": sizes,
         "raw": str(raw or "")[:2000], "error": str(error or "")[:200]})
+
+
+# THE ENGINE RING. Short on purpose: it is a diagnostic for the last few minutes, not a record,
+# and a ledger that grows without bound in a process that runs for weeks is a leak with a nice
+# name. No prompt, no transcript, no spoken line and no key goes in - see turn_engine().
+_ENGINE_LOG = []
+ENGINE_LOG_MAX = 40
+
+
+def turn_engine(capability, served, outcome, reason=""):
+    """One row in the engine ledger: who served this capability, and how it went.
+
+    `outcome` is one of three words and the vocabulary is closed on purpose:
+        "ok"        the engine that was asked answered.
+        "failed"    it did not, and nothing else was tried - a missing key, a wrong key, a
+                    retired model id. The boss hears a refusal naming the config field.
+        "fallback"  it did not, transiently, and today's default for that capability answered
+                    instead. EXACTLY ONCE. `reason` carries why, so a week of these can be
+                    read as a rate rather than as a mystery.
+
+    WHY A LEDGER AT ALL, when the error is already in the answer: because a fallback is
+    invisible by design. It exists so the boss hears one answer rather than an apology, which
+    means the ONLY record that Groq was unreachable at four o'clock is this row. A silent
+    fallback with no ledger is an engine that can be broken for a month.
+
+    AND IT IS WRITTEN IN TWO PLACES, which is not redundancy. The turn record is the ledger for
+    a /chat turn and it is the right home for the chat and vision rows - they happen inside a
+    turn, beside the question they belong to. But the voice and the ear do NOT: /say and
+    /ear/transcribe are their own requests with no turn open, and turn_engine used to return
+    doing nothing at all when there was no rec - which would have made "ledger fallback row
+    naming the reason" quietly false for two of the four capabilities, in the two cases where
+    the fallback is least visible. So every row also goes into a short ring in this process,
+    which /health publishes and a harness can read for any capability.
+    """
+    row = {"capability": str(capability), "served": str(served),
+           "outcome": str(outcome), "reason": str(reason or "")[:200]}
+    if row["outcome"] == "fallback":
+        groq_seen("fallback")
+    _ENGINE_LOG.append(dict(row, at=time.strftime("%H:%M:%S")))
+    while len(_ENGINE_LOG) > ENGINE_LOG_MAX:
+        _ENGINE_LOG.pop(0)
+    rec = getattr(_turn_local, "rec", None)
+    if rec is None:
+        return
+    rec.setdefault("engines", []).append(row)
 
 
 # ---- THE GROUNDING CLASS, section 26 PART 3 -------------------------------------------
@@ -3777,9 +4132,32 @@ def load_config(apply_override=True):
     # on disk is untouched, so this override dies with the process.
     with _brain_lock:
         brain = _brain if apply_override else None
+        engine = _chat_engine if apply_override else None
     if brain:
         merged["provider"] = "openrouter"
         merged["openrouter_model"] = brain
+    # AND THE PROVIDER SWAP, applied in the same funnel for the same reason: /chat, /see,
+    # /health, /say and the model chip all read config through here, so they cannot end up
+    # disagreeing about which engine is in play. Nothing is written to disk, so a restart
+    # returns to whatever config.json says - which is the definition of "zero residue" this
+    # server has always used and the one the harness asserts.
+    elif engine == "groq":
+        merged["provider"] = "groq"
+    # AND THE OTHER THREE ENGINES, in the same funnel and for the same reason. Read under the
+    # same lock and applied one field each: an override of None leaves config.json's own answer
+    # exactly as it was, so a house with no overrides set merges byte-identically to the way it
+    # did before any of this existed. THE FAILURE MODE: applying these anywhere but here, and
+    # having /health say "groq" while the route that serves the audio reads "piper" off the
+    # file - two truths about one engine, and the seal painting the wrong one.
+    if apply_override:
+        with _brain_lock:
+            over = dict(_engines)
+        if over.get("ear"):
+            merged["ear_stt"] = over["ear"]
+        if over.get("vision"):
+            merged["vision_engine"] = over["vision"]
+        if over.get("voice"):
+            merged["voice_engine"] = over["voice"]
     return merged, None
 
 
@@ -4369,7 +4747,68 @@ def provider_of(cfg):
     name = str(cfg.get("provider") or DEFAULT_CONFIG["provider"]).strip().lower()
     if name in ("openrouter", "open router", "router", "or"):
         return "openrouter"
+    # Groq is tested BEFORE the openai clause and that ordering is deliberate: Groq speaks
+    # OpenAI's dialect and somebody reading this list could reasonably shorten it to "oai",
+    # so the exact words are kept apart. Anything unrecognised still means bedrock, which is
+    # the law this function has always obeyed - a typo in config.json must not be able to
+    # silence the assistant, and the default is the engine that needs no second account.
+    if name in ("groq", "groqcloud", "groq cloud"):
+        return "groq"
     return "openai" if name in ("openai", "oai", "gpt") else "bedrock"
+
+
+def ear_stt_of(cfg):
+    """"browser" or "groq", read charitably, defaulting to the browser's own ear.
+
+    THE DEFAULT IS THE ANSWER TO A TYPO. An unrecognised word means the browser, because the
+    browser's ear is the one that works with no key and no network round trip, and a flag
+    misspelt in config.json must not be able to send an utterance somewhere it was not asked
+    to go. The failure mode named: "ear_stt": "grok" quietly transcribing nothing.
+    """
+    name = str(cfg.get("ear_stt") or DEFAULT_CONFIG["ear_stt"]).strip().lower()
+    return "groq" if name in ("groq", "whisper", "groq-whisper", "cloud") else "browser"
+
+
+def vision_engine_of(cfg):
+    """"bedrock" or "groq" for the eyes. Same charity, same default, same reason."""
+    name = str(cfg.get("vision_engine") or DEFAULT_CONFIG["vision_engine"]).strip().lower()
+    return "groq" if name in ("groq", "groqcloud") else "bedrock"
+
+
+def groq_key(cfg):
+    """The key as a string, stripped, or "" - and placeholders count as absent."""
+    key = str(cfg.get("groq_api_key") or "").strip()
+    return "" if key.lower() in PLACEHOLDER_KEYS else key
+
+
+def groq_digest(cfg):
+    """THE ONLY THING THIS PROCESS WILL EVER SAY ABOUT THE KEY: a length and a digest.
+
+    Returned as a dict of exactly three facts - present, length, sha256 prefix - because every
+    surface that wants to talk about the key (the /health block, the harness, the lookbook)
+    wants the same three and none of them may have the fourth. A digest is not reversible and
+    a length is not a secret; the value never leaves this function's caller in any other form.
+    FAILURE MODE THIS NAMES: a "just for debugging" line printing the first eight characters,
+    which for most key formats is the account prefix and for all of them is eight characters
+    more than anybody needed.
+    """
+    key = groq_key(cfg)
+    return {"present": bool(key), "length": len(key),
+            "sha256": hashlib.sha256(key.encode("utf-8")).hexdigest()[:12] if key else ""}
+
+
+def groq_ready(cfg):
+    """(True, "") when Groq is callable, else (False, one plain sentence naming the field).
+
+    THE SENTENCE NAMES THE CONFIG FIELD AND NOT THE CONCEPT. "No Groq key" tells the boss he
+    has a problem; "groq_api_key in config.json is empty" tells him where his hands go. That
+    is the difference between a refusal and a support ticket.
+    """
+    if not groq_key(cfg):
+        return False, ("There is no Groq key, sir: \"groq_api_key\" in config.json is empty. "
+                       "Paste one in and ask again - no restart needed - or leave the flags "
+                       "as they are and I shall carry on as I was.")
+    return True, ""
 
 
 def display_label(model_id):
@@ -4401,6 +4840,8 @@ def model_label(cfg):
         return str(cfg.get("openrouter_model") or DEFAULT_CONFIG["openrouter_model"])
     if provider_of(cfg) == "openai":
         return str(cfg.get("model") or DEFAULT_CONFIG["model"])
+    if provider_of(cfg) == "groq":
+        return str(cfg.get("groq_model") or DEFAULT_CONFIG["groq_model"])
     wanted = str(cfg.get("bedrock_model_id")
                  or DEFAULT_CONFIG["bedrock_model_id"]).strip()
     # "haiku", "claude-haiku" and "anthropic.claude-haiku" all mean the same thing.
@@ -4419,6 +4860,16 @@ def voice_engine_of(cfg):
     name = str(cfg.get("voice_engine") or DEFAULT_CONFIG["voice_engine"]).strip().lower()
     if name in ("web", "browser", "speechsynthesis", "system", "off", "none"):
         return "web"
+    # THE THIRD ANSWER, ADDED IN §28. The docstring above says "only two answers exist because
+    # the page only has two paths", and that is still true: Orpheus rides the SERVED path, the
+    # one Piper already uses, because the page fetches WAV bytes from /say and has no idea who
+    # made them. So the page still has two paths and this function now names three engines -
+    # see `served` in voice_state(), which is the boolean the page actually branches on.
+    # Why that shape rather than a fourth path in the page: the Piper FIFO, the chime ducking,
+    # the ear reset, the face's chunk timing and the caption are all downstream of those bytes.
+    # A second audio path would be a second copy of every one of those contracts.
+    if name in ("orpheus", "groq", "canopy", "canopylabs"):
+        return "orpheus"
     return "piper"
 
 
@@ -4432,15 +4883,29 @@ def voice_state(cfg):
     engine = voice_engine_of(cfg)
     state = say.ready(cfg.get("voice_model") or DEFAULT_CONFIG["voice_model"])
     files, size = say.cache_size()
+    orpheus, orpheusWhy = groq_ready(cfg) if engine == "orpheus" else (False, "")
     return {
         "engine": engine,
-        "model": state["model"],
+        # WHICH MODEL IS SPEAKING, and for Orpheus that is a Groq slug rather than a file on
+        # this disk. The seal reads this, so it has to be the truth about the voice actually
+        # serving and not the name of the Piper model sitting unused in voices/.
+        "model": (str(cfg.get("groq_tts_model") or DEFAULT_CONFIG["groq_tts_model"])
+                  if engine == "orpheus" else state["model"]),
+        "voice": (str(cfg.get("groq_tts_voice") or DEFAULT_CONFIG["groq_tts_voice"])
+                  if engine == "orpheus" else state["model"]),
         "installed": state["binary"],
         "modelPresent": state["model_file"],
         # The question the page actually asks: can I fetch audio from /say? Wanting the
         # web engine is a "no" just as firmly as a missing binary is.
-        "ready": engine == "piper" and state["ready"],
+        # `served` IS THAT QUESTION AND `ready` IS NOW ITS ANSWER FOR TWO ENGINES. Kept as
+        # separate fields because the page has one line that decides where chunks go, and a
+        # boolean it can read is one edit there instead of a growing list of engine names -
+        # the next served engine changes this function and nothing in the page.
+        "served": engine in ("piper", "orpheus"),
+        "ready": ((engine == "piper" and state["ready"])
+                  or (engine == "orpheus" and orpheus)),
         "why": (state["why"] if engine == "piper"
+                else orpheusWhy if engine == "orpheus"
                 else "config.json asks for the browser's voices"),
         "lengthScale": state["lengthScale"],
         "noiseScale": state["noiseScale"],
@@ -5038,12 +5503,23 @@ def call_bedrock(cfg, messages, image=None):
     return answer, None
 
 
-def call_chat_completions(url, key, model, who, messages, image=None, extra=None):
-    """OpenAI's /chat/completions shape, which OpenRouter speaks too.
+def call_chat_completions(url, key, model, who, messages, image=None, extra=None,
+                          status=None):
+    """OpenAI's /chat/completions shape, which OpenRouter and Groq speak too.
 
-    Returns (answer, error) and never raises. One implementation for both, because
+    Returns (answer, error) and never raises. One implementation for all three, because
     a second copy is how the image block ends up correct in one place only.
+
+    `status`, WHEN A CALLER PASSES A DICT, IS FILLED IN WITH THE MACHINE-READABLE OUTCOME:
+    {"code": 429, "transient": True}. It exists for the Fallback Law and for nothing else.
+    The alternative was to have the caller decide whether to fall back by pattern-matching
+    the English sentence this function returns - and that sentence is written to be read
+    aloud to a person, so the day somebody improves its wording is the day 429s stop
+    falling back and nobody finds out until the boss hears an apology instead of an answer.
+    A keyword argument with a None default leaves all three existing call sites untouched.
     """
+    if status is not None:
+        status.update({"code": 0, "transient": False})
     if image:
         # A data URL, whose media type is the SAME constant the bytes were encoded
         # and declared with - so the two cannot fall out of step. Copied rather than
@@ -5082,6 +5558,13 @@ def call_chat_completions(url, key, model, who, messages, image=None, extra=None
             detail = (err.get("error") or {}).get("message") or ""
         except Exception:                                      # noqa: BLE001
             pass
+        if status is not None:
+            # ONLY 429 IS TRANSIENT AMONG THE HTTP CODES, and the three that are not are the
+            # reason this is a whitelist rather than "anything over 400". A 401 is a wrong key
+            # and a 404 is a retired model id: falling those back to bedrock would give the
+            # boss a perfectly good answer from the wrong engine and leave the broken flag in
+            # config.json for the next person to find. Those must be heard as refusals.
+            status.update({"code": exc.code, "transient": exc.code == 429})
         if exc.code == 401:
             return None, ("%s rejected the key in config.json (401). "
                           "Check that it is pasted in full and still active." % who)
@@ -5096,8 +5579,15 @@ def call_chat_completions(url, key, model, who, messages, image=None, extra=None
                           "credit (429). %s" % (who, detail)).strip()
         return None, ("%s returned HTTP %s. %s" % (who, exc.code, detail)).strip()
     except urllib.error.URLError as exc:
+        # A TIMEOUT AND AN UNREACHABLE HOST ARE BOTH TRANSIENT, and urllib delivers both here:
+        # socket.timeout arrives wrapped in URLError, as does a DNS failure and a refused
+        # connection. All three describe a road, not a decision, so all three fall back.
+        if status is not None:
+            status.update({"code": 0, "transient": True})
         return None, "Could not reach the %s API (%s)." % (who, exc.reason)
     except Exception as exc:                                   # noqa: BLE001
+        # NOT TRANSIENT, because nobody knows what this is. An unknown failure that retries on
+        # a second engine is an unknown failure that happens twice.
         return None, "Unexpected error talking to %s: %s" % (who, exc)
 
     try:
@@ -5124,6 +5614,238 @@ def call_openrouter(cfg, messages, image=None):
         # Optional, documented, and only ever the local address of this project.
         extra={"HTTP-Referer": "http://%s:%d/" % (HOST, PORT),
                "X-Title": "Knowledge Galaxy"})
+
+
+# =============================================================================================
+#  GROQ - ONE CLIENT, FOUR CAPABILITIES
+# =============================================================================================
+#
+# WHY THERE IS SO LITTLE CODE HERE. Groq serves OpenAI's dialect, so chat and vision are
+# call_chat_completions() with a different URL and a different model string - there is no second
+# implementation of the image block, the error ladder or the response shape, and that is the
+# single most valuable property of this section. The two that are genuinely different are the
+# two that are not chat: a multipart upload for transcription and a call that returns audio
+# bytes rather than JSON. Both are written out by hand against urllib, because the standing
+# instruction on this project is the standard library and nothing else.
+#
+# WHAT NONE OF THESE FUNCTIONS DO: decide anything. They call and they report. The switching,
+# the refusals and the Fallback Law all live above them in call_model() and in the routes, so
+# there is exactly one place to read to find out when Groq is reached for.
+
+
+# WHAT THIS PROCESS HAS SPENT AT GROQ, COUNTED WHERE THE REQUESTS ARE MADE. Four counters and
+# nothing identifying: no prompt, no transcript, no spoken line, no key. It exists because three
+# of §28's claims are claims about HOW MANY: "one cheap ping on switch, no polling", "one
+# attempt, no retry storm", and "refusal + zero Groq calls". Every one of those is unfalsifiable
+# against a server that will not say how many times it called out - a harness can only watch a
+# transcript and hope. `attempts` counts the moment before the request goes out, so a refusal
+# that never reached the wire leaves it where it was, which is exactly the claim being made.
+_GROQ_SEEN = {"chat": 0, "vision": 0, "stt": 0, "tts": 0, "refused": 0, "fallback": 0}
+
+
+def groq_seen(what):
+    """One counter up, under no lock on purpose: a miscount here is never worth a deadlock.
+
+    int += 1 is not atomic in CPython, so two chunks arriving in the same millisecond can in
+    principle lose one. The alternative is a lock on every model call to protect a diagnostic,
+    and a number that is occasionally one low is a better trade than a route that can block.
+    The claims that matter - 0 versus 1, 1 versus 2 - are made by harnesses that call one thing
+    at a time.
+    """
+    if what in _GROQ_SEEN:
+        _GROQ_SEEN[what] += 1
+
+
+def call_groq(cfg, messages, image=None, model=None, status=None):
+    """Chat OR vision, by model string. (answer, error), never raises.
+
+    ONE FUNCTION FOR BOTH BECAUSE GROQ MAKES NO DISTINCTION: an image is a content part on the
+    last user message of an ordinary /chat/completions call, which is exactly what
+    call_chat_completions() already builds for OpenAI and OpenRouter. `model` is passed in by
+    the vision path so that the eyes and the tongue can be on different Groq models at the
+    same time - which they are by default, one of them a vision slug and one not.
+    """
+    ready, why = groq_ready(cfg)
+    if not ready:
+        # COUNTED AS A REFUSAL AND NOT AS AN ATTEMPT, and it happens here rather than inside
+        # call_chat_completions() so that no key means no request rather than a 401 spent
+        # finding out what config.json already knew.
+        groq_seen("refused")
+        return None, why
+    groq_seen("vision" if image else "chat")
+    return call_chat_completions(
+        GROQ_CHAT_URL, groq_key(cfg),
+        model or str(cfg.get("groq_model") or DEFAULT_CONFIG["groq_model"]),
+        "Groq", messages, image, status=status)
+
+
+def _multipart(fields, files):
+    """(body bytes, content type) for one multipart/form-data POST. Stdlib only.
+
+    Hand-rolled because `requests` is not on this machine and will not be added for one upload.
+    THE BOUNDARY IS RANDOM PER CALL, which matters more than it looks: a fixed boundary that
+    happens to occur inside the audio bytes truncates the file at that point, and the symptom
+    is a transcription of the first two seconds with no error anywhere. os.urandom rather than
+    random, because this one wants to be unguessable-ish rather than reproducible.
+    """
+    boundary = "----galaxy" + base64.b16encode(os.urandom(12)).decode("ascii").lower()
+    out = []
+    for name, value in (fields or {}).items():
+        out.append(("--%s\r\nContent-Disposition: form-data; name=\"%s\"\r\n\r\n%s\r\n"
+                    % (boundary, name, value)).encode("utf-8"))
+    for name, (filename, data, ctype) in (files or {}).items():
+        out.append(("--%s\r\nContent-Disposition: form-data; name=\"%s\"; filename=\"%s\"\r\n"
+                    "Content-Type: %s\r\n\r\n" % (boundary, name, filename, ctype))
+                   .encode("utf-8"))
+        out.append(data)
+        out.append(b"\r\n")
+    out.append(("--%s--\r\n" % boundary).encode("utf-8"))
+    return b"".join(out), "multipart/form-data; boundary=%s" % boundary
+
+
+def call_groq_whisper(path, cfg=None, audio=None, status=None):
+    """Transcribe one utterance with whisper-large-v3-turbo. (text, error), never raises.
+
+    `path` is a file on disk; `audio` is bytes when the caller already has them and would
+    rather not write a temporary file. EXACTLY ONE OF THEM, and bytes are preferred when both
+    arrive, because the caller that has bytes is the route that took them off the wire and the
+    Scribe's privacy discipline - audio that never touches disk - is worth keeping habitual
+    even here, where the audio is on its way to a third party anyway.
+
+    THE CEILING IS CHECKED BEFORE THE REQUEST, not after: an eight-megabyte refusal that costs
+    a round trip is a refusal that costs a round trip every time somebody's recorder is
+    misconfigured.
+    """
+    cfg = cfg if cfg is not None else load_config()[0]
+    if status is not None:
+        status.update({"code": 0, "transient": False})
+    ready, why = groq_ready(cfg)
+    if not ready:
+        groq_seen("refused")
+        return None, why
+    name = os.path.basename(str(path or "utterance.wav"))
+    if audio is None:
+        try:
+            with open(path, "rb") as fh:
+                audio = fh.read(GROQ_STT_MAX_BYTES + 1)
+        except OSError as exc:
+            return None, "That audio could not be read (%s)." % exc
+    if not audio:
+        return None, "There was no audio to transcribe."
+    if len(audio) > GROQ_STT_MAX_BYTES:
+        return None, ("That audio is %d bytes and the ceiling here is %d."
+                      % (len(audio), GROQ_STT_MAX_BYTES))
+    model = str(cfg.get("groq_stt_model") or DEFAULT_CONFIG["groq_stt_model"])
+    # response_format json, which is the documented default, asked for out loud anyway: a
+    # default that changes upstream changes the shape this function parses, and "text" would
+    # come back as a bare string and be read as an empty transcript by the line below.
+    body, ctype = _multipart({"model": model, "response_format": "json",
+                              "temperature": "0"},
+                             {"file": (name, audio, "audio/wav")})
+    groq_seen("stt")
+    req = urllib.request.Request(
+        GROQ_STT_URL, data=body, method="POST",
+        headers={"Content-Type": ctype, "Authorization": "Bearer %s" % groq_key(cfg),
+                 "User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as res:
+            payload = json.loads(res.read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = (json.loads(exc.read().decode("utf-8", "replace"))
+                      .get("error") or {}).get("message") or ""
+        except Exception:                                      # noqa: BLE001
+            pass
+        if status is not None:
+            status.update({"code": exc.code, "transient": exc.code == 429})
+        if exc.code == 401:
+            return None, ("Groq rejected the key in config.json (401) when I tried to "
+                          "transcribe. Check \"groq_api_key\".")
+        if exc.code == 404:
+            return None, ("Groq does not serve the transcriber \"%s\" (404). That is "
+                          "\"groq_stt_model\" in config.json. %s" % (model, detail)).strip()
+        return None, ("Groq returned HTTP %s from the transcriber. %s"
+                      % (exc.code, detail)).strip()
+    except urllib.error.URLError as exc:
+        if status is not None:
+            status.update({"code": 0, "transient": True})
+        return None, "Could not reach the Groq transcriber (%s)." % exc.reason
+    except Exception as exc:                                   # noqa: BLE001
+        return None, "Unexpected error talking to the Groq transcriber: %s" % exc
+    text = str((payload or {}).get("text") or "").strip()
+    # AN EMPTY TRANSCRIPT IS NOT AN ERROR AND IS REPORTED AS ITSELF. Silence transcribes to
+    # nothing, and the ear above has to be able to tell "he said nothing" from "the call
+    # failed" - conflating them is how a quiet room becomes an outage in the log.
+    return text, ""
+
+
+def call_groq_speech(text, cfg=None, status=None):
+    """Orpheus. (wav bytes, error), never raises. The one call that returns audio.
+
+    WHAT IS NOT HERE, DELIBERATELY: normalization. The Quiet Tongue runs in the page, on the
+    text's way to an engine, and it runs for Piper and Orpheus alike because both are fed from
+    the same place - so a second normalizer here would either be dead code or a second opinion
+    about how to read an em-dash. /say asserts what it received; it does not re-write it.
+    """
+    cfg = cfg if cfg is not None else load_config()[0]
+    if status is not None:
+        status.update({"code": 0, "transient": False})
+    ready, why = groq_ready(cfg)
+    if not ready:
+        groq_seen("refused")
+        return None, why
+    line = str(text or "").strip()
+    if not line:
+        return None, "there was no text to speak."
+    model = str(cfg.get("groq_tts_model") or DEFAULT_CONFIG["groq_tts_model"])
+    voice = str(cfg.get("groq_tts_voice") or DEFAULT_CONFIG["groq_tts_voice"])
+    # wav, not mp3: the page's Piper FIFO decodes WAV bytes today and the whole point of
+    # putting Orpheus behind /say is that nothing downstream of the response has to change.
+    payload = json.dumps({"model": model, "input": line, "voice": voice,
+                          "response_format": "wav"}).encode("utf-8")
+    groq_seen("tts")
+    req = urllib.request.Request(
+        GROQ_SPEECH_URL, data=payload, method="POST",
+        headers={"Content-Type": "application/json",
+                 "Authorization": "Bearer %s" % groq_key(cfg),
+                 "User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as res:
+            data = res.read()
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = (json.loads(exc.read().decode("utf-8", "replace"))
+                      .get("error") or {}).get("message") or ""
+        except Exception:                                      # noqa: BLE001
+            pass
+        if status is not None:
+            status.update({"code": exc.code, "transient": exc.code == 429})
+        if exc.code == 401:
+            return None, ("Groq rejected the key in config.json (401) when I tried to "
+                          "speak. Check \"groq_api_key\".")
+        if exc.code == 404:
+            return None, ("Groq does not serve the voice \"%s\" (404). That is "
+                          "\"groq_tts_model\" in config.json. %s" % (model, detail)).strip()
+        if exc.code == 400 and "voice" in detail.lower():
+            return None, ("Groq refused the voice \"%s\": %s. That is \"groq_tts_voice\" "
+                          "in config.json." % (voice, detail))
+        return None, ("Groq returned HTTP %s from the voice. %s" % (exc.code, detail)).strip()
+    except urllib.error.URLError as exc:
+        if status is not None:
+            status.update({"code": 0, "transient": True})
+        return None, "Could not reach the Groq voice (%s)." % exc.reason
+    except Exception as exc:                                   # noqa: BLE001
+        return None, "Unexpected error talking to the Groq voice: %s" % exc
+    # A RIFF HEADER OR IT IS NOT AUDIO. Groq answers an error with JSON and a 200 is not a
+    # promise of sound; forty-four bytes of something is how a page ends up playing silence
+    # and reporting success. The check is four bytes and it is the difference between "the
+    # voice failed" and a mute assistant nobody can explain.
+    if len(data) < 45 or data[:4] != b"RIFF":
+        return None, ("Groq's voice returned %d bytes that are not a WAV file."
+                      % len(data))
+    return data, ""
 
 
 def wear_persona(cfg, messages):
@@ -5184,10 +5906,41 @@ def call_model(cfg, messages, image=None):
         plan["wireChars"] = sum(len(str(m.get("content") or "")) for m in worn)
         plan["accounted"] = plan["chars"] == plan["wireChars"]
     provider = provider_of(cfg)
+    # THE EYES MAY BE ON A DIFFERENT ENGINE FROM THE TONGUE, which is what vision_engine is
+    # for, and this is the one line that makes that true: a call carrying an image consults
+    # its own flag. When the flag is "groq" and the chat provider is not, the image goes to
+    # Groq's vision slug and the prose of the same session keeps going to bedrock. Flipping it
+    # changes ONE engine's source, which is the §28 requirement stated exactly.
+    if image is not None and vision_engine_of(cfg) == "groq":
+        provider, capability = "groq", "vision"
+    else:
+        capability = "vision" if image is not None else "chat"
     if provider == "openrouter":
         answer, error = call_openrouter(cfg, worn, image)
     elif provider == "openai":
         answer, error = call_openai(cfg, worn, image)
+    elif provider == "groq":
+        # THE FALLBACK LAW, AND IT IS FOUR LINES BECAUSE IT HAS TO BE EXACTLY ONCE.
+        # A 429 or an unreachable host routes THIS ONE REQUEST to today's default for this
+        # capability - bedrock, for both chat and vision - and then stops. There is no loop,
+        # no backoff, no second provider after the second: the boss hears one answer, never
+        # two and never none, and the ledger carries the reason.
+        # WHAT IS NOT FALLEN BACK: a 401 and a 404. Those are a wrong key and a retired slug,
+        # and answering them from bedrock would hide a broken config.json behind a correct
+        # answer - see the whitelist in call_chat_completions().
+        status = {}
+        model = (str(cfg.get("groq_vision_model") or DEFAULT_CONFIG["groq_vision_model"])
+                 if capability == "vision" else None)
+        answer, error = call_groq(cfg, worn, image, model=model, status=status)
+        if error and status.get("transient"):
+            turn_engine(capability, "bedrock", "fallback", error)
+            sys.stderr.write("  fallback: groq %s -> bedrock (%s)\n"
+                             % (capability, error[:120]))
+            answer, error = call_bedrock(cfg, worn, image)
+        elif error:
+            turn_engine(capability, "groq", "failed", error)
+        else:
+            turn_engine(capability, "groq", "ok")
     else:
         answer, error = call_bedrock(cfg, worn, image)
     turn_call((plan or {}).get("label") or "model", worn, answer, error)
@@ -5196,6 +5949,11 @@ def call_model(cfg, messages, image=None):
 
 def credentials_error(cfg):
     """None when the model is callable, else one sentence saying what is missing."""
+    if provider_of(cfg) == "groq":
+        # ONE ATTEMPT AND A PLAIN SENTENCE, which is what PART 2 asks for: this is consulted
+        # before the request is built, so an empty key costs no round trip at all and there is
+        # nothing for a retry storm to be made of. The sentence names the field.
+        return None if groq_ready(cfg)[0] else groq_ready(cfg)[1]
     if provider_of(cfg) == "openrouter":
         key = str(cfg.get("openrouter_api_key", "")).strip()
         if _blank(key) or key.lower() in PLACEHOLDER_KEYS:
@@ -5455,14 +6213,28 @@ def brain_state():
     active = model_label(cfg)
     return {
         "model": active,
-        "label": display_label(active),
+        # THE PROVIDER IS ON THE CHIP FOR GROQ AND FOR NOTHING ELSE, and the asymmetry is the
+        # requirement rather than an oversight. Bedrock, OpenAI and OpenRouter all serve the
+        # same small set of pinned names, so the model id alone says which is answering; Groq
+        # serves ids nobody here has seen before, at a latency the boss will notice, and the
+        # one question a chip has to answer during an incident is "am I on the fast borrowed
+        # brain or my own?". Prefixing only groq also keeps every existing label byte-identical,
+        # which is what lets the three standing harnesses that read this chip stay green.
+        "label": (("GROQ · " + display_label(active)) if provider_of(cfg) == "groq"
+                  else display_label(active)),
         "provider": provider_of(cfg),
         "swapped": bool(override),
         "keyConfigured": credentials_error(cfg) is None,
         # What "go back to your normal brain" and a restart both mean, which is the
         # same thing by construction: this is read from the file, not from memory.
         "configModel": model_label(on_disk),
-        "configLabel": display_label(model_label(on_disk)),
+        # Prefixed by the same rule as `label` above, so "zero residue" can be asserted as one
+        # string comparison: after a switch and a switch back, label == configLabel. Two
+        # different rules for the two fields would make that comparison pass on a page still
+        # talking to Groq.
+        "configLabel": (("GROQ · " + display_label(model_label(on_disk)))
+                        if provider_of(on_disk) == "groq"
+                        else display_label(model_label(on_disk))),
         "configProvider": provider_of(on_disk),
     }
 
@@ -5562,7 +6334,7 @@ def brain_intro(model_id, cfg=None, ask=None):
 # charming swap and two that read like a status page.
 def swap_to(model_id, door="voice", ask=None):
     """(status, payload) for a swap onto an id, which is checked here regardless."""
-    global _brain
+    global _brain, _chat_engine
     model_id = str(model_id or "")
     if model_id not in KNOWN_MODEL_IDS:
         # Not reachable through swap_brain(), which resolves first. It is here because
@@ -5578,6 +6350,10 @@ def swap_to(model_id, door="voice", ask=None):
     with _brain_lock:
         already = (_brain == model_id)
         _brain = model_id
+        # A MODEL SWAP CLEARS THE PROVIDER SWAP. "Be Astra" after "switch to Groq" means
+        # Astra on OpenRouter, not Astra-on-Groq, which is not a thing that exists. The two
+        # overrides are mutually exclusive and this is one of the three lines that make it so.
+        _chat_engine = None
     state = brain_state()
 
     if already:
@@ -5593,12 +6369,161 @@ def swap_to(model_id, door="voice", ask=None):
                      restored=False, door=door, intro=source)
 
 
+def swap_to_groq(door="voice"):
+    """(status, payload) for "switch to Groq". Runtime only; config.json is never written.
+
+    THE ONE CHEAP PING, AND WHY IT IS NOT POLLING. A switch onto an engine nobody has called
+    yet is a claim, and the boss finds out whether the claim was true on his next real
+    question - at which point he has lost that question. So the switch spends one four-token
+    completion to find out now, and reports what it found in the same sentence as the switch.
+    ONE. There is no health loop, no periodic probe and no retry: an engine that answers a ping
+    and fails a minute later is what the Fallback Law is for, and a poller would add a
+    per-minute cost to a borrowed account for information that goes stale immediately.
+
+    AND A FAILED PING DOES NOT UNDO THE SWITCH. It is reported, loudly, in the line he hears -
+    because a switch that silently refuses to happen leaves the chip and his mental model
+    disagreeing, and "say it again, it did not take" is a worse afternoon than "it is on and it
+    is not answering". The one exception is a missing key, which is refused OUTRIGHT below: an
+    engine with no credential cannot serve a single question, so switching onto it would be
+    switching onto an outage.
+    """
+    global _brain, _chat_engine
+    cfg = load_config(apply_override=False)[0]
+    ready, why = groq_ready(cfg)
+    if not ready:
+        # ONE ATTEMPT, NO REQUEST AT ALL, PROVIDER UNCHANGED. The refusal names the field and
+        # the state it did not change, exactly like every other refusal at this door.
+        return 409, dict(brain_state(), ok=False, kind="model", nodes=[],
+                         refused="nokey", error=why, answer=why, door=door, intro=None,
+                         available=sorted(SPOKEN_MODELS))
+    with _brain_lock:
+        already = (_chat_engine == "groq")
+        _chat_engine = "groq"
+        _brain = None                                  # mutually exclusive; see swap_to()
+    state = brain_state()
+    cfg = load_config()[0]
+    line = ("Groq it is, sir: %s. Do let me know if you notice the pace."
+            % pretty_name(state["model"]))
+    if already:
+        line = BRAIN_LINES["already"].format(label=pretty_name(state["model"]))
+    ping, error = (None, "")
+    if not already:
+        ping, error = call_groq(
+            cfg, [{"role": "user", "content": "Reply with the single word: ready."}])
+        if error:
+            line += (" I cannot get a word out of it yet, mind: %s" % error)
+    return 200, dict(state, ok=True, kind="model", nodes=[], answer=line,
+                     restored=False, door=door, intro="groq",
+                     ping=bool(ping) and not error, pingError=error or "")
+
+
+# THE THREE OTHER FLIPS, AND THE WORDS EACH ONE WILL ACCEPT. A whitelist rather than a
+# passthrough: ear_stt = "grok" would otherwise resolve to "not groq", which is "browser", and
+# the boss would be told the flip worked while nothing whatever had changed. Every word here
+# is one an *_of() resolver already understands, so there is no second spelling table.
+ENGINE_WORDS = {
+    "ear": ("browser", "groq"),
+    "vision": ("bedrock", "groq"),
+    "voice": ("piper", "web", "orpheus"),
+}
+
+
+def engines_state(cfg=None):
+    """The four engines as they are SERVING, plus what config.json would say on a restart.
+
+    `served` is the resolver's answer with the overrides applied; `configured` is the same
+    resolver with them ignored. The two differing is not a fault - it is the whole point of a
+    runtime flip - and publishing both is what makes "flipping back is lossless" checkable:
+    after a reset the two must agree again, field for field.
+    """
+    cfg = cfg if cfg is not None else load_config()[0]
+    base = load_config(apply_override=False)[0]
+    with _brain_lock:
+        over = dict(_engines)
+        over["chat"] = _chat_engine
+    return {
+        "served": {"chat": provider_of(cfg), "ear": ear_stt_of(cfg),
+                   "vision": vision_engine_of(cfg), "voice": voice_engine_of(cfg)},
+        "configured": {"chat": provider_of(base), "ear": ear_stt_of(base),
+                       "vision": vision_engine_of(base), "voice": voice_engine_of(base)},
+        # Which of the four are being held away from the file, so a harness never has to
+        # infer an override from two labels that happen to differ.
+        "overrides": {k: (v or "") for k, v in over.items()},
+        "models": {"chat": model_label(cfg),
+                   "vision": str(cfg.get("groq_vision_model") or
+                                 DEFAULT_CONFIG["groq_vision_model"]),
+                   "ear": str(cfg.get("groq_stt_model") or DEFAULT_CONFIG["groq_stt_model"]),
+                   "voice": (str(cfg.get("groq_tts_model") or DEFAULT_CONFIG["groq_tts_model"])
+                             if voice_engine_of(cfg) == "orpheus"
+                             else str(cfg.get("voice_model") or DEFAULT_CONFIG["voice_model"]))},
+        "groqKey": groq_digest(cfg),
+        # WHAT HAS BEEN SPENT AND WHAT HAPPENED, both published because two of §28's laws are
+        # arithmetic: "one cheap ping, no polling" is calls going up by exactly one, and
+        # "zero Groq calls" is a counter that did not move. The ring carries the fallback rows
+        # for the voice and the ear, which have no turn record to be written into.
+        "calls": dict(_GROQ_SEEN),
+        "log": list(_ENGINE_LOG),
+    }
+
+
+def set_engines(data):
+    """(status, payload) for POST /engines. Runtime only; config.json is never written.
+
+    One flag at a time or all of them at once, and {"reset": true} puts every one of the four
+    back to the file - which is also what a restart does, and what "zero residue" means here.
+    """
+    global _chat_engine, _brain
+    asked = {k: str(data.get(k) or "").strip().lower()
+             for k in ("chat", "ear", "vision", "voice") if data.get(k) is not None}
+    reset = bool(data.get("reset"))
+    if not asked and not reset:
+        return 400, {"ok": False, "kind": "engines", "error":
+                     "Name an engine: ear, vision, voice or chat - or send {\"reset\": true}.",
+                     "engines": engines_state()}
+    # EVERY WORD IS CHECKED BEFORE ANY IS APPLIED, so a request naming two engines cannot flip
+    # the first and refuse the second and leave the house half-changed.
+    for which, word in asked.items():
+        legal = ("bedrock", "groq") if which == "chat" else ENGINE_WORDS[which]
+        if word not in legal:
+            return 400, {"ok": False, "kind": "engines", "engines": engines_state(),
+                         "error": "The %s engine answers to %s, not \"%s\"."
+                                  % (which, " or ".join('"%s"' % w for w in legal), word)}
+    # AND A GROQ FLIP WITH NO KEY IS REFUSED RATHER THAN ACCEPTED-AND-BROKEN, in the same
+    # sentence naming the same config field the chat swap uses. Nothing is requested here:
+    # this is the same one-attempt-then-refuse law, at the flag rather than at the call.
+    if "groq" in asked.values() or asked.get("voice") == "orpheus":
+        ready, why = groq_ready(load_config()[0])
+        if not ready:
+            return 409, {"ok": False, "kind": "engines", "refused": "nokey",
+                         "error": why, "engines": engines_state()}
+    with _brain_lock:
+        if reset:
+            for k in _engines:
+                _engines[k] = None
+            _chat_engine = None
+        for which, word in asked.items():
+            if which == "chat":
+                _chat_engine = "groq" if word == "groq" else None
+                if word == "groq":
+                    _brain = None                      # mutually exclusive; see swap_to()
+            else:
+                _engines[which] = word
+    return 200, {"ok": True, "kind": "engines", "reset": reset,
+                 "engines": engines_state()}
+
+
 def restore_brain(door="voice"):
     """Back to whatever config.json says, which is also what a restart means."""
-    global _brain
+    global _brain, _chat_engine
     with _brain_lock:
-        was = _brain
+        # BOTH OVERRIDES, AND "was" IS TRUE IF EITHER WAS SET. "Go back to your normal brain"
+        # is the one direction that is always safe, and it has to mean ALL the way back - a
+        # restore that cleared the model override and left the process talking to Groq would
+        # report "back to my usual faculties" while answering from a borrowed engine. That is
+        # the exact shape of a residue bug and it would read as correct in every log.
+        was = bool(_brain or _chat_engine)
         _brain = None
+        _chat_engine = None
     state = brain_state()
     line = (BRAIN_LINES["restored"] if was else BRAIN_LINES["already"]).format(
         label=pretty_name(state["model"]))
@@ -5620,6 +6545,16 @@ def swap_brain(said, door="voice", ask=None):
     if RESTORE_RE.search(raw) or text in ("back", "normal", "usual", "default") or \
             (not text and re.search(r"\bback\b", raw, re.I)):
         return restore_brain(door=door)
+
+    # GROQ IS A PROVIDER AND IS ANSWERED BEFORE THE MODEL RESOLVER, which is the whole reason
+    # this branch is five lines above resolve_spoken_model() rather than inside it. The
+    # resolver's job is to turn a spoken phrase into one id from KNOWN_MODEL_IDS and to refuse
+    # rather than guess; "groq" is not a model and putting it in that allowlist would make
+    # every refusal message below have to explain a word that is not a vintage of anything.
+    # So: the allowlist, the pinned aliases, the family refusals and the three BRAIN_LINES
+    # refusals are all byte-identical to what they were, and the word "groq" is handled here.
+    if re.fullmatch(r"(?:switch\s+to\s+|use\s+|go\s+)?groq(?:\s*cloud)?", text or "", re.I):
+        return swap_to_groq(door=door)
 
     model_id, refusal = resolve_spoken_model(raw)
     if refusal is not None:
@@ -7516,6 +8451,24 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 "ear": {"timeoutS": max(5, min(600, int(
                     _number(cfg.get("conversation_timeout_s"),
                             DEFAULT_CONFIG["conversation_timeout_s"]))))},
+                # THE FOUR ENGINE FLAGS, IN ONE PLACE, because the seal has to name the
+                # serving ear and the serving voice and it will not make four trips to
+                # find out. Each of these is the ANSWER of the resolver, not the raw
+                # config string, so "groqcloud" and "Groq" read the same here as they do
+                # in the router - the failure mode being a seal that says BEDROCK while
+                # Groq is answering because the page did its own spelling.
+                #
+                # `groqKey` is a digest and a length. It is published at all because the
+                # page's own refusal line has to be able to say "the field is empty"
+                # without guessing, and a harness has to be able to prove the key never
+                # left this process: a sha256 prefix is checkable against the config and
+                # useless to anybody who intercepts it.
+                # ONE SHAPE, and it is engines_state()'s - the same object POST /engines
+                # answers with. The page reads `served` to paint the seal and `configured`
+                # to know what a restart would bring back; two different shapes for one
+                # question is how a rail ends up reading the file while the route reads
+                # the override.
+                "engines": engines_state(cfg),
                 # THE SECOND INDEX, DESCRIBED THE SAME WAY THE FIRST ONE IS: how many
                 # documents and chunks are in the store, which model embedded them, what
                 # the dial is set to, and - if it is not working - one sentence saying
@@ -7612,8 +8565,14 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             # about the proposal - it went to the brain, which happened to be wearing the
             # persona and happened to answer correctly. A right answer for the wrong reason
             # is one prompt edit away from a wrong one, and it costs a model call to get.
-            klass, said = protected_answer(question, load_config()[0], ear_open,
-                                           offer_standing=True)
+            # §29's two arguments here as well, and computed from the same slot the Doorman
+            # reads twenty lines above: a sentence asking for the screen while an offer stands
+            # is still a sentence asking for the screen, and a gate that applied the voice law
+            # on one path and not the other is a gate with a way round it.
+            _spk, _spoken, _ = _speaker_turn(body or {}, session)
+            klass, said = protected_answer(
+                question, load_config()[0], ear_open, offer_standing=True, spoken=_spoken,
+                seal=(voiceprint.seal_for(_spk) if (voiceprint is not None and _spoken) else ""))
             if klass is not None:
                 said["pending"] = pending
                 sys.stderr.write("  route: %s - answered from state with an offer still "
@@ -7675,6 +8634,50 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             # model's own readiness rather than the configured one's, because auditioning
             # Alan on a machine that has Ryan is exactly the case the panel exists to
             # show. A voice heard here is not a voice chosen: choosing is POST /voice.
+            # ORPHEUS, AND IT IS ANSWERED BEFORE THE PIPER LADDER BELOW because every rung of
+            # that ladder is a question about this machine - is the binary installed, is the
+            # .onnx present, is the audition voice one of the three cast files - and none of
+            # them is a question about a cloud voice. Running them first would refuse Orpheus
+            # on a laptop with no Piper model on it, which is precisely the machine somebody
+            # would flip this flag on.
+            #
+            # THE TEXT IS NOT NORMALIZED HERE, and that is the Quiet Tongue's law rather than
+            # an omission: normalization happens in the page on the text's way to an engine,
+            # once, for Piper and Orpheus alike, because both are fed from this one route. A
+            # second normalizer on this side would be a second opinion about how to read an
+            # em-dash, and the two would drift.
+            if voice_engine_of(cfg) == "orpheus":
+                if not state["ready"]:
+                    return self._send_json(503, {
+                        "ok": False, "engine": "orpheus", "say": state,
+                        "error": "The Orpheus voice is unavailable: %s"
+                                 % (state["why"] or "no Groq key")})
+                # THE FALLBACK LAW FOR THE VOICE: a 429 or an unreachable host reads this one
+                # line with Piper instead, exactly once, and only if Piper can actually speak
+                # on this machine. A 401 or a retired slug is heard as a refusal naming the
+                # field - see call_groq_speech() - because falling those back would leave a
+                # broken config.json sounding perfectly fine.
+                status = {}
+                wav, why = call_groq_speech(text, cfg, status=status)
+                if wav is None and status.get("transient") and say.ready(
+                        cfg.get("voice_model") or DEFAULT_CONFIG["voice_model"])["ready"]:
+                    turn_engine("tts", "piper", "fallback", why)
+                    sys.stderr.write("  fallback: orpheus -> piper (%s)\n" % why[:120])
+                    wav, why, source = say.synthesise(
+                        text, cfg.get("voice_model") or DEFAULT_CONFIG["voice_model"])
+                    if wav is not None:
+                        return self._send_wav(wav, source)
+                if wav is None:
+                    turn_engine("tts", "orpheus", "failed", why)
+                    sys.stderr.write("say: orpheus refused - %s\n" % why)
+                    return self._send_json(503, {
+                        "ok": False, "engine": "orpheus", "say": state,
+                        "error": "Orpheus could not speak that: %s" % why})
+                turn_engine("tts", "orpheus", "ok")
+                # "miss" because no cache was consulted: say-cache/ is Piper's, keyed by the
+                # Piper model name, and putting cloud audio in it under a Piper key is how a
+                # flip back to Piper starts playing Orpheus.
+                return self._send_wav(wav, "miss")
             asked = os.path.basename(str(data.get("model") or "").strip())
             if asked.endswith(".onnx"):
                 asked = asked[:-5]
@@ -7761,6 +8764,92 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 "text": out["text"], "start": out["start"], "end": out["end"],
                 "language": out["language"],
                 "tookMs": out["tookMs"], "durationS": out["durationS"]})
+
+        # THE CLOUD EAR, AND ITS BOUNDARY IS DRAWN IN THE OPEN.
+        #
+        # This route is the whole of what `ear_stt: "groq"` means: one utterance in, one
+        # transcript out. It does NOT reach into the live microphone path. The ear contract -
+        # the browser holds the microphone, runs the voice detector, decides when a silence is
+        # a goodbye, and hands the funnel a finished sentence - is on the DO-NOT-ALTER list,
+        # and replacing the recognizer inside it would change the timing of every closer, the
+        # re-arm and the barge-in at once. So the flag changes where a transcript CAN come
+        # from and the default keeps the browser serving; the seal says so either way.
+        # Failure mode this boundary exists to prevent: an ear that transcribes beautifully
+        # and never re-arms, discovered live, mid-sentence, by the boss.
+        #
+        # AND IT IS NOT THE SCRIBE. The Scribe's audio stays on this machine by law; this one
+        # is an explicit opt-in to a third party for the ASK bar's own audio, so the two must
+        # never share a route. /scribe/transcribe above has no Groq branch and gets none.
+        #
+        # THE AUDIO NEVER TOUCHES DISK here either: bytes off the wire, into one multipart
+        # body, reference dropped before the return.
+        if route == "/ear/transcribe":
+            cfg = load_config()[0]
+            served = ear_stt_of(cfg)
+            if served != "groq":
+                # NOT AN ERROR - AN ANSWER. The flag says the browser is the ear, so the honest
+                # reply is "the browser is the ear", and the page's own recognizer supplies the
+                # words. A 503 here would read to a harness as a broken transcriber.
+                self._read_bytes(GROQ_STT_MAX_BYTES)
+                return self._send_json(409, {
+                    "ok": False, "kind": "ear", "served": served, "text": "",
+                    "fallback": False,
+                    "error": "The ear is served by the browser. That is \"ear_stt\" in "
+                             "config.json; set it to \"groq\" to transcribe here."})
+            ready, why = groq_ready(cfg)
+            if not ready:
+                # BEFORE A BYTE IS READ, for the same reason the Scribe and the doorman refuse
+                # first: taking somebody's speech and then discovering there is nowhere to send
+                # it is worse than saying so up front.
+                self._read_bytes(GROQ_STT_MAX_BYTES)
+                turn_engine("stt", "groq", "failed", why)
+                return self._send_json(503, {
+                    "ok": False, "kind": "ear", "served": "groq", "text": "",
+                    "fallback": False, "error": why})
+            fields, bad = self._read_multipart(GROQ_STT_MAX_BYTES)
+            if fields is None:
+                return self._send_json(400, {
+                    "ok": False, "kind": "ear", "served": "groq", "text": "",
+                    "fallback": False,
+                    "error": "That audio could not be read: %s" % bad})
+            part = (fields.get("audio") or fields.get("file") or fields.get("chunk"))
+            if not part or not part["data"]:
+                return self._send_json(400, {
+                    "ok": False, "kind": "ear", "served": "groq", "text": "",
+                    "fallback": False,
+                    "error": "Send the audio in a part named \"audio\"."})
+            name = part["filename"] or "utterance.wav"
+            began = time.time()
+            status = {}
+            text, why = call_groq_whisper(name, cfg, audio=part["data"], status=status)
+            part["data"] = None                      # the only copy, dropped here
+            fields = None
+            if text is None and status.get("transient"):
+                # THE FALLBACK LAW FOR THE EAR, and it is the one capability where the fallback
+                # cannot be performed on this side: today's default recognizer lives in the
+                # browser and this process has no microphone. So the fallback is DECLARED - a
+                # 200 naming "browser" as the server of this one utterance - and the page hears
+                # exactly one answer, from its own ear, which was listening anyway. Exactly
+                # once: the page does not retry this route for the same utterance.
+                turn_engine("stt", "browser", "fallback", why)
+                sys.stderr.write("  fallback: groq stt -> browser (%s)\n" % why[:120])
+                return self._send_json(200, {
+                    "ok": False, "kind": "ear", "served": "browser", "text": "",
+                    "fallback": True, "reason": why, "tookMs": int((time.time() - began) * 1000),
+                    "error": ""})
+            if text is None:
+                turn_engine("stt", "groq", "failed", why)
+                sys.stderr.write("ear: groq refused - %s\n" % why)
+                return self._send_json(503, {
+                    "ok": False, "kind": "ear", "served": "groq", "text": "",
+                    "fallback": False, "error": why})
+            turn_engine("stt", "groq", "ok")
+            # CHARACTERS, NEVER THE WORDS, in the trace - the Scribe's habit, kept here.
+            sys.stderr.write("ear: groq %d chars  %dms\n"
+                             % (len(text), int((time.time() - began) * 1000)))
+            return self._send_json(200, {
+                "ok": True, "kind": "ear", "served": "groq", "text": text,
+                "fallback": False, "tookMs": int((time.time() - began) * 1000)})
 
         # THE DOORMAN, and it is third because it arrives at the same rate as the Scribe's
         # chunks and for the same reason must not queue behind a model call.
@@ -8115,7 +9204,14 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             # PROTECTED CLASSES 2 AND 3, above every retrieval in this server: whether the
             # ear is open, who he is, who I am, what I can do. Answered from live state and
             # the persona block, costing nothing - see protected_answer().
-            klass, said = protected_answer(question, load_config()[0], ear_open)
+            # AND §29's TWO ARGUMENTS. The seal is computed here from the verdict THIS process
+            # reached from audio, never from anything in the body - see seal_for(). Only the
+            # fullscreen branch reads them, and it reads them to decide whether to do something
+            # to the room; every other class is indifferent to who is speaking.
+            klass, said = protected_answer(
+                question, load_config()[0], ear_open, spoken=spoken,
+                seal=(voiceprint.seal_for(speaker) if (voiceprint is not None and spoken)
+                      else ""))
             if klass is not None:
                 # THE TRACE NAMES THE CLASS. The failure this catches is silent: a routing
                 # change that quietly sends "who am i" back to the notes would still return
@@ -8426,6 +9522,33 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             return self._send_json(400, {
                 "ok": False, "kind": "google", "nodes": [], "answer": "",
                 "error": "The only commands are connect and disconnect."})
+
+        # THE OTHER THREE ENGINES, AND IT IS BESIDE /model ON PURPOSE. Same law, same lock,
+        # same "nothing is written to disk": /model flips the brain by its spoken name and this
+        # flips the ear, the eyes and the voice by their engine's name. Kept separate from
+        # /model because the brain swap is something the boss SAYS - it goes through the
+        # resolver, the aliases and the three refusals - and these three are a switch, with no
+        # spoken form and no opinion about vintages.
+        if route == "/engines":
+            data = self._read_json()
+            if not isinstance(data, dict):
+                return self._send_json(400, {
+                    "ok": False, "kind": "engines",
+                    "error": "Send a JSON body like {\"voice\": \"orpheus\"} or "
+                             "{\"reset\": true}.", "engines": engines_state()})
+            try:
+                status, payload = set_engines(data)
+            except Exception as exc:                           # noqa: BLE001
+                sys.stderr.write("engines: %s\n" % exc)
+                return self._send_json(500, {
+                    "ok": False, "kind": "engines",
+                    "error": "That flip could not be made: %s" % exc})
+            served = payload.get("engines", {}).get("served", {})
+            sys.stderr.write("engines: %s -> chat=%s ear=%s vision=%s voice=%s\n"
+                             % ("reset" if payload.get("reset") else "set",
+                                served.get("chat"), served.get("ear"),
+                                served.get("vision"), served.get("voice")))
+            return self._send_json(status, payload)
 
         if route == "/model":
             # {"say": "switch to Astra"} - the spoken phrase IS the interface, so the

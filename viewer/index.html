@@ -3423,10 +3423,35 @@ function layout(vwOverride) {
   return layoutLast;
 }
 
+/* ---- THE SURFACES FOLLOW THE ROOM, AND THEY GO FIRST ----
+   THE SEAM, AND WHY THIS HOOK IS A VARIABLE RATHER THAN A CALL. The governor places CSS
+   boxes; a WebGL canvas has a second size nothing in CSS can reach - its BACKING STORE, the
+   pixel grid the renderer draws into - and the two are set by different code. When the
+   Fullscreen API grants the room, the viewport grows, every CSS surface grows with it, and a
+   renderer that was never told keeps drawing into its old grid: the frame is composited at
+   the windowed size inside a larger glass, and what is left over is bare body background
+   down the flanks. That is the seam in the boss's photograph, and it was measured before it
+   was believed - `_runs/seam_probe.mjs`, windowed 1186x706 and fullscreen 1280x800 with the
+   graph canvas still reading css 1186x706 / store 1779x1059 in both.
+   The hook is a variable because of SCOPE and nothing cleverer: `layout()` and this listener
+   are top-level, while the graph is `const Graph` inside main(), and the order the Law names -
+   every drawing surface resized BEFORE the governor re-measures - has to be owned by whoever
+   fires first. So the listener owns the ORDER and main() registers the IMPLEMENTATION, next to
+   the graph it needs. Until it does, a resize is exactly what it was before: the governor
+   alone - which is also the honest behaviour if the library never loads. */
+let surfaceResize = null;
+
 /* A panel toggle and a resize both re-run it. Three places in this file add or
    remove #panel.open; watching the attribute means none of them has to remember to
    call the governor, which is the only way "none positions itself" stays true. */
-window.addEventListener('resize', function () { layout(); });
+window.addEventListener('resize', function () {
+  /* SURFACES, THEN THE GOVERNOR. The other order measures rails against a viewport whose
+     renderer has not caught up, which is a governor reading a stale room and reporting
+     success. Failure mode: swap these two lines and the fullscreen assertions still pass
+     while the first frame after the change is drawn at the old size. */
+  if (surfaceResize) surfaceResize('resize');
+  layout();
+});
 (function () {
   const panel = document.getElementById('panel');
   if (panel && window.MutationObserver) {
@@ -4788,6 +4813,25 @@ async function loadLib() {
       typeLineDown('escape');
       return;
     }
+    /* CTRL+A TAKES THE ROOM - AND GIVES IT BACK TO THE FIELD IT WAS TYPED IN. This is the
+       one keystroke in the whole deck that has a meaning older than this deck: in a text
+       field it selects the line, and everybody uses it to retype a question. So the guard
+       comes FIRST and the feature second. The caret's whereabouts is asked of the event's
+       target AND of activeElement, because the two disagree for one frame after a click and
+       that frame is exactly where a stolen keystroke would live.
+       Nothing here exits fullscreen by hand: Escape is the browser's own law, and the state
+       this page keeps is synced from the fullscreenchange event below - never from the
+       keypress - so a request the browser refuses cannot leave the deck believing a lie. */
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey &&
+        (e.key === 'a' || e.key === 'A')) {
+      if (typingInto(e.target) || typingInto(document.activeElement)) {
+        fullGuarded++;
+        return;                                          // select-all, untouched
+      }
+      e.preventDefault();
+      fullToggle();
+      return;
+    }
     if (e.ctrlKey || e.metaKey || e.altKey) return;      // Ctrl+K and friends are not typing
     if (typeLineIsUp()) return;                          // it has the keyboard already
     if (typingInto(e.target)) return;                    // some other field is being filled
@@ -4806,6 +4850,180 @@ async function loadLib() {
       e.preventDefault();
       typeLineUp('a printable key', e.key);
     }
+  });
+
+  /* ---- EVERY DRAWING SURFACE, RESIZED BEFORE THE NEXT FRAME ----
+     One surface forgot the event and three did not, which is worth writing down because it
+     is the opposite of what the shape of the bug suggests. Measured, windowed against a
+     1280x800 fullscreen room:
+       #stars      1186x706 -> 1280x800, store 1779x1059 -> 1920x1200   already correct
+       #nebula     a CSS layer at inset:0, so it cannot be wrong        already correct
+       presence    368 -> 404 square, store follows                      already correct
+       graph canvas  css 1186x706 / store 1779x1059 in BOTH             THE SEAM
+     The starfield rebuilds its backing store on `resize` in seed(); the nebula is two divs;
+     the presence well is re-measured by the governor. Only the galaxy's renderer has a size
+     that no CSS rule and no governor can reach, and only it was left behind.
+
+     THE LIBRARY'S SETTER AND THE RENDERER'S, BOTH. Graph.width()/height() is 3d-force-graph's
+     supported path and it does the whole job today; setSize + camera.aspect is stated again
+     underneath because this page must not depend on a library's internals staying arranged as
+     they are, and because a harness can read `store` back off the canvas and cannot read the
+     library's intentions. Doing both is idempotent - the second call sets what the first set.
+
+     A SURFACE THAT CANNOT RESIZE DOES NOT RENDER THAT FRAME. If the resize throws - a context
+     lost on a GPU reset, a library mid-rebuild - the animation is PAUSED rather than allowed
+     to composite a frame at the wrong size, and it resumes on the first resize that works.
+     A wrong-sized frame is a lie about the room that looks like a design decision; a still
+     galaxy is visibly a fault, and `skipped` counts it for whoever asks. */
+  let surfResizes = 0;            // times every surface was re-sized to the room
+  let surfSkipped = 0;            // times one could not be, and the frame was withheld
+  let surfPaused = false;         // whether the withholding is currently in force
+  let surfLast = null;            // the last reading, for the instruments
+  function graphBits() {
+    const G = (typeof Graph !== 'undefined' && Graph) ? Graph : null;
+    return {
+      G: G,
+      r: (G && G.renderer) ? G.renderer() : null,
+      cam: (G && G.camera) ? G.camera() : null
+    };
+  }
+  function resizeSurfaces(why) {
+    const vw = Math.max(1, window.innerWidth), vh = Math.max(1, window.innerHeight);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const rec = { why: why || 'asked', vw: vw, vh: vh, dpr: dpr, graph: null, ok: true };
+    try {
+      const b = graphBits();
+      if (b.G && b.G.width && b.G.height) { b.G.width(vw); b.G.height(vh); }
+      if (b.r) {
+        b.r.setPixelRatio(dpr);
+        b.r.setSize(vw, vh, true);        // true: the CSS box as well as the backing store
+      }
+      if (b.cam) { b.cam.aspect = vw / vh; b.cam.updateProjectionMatrix(); }
+      const cv = b.r && b.r.domElement;
+      rec.graph = cv ? { store: cv.width + 'x' + cv.height,
+                         css: Math.round(cv.getBoundingClientRect().width) + 'x' +
+                              Math.round(cv.getBoundingClientRect().height) } : null;
+      surfResizes++;
+      if (surfPaused) {
+        /* IT CAME BACK. Resuming here and not on a timer: the thing that proves the surface
+           can be drawn again is a resize that completed, and there is no other evidence. */
+        try { if (b.G && b.G.resumeAnimation) b.G.resumeAnimation(); } catch (e) { }
+        surfPaused = false;
+      }
+    } catch (err) {
+      rec.ok = false;
+      rec.err = String((err && err.message) || err);
+      surfSkipped++;
+      try {
+        const b = graphBits();
+        if (b.G && b.G.pauseAnimation) { b.G.pauseAnimation(); surfPaused = true; }
+      } catch (e) { /* nothing left to pause; the galaxy is already gone */ }
+    }
+    surfLast = rec;
+    return rec;
+  }
+  /* Registered for the top-level resize listener, which owns the order. */
+  surfaceResize = resizeSurfaces;
+  /* AND ONCE NOW, because the page may have been opened into a window that is not the size
+     the library measured at construction - a restored session, a tiling manager, a second
+     monitor with a different scale factor. */
+  resizeSurfaces('boot');
+
+  /* ---- THE FULL ROOM ----
+     A deck on a desk is a window; a deck on a wall is the room. Ctrl+A moves between the two
+     and that is the whole of the feature - but the Layout Governor is what makes it work,
+     because every surface this page places is placed against the viewport it measured. A
+     fullscreen that did not re-measure would leave the presence tier, the containment budget
+     and the rails sized for a window that is no longer there.
+
+     THE STATE IS READ, NEVER REMEMBERED. `on` asks the document every time. The browser can
+     refuse the request, grant it late, drop it when a tab is switched, or be sent out of it by
+     an Escape this page never sees - so a boolean of our own would be wrong within a minute,
+     and it would be wrong in the direction that hides the bug. The three integers are counters
+     and not state: what happened, how many times.
+
+     failure mode this shape catches: a toggle that flips a flag and re-measures immediately
+     would measure the OLD viewport, since the resize has not happened yet at the moment the
+     promise is made - and the numbers would look perfect while every rail was misplaced. */
+  let fullChanges = 0;            // times the browser told us the room changed
+  let fullMeasured = 0;           // times the governor re-ran BECAUSE of one of those
+  let fullTaken = 0;              // times Ctrl+A was ours
+  let fullGuarded = 0;            // times it belonged to a field and was left alone
+  function fullOn() { return !!document.fullscreenElement; }
+  function fullToggle() {
+    fullTaken++;
+    try {
+      if (fullOn()) {
+        /* Only when we are the ones who took it. Escape does this without us, which is why
+           there is no key handler for it here. */
+        if (document.exitFullscreen) document.exitFullscreen().catch(function () { });
+      } else if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(function (err) {
+          /* A REFUSAL IS A SENTENCE, not a silence. Chrome refuses when the gesture is too
+             old or the document is not permitted, and a Ctrl+A that did nothing at all would
+             be reported as "the fullscreen key is broken" with nothing to read. */
+          speakNote('the browser would not give us the room: ' +
+                    String((err && err.message) || err));
+        });
+      }
+    } catch (err) { /* an API this old browser has not got; the deck is unharmed */ }
+    return fullOn();
+  }
+
+  /* ---- §29: THE SAME ROOM, ASKED FOR OUT LOUD ----
+     THE ONE PATH IN IS STILL fullToggle(). This is not a second way into the Fullscreen API;
+     it is a reader of what was asked for that calls the one toggle Ctrl+A calls, and only when
+     the room is not already the way it was asked to be. "Exit full screen" said while already
+     windowed must not put it ON, and "go full screen" said twice must not take it away - a
+     blind flip does both, and doing the opposite of a plain instruction is worse than ignoring
+     one. The server sends "on" or "off" and never "toggle" for the same reason; see
+     FULLSCREEN_ON_RE's comment in server.py.
+
+     AND THE THING THE BROWSER WILL NOT DO, said plainly rather than discovered later:
+     requestFullscreen() demands TRANSIENT USER ACTIVATION, and a sentence arriving over the
+     network carries none. Speaking "go full screen" can therefore be REFUSED by the browser -
+     not by this page, and not by the Doorman, who has already said yes. exitFullscreen() has
+     no such requirement, so "exit full screen" always works by voice. That asymmetry is the
+     browser's and cannot be coded around; what this page owes the boss is to SAY SO, which
+     fullToggle() already does through speakNote(), and never to leave him wondering whether he
+     was heard. Ctrl+A is a keystroke and carries activation, which is why it remains the
+     feature and the voice is a convenience on top of it. */
+  let fullSpoken = 0;             // times a sentence asked for the room
+  let fullAlready = 0;            // times it was already the way it was asked to be
+  function fullAsked(want) {
+    if (want !== 'on' && want !== 'off') return false;
+    fullSpoken++;
+    if ((want === 'on') === fullOn()) {
+      /* NOTHING TO DO IS NOT A FAILURE, and it is not silent either: the answer the server
+         already sent says what the boss asked for, and this counter is how a proof tells
+         "obeyed" from "was already right" without guessing from the state. */
+      fullAlready++;
+      return false;
+    }
+    fullToggle();
+    return true;
+  }
+  addEventListener('fullscreenchange', function () {
+    fullChanges++;
+    /* THE SURFACES FIRST, AND FROM HERE RATHER THAN ONLY FROM THE RESIZE. Chrome fires resize
+       alongside this event and the top-level listener would resize the surfaces anyway - but
+       "alongside" is not a guarantee and the ORDER between two listeners on two different
+       events is not one either. The resize is idempotent, so doing it twice costs one setSize
+       on an unchanged canvas; NOT doing it costs the seam in the photograph. The asymmetry
+       decides it. Failure mode if this line is deleted: the deck still looks right in Chrome
+       and grows flat flank bands in any browser that treats the resize as optional. */
+    try { resizeSurfaces('fullscreenchange'); } catch (err) { /* it counts its own failures */ }
+    /* THE GOVERNOR, against the dimensions that are there NOW. This event fires after the
+       viewport has changed, which is the only moment the measurement is worth taking. Chrome
+       also fires resize here and the resize listener runs layout() too - that is a second
+       identical measurement, not a conflict, because layout() is a pure re-read of the
+       viewport and the rails it places. Called from here anyway: the claim is that the deck
+       re-measures because the ROOM changed, and inheriting it from a resize that a browser is
+       not required to fire is a claim resting on somebody else's implementation detail. */
+    try { layout(); fullMeasured++; } catch (err) { /* a readout must not break the room */ }
+    /* AND THE COMPACT AUDITION STILL GOVERNS, because it is inside layout() - the tier is
+       recomputed from the new width, so going full screen on a small laptop promotes the deck
+       out of compact and coming back demotes it, with no special case here. */
   });
 
   /* Whether the keystroke already has somewhere to go. Asked of the event's target rather
@@ -5536,7 +5754,13 @@ async function loadLib() {
          piper model half-downloaded is speaking through the web voice right now, and the
          rail's job is to say what is happening rather than what was asked for. */
       const say = (data && data.say) || null;
-      if (speakEngine === 'piper') {
+      if (speakEngine === 'piper' && speakServed === 'orpheus') {
+        /* CYAN AND NOT GOLD, and the colour is the point: gold in this rail means a model
+           file on this disk with nothing leaving the machine, which is exactly the claim a
+           cloud voice breaks. The voice NAME rather than a filename, because there is no
+           file - `voice` is the Orpheus speaker and `model` is the slug. */
+        railSet('voice', 'orpheus · ' + ((say && say.voice) || 'default'), 'live');
+      } else if (speakEngine === 'piper') {
         railSet('voice', 'piper · ' + (railVoiceName(say && say.model) || 'default'), 'local');
       } else {
         const name = chosenVoice ? chosenVoice.name : '';
@@ -6115,9 +6339,15 @@ async function loadLib() {
        fallback here exactly as it does on the rail. */
     if (speakEngine === 'piper') {
       const say = (railHealth && railHealth.say) || null;
-      return { label: 'Voice Casting', tone: 'local',
-               line: 'piper · ' + (railVoiceName(say && say.model) || 'local') +
-                     ' · three candidates' };
+      /* AND THE SEAL NAMES THE EAR TOO, because §28 moves both and only one of them has a
+         rail cell. The ear named is the one that would serve a transcription right now, read
+         off /health rather than off config.json - the flag can be held in memory. */
+      const ear = ((railHealth && railHealth.engines && railHealth.engines.served) || {}).ear;
+      const mouth = speakServed === 'orpheus'
+        ? 'orpheus · ' + ((say && say.voice) || 'groq')
+        : 'piper · ' + (railVoiceName(say && say.model) || 'local');
+      return { label: 'Voice Casting', tone: speakServed === 'orpheus' ? 'live' : 'local',
+               line: mouth + ' · ear ' + (ear || 'browser') + ' · three candidates' };
     }
     return { label: 'Voice Casting', tone: 'bad',
              line: 'piper offline · the browser\'s voices' };
@@ -6628,12 +6858,21 @@ async function loadLib() {
         sub: 'no hand in the registry and no client on this machine',
         act: 'Connect', actOff: true },
       {
-        key: 'voice', name: 'Voice', tone: speakEngine === 'piper' ? 'local' : 'bad',
-        value: speakEngine === 'piper' ? 'PIPER' : 'BROWSER',
-        sub: speakEngine === 'piper'
-          ? handLine('set_voice', railVoiceName((railHealth && railHealth.say
-                                                 && railHealth.say.model) || '') || 'local')
-          : 'piper offline · the browser\'s own voices',
+        key: 'voice', name: 'Voice',
+        tone: speakEngine !== 'piper' ? 'bad'
+                                      : (speakServed === 'orpheus' ? 'live' : 'local'),
+        /* THREE READINGS AND NOT TWO. The tile answered PIPER or BROWSER, which had exactly
+           the right number of values until a cloud voice existed; ORPHEUS is a third fact and
+           reading it as PIPER would put a local-voice claim on a network round trip. */
+        value: speakEngine !== 'piper' ? 'BROWSER'
+                                       : (speakServed === 'orpheus' ? 'ORPHEUS' : 'PIPER'),
+        sub: speakEngine !== 'piper'
+          ? 'piper offline · the browser\'s own voices'
+          : (speakServed === 'orpheus'
+             ? 'groq · ' + ((railHealth && railHealth.say && railHealth.say.model) || 'orpheus')
+               + ' · the words leave this machine'
+             : handLine('set_voice', railVoiceName((railHealth && railHealth.say
+                                                    && railHealth.say.model) || '') || 'local')),
         act: 'Recast', actOff: speakEngine !== 'piper',
         onAct: function () { cmdRun('cast'); }
       },
@@ -10689,6 +10928,16 @@ async function loadLib() {
          last word on every entry, the way safeUrl() does for a link. */
       const cites = (data && Array.isArray(data.citations)) ? data.citations : null;
       const scans = (data && Array.isArray(data.scanNotes)) ? data.scanNotes : null;
+      /* §29: THE ROOM, IF THAT IS WHAT WAS ASKED FOR. Acted on BEFORE the answer is shown, so
+         the room is already changing as the sentence appears rather than a beat after it - and
+         only on the two fields the server sends, never on the prose. `fullscreen: false` with a
+         `refused` code is the Doorman's no: there is no `fullscreenWant` to read, so this
+         branch cannot fire on it even by accident, which is what "the state untouched" means
+         on this side of the wire. */
+      if (data && data.fullscreen === true &&
+          (data.fullscreenWant === 'on' || data.fullscreenWant === 'off')) {
+        try { fullAsked(data.fullscreenWant); } catch (e) { /* the answer is still owed */ }
+      }
       if (!data) {
         respond('The server replied with something that was not JSON (HTTP ' +
           res.status + ').', true, null, 'chat');
@@ -11608,6 +11857,12 @@ async function loadLib() {
   let speakDoneCount = 0;         // how many times the queue has run dry
   let speakDoneLast = null;       // the detail of the last speakDone, for reading back
   let speakEngine = 'web';        // 'piper' once /health says this machine can synthesise
+  /* WHO IS ACTUALLY MAKING THE SOUND, by name, when speakEngine is 'piper'. Two fields and
+     not one: speakEngine answers "where do the chunks go" and is read in a dozen places, and
+     this answers "whose voice is it" and is read only by the three labels that name it. A rail
+     that said PIPER while a cloud voice spoke would be the deck lying about where his words
+     went, and that is the whole reason this line exists. Empty while the browser speaks. */
+  let speakServed = '';
   let speakEngineWhy = 'not asked yet';
   let speakPiperDown = '';        // non-empty once the local voice has given up on us
   let speakPiperMisses = 0;       // consecutive failed fetches; two is a pattern
@@ -11639,9 +11894,22 @@ async function loadLib() {
   function speakEngineFrom(state) {
     const want = (state && String(state.engine || '')) || 'web';
     const ready = !!(state && state.ready);
-    const next = (want === 'piper' && ready) ? 'piper' : 'web';
+    /* TWO VALUES HERE, A NAME BESIDE IT. `speakEngine` decides where the chunks GO and is
+       compared to 'piper' in a dozen places to mean "the server makes the audio"; a third
+       value in it would route Orpheus's chunks to the browser and mislabel the rail in the
+       same edit. So the question asked of /health is the boolean it now answers - served:
+       can I fetch audio from /say? - and the engine's NAME is kept separately, for labels
+       only. Adding a cloud voice therefore costs this function one word and nothing else.
+       The `want === 'piper'` fallback is for an OLDER server with no `served` field: this
+       page is served from disk and the process answering /health may be a minute behind it. */
+    const served = (state && state.served !== undefined) ? !!state.served
+                                                         : (want === 'piper');
+    const next = (served && ready) ? 'piper' : 'web';
+    speakServed = next === 'piper' ? (want || 'piper') : '';
     const why = next === 'piper'
-      ? 'piper, ' + String((state && state.model) || 'unnamed model') + ', locally'
+      ? (speakServed === 'orpheus'
+         ? 'orpheus, ' + String((state && state.model) || 'unnamed model') + ', through groq'
+         : 'piper, ' + String((state && state.model) || 'unnamed model') + ', locally')
       : ((state && state.why) ? 'the browser\'s own voices, because ' + state.why
                               : 'the browser\'s own voices');
     /* RECOVERY, and it is separate from the change above on purpose: after a fallback the
@@ -15351,7 +15619,18 @@ async function loadLib() {
     speaker.ring.push({ pcm: pcm, rate: rate || 48000, at: at,
                         ms: (pcm.length / (rate || 48000)) * 1000 });
     speaker.ringSamples += pcm.length;
-    while (speaker.ring.length && (at - speaker.ring[0].at) > SPEAKER_RING_MS) {
+    /* BOUNDED BY THE OLDEST SAMPLE IN THE CHUNK, NOT BY THE CHUNK'S ARRIVAL. `at` is stamped
+       when the chunk lands, which is the moment its LAST sample was taken - so a chunk whose
+       arrival is 13.9s old still carries audio from 14.4s ago, and the two comments above,
+       which promise that "nothing older than this exists anywhere" and that "the longest any
+       sample exists is fourteen seconds and a fetch", were both off by one grain.
+       Half a second is a small lie and it is still a lie about how long this page keeps a
+       recording of a room - which is the one number the ear's privacy claim rests on. Bounding
+       by `at - ms`, the chunk's START, makes the promise true and costs SPEAKER_CHUNK_S of
+       retention at the tail, which no caller needs: speakerSlice() asks for a span the VAD
+       has already declared, plus SPEAKER_LEAD_MS of run-up, and both sit far inside the ring. */
+    while (speaker.ring.length &&
+           (at - (speaker.ring[0].at - speaker.ring[0].ms)) > SPEAKER_RING_MS) {
       speaker.ringSamples -= speaker.ring[0].pcm.length;
       speaker.ring.shift();
     }
@@ -21631,6 +21910,59 @@ async function loadLib() {
         return out;
       }
     },
+    /* THE FULL ROOM, read back. `on` is asked of the document every time rather than kept,
+       for the reason written where it is toggled; `measured` is the number of times the Layout
+       Governor re-ran BECAUSE the room changed, which is the one number that distinguishes "we
+       went fullscreen" from "we went fullscreen and the deck noticed"; and `taken` against
+       `guarded` is the truth table of the keystroke - one row for the deck, one for the field
+       the caret was in. `toggle` is here so a fixture can exercise the Fullscreen API's own
+       refusal path, but Ctrl+A is the feature and a real keystroke is the only way to test it:
+       the API demands a user gesture, and a call from a debugger carries none. */
+    fullscreen: {
+      get on() { return fullOn(); },
+      get changes() { return fullChanges; },
+      get measured() { return fullMeasured; },
+      get taken() { return fullTaken; },
+      get guarded() { return fullGuarded; },
+      /* §29. `spoken` is how many sentences asked for the room and `already` how many of those
+         found it the way they asked for - so "obeyed" is spoken minus already, and a proof can
+         tell an obeyed command from a no-op without inferring it from the state it was about
+         to change. `asked` is exposed so a fixture can drive the voice path without a
+         recogniser; the Doorman lives on the server and this cannot reach past it. */
+      get spoken() { return fullSpoken; },
+      get already() { return fullAlready; },
+      asked: fullAsked,
+      toggle: fullToggle
+    },
+    /* EVERY DRAWING SURFACE, READ BACK. What a harness needs that it cannot get from the page's
+       own opinion: `store` and `css` come off the renderer's real canvas, so an assertion
+       compares pixels-the-renderer-draws-into against innerWidth x pixelRatio and not one
+       intention against another. `resizes` against `skipped` is the truth table of the Law -
+       every fullscreenchange and every resize should land in the first, and anything in the
+       second means a frame was deliberately withheld and `paused` says whether it still is.
+       `run` exists so the negative test can drive a resize without a real window change; the
+       feature is the event, and the event is what the proof uses. */
+    surfaces: {
+      get last() { return surfLast; },
+      get resizes() { return surfResizes; },
+      get skipped() { return surfSkipped; },
+      get paused() { return surfPaused; },
+      /* Measured NOW, not at the last resize: the question a seam assertion asks is what the
+         canvas is this instant, and a cached answer would pass a page that had drifted. */
+      get graph() {
+        try {
+          const b = graphBits(), cv = b.r && b.r.domElement;
+          if (!cv) return null;
+          const r = cv.getBoundingClientRect();
+          return { store: { w: cv.width, h: cv.height },
+                   css: { w: Math.round(r.width), h: Math.round(r.height) },
+                   styleW: cv.style.width, styleH: cv.style.height,
+                   pixelRatio: b.r.getPixelRatio ? b.r.getPixelRatio() : null,
+                   aspect: b.cam ? +(b.cam.aspect || 0).toFixed(4) : null };
+        } catch (e) { return null; }
+      },
+      run: function (why) { return resizeSurfaces(why || 'asked by an instrument'); }
+    },
     /* THE INSTRUMENTS. ?focusdebug=1 for the overlay, ?focusprobe=1 for the battery -
        and both reachable from here so a harness can drive them without a query
        string, and so the panel's own numbers can be read rather than screen-scraped. */
@@ -22122,6 +22454,11 @@ async function loadLib() {
         return speakNow ? Math.max(0, speakBuf.size - (speakNow.i + 1)) : 0;
       },
       get engine() { return speakEngine; },
+      /* THE NAME BESIDE THE ROUTE. `engine` is where the chunks go ('piper' means the server
+         makes the audio) and `served` is whose voice it is ('piper' or 'orpheus', empty while
+         the browser speaks). A fixture that only had `engine` could not tell a local voice
+         from a cloud one, which is the single distinction §28 added. */
+      get served() { return speakServed; },
       get engineWhy() { return speakEngineWhy; },
       /* Empty unless the local voice has fallen over mid-session. Separate from engine
          because the CONFIGURED engine and the one currently carrying the chunks are two

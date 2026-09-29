@@ -334,6 +334,82 @@ const MATRIX = [
     why: 'THE WEB DOOR, on a question the notes hold 0.00 of - measured, in the trace, ' +
          'not chosen because it sounded worldly. A Web Gate assertion that quietly ' +
          'passed through the notes would prove nothing about the web at all.'
+  },
+
+  /* ==================== §29: THE ROOM, ASKED FOR ====================
+     Five phrasings of one instruction, and they are the five the mandate names rather than
+     five this file invented, because the point of them is COVERAGE OF A RECOGNISER: the
+     on-device ear writes "full screen", the cloud writes "fullscreen", a keyboard writes
+     "full-screen", and a phrasing that only works in one of the three spellings is a feature
+     that works for whoever happened to be testing it.
+
+     WHY `lookups: 0` IS THE LOAD-BEARING NUMBER HERE. Before §29 all five of these sentences
+     reached the NOTES door and cost a retrieval each - measured on the stale server this run
+     replaced, which answered "switch to full screen" with "That particular lever was never
+     fitted to me, sir", kind=notes, lookups=1. So the regression this row catches is not
+     hypothetical and is not "the wrong words": it is an instruction being researched instead
+     of obeyed. The funnel either recognises the instruction above every retrieval or the deck
+     pays a model call to explain why it cannot do the thing it can do.
+
+     AND `noChips` IS THE CLAIM THE MANDATE MAKES IN ITS OWN WORDS - "with zero chips". An
+     obeyed instruction has nothing to cite. A citation on this answer would mean the sentence
+     went somewhere and came back, which is the failure above wearing the right words. */
+  {
+    say: 'switch to full screen', setup: 'none',
+    want: { status: 200, kind: 'chat', route: 'fullscreen', lookups: 0 },
+    wantsFullscreen: 'on', noChips: true, answerHas: 'Filling the screen',
+    why: '§29, THE ROOM ASKED FOR IN WORDS. A fifth route above every retrieval, and the ' +
+         'four protected CLASSES are untouched: PROTECTED_CLASSES is still exactly four, and ' +
+         'this rides as payload fields the way `clock` already does. The failure mode: an ' +
+         'instruction answered as a question, which is what this sentence did yesterday.'
+  },
+  {
+    say: 'go full screen', setup: 'none',
+    want: { status: 200, kind: 'chat', route: 'fullscreen', lookups: 0 },
+    wantsFullscreen: 'on', noChips: true,
+    why: 'THE SHORTEST FORM, and the one an impatient person actually says. It is here ' +
+         'because a regex anchored a word too tightly would take the long form and drop this.'
+  },
+  {
+    say: 'make it full screen', setup: 'none',
+    want: { status: 200, kind: 'chat', route: 'fullscreen', lookups: 0 },
+    wantsFullscreen: 'on', noChips: true,
+    why: 'WITH A PRONOUN IN IT. "it" is the deck, and no antecedent memory is consulted to ' +
+         'know that - which is the point: the instruction is recognised by its shape, so a ' +
+         'cleared antecedent cannot make the room stop obeying.'
+  },
+  {
+    say: 'fill the screen', setup: 'none',
+    want: { status: 200, kind: 'chat', route: 'fullscreen', lookups: 0 },
+    wantsFullscreen: 'on', noChips: true,
+    why: 'AND THE ONE WITH NEITHER SPELLING OF THE WORD IN IT. This row is the reason the ' +
+         'matcher is a set of forms and not a substring search for "fullscreen".'
+  },
+  {
+    say: 'exit full screen', setup: 'none',
+    want: { status: 200, kind: 'chat', route: 'fullscreen', lookups: 0 },
+    wantsFullscreen: 'off', answerHas: 'Back to the window', noChips: true,
+    why: 'THE WAY BACK, AND IT IS A DIFFERENT INSTRUCTION AND NOT A TOGGLE. The mandate says ' +
+         'each variant calls the same toggle Ctrl+A calls, and what protects that sentence is ' +
+         'that there is exactly ONE path into the Fullscreen API - but the WANT has to travel ' +
+         'as "off", because a blind flip on "exit full screen" spoken at a windowed deck would ' +
+         'ENTER fullscreen. That is the defect this row exists to make impossible: OFF is ' +
+         'asserted as OFF at the wire, not inferred from a flip.'
+  },
+  {
+    say: 'what is full screen mode?', setup: 'none',
+    want: { status: 200, minLookups: 1 },
+    notProtected: true, noFullscreen: true, wantsChips: true,
+    why: 'THE CONTROL, AND IT IS THE WHOLE SAFETY OF PART 2. A question ABOUT full screen is ' +
+         'an ordinary question and must be answered like one: through a door that costs a ' +
+         'lookup, carrying its honest citations, with no fullscreen field in the payload and ' +
+         'nothing done to the room. The failure mode is a funnel that grew until the deck ' +
+         'could no longer be asked about itself without changing shape - and the thing that ' +
+         'keeps it out is that both instruction patterns are ^...$ anchored on the ' +
+         'addressless form, so a sentence with a question in front of the words never matches. ' +
+         'On this corpus it lands on the NOTES door with 2 citations; the assertion is written ' +
+         'as "a lookup and at least one chip" rather than "kind=notes", because which door an ' +
+         'ordinary question opens is a property of the corpus and not of §29.'
   }
 ];
 
@@ -397,15 +473,43 @@ async function typedPass() {
         .indexOf(got.googleState) >= 0);
     const okNotConn = !row.notConnection ||
       (!got.googleState && String(got.answer || '').indexOf('GOOGLE: ') < 0);
+    /* §29'S THREE CLAIMS, and each is written as a claim about the PAYLOAD because the payload
+       is what the page acts on. The page's own side of this - fullAsked() - reads exactly
+       these two fields and nothing else, so a row that asserted only the sentence would pass
+       on an answer that says "Filling the screen" and leaves the deck the size it was.
+         `wantsFullscreen`  the direction, asserted as 'on'/'off' and never as "truthy". A
+                            want of "on" arriving as "off" is a working feature pointed the
+                            wrong way, and it reads as a pass to anything that only checks
+                            that the field is there.
+         `noChips`          zero of all three chip carriers. Counted across nodes, sources and
+                            citations rather than one of them, because three different doors
+                            fill three different fields and checking one proves nothing about
+                            the other two.
+         `noFullscreen`     the control's negative: the field is ABSENT, not false. `false` is
+                            what a refusal carries, and the control is not a refusal - it is a
+                            question that never reached the route at all. */
+    const chipCount = (a) => (Array.isArray(a) ? a.length : 0);
+    const chips = chipCount(got.nodes) + chipCount(got.sources) + chipCount(got.citations);
+    const okFull = !row.wantsFullscreen ||
+      (got.fullscreen === true && got.fullscreenWant === row.wantsFullscreen);
+    const okNoChips = !row.noChips || chips === 0;
+    const okNoFull = !row.noFullscreen ||
+      (got.fullscreen === undefined || got.fullscreen === null) &&
+      (got.fullscreenWant === undefined || got.fullscreenWant === null);
+    const okChips = !row.wantsChips || chips >= 1;
     ok(okStatus && okKind && okRoute && okLookups && okMin && okOk && okAnswer &&
-       okPending && okNotProt && okAlso && okGState && okNotConn,
+       okPending && okNotProt && okAlso && okGState && okNotConn &&
+       okFull && okNoChips && okNoFull && okChips,
        'TYPED ' + label + ' -> ' + r.status + ' kind=' + got.kind +
        ' route=' + (got.route || '-') + ' lookups=' + got.lookups +
+       (got.fullscreenWant ? ' want=' + got.fullscreenWant : '') +
+       ((row.noChips || row.wantsChips) ? ' chips=' + chips : '') +
        (got.googleState ? ' google=' + got.googleState : '') +
        (got.protected ? ' protected=' + got.protected : '') +
        (('want_pending' in row) ? ' pending=' + (got.pending ? got.pending.tool : 'none') : ''),
        JSON.stringify({ status: r.status, kind: got.kind, route: got.route,
                         lookups: got.lookups, protected: got.protected,
+                        fullscreen: got.fullscreen, want: got.fullscreenWant, chips: chips,
                         ok: got.ok, pending: got.pending && got.pending.tool,
                         answer: String(got.answer || got.error || '').slice(0, 160) }));
     say('       he was told: "' + scrub(got.answer || got.error).slice(0, 150) + '"');
@@ -439,6 +543,157 @@ async function typedPass() {
   }
   await clearSlot();
   return rows;
+}
+
+/* ================= §29: THE DOORMAN ON THE FULLSCREEN INSTRUCTION =================
+   "A guest's spoken command meets 'Only the boss fills the room, Addi.' with the state
+   untouched." That is a claim about a SPOKEN turn from somebody who is not the boss, and the
+   hard part of proving it is ordinarily a second person and a microphone.
+
+   IT DOES NOT NEED EITHER, and the mechanism is one speaker_proof already measured: five
+   seconds of generated noise posted to /speaker comes back sealed GUEST, because the matcher
+   returns GUEST rather than its nearest row when nothing clears the 0.50 threshold. So this
+   file can hold a real GUEST verdict, reached by this server from real audio, and quote its
+   turn number at /chat exactly as the page would. Deterministic - a fixed-seed LCG - so a red
+   row here is reproducible on a machine with no audio hardware at all.
+
+   WHAT IT DELIBERATELY DOES NOT DO: it does not enrol, forget or replace anything. The boss's
+   speaker store is not a harness's to edit, and a fixture that emptied it to make its own
+   arithmetic neat would be the most expensive green in the file.
+
+   AND WHAT IT CANNOT PROVE HERE, said plainly rather than left as a gap: the mandate admits
+   BOSS *or a name*, and a NAMED colleague is ALLOWED through this gate. Proving that needs a
+   second enrolled larynx, which needs an enrolment - so it is measured in-process and reported
+   in the lookbook's gate table instead of asserted here. What this section proves is the
+   refusal, which is the half that can do harm if it is wrong.
+
+   THE SEAL IS ASSERTED BEFORE THE REFUSAL IS. A refusal on a turn that was never sealed GUEST
+   is not evidence of a doorman - it is evidence of a server that refuses everything, which is
+   also what a broken fullscreen_allowed() looks like. */
+function writeWav(samples, rate) {
+  const bytes = samples.length * 2, w = Buffer.alloc(44 + bytes);
+  w.write('RIFF', 0); w.writeUInt32LE(36 + bytes, 4); w.write('WAVE', 8);
+  w.write('fmt ', 12); w.writeUInt32LE(16, 16); w.writeUInt16LE(1, 20);
+  w.writeUInt16LE(1, 22); w.writeUInt32LE(rate, 24); w.writeUInt32LE(rate * 2, 28);
+  w.writeUInt16LE(2, 32); w.writeUInt16LE(16, 34);
+  w.write('data', 36); w.writeUInt32LE(bytes, 40);
+  for (let i = 0; i < samples.length; i++) w.writeInt16LE(samples[i], 44 + i * 2);
+  return w;
+}
+function noisePcm(seconds, rate, amplitude) {
+  const n = Math.round(seconds * rate), out = new Int16Array(n);
+  let seed = 20260927;
+  for (let i = 0; i < n; i++) {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    out[i] = Math.round(((seed / 0x7fffffff) * 2 - 1) * amplitude * 32767);
+  }
+  return out;
+}
+const noiseWav = (seconds, rate, amplitude) => writeWav(noisePcm(seconds, rate, amplitude), rate);
+/* Parts numbered audio0, audio1, ... because _read_multipart keys its dict by part name and
+   two parts both called "audio" would silently become one. */
+async function postAudio(fields, clips) {
+  const form = new FormData();
+  for (const [k, v] of Object.entries(fields)) form.append(k, String(v));
+  clips.forEach((buf, i) => form.append('audio' + i,
+    new Blob([buf], { type: 'audio/wav' }), 'clip' + i + '.wav'));
+  const res = await fetch(GALAXY + '/speaker', { method: 'POST', body: form });
+  const text = await res.text();
+  let json = null;
+  try { json = JSON.parse(text); } catch (e) { json = { unparsed: text.slice(0, 300) }; }
+  return { status: res.status, body: json };
+}
+
+const GUEST_SESSION = 'routing-proof-guest';
+async function fullscreenDoorman() {
+  say('\n  ---- §29 THE DOORMAN: a guest asks for the room ------------------------');
+  const sp = await (await fetch(GALAXY + '/health')).json().catch(() => null);
+  if (!sp || !sp.speaker || !sp.speaker.ready) {
+    note('the speaker brain is not ready on this machine, so no seal can be earned and the ' +
+         'refusal cannot be reached honestly. Reported, not skipped silently.');
+    return ok(false, '§29 the guest refusal could not be exercised: /health says the speaker ' +
+              'brain is not ready', JSON.stringify(sp && sp.speaker));
+  }
+  if (!sp.speaker.hasHands) {
+    note('nobody with hands is enrolled on this machine, so fullscreen_allowed() opens for ' +
+         'everyone BY DESIGN - a house that has never been taught a voice cannot prefer one.');
+    return ok(true, '§29 the doorman stands down when no hands voice is enrolled, which is ' +
+              'the Fallback Law applied to a gate: no roster, no refusals',
+              JSON.stringify(sp.speaker));
+  }
+
+  step('a voice this house has never heard asks for the room');
+  const id = await postAudio({ cmd: 'identify', session: GUEST_SESSION },
+                             [noiseWav(5, 16000, 0.05)]);
+  const seal = (id.body && id.body.seal) || '-';
+  const turn = id.body && id.body.turn;
+  ok(id.status === 200 && seal === 'GUEST' && !!turn,
+     'five seconds of audio with no larynx in it is sealed ' + seal + ' and issued turn ' +
+     turn + ' - a real verdict this server reached from real audio, not a word this harness ' +
+     'chose for itself',
+     JSON.stringify(id.body).slice(0, 260));
+  if (seal !== 'GUEST' || !turn) {
+    return note('without a GUEST seal there is nothing to refuse, so the rows below are not run');
+  }
+
+  const mark = traceMark();
+  const r = await post('/chat', { question: 'go full screen', session: GUEST_SESSION,
+                                  speaker: { via: 'voice', turn } });
+  const trace = traceSince(mark);
+  const g = r.body || {};
+  say('       he was told: "' + scrub(g.answer || g.error) + '"');
+
+  ok(r.status === 200 && g.refused === 'not-the-boss',
+     'THE GUEST IS REFUSED AT THE DOORMAN: refused=' + (g.refused || 'nothing') +
+     ' - and it is the doorman and not an error, because the deck has to keep working for ' +
+     'the person in front of it',
+     JSON.stringify(g).slice(0, 300));
+  /* THE STATE, UNTOUCHED, AND IT IS THE PAYLOAD THAT SAYS SO. The page's fullAsked() is
+     driven by exactly two fields; with no want in the payload there is no branch that can
+     reach fullToggle(). `fullscreen:false` rather than absent is the refusal's own signature -
+     the control row above asserts the ABSENT form, so the two cannot be confused. */
+  ok(g.fullscreen === false && (g.fullscreenWant === undefined || g.fullscreenWant === null),
+     'AND THE ROOM IS UNTOUCHED: the payload carries fullscreen=false and no ' +
+     'fullscreenWant at all, so there is no field the page could act on even if it wanted to',
+     JSON.stringify({ fullscreen: g.fullscreen, want: g.fullscreenWant }));
+  /* THE MANDATE'S SENTENCE, AND IT ARRIVES DE-ADDRESSED WITHOUT A SPECIAL CASE. It is stored
+     verbatim as the mandate wrote it - "Only the boss fills the room, Addi." - and the vocative
+     peel, which is a DO-NOT-ALTER, takes the boss's address form off it for anybody who is not
+     him. The failure mode this catches is the one worth catching: a stranger in the room being
+     called by the boss's name while being told the room is not theirs. */
+  const said = String(g.answer || '');
+  ok(/only the boss fills the room/i.test(said),
+     'and he is told the mandate’s own sentence: "' + scrub(said) + '"', said);
+  ok(said.indexOf('Addi') < 0,
+     'AND IT IS DE-ADDRESSED FOR A STRANGER: the boss’s address form is peeled off by the ' +
+     'existing vocative peel, so a guest is refused without being called by his name', said);
+  /* A REFUSAL MUST BE FREE. A doorman that paid for a model call to say no would be a doorman
+     a stranger could run a bill up on, and the zero here is the same zero the five obeyed
+     variants carry: the funnel answered above every retrieval either way. */
+  ok(Number(g.lookups || 0) === 0 &&
+     (!Array.isArray(g.citations) || g.citations.length === 0),
+     'and THE REFUSAL COST NOTHING: lookups=' + (g.lookups || 0) + ' and no chips - a no is ' +
+     'not a research question',
+     JSON.stringify({ lookups: g.lookups, citations: (g.citations || []).length }));
+  if (TRACE_LIVE && trace !== null) {
+    const line = trace.split(/\r?\n/).find((l) => /route: fullscreen/.test(l));
+    ok(!!line && /refused/.test(line),
+       'and THE TRACE SAYS SO OUT LOUD, which is where the lookbook’s evidence comes ' +
+       'from: "' + String(line || '').trim().slice(0, 170) + '"',
+       JSON.stringify(String(trace).slice(-400)));
+  }
+
+  /* AND THE REFUSAL DOES NOT LATCH. A gate that refused once and then stayed shut would pass
+     every assertion above and break the deck for its owner - so the boss's own keyboard is
+     tried immediately afterwards, in the same session the guest just spoke into. */
+  step('and the boss, typing, in the very session the guest just spoke into');
+  const after = await post('/chat', { question: 'go full screen', session: GUEST_SESSION });
+  const a = after.body || {};
+  ok(after.status === 200 && a.fullscreen === true && a.fullscreenWant === 'on' && !a.refused,
+     'THE REFUSAL DID NOT LATCH: the same instruction typed is obeyed at once (want=' +
+     (a.fullscreenWant || '-') + ') - the guard is on the TURN, not on the session',
+     JSON.stringify(a).slice(0, 260));
+  return null;
 }
 
 /* ---- THE MANIFEST IS CURRENT, asserted against the live registry rather than against a
@@ -768,7 +1023,19 @@ async function chatRows(page, from) {
 const SPOKEN = MATRIX.filter((r) => !(r.say === 'can you listen to me' && r.ear === false))
   .filter((r) => r.say !== 'what is react')
   .filter((r) => r.say !== 'how do i connect google')
-  .filter((r) => r.say !== 'why is it not connected');
+  .filter((r) => r.say !== 'why is it not connected')
+  /* §29 IS HELD OUT OF THE SPOKEN COLUMN, and the reason is mechanical rather than shy. This
+     column drives ONE headed Chrome whose window size every later measurement in it depends
+     on, and these five sentences are an instruction to change that window: speaking "switch
+     to full screen" into it would put the instrument itself in fullscreen halfway through its
+     own run. The second reason is the budget - two unproven out of thirteen is a number three
+     measured runs produced, and quietly stretching the denominator to nineteen would loosen a
+     threshold without measuring it again.
+     WHAT COVERS THE GAP, so this is a held-out row and not an untested path: the funnel is
+     reached from a REAL SPOKEN TURN in fullscreenDoorman() - sealed from audio by this server,
+     carrying via:'voice' - so the spoken road into the fullscreen route is exercised, and the
+     three spellings the recogniser can produce are covered by the typed variants above. */
+  .filter((r) => !r.wantsFullscreen && !r.noFullscreen);
 
 async function spokenPass() {
   say('\n  ---- SPOKEN: the same sentences, out of the speakers -------------------');
@@ -987,6 +1254,11 @@ ok(TRACE_LIVE, 'the server\u2019s trace is readable, which is where PART A asks 
 
 const typed = TYPED_ONLY || !SPOKEN_ONLY ? await typedPass() : [];
 if (!SPOKEN_ONLY) await capabilitiesAgree();
+/* §29's doorman runs with the TYPED column and not with the spoken one, even though what it
+   proves is about a voice: the guest's turn is sealed from a generated WAV posted over HTTP,
+   so it needs no room, no microphone and no second person - and a claim that can be made at
+   the wire should be made there, where it cannot be lost to a recogniser having a bad minute. */
+if (!SPOKEN_ONLY) await fullscreenDoorman();
 /* THE CHIP COLUMN GOES BEFORE THE SPOKEN ONE and both are sequential, because only one
    headed Chrome can hold its own clicks at a time and the chip pass kills its own headless
    one before returning. TYPED_ONLY keeps it: it is a wire-and-DOM claim, not a room claim. */

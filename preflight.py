@@ -6145,11 +6145,18 @@ def check_world_clock():
     if tuple(server.PROTECTED_CLASSES) != ("confirmation", "meta", "identity", "directive"):
         return FAIL, notes + ["PROTECTED_CLASSES is now %r - the four the mandate named have "
                               "been edited" % (tuple(server.PROTECTED_CLASSES),)]
-    if tuple(server.UNPAID_CLASSES) != tuple(server.PROTECTED_CLASSES) + ("clock",):
-        return FAIL, notes + ["UNPAID_CLASSES is %r; the clock is meant to be tried after all "
-                              "four have declined" % (tuple(server.UNPAID_CLASSES),)]
-    notes.append("the four protected classes are as the mandate wrote them and the clock is "
-                 "tried after them, not among them")
+    # THE TAIL GREW BY ONE IN §29 AND THE PIN IS STILL A PIN. `fullscreen` is a second thing that
+    # costs no lookup and is answered from state, and it stands OUTSIDE the four for the clock's
+    # own reason. What this clause is for is unchanged and is asserted no more loosely: the four
+    # are exactly the mandate's four, in order, and every later route is appended after them
+    # rather than added among them - which is the cheap edit this exists to catch.
+    if tuple(server.UNPAID_CLASSES) != tuple(server.PROTECTED_CLASSES) + ("clock", "fullscreen"):
+        return FAIL, notes + ["UNPAID_CLASSES is %r; the clock and the fullscreen route are "
+                              "meant to be tried after all four have declined, and appended "
+                              "after them rather than mixed in among them"
+                              % (tuple(server.UNPAID_CLASSES),)]
+    notes.append("the four protected classes are as the mandate wrote them, and the clock and "
+                 "§29's fullscreen route are tried after them, not among them")
 
     session = "preflight-30-%d" % int(time.time())
     post_json("/reset", {"session": session}, timeout=30, label="a clean room for 30")
@@ -7332,6 +7339,396 @@ def check_census():
     return PASS, notes
 
 
+def check_borrowed_engines():
+    """38. The borrowed engines are opt-in, and the key is a digest.
+
+    Section 28 puts a second supplier behind four senses - the tongue, the ear, the eyes and
+    the voice - and leaves every default where it was. That is what makes it worth a check of
+    its own: a flag that has quietly become the default looks exactly like a flag that works,
+    and the difference only shows on the day this laptop has no network.
+
+    Five things, each with the failure it exists to catch:
+
+        (a) the four flags in config.json still read bedrock, browser, bedrock, piper. A cloud
+            engine promoted to default is a house that stops answering when the wifi does.
+        (b) nothing is being held away from the file. The engine overrides live in memory, so
+            a harness that flipped one and died has reconfigured this house until a restart
+            that nobody knows is needed.
+        (c) /health describes the key as a length and a digest, and the word "gsk_" appears
+            nowhere in the body. The page reads /health; a key in it is a key in the browser.
+        (d) THE SOURCE AS COMMITTED, read from HEAD rather than from the working tree. A key
+            pasted into a tracked file is in the history forever, and the working tree is
+            exactly where it would have been taken back out of. One WAS found in
+            DEFAULT_CONFIG on 28 Sep 2026 and removed before any commit; this check is what
+            makes that a one-time event rather than a habit.
+        (e) an engine word nobody answers to is refused, and the refusal spends nothing. A
+            flip that is accepted-and-broken is a config file that lies.
+
+    It never flips an engine to groq and never asks Groq anything, so it costs nothing and
+    cannot leave this house pointed at a supplier because a preflight ran.
+    """
+    if not state["up"]:
+        return FAIL, ["skipped: the server is not reachable"]
+    notes = []
+
+    # -- (a) and (b): the flags at rest, read off the running server.
+    status, _, body = http_call("GET", "/health", timeout=30, label="GET /health (engines)")
+    raw = body.decode("utf-8", "replace") if isinstance(body, bytes) else str(body)
+    health = as_json(body) or {}
+    eng = health.get("engines") or {}
+    if status != 200 or not eng:
+        return FAIL, ["/health answered %s with no engines block, so which supplier is behind "
+                      "each sense cannot be read from outside the process at all" % status]
+    served, configured = eng.get("served") or {}, eng.get("configured") or {}
+    wanted = {"chat": "bedrock", "ear": "browser", "vision": "bedrock", "voice": "piper"}
+    wrong = {k: configured.get(k) for k in wanted if configured.get(k) != wanted[k]}
+    if wrong:
+        return FAIL, ["config.json no longer serves today's defaults: %s (wanted %s). Section 28 "
+                      "says the borrowed engines are opt-in; a cloud default is a laptop that "
+                      "stops answering when the network does" % (json.dumps(wrong),
+                                                                json.dumps(wanted))]
+    held = {k: v for k, v in (eng.get("overrides") or {}).items() if v}
+    if held:
+        return FAIL, ["an engine is being held away from config.json: %s. Overrides live in "
+                      "memory, so this survives until a restart and reads as configuration to "
+                      "anybody looking at the file" % json.dumps(held)]
+    if served != configured:
+        return FAIL, ["the serving engines and the file disagree: %s vs %s"
+                      % (json.dumps(served), json.dumps(configured))]
+    notes.append("the four engines read %s, the file agrees field for field, and no override is "
+                 "held" % ", ".join("%s=%s" % (k, served.get(k)) for k in sorted(wanted)))
+
+    # -- (c) the key, as the only two things anybody may say about it.
+    key = eng.get("groqKey") or {}
+    digest = str(key.get("sha256") or "")
+    if key.get("present"):
+        if not re.fullmatch(r"[0-9a-f]{12}", digest) or not isinstance(key.get("length"), int):
+            return FAIL, notes + ["the key is published as %s. A length and a twelve-character "
+                                  "digest are the only two things that may be said about a "
+                                  "credential anywhere in this house" % json.dumps(key)]
+        notes.append("the key is %d characters long with sha256 %s, and that is the whole of "
+                     "what /health says about it" % (key["length"], digest))
+    else:
+        notes.append("no Groq key is configured, so the borrowed engines can only refuse - "
+                     "which is itself the correct behaviour and is checked below")
+    if re.search(r"gsk_[A-Za-z0-9]", raw):
+        return FAIL, notes + ["a Groq key, or the head of one, is in the /health body. The page "
+                              "polls /health, so this is a credential handed to the browser"]
+    notes.append("and \"gsk_\" appears nowhere in the %d bytes the browser is given" % len(raw))
+
+    # -- (d) THE SOURCE, BOTH AS COMMITTED AND AS IT SITS - see the docstring. _proc.run and
+    #    not subprocess.run, because check 21 parses THIS file too and a bare spawn here is a
+    #    console window on the employer's desktop; it caught exactly that on the first run.
+    #
+    #    TWO READS RATHER THAN ONE, and the reason is worth a sentence. §28 asks for this read
+    #    "from HEAD", because a key in a tracked file is in the history forever and taking it
+    #    back out of the working tree does not take it out of a clone somebody already has. But
+    #    HEAD only carries the groq branch once the branch is COMMITTED, and until then a check
+    #    that reads HEAD alone cannot tell "this branch is not written yet" from "this branch
+    #    lost its guard" - it fails identically either way, which is a check that has to be
+    #    argued with rather than read. So: the KEY SEARCH runs against both, and either one
+    #    holding a literal is a failure; the SHAPE is taken from whichever carries the branch,
+    #    and a branch that is only in the working tree is said out loud as a warn.
+    def source(where, argv, path):
+        try:
+            if argv:
+                proc = _proc.run(argv, cwd=ROOT, timeout=45,
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                if proc.returncode != 0 or not proc.stdout:
+                    return None
+                return proc.stdout.decode("utf-8", "replace")
+            with open(path, encoding="utf-8") as handle:
+                return handle.read()
+        except Exception:                                      # noqa: BLE001
+            return None
+
+    head_src = source("HEAD", ["git", "show", "HEAD:server.py"], None)
+    tree_src = source("the working tree", None, os.path.join(ROOT, "server.py"))
+    if tree_src is None:
+        return FAIL, notes + ["server.py could not be read at all, so nothing below was checked"]
+    for where, src in (("HEAD", head_src), ("the working tree", tree_src)):
+        if src is None:
+            continue
+        leaked = re.findall(r"gsk_[A-Za-z0-9]{8,}", src)
+        if leaked:
+            return FAIL, notes + ["%d Groq key literal(s) are in %s of server.py. A key in a "
+                                  "tracked file is in the history forever, and taking it out of "
+                                  "the working tree afterwards does not take it out of the clone "
+                                  "somebody already has" % (len(leaked), where)]
+    if head_src is None:
+        notes.append("WARN: git could not be asked for HEAD:server.py, so only the working tree "
+                     "was searched for a key literal")
+    else:
+        notes.append("and no Groq key literal is in EITHER HEAD or the working tree of "
+                     "server.py, which is the read §28 asks for: the history is the copy that "
+                     "cannot be edited afterwards")
+    # The branch itself, from whichever source has it. HEAD first, because that is the one a
+    # clone gets; the tree second, with a warn, because uncommitted is not the same as absent.
+    src, where, warn = tree_src, "the working tree", True
+    if head_src is not None and '"groq_api_key": ""' in head_src:
+        src, where, warn = head_src, "HEAD", False
+    if '"groq_api_key": ""' not in src:
+        return FAIL, notes + ["DEFAULT_CONFIG in %s of server.py does not carry an EMPTY "
+                              "groq_api_key. That line is source, source is tracked, and it is "
+                              "the exact line a live key was found on once" % where]
+    head_src = src
+    shape = {
+        "one client, at the documented base": "https://api.groq.com/openai/v1",
+        "the chat and vision endpoint": "/chat/completions",
+        "the ear's endpoint": "/audio/transcriptions",
+        "the voice's endpoint": "/audio/speech",
+        "the fallback law": "def turn_engine(",
+        "the four engine words": "ENGINE_WORDS",
+    }
+    missing = [name for name, needle in shape.items() if needle not in head_src]
+    if missing:
+        return FAIL, notes + ["%s of server.py has no %s. The branch this check exists to guard "
+                              "is not there" % (where, "; no ".join(missing))]
+    notes.append("%s of server.py carries the groq branch - one client at %s serving chat and "
+                 "vision by model string, plus /audio/transcriptions and /audio/speech - with an "
+                 "empty key on the DEFAULT_CONFIG line and no key literal anywhere in it"
+                 % (where, shape["one client, at the documented base"]))
+    if warn:
+        notes.append("WARN: that branch is in the working tree and NOT YET IN HEAD, so this "
+                     "check's guard is currently reading uncommitted source. The key search "
+                     "above covered HEAD regardless; it is the shape that is unwitnessed by a "
+                     "commit, and the warn clears itself the moment the branch is committed")
+
+    # -- and config.json is not among the tracked files at all.
+    try:
+        proc = _proc.run(["git", "ls-files", "--error-unmatch", "config.json"],
+                         cwd=ROOT, timeout=30, stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE)
+        if proc.returncode == 0:
+            return FAIL, notes + ["config.json is TRACKED by git. It holds the key itself; the "
+                                  "next commit publishes it"]
+        notes.append("and config.json is untracked, so the only copy of the key is the one on "
+                     "this disk")
+    except Exception:                                          # noqa: BLE001
+        pass
+
+    # -- (e) a word nobody answers to, and the bill for it.
+    before = dict(eng.get("calls") or {})
+    status, _, data = post_json("/engines", {"voice": "gibberish"}, timeout=30,
+                                label="POST /engines (a word nobody answers to)")
+    said = as_json(data) or {}
+    if status != 400:
+        # Put it back before failing: a refusal that was accepted is an engine left flipped.
+        post_json("/engines", {"reset": True}, timeout=30, label="POST /engines (reset)")
+        return FAIL, notes + ["a voice engine called \"gibberish\" was answered %s rather than "
+                              "refused: %s" % (status, json.dumps(said)[:200])]
+    if not re.search(r"piper|orpheus", str(said.get("error") or "")):
+        return FAIL, notes + ["the refusal does not name the words that would have worked (%r), "
+                              "so the boss is told no without being told what to say instead"
+                              % said.get("error")]
+    status, _, body = http_call("GET", "/health", timeout=30, label="GET /health (after)")
+    after = ((as_json(body) or {}).get("engines") or {})
+    if (after.get("calls") or {}) != before:
+        return FAIL, notes + ["the refused flip moved a Groq counter: %s -> %s. One attempt must "
+                              "not include an attempt spent discovering what the word list "
+                              "already knew" % (json.dumps(before), json.dumps(after.get("calls")))]
+    if (after.get("served") or {}) != served:
+        return FAIL, notes + ["the refused flip changed what is serving: %s -> %s"
+                              % (json.dumps(served), json.dumps(after.get("served")))]
+    notes.append("a made-up engine word is refused 400 naming the legal ones, spends nothing on "
+                 "the wire, and leaves all four engines where they were")
+    return PASS, notes
+
+
+def check_the_seam():
+    """39. The surfaces follow the room, and they go first - plus the room asked for in words.
+
+    THE PHOTOGRAPH IS WHY THIS EXISTS. The deck in fullscreen, with two flat dead bands marked
+    down the flanks in green: the viewport grew, the WebGL renderer kept its windowed pixel
+    size, and the composited frame was a windowed galaxy centred in a bigger pane of glass.
+    Measured before anything was edited, exactly one surface had forgotten the event - the
+    graph's renderer, css 1186x706 / store 1779x1059 in BOTH a windowed and a 1280x800 room -
+    while the starfield, the nebula layer and the presence well all followed correctly.
+
+    WHY A SOURCE CHECK AND NOT A BROWSER CHECK. layout_proof proves this properly: it takes the
+    room with a real Ctrl+A, reads the backing store, samples the screenshot's edge columns and
+    has a negative test. It also needs a headed Chrome, nine seconds of settling and a desk
+    whose minimiser is not eating the window - which means it is run deliberately and not on
+    every edit. This check is the cheap guard that runs every time, and it is written to catch
+    the one edit that brings the seam back: DELETING A LINE. So it asserts ORDER in the source,
+    which is the thing the Law is actually about.
+
+      (a) THE SURFACES GO FIRST, in both places the room can change. Inside the fullscreenchange
+          handler, resizeSurfaces() appears BEFORE layout(); in the top-level resize listener,
+          surfaceResize() does. The Law says the governor re-measures only after every drawing
+          surface has been resized, and an order in source is the only form of that claim a
+          check without a browser can make. Failure mode caught: a governor that measures the
+          new room and then the surfaces are resized to it - which looks right in Chrome, where
+          the next frame hides it, and leaves the seam anywhere the resize is treated as
+          optional.
+      (b) THE RESIZE IS THE WHOLE RESIZE. setPixelRatio, setSize, camera.aspect and
+          updateProjectionMatrix, all four inside resizeSurfaces. A setSize() without the
+          pixel ratio is a sharp-cornered blur on this 1.5x desk; a camera whose aspect is not
+          updated stretches the galaxy instead of banding it, which is a subtler wrong than the
+          photograph and would not be marked in green by anybody.
+      (c) A SURFACE THAT CANNOT RESIZE DOES NOT RENDER THAT FRAME. The catch branch pauses the
+          animation and counts the skip. This is the clause of the Law with teeth: the honest
+          behaviour when a surface cannot be resized is to stop painting, not to paint at the
+          old size and hope.
+      (d) THE FIVE PHRASINGS AND THE CONTROL, asked of fullscreen_asked() in process. Three
+          spellings exist in the wild - the on-device ear writes "full screen", the cloud
+          writes "fullscreen", a keyboard writes "full-screen" - and a matcher that only knows
+          the tester's spelling is a feature that works for the tester. The control is the
+          safety: "what is full screen mode?" is a QUESTION about the deck and must stay an
+          ordinary question, which both patterns being ^...$ anchored is what guarantees.
+      (e) THE DOORMAN, four seals and a typed turn. Only the boss fills the room; an enrolled
+          colleague may too; a guest and an unverified voice may not; and a spoken turn with NO
+          seal at all FAILS CLOSED, which is the clause that matters because that is what a
+          missing identification step looks like from here.
+      (f) AND THE REFUSAL IS STORED ADDRESSED AND DELIVERED PEELED. The sentence is kept exactly
+          as the mandate wrote it, with the boss's address form on it, and the existing vocative
+          peel - a DO-NOT-ALTER - takes the name off for anybody who is not him. Asserted
+          because the alternative is a stranger being refused the room while being called by
+          the boss's name.
+
+    IT COSTS NOTHING AND CHANGES NOTHING: no HTTP, no model, no browser. Every clause is either
+    a read of viewer/index.html or a call to a pure function in server.py.
+    """
+    notes, page = [], None
+    try:
+        with open(os.path.join(ROOT, "viewer", "index.html"), "r", encoding="utf-8") as fh:
+            page = _js_source(fh.read())
+    except Exception as exc:                                   # noqa: BLE001
+        return FAIL, ["cannot read viewer/index.html: %s" % exc]
+
+    # -- (a) the order, in both places the room can change.
+    #    Read out of the stripped source, because both of these lines are surrounded by
+    #    paragraphs that name the functions they call - counting the raw file would find
+    #    "layout()" in a comment above the resize and call the order wrong.
+    fs_at = page.find("addEventListener('fullscreenchange'")
+    if fs_at < 0:
+        return FAIL, ["viewer/index.html has no fullscreenchange listener, so nothing in the "
+                      "page reacts to the room changing and the seam cannot be guarded here"]
+    handler = page[fs_at:page.find("});", fs_at) + 3]
+    surf_at, lay_at = handler.find("resizeSurfaces("), handler.find("layout()")
+    if surf_at < 0:
+        return FAIL, ["the fullscreenchange handler does not resize the surfaces at all. This "
+                      "is the photograph: the governor re-measures, the renderer keeps its "
+                      "windowed pixel size, and the flanks go flat"]
+    if lay_at < 0 or surf_at > lay_at:
+        return FAIL, ["the fullscreenchange handler calls layout() BEFORE resizeSurfaces(). "
+                      "The Law is that every drawing surface is resized before the next frame "
+                      "and only then does the governor re-measure; this order measures the new "
+                      "room against surfaces that are still the old size"]
+    res_at = page.find("window.addEventListener('resize'")
+    if res_at < 0:
+        return FAIL, ["viewer/index.html has no top-level resize listener"]
+    rblock = page[res_at:page.find("});", res_at) + 3]
+    if "surfaceResize(" not in rblock:
+        return FAIL, ["the resize listener does not resize the surfaces. Fullscreen is the half "
+                      "the photograph shows; a plain window drag runs through the same renderer "
+                      "and was broken in exactly the same way, which nothing in the picture "
+                      "would have told anybody"]
+    if rblock.find("surfaceResize(") > rblock.find("layout()"):
+        return FAIL, ["the resize listener calls layout() before surfaceResize()"]
+    notes.append("the surfaces go FIRST in both places the room can change: resizeSurfaces() "
+                 "before layout() on fullscreenchange, surfaceResize() before layout() on resize")
+
+    # -- (b) and (c) what the resize actually does, and what it does when it cannot.
+    body = _fn_body(page, "resizeSurfaces")
+    if not body:
+        return FAIL, notes + ["there is no resizeSurfaces() in viewer/index.html to inspect"]
+    needed = {"the pixel ratio": "setPixelRatio(",
+              "the backing store and the CSS box": "setSize(",
+              "the camera's aspect": ".aspect =",
+              "the projection matrix": "updateProjectionMatrix()"}
+    missing = [name for name, needle in needed.items() if needle not in body]
+    if missing:
+        return FAIL, notes + ["resizeSurfaces() never sets %s. A resize that is only half a "
+                              "resize is a blur or a stretch instead of a band, which is a "
+                              "subtler wrong than the one in the photograph and nobody marks "
+                              "it in green" % "; nor ".join(missing)]
+    tail = body[body.find("catch"):] if "catch" in body else ""
+    if "pauseAnimation" not in tail or "surfSkipped" not in body:
+        return FAIL, notes + ["resizeSurfaces() does not pause the animation and count the skip "
+                              "when a surface cannot be resized. \"A surface that cannot resize "
+                              "does not render that frame\" is the clause with teeth: the "
+                              "alternative is compositing a wrong-sized frame and hoping"]
+    notes.append("and the resize is the WHOLE resize - pixel ratio, backing store, CSS box, "
+                 "camera aspect and projection matrix - with a failure pausing the animation "
+                 "rather than compositing a frame at the old size")
+
+    # -- (d) the five phrasings and the control, in process and free.
+    if not hasattr(server, "fullscreen_asked"):
+        return FAIL, notes + ["server.py has no fullscreen_asked(), so the room cannot be asked "
+                              "for in words at all"]
+    wants = {"switch to full screen": "on", "go full screen": "on", "make it full screen": "on",
+             "fill the screen": "on", "exit full screen": "off",
+             "galaxy go fullscreen": "on", "full-screen please": "on",
+             "go back to the window": "off"}
+    wrong = {s: server.fullscreen_asked(s) for s, w in wants.items()
+             if server.fullscreen_asked(s) != w}
+    if wrong:
+        return FAIL, notes + ["the funnel reads %r, and the five the mandate names have to route "
+                              "whichever of the three spellings a recogniser produced" % wrong]
+    controls = ["what is full screen mode?", "what does full screen do",
+                "why is the screen not full", "tell me about the full screen feature"]
+    taken = {s: server.fullscreen_asked(s) for s in controls if server.fullscreen_asked(s)}
+    if taken:
+        return FAIL, notes + ["a QUESTION about full screen was taken as an instruction: %r. Both "
+                              "patterns are ^...$ anchored on the addressless form precisely so "
+                              "the deck can still be asked about itself" % taken]
+    notes.append("%d phrasings route (on/off named, not toggled, so \"exit full screen\" at a "
+                 "windowed deck cannot ENTER), and %d questions ABOUT full screen stay ordinary "
+                 "questions" % (len(wants), len(controls)))
+
+    # -- (e) the doorman. Table rather than prose: the shape of the refusal is the point.
+    if not hasattr(server, "fullscreen_allowed"):
+        return FAIL, notes + ["server.py has no fullscreen_allowed(), so the gate is not a gate"]
+    hands = False
+    try:
+        hands = bool(server.voiceprint is not None and server.voiceprint.has_hands_voice())
+    except Exception:                                          # noqa: BLE001
+        hands = False
+    if not hands:
+        notes.append("no hands-privileged voice is enrolled on this machine, so the gate opens "
+                     "for everyone BY DESIGN - a house that has never been taught a voice "
+                     "cannot prefer one - and the seal table below is not asserted")
+    else:
+        table = [(False, "", True, "typed: the keyboard is his other door"),
+                 (True, "BOSS", True, "spoken by the boss"),
+                 (True, "Priya", True, "spoken by an enrolled colleague, whom the mandate admits"),
+                 (True, "GUEST", False, "spoken by a stranger"),
+                 (True, "UNVERIFIED", False, "spoken, and the doorman could not say who"),
+                 (True, "", False, "spoken with NO seal at all - and this one fails CLOSED")]
+        for spoken, seal, expect, why in table:
+            allowed, refusal = server.fullscreen_allowed(spoken, seal)
+            if bool(allowed) is not expect:
+                return FAIL, notes + ["%s: fullscreen_allowed(spoken=%r, seal=%r) said %r. A "
+                                      "spoken instruction with no established speaker must not "
+                                      "be honoured just because the identification step went "
+                                      "missing" % (why, spoken, seal, allowed)]
+            if not expect and "fills the room" not in str(refusal):
+                return FAIL, notes + ["%s is refused with %r rather than the mandate's own "
+                                      "sentence" % (why, refusal)]
+        notes.append("the doorman admits the boss, an enrolled name and the keyboard, refuses a "
+                     "guest and an unverified voice, and FAILS CLOSED on a spoken turn carrying "
+                     "no seal at all")
+
+    # -- (f) stored addressed, delivered peeled, by the vocative peel that was already there.
+    line = getattr(server, "FULLSCREEN_REFUSAL", "")
+    if "fills the room" not in line:
+        return FAIL, notes + ["FULLSCREEN_REFUSAL is %r, not the sentence the mandate wrote" % line]
+    try:
+        peeled = server.deaddress(line, None)
+    except Exception as exc:                                   # noqa: BLE001
+        return FAIL, notes + ["deaddress() would not peel the refusal: %s" % exc]
+    call = str((server.persona(None) or {}).get("boss_call") or "")
+    if call and call in peeled:
+        return FAIL, notes + ["the refusal still carries the boss's address form after the peel: "
+                              "%r. A stranger being told the room is not theirs must not be "
+                              "called by his name while being told it" % peeled]
+    notes.append("the refusal is stored addressed as the mandate wrote it and arrives peeled for "
+                 "anybody who is not him - %r - and that is the EXISTING vocative peel doing it, "
+                 "with no special case added for this route" % peeled)
+    return PASS, notes
+
+
 CHECKS = [
     ("the server is up and serving the viewer", check_server),
     ("the graph data loads and has nodes", check_graph),
@@ -7381,6 +7778,9 @@ CHECKS = [
      check_his_corpus),
     ("seventeen questions, an answered-state read off the disk, and three refusals",
      check_census),
+    ("the borrowed engines are opt-in, and the key is a digest", check_borrowed_engines),
+    ("the surfaces follow the room and go first, and the room can be asked for in words",
+     check_the_seam),
 ]
 
 

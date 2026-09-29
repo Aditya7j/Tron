@@ -107,6 +107,15 @@ class Page {
     writeFileSync(file, Buffer.from(data, 'base64'));
     return file;
   }
+  /* The same frame as base64 and not written anywhere, for the seam assertion: the plate the
+     boss looks at and the pixels the assertion reads should be the same kind of evidence, and
+     a file on disk that nothing reads back is not evidence, it is a souvenir. */
+  async shotData() {
+    const r = await this.send('Page.captureScreenshot', { format: 'png' });
+    const data = r.result && r.result.data;
+    if (!data) throw new Error('no screenshot came back');
+    return data;
+  }
   close() { try { this.ws.close(); } catch { } }
 }
 const cdp = async (p) => { const r = await fetch(CDP + p); const t = await r.text();
@@ -120,6 +129,37 @@ async function waitFor(page, expr, ms = 8000) {
     await sleep(200);
   }
   return false;
+}
+
+/* ---- THE WINDOW MUST STAY AWAKE, AND THIS IS THE REASON IT IS HERE AT ALL ----
+ *
+ * This harness scored 149/150 twice and then 138-143 four times over, which reads like a
+ * regression and was not one. #brain carries `transition: width .22s`; the governor writes
+ * style.width and the browser ANIMATES to it. Something on this desk minimises a
+ * harness-launched Chrome about two seconds in, a minimised window throttles rAF, and a
+ * throttled 220ms transition takes one to two SECONDS - so a wait of 500ms reads the element
+ * in mid-flight and the pair the harness printed was `style 312px / rect 760px`: the governor
+ * telling the truth and the rectangle not having arrived. Nine of the ten failures were this.
+ *
+ * Restored by BOUNDS ONLY. Page.bringToFront and SetWindowPos(HWND_TOPMOST) both do nothing
+ * for a minimised window, and stealing the foreground back from the employer every two seconds
+ * is worse than a flaky harness. Failure mode this does NOT cover: an occluded but un-minimised
+ * window, which Chrome also throttles - hence the flags on the launch line as well.
+ */
+function keepFront(page, every = 1500) {
+  let puts = 0;
+  const t = setInterval(async () => {
+    try {
+      const { result } = await page.send('Browser.getWindowForTarget');
+      if (result && result.bounds && result.bounds.windowState === 'minimized') {
+        await page.send('Browser.setWindowBounds',
+          { windowId: result.windowId, bounds: { windowState: 'normal' } });
+        puts++;
+      }
+    } catch (e) { /* the run is ending, or this build has no Browser domain */ }
+  }, every);
+  if (t.unref) t.unref();
+  return { stop: () => clearInterval(t), count: () => puts };
 }
 
 /* THE TIDY CARD, measured rather than eyeballed.
@@ -142,6 +182,112 @@ async function waitFor(page, expr, ms = 8000) {
  * the final letter, which is ink-free space the layout engine still measures. One
  * pixel of that is not text outside the card. Ten would be.
  */
+/* ================ §29: the surfaces, the room, and the edge columns ================= */
+
+/* WHAT A FLAT COLUMN IS. Luminance max minus min down a single column of the composited
+   frame. A live starfield has points of light on near-black, so every column of it has a
+   spread in the tens; a band of bare body background has ONE value from top to bottom and a
+   spread of zero. Two is the slack for PNG quantisation and the body's own vertical gradient,
+   and nothing else - it is deliberately far below the smallest real starfield column measured
+   on this page (29) so that the test cannot pass a dead band by being generous. */
+const FLAT_TOL = 2;
+
+/* Every surface, plus the two things that decide whether the numbers mean anything: whether
+   the window is awake, and what the page's own resize counters say. Read as one evaluate so
+   all of it describes the same instant - two evaluates across a resize describe two rooms. */
+const SURF = `(function () {
+  function one(el) {
+    if (!el) return null;
+    var r = el.getBoundingClientRect();
+    return { css: Math.round(r.width) + 'x' + Math.round(r.height),
+             store: el.width + 'x' + el.height };
+  }
+  var s = null, g = null;
+  try { s = window.__galaxy && __galaxy.surfaces; } catch (e) { }
+  try { g = s && s.graph; } catch (e) { }
+  return {
+    vw: innerWidth, vh: innerHeight, dpr: devicePixelRatio,
+    full: !!document.fullscreenElement,
+    vis: document.visibilityState, focus: document.hasFocus(),
+    resizes: s ? s.resizes : null, skipped: s ? s.skipped : null,
+    paused: s ? s.paused : null, why: (s && s.last) ? s.last.why : null,
+    graph: g ? { css: g.css.w + 'x' + g.css.h, store: g.store.w + 'x' + g.store.h,
+                 pixelRatio: g.pixelRatio, aspect: g.aspect } : null,
+    stars: one(document.getElementById('stars')),
+    presence: one(document.getElementById('presence-cvs'))
+  };
+})()`;
+
+/* WHAT THE ROOM DEMANDS OF A SURFACE, derived from the reading itself rather than written down
+   as a constant: css must be innerWidth x innerHeight, and the backing store must be that
+   times the pixel ratio the renderer was given - capped at 2, as the page caps it, because a
+   3x store on a 3x monitor is four times the fill rate for no visible gain. Comparing against
+   a constant would turn every one of these assertions into an assertion about this desk.
+
+   AND WHY THE STORE IS COMPARED WITH A PIXEL OF SLACK. A backing store is an integer grid and
+   innerHeight x devicePixelRatio is not always an integer: this desk runs at dpr 1.5, so a
+   723px window wants 1084.5 rows. Nobody can have half a row. three.js floors it, assigning
+   to canvas.height truncates it, and a differently-arranged library could legitimately round -
+   so an assertion demanding an exact product is an assertion about a rounding mode, and it
+   fails on a page that is behaving perfectly. It failed here first, on 1899x1085-vs-1084, and
+   the page was right. One pixel of slack per axis; a surface that forgot the event is out by
+   HUNDREDS, so nothing real is let through. */
+const STORE_TOL = 1;
+function expected(s) {
+  const pr = Math.min(s.dpr || 1, 2);
+  return { pr: pr, css: s.vw + 'x' + s.vh,
+           store: Math.floor(s.vw * pr) + 'x' + Math.floor(s.vh * pr),
+           w: s.vw * pr, h: s.vh * pr };
+}
+/* "1899x1084" against the exact product, per axis, within the slack above. */
+function storeOk(store, s) {
+  if (!store) return false;
+  const e = expected(s), got = String(store).split('x').map(Number);
+  return got.length === 2 && Math.abs(got[0] - e.w) <= STORE_TOL &&
+         Math.abs(got[1] - e.h) <= STORE_TOL;
+}
+
+/* THE EDGE COLUMNS, decoded by the browser rather than by a PNG decoder written here: the
+   screenshot goes back into the page as a data URL, onto an offscreen canvas, and getImageData
+   answers. Same origin, so nothing taints. The body's own background colour is read too, so
+   "flat band matching the body background" is a comparison and not an adjective. */
+const EDGES = (dataUrl) => `(async function () {
+  var img = new Image();
+  img.src = ${JSON.stringify(dataUrl)};
+  await img.decode();
+  var W = img.naturalWidth, H = img.naturalHeight;
+  var c = document.createElement('canvas'); c.width = W; c.height = H;
+  var g = c.getContext('2d'); g.drawImage(img, 0, 0);
+  function lum(r, gg, b) { return 0.2126 * r + 0.7152 * gg + 0.0722 * b; }
+  function col(x) {
+    var d = g.getImageData(x, 0, 1, H).data, mn = 1e9, mx = -1, sum = 0, n = 0;
+    for (var i = 0; i < d.length; i += 4) {
+      var L = lum(d[i], d[i + 1], d[i + 2]);
+      if (L < mn) mn = L; if (L > mx) mx = L; sum += L; n++;
+    }
+    return { x: x, min: +mn.toFixed(1), max: +mx.toFixed(1),
+             mean: +(sum / n).toFixed(2), spread: +(mx - mn).toFixed(1) };
+  }
+  var bg = getComputedStyle(document.body).backgroundColor.match(/[\\d.]+/g) || [0,0,0];
+  return { W: W, H: H,
+           bodyL: +lum(+bg[0], +bg[1], +bg[2]).toFixed(2),
+           left: [0,1,2,3].map(col),
+           right: [W-4,W-3,W-2,W-1].map(col) };
+})()`;
+
+/* ONE TRUSTED KEYSTROKE. Down then up, with the text on the down only, because a keyup that
+   carries text is a keystroke no keyboard produces and some handlers count it twice. */
+async function key(page, k) {
+  for (const type of ['keyDown', 'keyUp']) {
+    await page.send('Input.dispatchKeyEvent', {
+      type, modifiers: k.modifiers || 0, key: k.key, code: k.code,
+      windowsVirtualKeyCode: k.vk, nativeVirtualKeyCode: k.vk,
+      text: type === 'keyDown' ? k.text : undefined
+    });
+    await sleep(70);
+  }
+}
+
 const TIDY_TOL = 1.5;
 const TIDY = `(function () {
   var card = document.getElementById('focuscard');
@@ -198,8 +344,12 @@ async function main() {
   }
   const profile = mkdtempSync(join(tmpdir(), 'gov-verify-'));
   profiles.push(profile);
+  /* The three throttling flags address OCCLUSION, which is a different thing from the
+     minimise keepFront() undoes, and neither covers the other. */
   procs.push(spawn(exe, ['--remote-debugging-port=' + PORT, '--user-data-dir=' + profile,
-    '--no-first-run', '--no-default-browser-check', '--window-size=' + W + ',' + H, VIEW],
+    '--no-first-run', '--no-default-browser-check', '--window-size=' + W + ',' + H,
+    '--disable-features=CalculateNativeWinOcclusion',
+    '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', VIEW],
     { detached: true, stdio: 'ignore' }));
   for (let i = 0; i < 80; i++) { try { await cdp('/json/version'); break; } catch { await sleep(250); } }
   let target = null;
@@ -212,7 +362,9 @@ async function main() {
   const page = new Page(target.webSocketDebuggerUrl);
   await page.open();
   await page.send('Runtime.enable');
+  await page.send('Page.enable');
   await page.send('Page.bringToFront');
+  const keeper = keepFront(page);
   ok(await waitFor(page, '!!(window.__galaxy && window.__galaxy.layout)', 30000),
      'the viewer is up and exposes the layout governor');
 
@@ -1135,6 +1287,181 @@ async function main() {
   await sleep(900);
   const shut = await page.json('({out:__galaxy.session.desk.out})');
   ok(shut.out === false, 'and aborting closes it at once - no report, no eight seconds');
+
+  /* ---- 6. THE SEAM: every drawing surface follows the room -------------- */
+  /* WHAT THE BOSS PHOTOGRAPHED. In fullscreen the deck grew and the galaxy did not: the WebGL
+     renderer kept its windowed pixel grid and was composited at that size inside a larger
+     glass, leaving flanks the galaxy never reached. Measured before it was fixed - windowed
+     1186x706, fullscreen 1280x800, the graph canvas reading css 1186x706 / store 1779x1059 in
+     BOTH - and the starfield, the nebula and the presence well all followed correctly, so
+     exactly one surface forgot the event.
+     This section is last on purpose: it is the only one that takes the whole screen, and a
+     fullscreen window would invalidate every rectangle the five sections above compare. */
+  note('--- 6. the seam: the surfaces and the room ---');
+  await sleep(600);
+  const win0 = await page.json(SURF);
+  const wantWin = expected(win0);
+  ok(win0.vis === 'visible',
+     'the window is awake before a single pixel is measured: ' + win0.vis +
+     (win0.focus ? ', focused' : ', UNFOCUSED'),
+     'a hidden window throttles rAF, so a canvas read from one lags the room by a whole ' +
+     'stage and reads exactly like a surface that refused to resize. ' + JSON.stringify(win0));
+  ok(!!win0.graph, 'the galaxy has a renderer with a canvas to measure',
+     JSON.stringify(win0));
+  ok(win0.graph && win0.graph.css === wantWin.css && storeOk(win0.graph.store, win0),
+     'WINDOWED, the control: the renderer is css ' + wantWin.css + ' and its backing store is ' +
+     (win0.graph && win0.graph.store) + ' (' + wantWin.css + ' x pixelRatio ' + wantWin.pr +
+     ', within ' + STORE_TOL + 'px of ' + wantWin.w + 'x' + wantWin.h + ')',
+     'failure mode: a renderer that is wrong in the WINDOW too, which would make the ' +
+     'fullscreen assertion below pass by never having been right. ' + JSON.stringify(win0));
+  const platew = await page.shot('full27-windowed.png');
+
+  /* A REAL KEYSTROKE. requestFullscreen demands a user gesture and a call from a debugger
+     carries none: Input.dispatchKeyEvent is trusted, Runtime.evaluate is not. The blur first
+     because Ctrl+A inside a field is select-all and the page is right to leave it alone -
+     that guard is §28's and is not being retested here, only kept out of the way. */
+  await page.evaluate('(document.activeElement && document.activeElement.blur && ' +
+    'document.activeElement !== document.body) ? document.activeElement.blur() : 0');
+  await key(page, { key: 'a', code: 'KeyA', vk: 65, modifiers: 2, text: '\u0001' });
+  ok(await waitFor(page, '!!document.fullscreenElement', 6000),
+     'Ctrl+A took the whole room: document.fullscreenElement is set',
+     'failure mode: Chrome refuses the request when the gesture is stale or the document is ' +
+     'not permitted, and everything below would then be asserting about a window.');
+  /* THREE SECONDS, and not because three is a magic number: the fullscreenchange handler
+     resizes the surfaces synchronously, but the compositor still has to draw a frame at the
+     new size before a screenshot can show one, and the force layout re-centres into the new
+     aspect. A plate taken too early shows an empty starfield and proves nothing. */
+  await sleep(3000);
+  const full = await page.json(SURF);
+  const wantFull = expected(full);
+  note('fullscreen ' + full.vw + 'x' + full.vh + ' dpr ' + full.dpr + ' · graph css ' +
+       (full.graph && full.graph.css) + ' store ' + (full.graph && full.graph.store) +
+       ' · surfaces resized ' + full.resizes + ' skipped ' + full.skipped);
+  ok(full.vw > win0.vw || full.vh > win0.vh,
+     'the room really did grow: ' + win0.vw + 'x' + win0.vh + ' -> ' + full.vw + 'x' + full.vh,
+     'failure mode: a "fullscreen" that is the same size as the window tests nothing at all.');
+  ok(full.graph && full.graph.css === wantFull.css,
+     'THE CSS BOX FOLLOWED: the renderer\'s computed style is ' + wantFull.css +
+     ', which is innerWidth x innerHeight',
+     'failure mode: the canvas is stretched by CSS to fill the glass while its pixel grid ' +
+     'stays small - no flank band, and every star drawn as a fat blurred square instead. ' +
+     JSON.stringify(full.graph));
+  ok(full.graph && storeOk(full.graph.store, full),
+     'AND SO DID THE BACKING STORE: ' + (full.graph && full.graph.store) + ', which is ' +
+     wantFull.css +
+     ' x the pixel ratio ' + wantFull.pr,
+     'failure mode: THE DEFECT ITSELF. This is the assertion the photograph is about - the ' +
+     'store stayed ' + wantWin.store + ' in a ' + full.vw + 'x' + full.vh + ' room. ' +
+     JSON.stringify(full.graph));
+  ok(full.skipped === 0 && full.paused === false,
+     'no surface had to be skipped, so no frame was withheld: resized ' + full.resizes +
+     ', skipped ' + full.skipped,
+     'failure mode: a resize that threw would PAUSE the galaxy rather than composite a ' +
+     'wrong-sized frame - a still galaxy is a visible fault, a wrong-sized one looks ' +
+     'deliberate. A non-zero skipped here means that happened. ' + JSON.stringify(full));
+  const platef = await page.shot('full27-fullscreen.png');
+
+  /* THE SEAM, OUT OF A REAL SCREENSHOT. Everything above is the page's opinion of itself; the
+     photograph is about pixels, and a renderer that was told the right size and drew anyway
+     into the wrong one would pass every assertion above. So the composited frame's own edge
+     columns are read - decoded by the browser, in the page, because there is no PNG decoder
+     here and none is needed. */
+  /* evaluate() and not json(): EDGES is an async IIFE, and json() would wrap the PENDING
+     PROMISE in JSON.stringify and hand back "{}" with every field reading undefined. */
+  const edges = await page.evaluate(EDGES('data:image/png;base64,' + await page.shotData()));
+  note('edge columns · left spread [' + edges.left.map(c => c.spread.toFixed(0)).join(' ') +
+       '] · right spread [' + edges.right.map(c => c.spread.toFixed(0)).join(' ') +
+       '] · body background luminance ' + edges.bodyL.toFixed(1));
+  const flat = [...edges.left, ...edges.right].filter((c) => c.spread < FLAT_TOL);
+  ok(flat.length === 0,
+     'THE FLANKS ARE ALIVE: all eight edge columns carry starfield variance, none is a flat ' +
+     'band of body background (spreads ' + [...edges.left, ...edges.right]
+       .map(c => c.spread.toFixed(0)).join(' ') + ', flat is < ' + FLAT_TOL + ')',
+     'failure mode: a column whose luminance never changes from top to bottom is glass with ' +
+     'nothing drawn on it - the green marks in the photograph. ' + JSON.stringify(flat));
+  ok(edges.W === Math.round(full.vw * Math.min(full.dpr, 2)) || edges.W >= full.vw,
+     'and the frame that was measured is the fullscreen frame: ' + edges.W + 'x' + edges.H,
+     'failure mode: asserting about edge columns of a plate taken before the room changed.');
+
+  /* ---- THE NEGATIVE TEST: does the assertion have teeth? ----
+     An assertion that cannot fail is decoration, so the defect is put BACK, in the only way
+     that reproduces it exactly: the renderer is told the windowed size while the room is
+     still fullscreen, which is bit-for-bit the state the un-hooked build was in. Both limbs
+     of the seam assertion are then re-run against it and what each one says is REPORTED, not
+     assumed - the honest finding of this round is that they do not both catch it. */
+  note('--- the negative test: the defect put back on purpose ---');
+  /* DOCTORED FROM HERE, not by a switch in the page. The canvas's own width/height ARE the
+     backing store, and setting them leaves the renderer's viewport stale - which is exactly
+     what the un-hooked build produced, and it needs no test-only code in the deck. */
+  await page.evaluate('(function(){var cv=document.querySelector("#graph canvas");' +
+    'if(!cv) return "no canvas"; var pr=Math.min(devicePixelRatio||1,2);' +
+    'cv.width=Math.round(' + win0.vw + '*pr); cv.height=Math.round(' + win0.vh + '*pr);' +
+    'cv.style.width="' + win0.vw + 'px"; cv.style.height="' + win0.vh + 'px";' +
+    'return cv.width+"x"+cv.height;})()');
+  await sleep(2200);
+  const brk = await page.json(SURF);
+  const wantBrk = expected(brk);
+  note('doctored: room ' + brk.vw + 'x' + brk.vh + ' · graph css ' +
+       (brk.graph && brk.graph.css) + ' store ' + (brk.graph && brk.graph.store) +
+       ' · it should be ' + wantBrk.store + ' if the surfaces were following');
+  const dimCaught = !!(brk.graph && !storeOk(brk.graph.store, brk));
+  ok(dimCaught,
+     'THE NEGATIVE TEST, first limb: with the defect put back, the backing-store assertion ' +
+     'FAILS as it must - store ' + (brk.graph && brk.graph.store) + ' against a room wanting ' +
+     wantBrk.store,
+     'failure mode: if this limb passes on a doctored build then the assertion above proved ' +
+     'nothing and the fix is unverified. ' + JSON.stringify(brk.graph));
+  const bEdges = await page.evaluate(EDGES('data:image/png;base64,' + await page.shotData()));
+  const bFlat = [...bEdges.left, ...bEdges.right].filter((c) => c.spread < FLAT_TOL);
+  await page.shot('full27-doctored.png');
+  note('doctored edge columns · left spread [' +
+       bEdges.left.map(c => c.spread.toFixed(0)).join(' ') + '] · right spread [' +
+       bEdges.right.map(c => c.spread.toFixed(0)).join(' ') + '] · flat columns ' + bFlat.length);
+  ok(true,
+     'THE NEGATIVE TEST, second limb, REPORTED AND NOT CLAIMED: the flat-band test found ' +
+     bFlat.length + ' of 8 flat columns on the doctored build, so it does ' +
+     (bFlat.length >= 4 ? 'witness' : 'NOT witness') + ' this defect - ' +
+     (bFlat.length >= 4 ? 'both limbs have teeth.'
+       : 'the galaxy is transparent WebGL over a starfield that resizes correctly, so the ' +
+         'flank keeps its stars and loses only the galaxy. The flat-band test is kept because ' +
+         'it catches a surface that stops painting altogether; the backing-store assertion is ' +
+         'the one that catches THIS.'));
+  await page.evaluate('__galaxy.surfaces.run("undo the doctoring")');
+  await sleep(1200);
+  const mended = await page.json(SURF);
+  ok(mended.graph && storeOk(mended.graph.store, mended),
+     'and one resize puts it right again: ' + mended.graph.store,
+     'failure mode: leaving the page doctored would poison the Esc assertions below. ' +
+     JSON.stringify(mended.graph));
+
+  /* ---- ESC, which is the browser's law and not this page's ---- */
+  await key(page, { key: 'Escape', code: 'Escape', vk: 27 });
+  ok(await waitFor(page, '!document.fullscreenElement', 6000),
+     'Escape gave the room back: document.fullscreenElement is null again',
+     'failure mode: no key handler in the page exits fullscreen - if this fails the browser ' +
+     'never released it and the two stores below are asserting about a still-full screen.');
+  await sleep(2200);
+  const back2 = await page.json(SURF);
+  const wantBack = expected(back2);
+  ok(back2.vw === win0.vw && back2.vh === win0.vh,
+     'the window is the size it started: ' + back2.vw + 'x' + back2.vh,
+     JSON.stringify({ before: [win0.vw, win0.vh], after: [back2.vw, back2.vh] }));
+  ok(back2.graph && back2.graph.css === wantBack.css && storeOk(back2.graph.store, back2),
+     'AND BOTH STORES CAME BACK: css ' + wantBack.css + ', backing store ' +
+     (back2.graph && back2.graph.store),
+     'failure mode: resizing UP on the way in and never down on the way out leaves a canvas ' +
+     'larger than its glass - no visible seam, and every frame paying for pixels nobody ' +
+     'sees. ' + JSON.stringify(back2.graph));
+  ok(back2.stars && storeOk(back2.stars.store, back2),
+     'and the starfield came back with it: ' + (back2.stars && back2.stars.store),
+     'failure mode: the 2D layers rebuild on `resize` in seed(); if one stops doing so the ' +
+     'flanks go black for real. ' + JSON.stringify(back2.stars));
+  ok(back2.skipped === 0,
+     'across the whole section not one surface was skipped: ' + back2.resizes + ' resizes',
+     JSON.stringify(back2));
+  note('the plates for the boss: ' + platew + ' · ' + platef + ' · full27-doctored.png');
+  note('the window had to be un-minimised ' + keeper.count() + ' time(s) in this run');
+  keeper.stop();
   page.close();
 }
 

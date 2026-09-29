@@ -5849,6 +5849,382 @@ run of that negative test caught **two holes in the check itself**: the flag's p
 off the muted branch's copy of the same assignment, and one break had been written against an anchor
 that appears in `tonesUp()` as well, so it had been mutating the wrong function all along.
 
+
+### The face, large and of the future · and three rounds lost to a lying instrument
+
+The head before §27 was a luminous fog in the shape of a man. That is not a figure of speech, it
+is a description of the code: the only thing attenuating a point was how far away it sat.
+
+```glsl
+float near = clamp((p.z + 0.62) / 1.45, 0.0, 1.0);   // a fog, and a correct one
+a  *= 0.26 + 0.74 * near;
+sz *= 0.70 + 0.48 * near;
+```
+
+Depth is not shading. That line separates the back of the skull from the front and says **nothing
+about which way a surface faces**, so the lit cheek and the shadowed one came back identical. Three
+terms were added, in the order a painter puts them down — the Lambert for the form, the fresnel for
+the edge that catches whether the key can see it or not, and the rim for the edge the key *can* see,
+which is the same fresnel band multiplied by the Lambert.
+
+```glsl
+vec3 nrm = normalize(rot * (position / uNrmHalf + vec3(0.0, 0.0, 1e-5)));
+float lam  = max(0.0, dot(nrm, uRimDir));
+a *= 0.420 + 0.860 * lam;
+float fres = pow(1.0 - abs(nrm.z), uFresK);
+vR = clamp((uFresGain * fres + uRimGain * fres * lam) * near, 0.0, 1.0);
+sz *= 1.0 + 0.30 * vR;
+```
+
+Two details in there are the whole of it. The normal is estimated from **`position`, not from `p`** —
+by that line `p` has had a lid folded to its crease, a lip rippled and a mandible swung about the ear
+line, and a normal taken off those shades the *animation*: the cheek would change brightness every
+time the jaw opened. And **both edge terms ride `near`**, because without it the occiput catches its
+own fresnel and the head wears a second bright outline one ring outside the first. That was not
+predicted, it was photographed.
+
+### The square grew, and the point count had to go with it
+
+`PRES_W` 300 → **420**, `PRES_MIN` 168 → **192**, the compact floor left at 120. The width was
+measured rather than guessed, because the well is bounded by the **band** between the top-right lane
+and the toast and not by the window:
+
+```
+1280x800 → 319px    1366x768 → 287px    1600x900 → 419px
+1920x1080 → 420px   2560x1440 → 420px   1920x860 → 379px      (345px with a paragraph in the toast)
+```
+
+420px of glass is **1.96×** the area of 300px. Holding per-pixel density outright would have cost
+23,500 points, well over the mandate's 14,000 ceiling, so it is split: **1.15× the count** and 1.96×
+the sprite area through `uScale`, for 2.25× of coverage against 1.96× of glass. `PRES.CAP` is
+**13,800** — 200 points under the ceiling `deck_proof` reads.
+
+`PRES_MIN: 192` was chosen against a *measurement*, and its failure mode is the reason it is not
+higher. At a crowded 1920x860 — note panel open, live session card — the governor leaves 235px. Raise
+the full floor past what a crowded window can supply and the well does not draw a small face, it
+drops through to the compact tier; raise it past 120 as well and it draws **nothing**. The compact
+tier is what makes the whole change safe:
+
+```
+THE COMPACT TIER ENGAGES AT 1600x860: 172px of room, under the 192px full floor and over the 120px
+AND IT IS THE SAME HEAD WITH FEWER POINTS: 6,211 points at 45% density against 13,800 full
+still one object, one material and a real shader at the compact tier
+```
+
+### The instrument was the thing that was broken
+
+This is the part worth writing down, because the code was right for three rounds and I could not
+tell. The plates kept coming back looking the same, so I stopped trusting my eye and wrote a PNG
+decoder to measure them — and then trusted **that** for three rounds while it reported nonsense.
+
+**Round one, a false baseline.** The comparison plate was an old deck screenshot with the card's
+frame and the vignette inside the clip. FORM read 0.81 "before" against 1.24 "after" and I wrote down
+that the shading had reversed the head's gradient. It had not; the two plates had different contents.
+
+**Round two, `reach` was a maximum.** The head was found by centroid and the outer bound by
+`max(distance)`. In a 642px plate with the centroid at (319,337) the corner is 467px away and the
+tool reported 466 — so "a thin annulus just inside the silhouette" was a ring of **pure sky**, and it
+read the same with the rim on as with the rim at zero, which is precisely why the rim looked dead.
+
+**Round three, the sky was in the frame at all.** `#presence` is transparent over the galaxy, so
+every reading had been of a head *plus a starfield*. Hiding `#stars` by name changed nothing — the
+galaxy is not drawn there — so the probe now hides **every canvas except the head's own** and prints
+how many it hid, because a plate that can quietly become a plate of something else will.
+
+**Round four, a circular band on an oval head.** With the sky gone the keyed arc came back holding
+**zero pixels**: the head is a tall narrow oval, half-height ~336px against a half-width nearer 150,
+so a circle at 0.86 of the reach contains the crown and the neck and nothing else. Every band is now
+taken at a fraction of the silhouette radius **for that bearing**, 36 bins, each a 95th percentile so
+one surviving stray cannot push a bearing's edge out into the dark.
+
+And one measurement was retired rather than fixed. *Annulus against interior* reads below 1.0 in every
+attitude of **both** builds — the material is additive with no depth test, so an interior pixel is the
+sum of the front shell, the back shell and whatever feature lies between, while the silhouette is one
+layer. The middle wins on stacking alone. But `uRimDir` is a **key**, not an ambient: it should light
+one arc and leave the opposite arc dark. Edge against edge, both one layer deep, stacking cancels.
+
+### What the A/B actually says
+
+Same probe, same 419px clip, window pinned at 1600x900, head on black, four attitudes. The control is
+the same page with `LAM_LO = LAM_HI = 1.0`, `RIM_GAIN = 0`, `FRESNEL_GAIN = 0` and the old jitter
+restored — so this is the whole §27 shading block against its absence, not one term at a time.
+
+| attitude | FORM (keyed octant ÷ away) | RIM (keyed arc ÷ away arc) | edge hue, blue/red (lower = whiter) |
+|---|---|---|---|
+| yaw −30 | 0.40 → **0.72** | 0.69 → **1.11** | 4.17 → **3.65** |
+| yaw 0 | 0.65 → **0.99** | 0.90 → **1.88** | 4.37 → **3.31** |
+| yaw 30 | 1.79 → **2.09** | 1.07 → **1.75** | 4.26 → **3.54** |
+| yaw 90 | 1.43 → **2.24** | 1.74 → **2.89** | 3.96 → **2.93** |
+
+Twelve readings, twelve in the intended direction, no exception. The rim crosses 1.0 in all four: the
+keyed arc of the silhouette is now brighter than the arc turned away from the key, which it was not
+in any attitude before.
+
+Two things that table does **not** say, and should not be read as saying. FORM stays at or under 1.0
+at yaw −30 and yaw 0 — the anatomy's own bias runs the other way (0.40 and 0.65 unshaded, because the
+brow is sparser than the cheek), so at those attitudes the shading cancels the bias rather than
+reversing it. And the body's blue/red sits at 4.3 where `uTint` is `#7cc4ff`, whose ratio is 2.06:
+this is a raw `ShaderMaterial`, three.js applies no output encoding to it, so the fragment's linear
+values are shown as sRGB and the head renders considerably more saturated than its own constant
+names. Pre-existing, not §27, and named below rather than changed under cover of a shading round.
+
+### The four plates, and the one thing cut
+
+```
+face27-yaw-30.png   turned away from the key: the far cheek falls off, nose and lip still catch
+face27-yaw0.png     full face, the brow and the left cheek leading
+face27-yaw30.png    turned into the key, the strongest form reading of the four
+face27-yaw90.png    profile - the drawn edge from brow to eye to nose tip to lip
+face27-deck.png     the whole glass, the head as the dominant anchor
+```
+
+The profile plate is where the arc metric and the eye part company, and the eye is right. RIM reads
+**2.89** there, but the *drawn edge* the mandate asked for runs brow → nose → lip down the **mid**-left
+of the frame, largely outside an upper-left octant, so the metric is scoring the cranium's outline and
+undersampling the thing it is being credited for. Named because the number is better than it has
+earned.
+
+`#presence-tag` is gone — the small-caps **FACE** under the well. It was useful while the three modes
+were being built and it is instrumentation now: the boss can see that it is a face, and a label naming
+the render mode under his butler's head is what makes a product look like somebody's dashboard. Hidden
+rather than deleted, so the writer keeps its node and no harness gains a null; no harness, preflight
+check or lookbook reads that selector, which was grepped before the CSS was touched.
+
+### Verdicts
+
+```
+deck_proof.mjs    VERIFY 238/238 PASS      solo, headless - baseline was also 238/238
+preflight.py      31 pass, 0 fail, 3 warn  (34 checks; warns are the routine 10, 11, 12)
+_runs/neg34.py    9 of 9 breaks caught, 0 holes in the test itself
+```
+
+| | §27 baseline | after PART 3 |
+|---|---|---|
+| deck_proof | 238/238 PASS | 238/238 PASS |
+| idle galaxy | 60.2 fps | 60.0 fps |
+| deck with the face live | 60.2 fps | 60.1 fps |
+| points · cap | 12,000 · 12,000 | 13,800 · 13,800 (ceiling 14,000) |
+| objects · materials · shader | 1 · 1 · true | 1 · 1 · true |
+| audition | kept — 60 trial vs 39.8 ring | kept — 60.1 trial vs 39.8 ring |
+| crowded 1920x860 | 213px, clear of a 168px floor | 235px, clear of a 192px floor |
+| compact tier | kept — 5,401 pts at 45% | kept — 6,211 pts at 45%, 60.3 vs 60.6 fps |
+
+Check 34 — *the head is large and shaded, and still one object and one allocation* — exists because
+**a GLSL link failure does not throw in this page.** three.js logs the driver's error and draws
+nothing: `presence.shader` stays `true` because that is a test of the material's class, `objects`
+stays 1, and the fps floor is met comfortably because an empty well is cheap. `deck_proof` would go
+238/238 green over a blank square. So the check asserts the shading is *wired* — declared in the
+vertex program, assigned from `PRES.*` rather than from a literal, and read in both programs — and
+`face_probe` captures `Log.entryAdded` and `Runtime.consoleAPICalled` explicitly and reads
+`gl.getError()` off the canvas: `gl {"ctx":true,"err":0}`, 4 console lines, 0 of them about a shader.
+
+
+### The Scribe's own skin · and a ninth jewel the boss's own notes asked for
+
+Every surface on this glass was cyan over blue-black, and so was the minutes panel. That is the
+defect, stated as plainly as it can be: the one panel on the screen that is **not the butler
+thinking but a record of what the room said** looked like another readout of the butler thinking.
+Those are different kinds of claim, and the Scribe privacy law rests on a man being able to tell
+them apart at a glance.
+
+### Dark ledger, not a white sheet
+
+The obvious reading of "log-paper treatment" is a light sheet, and a light sheet 400px wide on a
+near-black deck is a lamp. It would have blown the void's contrast, dragged the eye off the head
+PART 3 had just spent a round making the anchor, and made the toast column beneath it unreadable.
+So it is paper the colour paper goes in a dark room — warm ground, ruled entries, a margin rule,
+a struck seal — and the warmth alone does all the separating that was needed.
+
+```
+--sc-accent  #e9b978    the Scribe's hue, and nothing else on the page uses it
+--sc-ink     #ece3d1    ink on paper, not light on glass
+--sc-rule    rgba(233,185,120,.15)
+--sc-faint   rgba(226,206,176,.5)
+--sc-gutter  62px
+```
+
+Amber is not a taste argument either. The deck's whole vocabulary of *state* is cyan for running,
+green for good, amber and red for attention — and amber was the only warm channel not already
+spoken for by a state. The Scribe is not a state.
+
+### The gutter is a grid, and the reason is a wrap
+
+`scribeAppend()` writes a transcript line as `<p><span class="t">mm:ss</span>then the words</p>` —
+a span and a **bare text node**, with no element around the words to take a margin. Float the
+stamp or margin it and the first visual line looks perfect; the **second** visual line of a long
+utterance wraps back underneath it and the column loses its left edge. Two grid tracks, and a wrap
+stays in its own track. Measured: the long entry wraps to three visual lines, all three starting
+at x=487.
+
+The track is a **fixed length** and that is load-bearing. Every line is its own grid container —
+there is no grid shared across the entries — so the only thing holding the stamps in a column is
+that the first track is the same absolute width in all of them. `min-content` would give each
+line the gutter its own stamp needs and the column would stagger line by line.
+
+62px was measured, and the measurement corrected a claim I had already written down. Every stamp
+in the first probe read `0:00`, because `scribe.startedAt` is set when the panel goes up and the
+fixtures arrive in the same second — so the four-character case was the only one ever exercised
+while the comment in the CSS claimed six. Forced:
+
+```
+0:07      inks 28.1px into 48px of track
+59:59     inks 35.2px into 48px of track
+137:22    inks 42.2px into 48px of track      six characters, which is what 62px was chosen for
+1043:07   inks 49.2px into 48px of track      OVER by 1.2px - clipped, not escaped
+```
+
+`scribeStamp()` does not pad the minutes and never rolls over to hours, so a two-hour meeting
+really does write `137:22`. Seventeen hours overruns by 1.2px, and the guard for that is
+`overflow:hidden` on the stamp — because a **right-aligned** overflow escapes to the *left*, out
+through the panel's padding and onto the glass. That is named rather than hidden.
+
+And the lines that carry no stamp get one track, padded to the same gutter. A note and a refusal
+have no `.t` at all, so under the two-track template their words are auto-placed into the 62px
+stamp column and written straight across the margin rule. Speech, notes and refusals now all begin
+at one left edge; all of them clear the rule at x=477.
+
+### The rule is per entry, and that is a choice against the prettier answer
+
+A `repeating-linear-gradient` at the line pitch is how ruled paper is usually faked, and it is
+wrong here: its pitch is a constant while the text's leading moves with the font that actually
+resolved, with the user's zoom and with any fallback — so it agrees with the text on the machine
+it was tuned on and drifts everywhere else. An **entry** is also the unit a man reading minutes
+counts in. The margin rule is a background on the **scroll box** rather than on the lines, so it
+runs unbroken top to bottom and stays put while the entries move under it: a ledger's margin is a
+property of the sheet, not of the entries.
+
+### The strip gets none of it
+
+This is where a decorative change gets caught, and it nearly was.
+
+```
+7px + 7px of strip padding and a ~13px head        = 27px, under the 34px floor the governor declares
+plus the head's new 1px underline and 8px padding  = 36px   -- over STRIP_H + 1, which layout_proof asserts
+```
+
+`LAYOUT.STRIP_H` is 34 and `layout_proof` asserts the panel measures no more than `STRIP_H + 1`.
+A ruled underline would have broken a published vertical budget. So the underline, its padding and
+the seal are all struck off under `.strip`, and the seal goes for a second reason given in the
+strip's own older note: at 312px with the note panel open, the label already ellipsizes and drops
+its letter-spacing, and 16px of seal plus 10px of gap would come out of the one word on that strip
+that says MINUTES. Measured after: **34px, against a declared 34, at all three viewports.**
+
+### A stray `*/`, and why a probe existed at all
+
+The seal is `#scribepanel .head::before` — a pseudo-element, because `::before` on a flex container
+becomes a flex item, so it cost no markup and gave no harness a new node. It also did not exist for
+the first two runs. A comment I extended had kept its old terminator, so the file read
+`... says MINUTES. */` then more prose then `*/` again, and **the CSS parser silently threw the
+seal rule away**. The page did not complain. The panel looked deliberate. `getComputedStyle` on the
+pseudo-element reported `width: auto` and `background-image: none`, and that is the only reason I
+know — a plate of a seal that is not there is indistinguishable from a plate of a design that has
+no seal.
+
+Two of the six "failures" in that first run were the probe's own: it asserted "two or more
+gradients" against a **120-character excerpt** of the background, which cut the second gradient
+off. A probe that truncates its own evidence reports a red on correct CSS. The count now comes off
+the whole string and only the printed text is a slice.
+
+### The cut, and the cold line
+
+**The fibre is gone, and that is this part's one decorative cut.** It was two
+`repeating-linear-gradient` passes at .014 and .010 alpha standing in for paper grain, and in a
+plate at 2× life size neither of them is visible. Two extra paint layers on a backdrop-filtered
+**scrolling** panel for a texture I could not find with my eye on a screenshot twice life size.
+A texture nobody can see is not subtlety, it is cost. The reasoning that put it there stays
+recorded, because it was the right shape: had grain been wanted it would have remained a gradient
+and never a fetched `.png`, since an image is a request, a cache entry and a thing to forget to
+ship — the no-webfont law's own argument applied to a texture. Check 35 asserts there is no `url()`
+anywhere in this panel.
+
+And one thing the assertions could not have caught, which a plate did. `p.note` took
+`var(--muted)`, the deck's cool blue-grey — correct everywhere else on the glass and, on warm
+paper, the one cold thing on the sheet. The machine's own asides read as pasted in from another
+panel. `--sc-faint` is warm; a note is still visibly not speech, because it is fainter and it is
+unstamped.
+
+### What it costs the head, measured
+
+`#scribepanel` is a child of the toast and the Layout Governor sizes the presence well from what
+the toast **leaves**, so every pixel this skin adds is a pixel off the face. The first cut left the
+head's new underline sitting on top of its old 10px margin — 19px of air where there had been 10,
+with the rule nearer the entries than the label it belongs to. Tightened to a 6px margin over 7px
+of padding, and then both states measured on the same probe with a four-entry ledger at 1600x900:
+
+```
+the panel at pre-PART-5 height    well side 234px
+the panel as shipped              well side 230px       full tier, 38px clear of the 192px floor
+```
+
+**Four pixels.** That is the whole cost, and it is stated as a number because "it is only
+decoration" is exactly the sentence under which a governor's budget gets spent.
+
+### The ninth jewel, and a check earning its keep on live data
+
+`deck_proof` went red mid-session on a clause that had nothing to do with PART 5:
+
+```
+RING COLOUR IS CLUSTER: 8 colours across 9 folders
+```
+
+Between two runs of it, the boss's own words went into `notes/captures/` through the capture path —
+two notes, timestamped 17:12 and 17:22 — and made a **ninth folder**. `colorOf` wraps on
+`PALETTE.length`, so the ninth cluster shared steel blue with the first, and the legend's one
+promise ("a colour in the corner and a colour in the sky are the same claim") broke. The palette's
+own comment had predicted it in those words: *"A ninth cluster wraps round to steel blue."*
+
+This is the check working, and it is worth being plain about what it means, because it will happen
+again: **the palette is a function of his corpus, not of this file.** Every folder he or the Scribe
+creates spends one of these.
+
+`#6BBC57` was chosen the way `#A9609D` was — by measurement, not taste. The eight hues present were
+0, 22, 45.6, 52.2, 163.7, 207.7, 257 and 309.9. Every gap round the wheel was 50° or less except
+one: the **111.5° between chartreuse and teal**, a green hole wide enough for two of any other gap.
+108 sits in it 55.8° from each neighbour — more separation than any hue on the wheel still had. Its
+saturation (43) and lightness (54) are the family's own medians, so it is a leaf and not a lamp:
+`deck_proof`'s sweet ceiling is max > 224 with a spread over 120, and this is 188 with a spread of
+101. Nothing else was touched, and the legend now reads nine folders in nine colours, with
+`2 CAPTURES` in steel blue and `1 UNFILED` in the new green.
+
+### Plates
+
+```
+scribe27-open.png        the ledger open - seal, gutter, margin rule, ruled entries, warm asides
+scribe27-strip.png       the same panel under a gate: one 34px line, no seal, no underline
+scribe27-norules.png     the accidental before-picture: hue and gutter, no rules - kept for the A/B
+scribe27-with-face.png   the whole glass with the head live AND the ledger open
+scribe27-deck.png        the whole glass, ledger open, nine clusters in the legend
+```
+
+### Verdicts
+
+```
+preflight.py            32 pass, 0 fail, 3 warn   (35 checks; warns are the routine 10, 11, 12)
+_runs/neg35.py          11 of 11 breaks caught, 0 holes in the test itself
+_runs/scribe_skin.mjs   VERIFY 27/27 PASS
+layout_proof.mjs        VERIFY 150/150 PASS       the 34px strip law, measured at three viewports
+scribe_proof.mjs        59 checks · 59 pass · 0 fail · PASS
+deck_proof.mjs          VERIFY 238/238 PASS       solo, headless
+```
+
+| | §27 baseline | after PART 5 |
+|---|---|---|
+| preflight | 31 pass, 0 fail, 3 warn (34) | **32 pass, 0 fail, 3 warn (35)** |
+| layout_proof | 150/150 PASS | 150/150 PASS |
+| scribe_proof | 59 pass, 0 fail | 59 pass, 0 fail |
+| deck_proof | 238/238 PASS | 238/238 PASS |
+| the collapsed strip | 34px against a declared 34 | 34px against a declared 34 |
+| presence well, ledger open | 234px (full tier) | 230px (full tier, floor 192) |
+| palette · clusters | 8 jewels · 8 folders | **9 jewels · 9 folders** |
+
+`layout_proof` is **flaky on this machine and it is not PART 5's doing**, which took three runs to
+establish rather than one. It went 144/150, then 140/150, then 150/150 on byte-identical source; it
+drives a **real model** at three viewports and its own comments say so, and the reds move run to
+run except three that turn on whether the answer it got back was long enough to overflow its card
+at all — one run's red read *"the answer is TALLER THAN ITS BOX"* failing, which is the same cause
+seen from the other side. A neutralised build scored 141/150, i.e. worse, which is how the
+suspicion that the skin had caused it was killed. Re-run alone before believing a failure.
+
 ### Left open
 
 - **`SPEAKING` is on the glass twice** — `#status-text` above the input and `#seal-text` inside it,
@@ -5858,3 +6234,711 @@ that appears in `tonesUp()` as well, so it had been mutating the wrong function 
 - **Stray untextured square sprites** appear in the corners of every headless plate, including the
   earlier `deck-*.png` set. They move between frames, which reads like point sprites drawn without a
   GPU rather than anything in the deck; unconfirmed on the employer's own browser.
+- **The outline is untouched.** The mandate asks for the head *resculpted*; what shipped is the
+  volumetrics, the shading, the rim, the fresnel and the size. `PRES_OUTLINE` is still a tall narrow
+  egg with no mandible corner and no zygomatic, and the plates read as an oval mask more than as a
+  skull. The eyes are dim smudges and the lips are two bright arcs that read as drawn-on lines
+  brighter than any modelled surface near them.
+- **The head is rendered in linear values shown as sRGB**, so it is markedly more saturated than
+  `#7cc4ff` names — measured, body blue/red 4.3 against the constant's 2.06.
+- **The stray untextured white squares** are prominent in `face27-deck.png`, larger than the stars
+  and scattered across the whole frame. Carried from §26, still unconfirmed on the employer's own
+  browser.
+- **`READY` is on the glass twice** in the deck plate, `#status-text` and `#seal-text`, as recorded.
+- **`PALETTE.length` is not asserted against the folder count by anything that runs without a
+  browser.** `deck_proof` catches it, but only on a full headless deck run; the next folder the
+  boss creates will red that harness rather than warn in preflight. It belongs with PART 8's
+  *clusters == folders* consistency work and is named here so it is not discovered twice.
+- **With the minutes open, the ledger — not the head — is the dominant object on the glass.** The
+  face is 230px in the upper right and the ledger is a lit 760px rectangle at centre. That may be
+  correct (while a meeting is being recorded, the record arguably should lead) but it is in tension
+  with PART 3's stated aim and it is the boss's eye that settles it, not mine. `scribe27-with-face.png`
+  is the plate to judge it on.
+- **The foot has not been given the skin's full treatment.** `#scribe-draft` took the amber and
+  `.said` took the warm faint, but `#scribe-close` still draws on `var(--muted)` and `var(--line)` —
+  the deck's cool chrome on the Scribe's warm paper. It reads as deliberately secondary, which is
+  arguably right for a Close button, but it was not a decision, it was a thing I did not do.
+- **The seal is a disc, not a device.** It reads as sealing wax and it is the right size and the
+  right hue, but there is no mark struck into it — no monogram, no device. A real seal has one.
+- **Carried from PART 3, unchanged and visible again in `scribe27-with-face.png`:** the head's
+  outline is still a tall egg with no mandible corner, the eyes are dim smudges and the lips two
+  over-bright arcs; `SPEAKING` is on the glass twice, at `#status-text` and `#seal-text`; and the
+  stray untextured white square sprites are still scattered across the frame.
+
+## 28 · Four borrowed engines, one client, and a room that can be made whole
+
+### The research, and where the documentation was wrong
+
+**Chat.** Groq serves an OpenAI-compatible surface at `https://api.groq.com/openai/v1`, so
+`/chat/completions` takes the same body this house already builds for OpenAI and OpenRouter:
+`{model, messages, temperature, max_tokens}`, `Authorization: Bearer <key>`, answer at
+`choices[0].message.content`. The mandate named `llama-3.3-70b-versatile`. **On this account that
+slug is a 404.** A `GET /openai/v1/models` returns eleven models and it is not among them; the
+one this house now defaults to is `qwen/qwen3.8-27b`, spent on a real curl before it was written
+into `DEFAULT_CONFIG`. The failure mode that check exists to catch is specific and ugly: a
+default slug that 404s is a feature that is dead on arrival **and blames the key**, because the
+first thing anybody does with a broken cloud engine is re-read `groq_api_key`.
+
+**Vision.** There is no vision endpoint. An image is a content part on the last user message of
+an ordinary `/chat/completions` call — `{type: "image_url", image_url: {url: "data:image/png;base64,…"}}`
+— which is why one function, `call_groq(cfg, messages, image=None, model=None)`, serves both and
+switches on the model string alone. The mandate named `llama-3.2-90b-vision-preview`; that one
+answers **400, decommissioned**. `qwen/qwen3.8-27b` does chat *and* vision, so the two flags
+point at the same slug today while remaining separate fields — the eyes and the tongue must be
+able to sit on different models, and on this account they merely happen not to. One slug was
+tried and rejected for a subtler reason: `openai/gpt-oss-120b` answers, but it burns tokens into
+a `reasoning` field nobody reads and it **rejects array content**, which is exactly the shape a
+vision call has to send. A model that works for chat and refuses images would have made the two
+flags silently non-interchangeable.
+
+**The ear.** `POST /audio/transcriptions`, `multipart/form-data`, fields `model`,
+`response_format`, `temperature` and a `file` part; `whisper-large-v3-turbo` is real and served.
+Two decisions here have failure modes worth naming. `response_format: "json"` is **asked for out
+loud although it is the documented default**, because a default that changes upstream changes the
+shape this function parses, and `"text"` comes back as a bare string that the JSON branch reads as
+an empty transcript — a silent mis-hearing rather than an error. And the multipart boundary is
+`os.urandom` per call, not a constant: a fixed boundary that happens to occur inside the audio
+bytes truncates the upload at that point, and the symptom is a correct-looking transcription of
+the first two seconds with no error anywhere.
+
+**The voice.** `POST /audio/speech`, `{model, input, voice, response_format}`. The Orpheus English
+slug resolves to **`canopylabs/orpheus-v1-english`**, whose English voices are autumn, diana,
+hannah, austin, daniel and troy; `voice` is a separate config field because the endpoint refuses
+the request without one. `response_format: "wav"` rather than mp3, because the page's Piper FIFO
+already decodes WAV and the entire point of putting Orpheus behind `/say` is that nothing
+downstream of the response changes. The response is checked for a `RIFF` header before it is
+handed on: Groq answers some errors with JSON and **HTTP 200 is not a promise of sound**. Forty-four
+bytes of something is how a page ends up playing silence and reporting success.
+
+### The switch, out loud
+
+```
+> /model groq
+Switched the tongue to Groq — qwen/qwen3.8-27b. It answered "ready" on the way in.
+
+rail:  GROQ · QWEN3.8.27B          (was OPUS 5)
+/health.engines.served.chat = "groq"      configured.chat = "bedrock"
+calls: {"chat": 3 → 4}  — one ping, and nothing else for six seconds across three health reads
+```
+
+A real question, asked immediately after, came back in **1121 ms**:
+
+> *"You expect me to know the capital of France, not from your notes on Noida or prompt
+> engineering, but presumably from general knowledge which I am contractually…"*
+
+`> go back to your normal brain` restores `OPUS 5` in the cell **and** clears the override, so a
+restart and a spoken restore agree; no new Groq row appears in the ledger afterwards. The one
+thing that makes the flip instant is that `served` and `configured` are two different fields:
+nothing is written to `config.json`, so there is no residue to clean up and no file to be honest
+about later.
+
+### The refusal, out loud
+
+With the key blanked in a temporary copy of `config.json`:
+
+```
+> /model groq
+I have no Groq key. That is "groq_api_key" in config.json.     (409, refused: "nokey")
+
+requests to api.groq.com:   0
+attempt counters:           chat 0, vision 0, stt 0
+ledger:                     one row, outcome "failed" — not "fallback", and not nothing
+override after the refusal: empty
+```
+
+Zero requests is the claim, not "one that failed". The check happens in `groq_ready()` **before**
+the client is reached, so no key means no request rather than a 401 spent finding out what
+`config.json` already knew. A 401 from a key that is present but wrong is treated the same way —
+a refusal naming the field, one attempt, no retry — because a wrong key does not become right on
+the second try, and a retry storm on a paid endpoint is a bill that arrives without a question
+being asked.
+
+### The Fallback Law, four times over
+
+| capability | Groq says | serves instead | ledger |
+|---|---|---|---|
+| chat | 429 | bedrock | `fallback`, reason `429` |
+| vision | 429 | bedrock | `fallback`, reason `429` |
+| tts | 429 | Piper — 56 876 bytes of real local audio | `fallback`, reason `429` |
+| stt | 429 | the browser's own ear | `fallback`, reason `429` |
+| all four | timeout | same four, by the other door | `fallback`, reason names the road |
+| all four | 401 | **nothing** — a refusal | `failed`, naming `groq_api_key` |
+
+Exactly once per request, four rows, and **the boss hears one answer — never two and never
+none.** The distinction the table is built on: a 429 or a timeout is a *road*, so the request
+takes the other one; a 401 is a *decision*, so it is reported. A fallback on a 401 would mean a
+wrong key is indistinguishable from a working house engine, and nobody would ever fix it.
+
+### Orpheus speaks, and whisper reads it back
+
+```
+POST /engines {"voice": "orpheus"}   → served.voice = orpheus, model canopylabs/orpheus-v1-english
+POST /say     "The finish window should stay at 900 milliseconds."
+              → 165 190 bytes of RIFF, tts counter +1 exactly, ledger row served "orpheus"
+POST /ear/transcribe  (the same bytes, ear flag still "browser")
+              → refused, naming the flag AND naming who is serving the ear instead
+POST /engines {"ear": "groq"} ; the same bytes again
+              → "The finish window should stay at 900 milliseconds."   in 266 ms
+```
+
+The round trip closes: the words Orpheus was given came back through `whisper-large-v3-turbo`,
+via `/say` and `/ear/transcribe` and nothing bespoke. The refusal in the middle is the more
+interesting line of the two — a cloud ear that transcribes anyway while the flag says `browser`
+is an engine that cannot be turned off.
+
+### Latency, on one fixture
+
+| | idle / house | groq |
+|---|---|---|
+| one chat answer | bedrock, the standing measurement | **1121 ms** (533 ms on a warmer run) |
+| one transcription | the browser's ear, no wire | **266 ms** for 165 190 bytes |
+| one spoken line | Piper, local, no wire | Orpheus, one round trip per chunk |
+
+The honest reading of this table is that Groq is fast enough that latency is not the reason to
+choose between them, and the reason to default to the house engines is therefore not speed — it
+is that **the words leave this machine**, which is what the cyan seal is for.
+
+### The Quiet Tongue runs first, for both voices
+
+```
+in:     This is **important**, sir - the *finish* window.
+spoken: This is important, sir, the finish window.
+```
+
+Asserted where it runs, which is the page: `__galaxy.voice.normalize()` on the string with no
+engine anywhere near it, **and** the chunk rows, where `text` is what was queued and `spoken` is
+what was read out loud. One chunk, one spoken row, not one asterisk in it, and the server's `tts`
+counter moved 5 → 6 on the same line — so the normalized form is what Orpheus was handed. There is
+one funnel; a second engine wired in below the normalizer would be a boss hearing punctuation read
+out, and `call_groq_speech()` deliberately contains no normalization at all rather than a second
+opinion about how to read an em-dash.
+
+### The Full Room · Ctrl+A, and the one keystroke that must not be stolen
+
+| where the focus is | Ctrl+A does | fullscreen | `taken` | `guarded` |
+|---|---|---|---|---|
+| the deck, nothing focused | takes the room | `fullscreenElement` non-null | 1 | 0 |
+| Esc, from fullscreen | the browser's own law | back to null | 1 | 0 |
+| the ask bar, caret in `paris` | selects `paris` | **untouched** | 1 | 1 |
+| a textarea or any contenteditable | select-all | untouched | — | 1 |
+
+Measured with real keystrokes through Chrome's input pipeline, not `requestFullscreen()` from a
+console: the Fullscreen API requires a user gesture, so a proof that called the function directly
+would be testing a different thing than the keystroke. The governor re-measured on both edges —
+`420px` well at `1356×802`, `237px` at `800×600`, and its own record of the viewport matches the
+viewport it was given, because **a re-measure against the old dimensions is worse than none**.
+
+The state syncs on `fullscreenchange` and **never on the keypress**. That is the whole design: a
+browser may refuse the request, and a deck that believed its own keystroke would be a deck holding
+a lie that only Escape could correct.
+
+### Two defects the fixtures found, both mine
+
+**`__galaxy.speech` is the EAR.** The voice surface is `__galaxy.voice`. Nine assertions read
+`speech.served` and `speech.engine`, got `undefined`, and the harness threw at `normalize`. It was
+diagnosed by dumping `Object.keys()` over CDP rather than by grepping harder — two probe surfaces
+whose names are near-synonyms will be confused again, and the fix that matters is that the seal
+now names both.
+
+**"0 chunk(s)" from a page that was working perfectly.** `speakLine()` has three gates: `MUTED`,
+no speech engine at all, and `audioUnlocked` — and the third is Chrome's autoplay policy, which
+`--autoplay-policy=no-user-gesture-required` does **not** satisfy, because `audioUnlocked` is the
+page's own flag, set by a click it believes came from a human. Without it the line is not refused,
+which would have been easy to read: it is **held** as `pendingLine` for the first gesture, so
+`say()` returns false, the chunk log stays empty, and every count below reads a page that is
+patiently waiting rather than one that is broken. `document.body.click()` will not do it;
+`Input.dispatchMouseEvent` will. The same run showed why the assertion had to be rewritten as
+well: `rows.every(…)` on an empty array is `true`, so the line *"not one asterisk reached the
+engine"* had been passing green about text that had never reached an engine either.
+
+### Preflight's thirty-eighth check
+
+One integer: *"the borrowed engines are opt-in, and the key is a digest."* Five parts — the four
+flags read their configured defaults and no override is held; `served == configured`; the key is
+published as an integer length and a twelve-character digest and `gsk_` appears nowhere in the
+bytes the browser is given; the source is searched for a key literal **in HEAD and in the working
+tree both**, with the groq branch's shape (the base URL, the three endpoints, `turn_engine`,
+`ENGINE_WORDS`) read from whichever carries it, and `config.json` asserted untracked; and a
+made-up engine word is refused 400, naming the legal ones, spending nothing and moving nothing.
+
+Two things went wrong writing it, and both are the kind that only a check catches:
+
+- It used `subprocess.run` for its two `git` calls, and **check 21 reads this file too** — two
+  console windows on the employer's desktop, reported by name and line. Every spawn in this house
+  goes through `tools/_proc.run`.
+- It read `HEAD:server.py` alone, as §28 asks. But HEAD only carries the groq branch once the
+  branch is *committed*, so on uncommitted work the check could not tell *"this is not written
+  yet"* from *"this lost its guard"* — it failed identically either way, which is a check that has
+  to be argued with rather than read. The key search now covers both sources, because that is the
+  part §28 actually wants from HEAD: **a key in a tracked file is in the history forever, and
+  taking it out of the working tree afterwards does not take it out of a clone somebody already
+  has.** The shape is read from HEAD when HEAD has it and from the tree with a warn when it does
+  not, and the warn clears itself on the first commit.
+
+### Every standing harness, before and after
+
+Twenty-nine harnesses and preflight, run before a line of §28 was written and again after. **Both
+columns are the solo column** — one harness per invocation, from a foreground shell — because the
+sweep number and the solo number are not the same measurement and comparing across them invents
+regressions that are not there. `_runs/baseline28.md` records why: its sweep put twenty-three
+phantom failures on `conversation_proof` alone. The after-sweep reproduced that signature almost
+exactly (`echo 28/49`, `nudge 12/21`, `layout 138/150`, `tools_live 2/3`) and every one of them
+came back at or above its bar when re-run alone, which is the second time the same instrument fault
+has been mistaken for the page breaking.
+
+| harness | baseline | after | | harness | baseline | after |
+|---|---|---|---|---|---|---|
+| boot_proof | 21/21 | 21/21 | | layout_proof | 149/150 | 149/150 |
+| brain_live | 33, 0 failed | 33, 0 failed | | lock_proof | 78, 9 failed | **78, 0 failed** ▲ |
+| capabilities_proof | 16/16 | 16/16 | | memory_proof | 40/40 | 40/40 |
+| census_proof | 36/44 | 36/44 | | nudge_proof | 21/21 | 21/21 |
+| chain_proof | 78/78 | 78/78 | | persona_proof | 19/19 | 19/19 |
+| clock_proof | 95/95 | 95/95 | | port_proof | 24, 0 failed | 24, 0 failed |
+| connectors_proof | 61/61 | 61/61 | | routing_proof | 80/91 | **89/89** ▲ |
+| console_proof | crash | **30/30** ▲ | | salutation_proof | 26/34 | 26/34 |
+| conversation_proof | 114/114 | 114/114 | | scribe_proof | 59, 0 failed | 59, 0 failed |
+| deck_proof | 241/241 | 241/241 | | session_proof | 75/75 | 75/75 |
+| desk_proof | 44, 0 failed | 44, 0 failed | | speaker_proof | 70/70 | 70/70 |
+| echo_proof | 45/49 | **49/49** ▲ | | tools_live | 62/62 | 62/62 |
+| eyes_live | 56, 0 failed | 56, 0 failed | | voice_proof | 169/169 | 169/169 |
+| focus_probe | 85, 0 failed | 85, 0 failed | | google_hands_proof | 24/24 | 24/24 |
+| followup_proof | 46/47 | **47/47** ▲ | | **preflight** | 37 · 33 pass 4 warn | **38 · 35 pass 3 warn** ▲ |
+
+**Nothing below its bar. Six above it**, and none of the six is a §28 feature — five are the
+baseline's own instrument faults finally measured properly, which means the honest reading of this
+table is *§28 cost nothing*, not *§28 improved five things*:
+
+- `console_proof` crashed at baseline on "the slash did not summon the type-line". It was a
+  detached-shell Chrome with no foreground activation, so the keystroke went nowhere. 30/30.
+- `lock_proof`'s nine failures and `routing_proof`'s eleven were the same class of lie from two
+  different machines: nine from focus, and eleven from **98% MUTED speakers**, which returned
+  `route:` lines for sentences nobody in the room could hear. Unmuted, the eleven trace assertions
+  pass and the run is 89/89 with one sentence left UNPROVEN (`no no cancel that` — declared inside
+  the file's own budget, and a re-run loses a different one). The speakers were **put back to
+  MUTED** afterwards.
+- `echo_proof` 45/49 → 49/49 and `followup_proof` 46/47 → 47/47 are the acoustic-gate and
+  output-reference assertions, which need a room that makes sound.
+- preflight is one check longer *because of* §28, so its ▲ is the only one this mandate earned.
+
+The doorman-ring correction (`viewer/index.html`, the trim bounded by the chunk's **start** rather
+than its arrival) landed after the sweep, deliberately, so that it could not contaminate the table
+above — and then the six harnesses that touch the speaker ring were run again against it:
+`speaker_proof` 70/70 with the ring reading 11 000 ms and 12 000 ms against its 14 000 ms ceiling,
+`scribe_proof` 59 · 0, `voice_proof` 169/169, `conversation_proof` 114/114, `deck_proof` 241/241,
+and `echo_proof` 48/49 then 49/49. That 48 is worth recording rather than hiding: the one failure
+was the echo law's `"stop"`-leaked-out-of-`"I shall stop there"` assertion, which is not one of the
+baseline's four and has no path to the retention ring. A re-run returned 49/49. It was flaky, and
+the way that was settled was to run it again and say so, not to argue from the diff.
+
+**On "byte-identical where untouched"** — the honest version, because `git status` is cheap and an
+assertion about untouched files should be read off it rather than remembered. Five files were edited
+by §28: `server.py` (the one client, the four flags, `/engines`), `preflight.py` (check 38),
+`viewer/index.html` (the doorman ring bound), `console_lookbook.md`, and `config.json`, which is
+untracked and stays that way. Two files are new: `groq_proof.mjs` and `groq_sandbox.py`. Nothing
+else in the tree was edited — but seven more files *are* dirty, and all seven are things the
+harnesses **wrote while proving the rest of this table**: six PNGs that `focus_probe`, `layout_proof`
+and `voice_proof` overwrite on every run by design, and `viewer/graph-data.js`, which the graph
+rebuilds because preflight's check 6 mints a note and then finds it again. There is also one new
+note in `notes/captures/`, captured through the viewer at 00:06 on 29 September, which is the app
+doing its job and not a harness: a real sentence about how its employer wishes to be addressed.
+Running the proofs is not a read-only act, and a claim of "untouched" that quietly excludes their
+output is the kind of tidy sentence this lookbook exists to avoid.
+
+### Verdicts
+
+```
+groq_proof.mjs        VERIFY 106/106 PASS
+preflight.py          38 checks · 35 pass · 0 fail · 3 warn
+```
+
+The three warns are the standing ones: `/model` and `/eyes` with no OpenRouter key configured
+(checks 10 and 12), and the focus check with no Chrome on 9222 (check 11). The baseline carried a
+**fourth** — check 13, the screen watch — and it cleared: at baseline that check returned in 3 ms,
+which is the shape of a check that declined to run, and it now returns in 5 965 ms, which is the
+shape of one that did. Check 38 passes; the WARN inside its notes is the self-clearing one about
+reading an uncommitted branch, and it is a note rather than a verdict.
+
+`groq_proof.mjs` ends in a `finally` that POSTs `/engines {"reset": true}` and then **asserts the
+four defaults**, so a run that dies halfway cannot leave a cloud engine serving. The key was
+searched for in three places afterwards and found in none: `server-trace.log` (661 010 bytes,
+14 792 lines), the engine ledger, and the 3 512 bytes the page itself gets back from its own
+`fetch('/health')`. The only two things said about it anywhere are **56 characters** and
+**sha256 b02fb5c8a51d**.
+
+### Left open
+
+- **The Safety model is reserved for The Scholar.** Groq serves `meta-llama/llama-guard-4-12b` and
+  the `llama-prompt-guard-2` pair on the same client this mandate just built — one base URL, one
+  key, a model string away. It would be a half-hour's work to put a guard in front of the funnel,
+  and that is exactly why it is not being done here: a refusal surface decides what the boss is
+  *not* allowed to ask, and the room already has three authorities on that question — the Gate, the
+  Doorman and the digest-only key law — each of which was argued for on its own page. Wiring a
+  fourth in as a side effect of a provider swap would make a safety policy out of a config default.
+  §28 leaves the slug measured and unused, and leaves the decision to whoever writes The Scholar.
+- **The groq branch is not committed**, so check 38 reads the shape from the working tree and says
+  so in a warn that clears itself on the first commit. Until then, the guarantee that HEAD carries
+  no key is the strong half and the guarantee about the branch's shape is the witnessed-by-nobody
+  half.
+- **`config.json` is in this repository's git history** — untracked now, never purged. The key on
+  this disk should be rotated before the repo is shared with anyone, and that is not something a
+  harness can do.
+- **One sentence in `routing_proof` is UNPROVEN on any given run** (`no no cancel that` on this
+  one). That is the room's recognition and not the funnel's routing, it is inside the budget the
+  file declares, and four runs of the same fixtures have given 2, 6, 10 and 6 soft turns at
+  verified-loud levels. It is a property of this microphone and this desk, not a defect with a fix.
+- **The Orpheus voices were auditioned, not chosen.** Six English voices answer
+  (autumn, diana, hannah, austin, daniel, troy); `voice_engine=orpheus` speaks one line correctly
+  and the Quiet Tongue normalises for it exactly as it does for Piper. Which of the six should be
+  Galaxy's, if any, is a taste question and nobody has been asked it.
+
+---
+
+## 28 · Addendum — the seam in the photograph, and the room asked for out loud
+
+§28 gave the deck a room it could fill, and then a photograph came back from the boss with two
+green marks down the flanks of it. This addendum is what those marks were, what the fix is, and
+what it cost to let the room be asked for in words instead of only with two fingers.
+
+### The photograph, explained — and one correction to its own diagnosis
+
+**The photograph never reached this session.** That has to be the first sentence, because
+everything below is a reproduction from the mandate's *description* of it — flat dead bands down
+both flanks of a fullscreen deck — and not from the image. The way it was reproduced was to
+instrument all four drawing surfaces, enter fullscreen with a real Ctrl+A, and read every
+surface's CSS box and its backing store on both sides of the event. That reading, against HEAD,
+is `_runs/baseline29/seam_probe.before2.txt`:
+
+| surface | windowed | in the 1280×800 room | did it follow? |
+|---|---|---|---|
+| **graph** — the WebGL renderer | css 1186×706 · store 1779×1059 | css 1186×706 · store 1779×1059 | **no** |
+| starfield | css 1186×706 · store 1779×1059 | css 1280×800 · store 1920×1200 | yes |
+| presence | css 287×287 · store 430×430 | css 404×404 · store 606×606 | yes |
+| nebula — a CSS layer, not a canvas | 1186×706 | 1280×800 | yes |
+
+So the paragraph the mandate asks for, in full: **on `fullscreenchange` the viewport grew from
+1186×706 to 1280×800, the Layout Governor re-measured against the new glass, the starfield, the
+presence ring and the nebula all followed it — and exactly one surface did not.** The galaxy's
+`THREE.WebGLRenderer` kept the canvas it had been given at boot, 1186×706 css over a 1779×1059
+store, centred in a room 94px wider and 77px taller, so the galaxy simply stopped existing in a
+47px strip down each flank and a 38px strip top and bottom. The mandate names *"the WebGL
+renderer and the 2D starfield/nebula layers"*; **the 2D layers were already following**, on a
+`resize` listener that predates §29 by a long way, and saying otherwise would have been repeating
+the mandate back rather than measuring the page. One surface, one missing call.
+
+**And the second correction, which matters more, because it is about the proof and not the
+defect.** The mandate's seam test is to sample the screenshot's edge columns and require starfield
+variance rather than *"a flat band matching the body background"*. Run against the doctored
+build — the defect deliberately put back — that test finds **0 of 8 flat columns**, spreads 29 to
+60 against a body background whose luminance is 6.1. It does not witness this defect at all, and
+the reason is the architecture: the galaxy is **transparent WebGL painted over a starfield that
+resizes correctly**, so the flank that loses the galaxy keeps every one of its stars. The boss's
+green marks are the galaxy's *absence* at the flanks, not a dead black band. The flat-band
+assertion is kept — it catches a surface that stops painting altogether, which is a different and
+worse defect — but it is reported as a limb that did not fire, and **the backing-store assertion
+is the one with teeth.** A test that passes on the broken build is not evidence, and presenting it
+as the proof because the mandate named it first would have been the exact kind of tidy sentence
+this lookbook exists to avoid.
+
+### The Law, and the order it puts things in
+
+`resizeSurfaces(why)` is one function, and there is one of it. It is called from three places —
+`'boot'`, the top-level `resize` listener, and the `fullscreenchange` handler — and in both of the
+two places the room can change size it is called **before `layout()`**, because a governor that
+re-measures and then finds the surfaces moving underneath it has measured the previous frame.
+Inside, per renderer: `setPixelRatio(dpr)`, `setSize(innerWidth, innerHeight)`, `camera.aspect`,
+`updateProjectionMatrix()`; per 2D layer, the backing store rebuilt to the new dimensions times
+the ratio. A surface that throws on the way through is caught, counted in `surfSkipped`, and has
+its animation **paused** — which is the mandate's last clause taken literally: *a surface that
+cannot resize does not render that frame*, because a renderer drawing at the wrong size is worse
+than a renderer not drawing.
+
+### The seam assertion, and the negative test that gives it teeth
+
+`layout_proof.mjs` gained a sixth section, headed, driven by a real keystroke — the Fullscreen API
+needs a user gesture, and `Input.dispatchKeyEvent` carries transient activation where
+`Runtime.evaluate` does not, so a proof that called `requestFullscreen()` itself would be testing
+a different thing than the keystroke:
+
+```
+ok   WINDOWED, the control: the renderer is css 1266x723 and its backing store is 1899x1084
+ok   Ctrl+A took the whole room: document.fullscreenElement is set
+note fullscreen 1280x800 dpr 1.5 · graph css 1280x800 store 1920x1200 · surfaces resized 16 skipped 0
+ok   THE CSS BOX FOLLOWED: the renderer's computed style is 1280x800, which is innerWidth x innerHeight
+ok   AND SO DID THE BACKING STORE: 1920x1200, which is 1280x800 x the pixel ratio 1.5
+ok   no surface had to be skipped, so no frame was withheld: resized 16, skipped 0
+ok   THE FLANKS ARE ALIVE: all eight edge columns carry starfield variance (spreads 29 50 29 55 60 59 60 59, flat is < 2)
+note doctored: room 1280x800 · graph css 1266x723 store 1899x1085 · it should be 1920x1200
+ok   THE NEGATIVE TEST, first limb: with the defect put back, the backing-store assertion FAILS as it must
+ok   THE NEGATIVE TEST, second limb, REPORTED AND NOT CLAIMED: 0 of 8 flat columns on the doctored build
+ok   Escape gave the room back: document.fullscreenElement is null again
+ok   AND BOTH STORES CAME BACK: css 1266x723, backing store 1899x1084
+ok   across the whole section not one surface was skipped: 19 resizes
+```
+
+`STORE_TOL` is 1 and that is not sloppiness: three.js floors its drawing-buffer dimensions and a
+canvas `.height =` assignment truncates, so 723 × 1.5 = 1084.5 becomes 1084 in one place and
+1085 in another, and an exact-equality assertion here would be a red about arithmetic rather than
+about the room.
+
+### Preflight's thirty-ninth check, and four builds that had to fail
+
+Check 39 — *"the surfaces follow the room and go first, and the room can be asked for in
+words"* — is a **source** check, not a browser one, and the reason is cost: the assertion above
+needs a headed Chrome and nine seconds of settling, and preflight has to stay something you run
+before every claim. Six clauses: the order in both places; `resizeSurfaces` containing all four of
+`setPixelRatio` / `setSize` / `.aspect =` / `updateProjectionMatrix`; the skip-and-pause tail;
+eight phrasings through `server.fullscreen_asked()` mapping to on/off with four controls returning
+falsy; the doorman table; and the refusal string with its de-addressing.
+
+It earns its integer by being seen to fail, so `_runs/seam_negtest.py` doctors
+`viewer/index.html` four ways — **the line deleted** (the photograph, bit for bit), **the line
+moved below `layout()`** (right code, wrong order, and the order is what the Law is about),
+**`setPixelRatio` dropped** (a resize that is only half a resize: a blur, not a band, which nobody
+would ever mark in green), and **the plain `resize` listener un-hooked** (fullscreen fixed and a
+window drag still broken, which is the half the photograph could never have shown). All four were
+caught, and the file was restored byte-identically — `sha256 e5edacd3b0ba1a37` before and after.
+
+Two things went wrong writing it. The first draft matched its needles on `\n` and found **zero**
+occurrences of a line that is plainly in the file: `viewer/index.html` is **CRLF**, and `open(p,
+'r')` reports LF because Python translates newlines on the way in, so the needle and the haystack
+disagreed about a file they were both reading correctly. The script now spells `NL = "\r\n"` out
+and says why. The second was a **fabricated call** — check 39's first draft read the config
+through `server.load_config()`, which does not exist; the accessor is `server.persona(cfg)`. A
+check that cannot import is a check that fails for the wrong reason, and it was the negative test
+that said so rather than a reading.
+
+### The room, asked for in words
+
+Six new fixtures in `routing_proof.mjs`, typed through the ask bar, which is the same funnel a
+spoken sentence reaches:
+
+| said | route | want | lookups | chips | answer |
+|---|---|---|---|---|---|
+| switch to full screen | `fullscreen` | `on` | 0 | 0 | *"Filling the screen, Addi."* |
+| go full screen | `fullscreen` | `on` | 0 | 0 | *"Filling the screen, Addi."* |
+| make it full screen | `fullscreen` | `on` | 0 | 0 | *"Filling the screen, Addi."* |
+| fill the screen | `fullscreen` | `on` | 0 | 0 | *"Filling the screen, Addi."* |
+| exit full screen | `fullscreen` | `off` | 0 | 0 | *"Back to the window, Addi."* |
+| **what is full screen mode?** | — | *absent* | 1 | 2 | an ordinary answer, with its honest chips |
+
+Four things in that table are load-bearing. **`fill the screen` has neither spelling of the word
+in it**, which is why the matcher is a set of anchored forms and not a substring search.
+**`make it full screen` has a pronoun in it** and no antecedent memory is consulted to resolve it,
+so a cleared antecedent cannot make the room stop obeying. **The want travels as `on` or `off` and
+never as `toggle`**: a blind flip on *"exit full screen"* spoken at a windowed deck would *enter*
+fullscreen, so OFF is asserted as OFF at the wire rather than inferred from a flip — and there is
+still exactly **one path into the Fullscreen API**, which is what keeps the mandate's *"the same
+toggle Ctrl+A calls"* true. And **the control is the whole safety of Part 2**: both instruction
+patterns are `^…$` anchored on the addressless form, so a sentence with a question in front of the
+words never matches, and the deck can still be asked about itself without changing shape.
+
+The route was added to `UNPAID_CLASSES`, which is a documentation-only constant read by preflight
+alone; **`PROTECTED_CLASSES` is still exactly four.** Before §29 all five sentences reached the
+notes door and paid a retrieval to be told *"That particular lever was never fitted to me, sir"*.
+The route sits below the four fixed classes and **above the clock**, deliberately: `worldclock`
+scans for place names, and a town called Fulscreen must never stop the deck obeying.
+
+**The honest limit, and it is in the API rather than in this code.** `requestFullscreen()` needs
+transient user activation. A keystroke carries it; **a `/chat` response does not.** So a spoken
+*enter* can be refused by the browser at the last inch, while a spoken *exit* always works,
+because leaving fullscreen needs no gesture. The server's job is to say `on` truthfully and the
+page's job is to try; neither can manufacture a gesture, and a deck that reported success on the
+strength of its own intent would be holding a lie only Escape could correct — which is the same
+rule §28 wrote about the keypress.
+
+### The Doorman at the fullscreen door
+
+The gate is the voiceprint seal, and it is exercised with **real audio through the real
+endpoint** — five seconds of PCM noise with no larynx in it, fixed seed, posted as a genuine
+speaker turn — so the verdict below is one this server reached, not a word the harness chose for
+itself:
+
+```
+ok   five seconds of audio with no larynx in it is sealed GUEST and issued turn 2
+     he was told: "Only the boss fills the room."
+ok   THE GUEST IS REFUSED AT THE DOORMAN: refused=not-the-boss - and it is the doorman and not an
+     error, because the deck has to keep working for the person in front of it
+ok   AND THE ROOM IS UNTOUCHED: the payload carries fullscreen=false and no fullscreenWant at all,
+     so there is no field the page could act on even if it wanted to
+ok   AND IT IS DE-ADDRESSED FOR A STRANGER: the boss's address form is peeled off by the existing
+     vocative peel, so a guest is refused without being called by his name
+ok   and THE REFUSAL COST NOTHING: lookups=0 and no chips - a no is not a research question
+ok   and THE TRACE SAYS SO OUT LOUD: "route: fullscreen - asked to go on by a voice sealed
+     'GUEST', refused at the doorman; the room is untouched"
+ok   THE REFUSAL DID NOT LATCH: the same instruction typed is obeyed at once (want=on) - the guard
+     is on the TURN, not on the session
+```
+
+The refusal's signature is `fullscreen: false` **with no `fullscreenWant`**, which is a different
+shape from the control's — where the whole field is absent — and both are asserted, because
+"nothing happened" and "a refusal happened" must not be readable as the same payload.
+
+Three disclosures about this section, all of them limits:
+
+- **The NAMED-colleague-allowed case is not proved here.** The Doorman admits BOSS *or* a name;
+  proving the *name* limb in `routing_proof` would need a second person enrolled in the voiceprint
+  store, so it is asserted instead in check 39's in-process table
+  (`(True,"Priya",True)` alongside `(True,"GUEST",False)` and `(True,"",False)` — the last one
+  named *and this one fails CLOSED*). A named colleague deliberately gets **no borrowed address
+  form**: he is obeyed, not called *Addi*.
+- **The gate does not spend the speaker slot, and that non-spend is not observable through this
+  route**, because a spent slot also refuses. It is documented in the harness rather than
+  asserted, which is the honest way round.
+- **§29's six rows are held out of `routing_proof`'s spoken column**, by an explicit filter with
+  its reason written next to it: that column drives one headed Chrome whose window size later
+  measurements depend on, so speaking *"switch to full screen"* would put the instrument itself
+  into fullscreen. The gap it leaves is covered, because `fullscreenDoorman()` reaches the funnel
+  from a real `via:'voice'` turn. The column's declared 2-of-13 recognition budget was also
+  measured over thirteen sentences, not nineteen.
+
+### Plates
+
+`full27-windowed.png` · `full27-fullscreen.png` · `full27-doctored.png` — the third is the one the
+boss should look at next to the second, because it is his photograph reproduced on purpose.
+
+### Every standing harness, before and after
+
+Both columns are the **solo** column — one harness per invocation, from a foreground shell,
+`port_proof` last — because the sweep number and the solo number are not the same measurement.
+`_runs/sweep29.sh` enforces it and names the three laws in its header.
+
+| harness | baseline | after | | harness | baseline | after |
+|---|---|---|---|---|---|---|
+| boot_proof | 21/21 | 21/21 | | layout_proof | 149/150 | **167/168** ▲ |
+| brain_live | 33, 0 failed | 33, 0 failed | | lock_proof | 78, 0 failed | 78, 0 failed |
+| capabilities_proof | 16/16 | 16/16 | | memory_proof | 40/40 | 40/40 |
+| census_proof | 36/44 | 36/44 | | nudge_proof | 21/21 | 21/21 |
+| chain_proof | 78/78 | 78/78 | | persona_proof | 19/19 | 19/19 |
+| clock_proof | 95/95 | 95/95 | | port_proof | 24, 0 failed | 24, 0 failed |
+| connectors_proof | 61/61 | 61/61 | | routing_proof | 89/89 | **84/84 typed** ▲ · spoken **deaf** |
+| console_proof | 30/30 | 30/30 | | salutation_proof | 26/34 | 26/34 |
+| conversation_proof | 114/114 | 114/114 | | scribe_proof | 59, 0 failed | 59, 0 failed |
+| deck_proof | 241/241 | 241/241 | | session_proof | 75/75 | 75/75 |
+| desk_proof | 44, 0 failed | 44, 0 failed | | speaker_proof | 70/70 | 70/70 |
+| echo_proof | 49/49 | 49/49 | | tools_live | 62/62 | 62/62 |
+| eyes_live | 56, 0 failed | **56, 2 failed** ▼ | | voice_proof | 169/169 | 169/169 |
+| focus_probe | 85, 0 failed | 85, 0 failed | | google_hands_proof | 24/24 | 24/24 |
+| followup_proof | 47/47 | 47/47 | | **preflight** | 38 · 35 pass 3 warn | **39 · 36 pass 3 warn** ▲ |
+
+`layout_proof` grew by eighteen assertions and carries the **same single pre-existing failure** on
+both sides — *"and every one of the 0 CONNECTED chips is legible under it"* — which cannot pass
+because `viewer/graph-data.js` holds 24 notes and **0 connections**, so there is no CONNECTED chip
+to be legible. `routing_proof`'s typed column went 60 → 84 against its own HEAD copy run the same
+way, which is exactly the +24 §29 added: five instruction rows × 3, the control × 1, the doorman
+× 8.
+
+**`routing_proof`'s spoken column could not be measured in this room, and the reason is a
+bluetooth headset.** The typed column is 84/84 against its own HEAD copy's 60/60, which is the
+whole of Part 2's proof; the spoken column ran for 913 s, returned **five consecutive UNPROVEN**
+rows — *"the room never carried his words to the funnel in 5 tries"* — and was then killed by the
+sweep's own 900 s timeout, so it produced no verdict line at all. That is reported as a timeout
+rather than dressed up as a number. The cause was measured, not guessed, with two read-only
+probes (`_runs/sweep29/_audio_roles.txt`):
+
+| role | device |
+|---|---|
+| **render, console** | Headphones (trüke BTG Alpha) |
+| **render, communications** | Headphones (trüke BTG Alpha) |
+| capture, console | Microphone Array (Intel Smart Sound Technology) |
+| **capture, communications** | Headset (trüke BTG Alpha) |
+
+`mic_probe.mjs` then played one Piper wave and read both microphones at once: the laptop array
+peaked at **0.113** and the headset at **0.759**. Put together, the room is this: **every sentence
+was played into an earcup lying on a desk.** `tools/mouth.mjs:164` plays through
+`Media.SoundPlayer`, which has no device argument and can only reach the default render endpoint,
+so the mouth had no way to aim at the speakers; the laptop array heard leakage, and Chrome's
+recogniser — which takes the *communications* capture device, i.e. the headset's own mic — heard
+that earcup through echo cancellation and automatic gain. The transcripts it returned say so
+better than any assertion: `""`, `"Char"`, `"I'm ready"`, `"By ¦ Bye"`, `"To use"`. Those are not
+mishearings of *"can you listen to me"*; they are a headset transcribing itself. **The speakers
+were left exactly as found — 100% unmuted — and no default device was changed**, because moving the
+render role needs the undocumented `IPolicyConfig` COM interface, and a wrong vtable offset on the
+audio policy service is not the kind of thing that can be handed back the way a mute can.
+
+**`eyes_live` is the one ▼ and it is not reachable from this diff.** Its two failures are a nudge
+latency of 1342 ms and `{"slouched":false,"headDown":false}` — both of which need a real camera and
+a body in the chair. `grep -c "/chat" eyes_live.mjs` is **0**: it touches only `/focus` and
+`/health`, and §29 changed neither. It failed identically twice.
+
+Five harnesses red-then-green, each for an instrument fault worth recording rather than hiding:
+
+- **`console_proof` crashed** and **`tools_live` gave 2/3**, both on *"the slash did not summon the
+  type-line"* — the §28-documented foreground-activation fault. Solo: 30/30 and 62/62.
+- **`lock_proof` gave three different verdicts in one afternoon**: 78 · 1 (a 1686 ms reading
+  against a 1500 ms budget), then 73 · 12 (focus theft, whose first failure was *"the locked tab is
+  active and focused before we leave it"*), then 78 · 0 with nothing else open. All three are
+  reported rather than argued from the diff.
+- **`scribe_proof` 59 · 58 · 1**, the failure being its privacy law on
+  `say-cache/…wav`. `audioFiles()` (`scribe_proof.mjs:263-281`) excludes `.git`, `__pycache__`,
+  `node_modules` and `.venv` — **not `say-cache/`** — so a line spoken for the first time mints a
+  WAV that its own privacy assertion counts as recorded audio. Warm cache: 59 · 59 · 0. The
+  harness is DO-NOT-ALTER and was left exactly as it stands.
+- **`desk_proof` reported 0 checks and stood down**, which traced to a 1800 s focus session left
+  running by **preflight itself** (`focus: start -> arming`, in `server-trace.log`, immediately
+  after its brain-swap checks) — not by the employer. `POST /focus {"cmd":"abort"}` cleared it and
+  the re-run gave 44 · 0. The stand-down is correct behaviour; the order of the sweep is what was
+  wrong.
+- **`layout_proof` gave 166/168 once**, the extra failure being *"the card is still tidy in the
+  squeezed window: 22 line boxes in, worst overhang 0px"*. The overhang was 0, so the failing
+  conjunct was the line-box **count** — 22 where every other run of the same code, including both
+  HEAD baselines, read 21. It was run again solo and gave 167/168 with 21. It was a reflow flake,
+  and the way that was settled was to run it again and say so.
+
+**On the two providers.** `brain_live` 33 · 0 and `groq_proof` 106/106 both stand at bar, and
+§29's own route was proved on each: with chat flipped to bedrock and then to groq, *"go full
+screen"* and *"exit full screen"* returned **byte-identical** answers at `route=fullscreen,
+lookups=0` — which is the point, since a routed instruction is answered from state and never
+reaches a model. The engines were reset to `{chat:bedrock, ear:browser, vision:bedrock,
+voice:piper}` afterwards.
+
+### Verdicts
+
+```
+layout_proof.mjs      VERIFY 167/168 FAIL   (the one pre-existing CONNECTED-chips failure)
+routing_proof.mjs     VERIFY 84/84 PASS     (TYPED_ONLY=1; HEAD's own copy, run the same way, 60/60)
+routing_proof.mjs     no verdict, rc=124    (the full column: killed at 900 s, 5 spoken UNPROVEN)
+seam_negtest.py       4 of 4 doctored builds were caught by check 39
+preflight.py          39 checks · 36 pass, 0 fail, 3 warn
+```
+
+The three warns are the standing ones: checks 10 and 12 (`/model` and `/eyes` with no OpenRouter
+key) and check 11 (the focus check with no Chrome on 9222).
+
+### Left open
+
+- **The photograph itself was never seen.** Everything above is a reproduction from its
+  description, and the one thing a reproduction cannot confirm is that the boss's green marks are
+  the strip this fix closed rather than some third thing in the same picture. The plates are
+  written so he can settle it in a second.
+- **The flat-band test does not witness the defect it was written for**, and the reason is
+  structural rather than incidental — transparent WebGL over a correctly-resizing starfield. It is
+  kept as a guard against a surface that stops painting, and if a future surface becomes opaque it
+  will start having teeth without anyone touching it.
+- **A spoken *enter* can still be refused for want of user activation.** Nothing in this codebase
+  can fix that; the browser is right and the only complete answer is the keystroke.
+- **`graph-data.js` holds 0 connections**, so `layout_proof`'s CONNECTED-chip legibility assertion
+  cannot pass on this corpus. It is at baseline on both sides and is a property of the data, not
+  of the layout.
+- **`scribe_proof`'s audio walk does not exclude `say-cache/`**, so its privacy law reds on a cold
+  TTS cache. That is a one-word fix in a DO-NOT-ALTER file and is being reported rather than made.
+- **Preflight leaves a 1800 s focus session running**, which makes any `desk_proof` run that
+  follows it stand down. Either preflight should end its own session or the sweep should abort one
+  before `desk_proof`; both are changes to standing files and neither was in scope.
+- **`eyes_live`'s two failures need a camera and a person.** They are unreachable from any diff a
+  keyboard can produce.
+- **The spoken half of `routing_proof` needs the headset out of the room**, and the remedy is two
+  clicks rather than a commit: set the output device to the laptop speakers and the communications
+  input to the microphone array, or simply switch the headset off. Until then every voice harness
+  that plays into the room and listens for itself is measuring an earcup, and the ones that passed
+  today — `voice_proof` 169/169, `echo_proof` 49/49, `conversation_proof` 114/114 — passed because
+  they read the page's own analyser or the fake capture device rather than the room. A cheap guard
+  worth someone's time: have the mouth read the default render endpoint's *name* before the first
+  sentence and refuse to call a spoken run deaf until it has said what it was speaking into.
+- **`config.json` is in this repository's git history** — untracked now, never purged. The key on
+  this disk should be rotated before the repo is shared. Still true, still not something a harness
+  can do.
+- **The phrase "blind-brain assembly law" appears nowhere in this tree or this lookbook.** It was
+  searched for in `server.py`, `preflight.py`, `brain_live.mjs` and every section above. It was
+  read as the brain-assembly path with its five assertions and discharged through `brain_live`
+  (33 · 0), `groq_proof` (106/106) and the two-provider fullscreen probe. If that reading is wrong,
+  the mandate's Part 3 has an obligation still open, and guessing quietly would have hidden it.
