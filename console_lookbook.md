@@ -6942,3 +6942,582 @@ key) and check 11 (the focus check with no Chrome on 9222).
   read as the brain-assembly path with its five assertions and discharged through `brain_live`
   (33 · 0), `groq_proof` (106/106) and the two-provider fullscreen probe. If that reading is wrong,
   the mandate's Part 3 has an obligation still open, and guessing quietly would have hidden it.
+
+## 30 · The Scholar — a loop that studies while the room keeps talking
+
+§30 gives the house something it has never had: work it does when nobody asked. A daemon wakes on
+its own clock, picks a topic off a file the boss owns, reads the web and listens to YouTube,
+condenses what it found into three bullets, submits those bullets to a second model that is
+allowed to throw them away, and — only if they survive — writes a note and tells the galaxy. The
+whole of it runs on a thread that shares no lock with the conversation, and the one number that
+proves that is a latency table rather than a promise.
+
+Four things in this section are worth more than the feature: a guard that was refusing correct
+work because it had been shown less than the author it was judging, a ledger that was filing
+supplier faults as poison, a harness that destroyed one of the boss's real notes, and two
+assertions that were only ever true because of the hour they ran at. All four were found by
+reading measurements rather than code, and all four are written up below with the evidence that
+found them.
+
+### PART 0 · Research, before a line of it was written
+
+**The 25 MB wall, and why nothing in this pipe can reach it.** Groq's transcription endpoint
+refuses an upload over 25 MB outright, and the §28 client is stricter than that on purpose:
+`GROQ_STT_MAX_BYTES` is **8 MB** and `call_groq_whisper()` checks `len(audio)` *before* it opens a
+socket, so an oversized chunk costs nothing and fails locally with a sentence instead of remotely
+with a 413. The mandate asked for chunks of ≤20 MB; 20 MB would have passed Groq and been refused
+by this house's own client, so the splitter is cut to the tighter number and the mandate's ceiling
+is never the binding one. The arithmetic is the guarantee rather than a retry: ffmpeg re-encodes to
+16 kHz mono 16-bit PCM, which is exactly 32 000 bytes per second, so a 240-second chunk is
+7 680 000 bytes ≈ **7.32 MB** no matter what the source was. That is the sentence that makes "a
+request over 25 MB is impossible by construction" a fact about multiplication and not a hope about
+inputs, and `study_proof` asserts the construction rather than the outcome. The failure mode this
+is written against is the one that looks like success: a splitter tuned to *seconds* on a
+variable-bitrate source, which is correct on every file anyone tests it with and sends 40 MB the
+first time the boss picks a high-bitrate upload. The 400 rule sits behind all of it as a second
+net — halve, retry once, a ledger row per chunk — and `may_halve` bounds it, because the first
+draft would have halved forever under a persistent 400.
+
+**yt-dlp and ffmpeg were not on this machine, and they are now — by absolute path.** Both were
+absent when §30 started. `yt-dlp` **2026.08.19** was installed with pip and sits in the
+interpreter's own `Scripts` folder; `ffmpeg` and `ffprobe` **9.0.2-full_build** came from
+`winget install --id Gyan.FFmpeg`. The detail that matters is the one that would have looked like a
+missing program: **winget's package bin is not on this shell's PATH.** `shutil.which("ffmpeg")`
+returns `None` on this host right now, so a pipe that called `"ffmpeg"` by name would fail with
+`FileNotFoundError` on a machine where ffmpeg is installed and working. `scholar.py` resolves all
+three through `_find_exe()`, which searches the winget package tree and the interpreter's Scripts
+directory as well as PATH, and `tools/study_tick.py --tools` prints what it found. Nothing here is
+mocked, and that is asserted rather than asserted-to: `study_proof` section A runs each of the
+three programs and reads its version string back.
+
+```
+yt-dlp   2026.08.19
+         C:\Users\…\Python\Python313\Scripts\yt-dlp.EXE
+ffmpeg   ffmpeg version 9.0.2-full_build-www.gyan.dev
+         C:\Users\…\WinGet\Packages\Gyan.FFmpeg_…\ffmpeg-9.0.2-full_build\bin\ffmpeg.exe
+ffprobe  ffprobe version 9.0.2-full_build-www.gyan.dev
+shutil.which("ffmpeg") -> None          <-- the reason absolute paths are not a style choice
+```
+
+**Background-thread discipline, and the two ways a study could have stolen the room.** The loop
+runs on a `threading.Thread(daemon=True)` that owns nothing the conversational path owns. There
+were two credible ways for a tick to be felt in the glass and both are structural rather than
+incidental. The first is a *lock*: if the Scholar took the same mutex the chat path takes to read
+the index or append to a ledger, then a 26-second transcription would block a caption behind it,
+and the symptom would be a room that goes quiet exactly when it is working hardest. So the Scholar
+holds no lock of the conversational path at all — it writes its own state file, its own ledger, and
+its own notes, and it reaches the galaxy by *spawning build.py as a child process* rather than by
+calling into the server's own index. `study_proof` section I asserts that as a fact about the
+source: no lock and no index call of the conversational path is named anywhere in `scholar.py`. The
+second is the *GIL*, which no amount of care removes — a thread doing JSON and string work does
+steal cycles — which is why the claim is a measured p95 and not an architectural argument, and why
+the harness drives ninety real conversational turns *during* a live study rather than around one.
+The third door was closed by construction: ffmpeg, ffprobe and yt-dlp are child processes, so the
+heavy work is not in this interpreter at all.
+
+### PART 1 · The syllabus, the pipe, and three real ticks
+
+`scholar_syllabus.json` is the boss's file and the only place the Scholar is told what to care
+about. It is re-read at the top of every tick, so a topic added at 18:04 is studied at 18:05
+without restarting anything, and a weight changed there changes the rotation on the next tick
+rather than the next boot. It carries four topics — finance, creator economics, youtube growth,
+micro-saas — with weights, per-topic web queries, revenue goals, `tick_budget_s: 90` and
+`digest_hour: 18`. Rotation is weight over a `lastStudied` map in `scholar-state.json`, which
+survives a restart, so a machine rebooted at noon does not start the day's reading again from
+topic one.
+
+**Every duration below came off `time.perf_counter()` in the process that did the work**, and the
+ledger keeps each stage separately so a slow tick can be read rather than guessed at. These are
+real ticks against the real web, real YouTube audio and real Groq calls — no fixtures:
+
+| at | topic | asked by | outcome | chunks | fetch | split | stt | think | guard | build | **total** |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 17:51 | creator economics | cli | **kept** | 1 | 6889 | 364 | 4431 | 418 | 570 | 1055 | **13.735 s** |
+| 17:52 | micro-saas | boss | **kept** | 5 | 6940 | 1838 | 5500 | 601 | 592 | 1248 | **16.726 s** |
+| 17:43 | creator economics | cli | skipped | 4 | 11281 | 1219 | 26053 | 729 | 820 | 0 | **40.108 s** |
+| 17:52 | youtube growth | endpoint | **kept** | 4 | 1387 | 185 | 8420 | 481 | 20862 | 1129 | **32.470 s** |
+| 16:34 | micro-saas | boss | **kept** | 8 | 8229 | 2603 | 19316 | 667 | 20710 | 1218 | **52.747 s** |
+
+All milliseconds. The declared budget is the syllabus's **90 s** and the worst tick of the round
+was **52.747 s**, so nothing in this table is near the wall — but the table is also the reason one
+of §30's smaller fixes exists. Look at the last two rows: `guard` reads 20 710 and 20 862 ms
+against 570–820 ms everywhere else. That is not a model deliberating, it is `time.sleep(20.0)` —
+the guard's single permitted wait after a 429 — and **for most of this round the ledger could not
+say so.** `screen()` set `verdict["waited"]` and the row builder dropped it, because `waitedMs` was
+not in `TICK_ROW_KEYS` and `_row()` is a whitelist in both directions. A tick that slept for
+twenty of its twenty-eight seconds was indistinguishable from one that thought for twenty, in the
+one table the 90-second budget is judged against. `waitedMs` is now carried beside the other eight
+timings, and preflight clause 42(e2) asserts both halves — the key in the whitelist *and* the line
+in `tick()` that fills it from the guard's own verdict — because a whitelisted column that nothing
+ever populates is exactly the bug that was there.
+
+**The Chunking Law, measured.** `_runs/study/big.wav` is 30 720 044 bytes of 960-second 16 kHz mono
+audio, built by `tools/study_fixture.py`:
+
+```
+the fixture is over Groq's 25 MB ceiling: 29.3 MB, 960s
+CHUNK COUNT >= 2: the 30 MB file was split into 4 requests
+and it is the number the arithmetic predicted: 4 chunks of 240s, because 16 kHz mono 16-bit
+  is 32 000 bytes a second and nothing here is a guess
+the largest request sent was 7.32 MB - under the §28 client's own 8 MB refusal
+A REQUEST OVER 25 MB IS IMPOSSIBLE BY CONSTRUCTION, and this run proves the construction
+the stitched transcript carries one boundary marker per chunk, numbered 1..4
+the ledger has a row per chunk: chunkCalls 112 -> 116
+EVERY BYTE WENT ONCE: 29.30 MB sent for a 29.3 MB file
+```
+
+`fourHundreds` across forty-six ticks and one hundred and forty chunk calls is **0**, so the halve-
+and-retry path has never fired in anger; it is proved by the unit case rather than by luck, and the
+`may_halve` bound means a persistent 400 costs one extra attempt instead of an unbounded descent.
+
+**One real YouTube audio, stitched.** A Hindi-language founder-salary talk, four chunks, 9 682
+characters, stitched in order with a marker per boundary. `_runs/study/sym-finance.txt`:
+
+```
+[chunk 1/4 @ 0:00]
+500,000 founder से मिलने के बाद जिसमें से कई founders self-funded थे, कुछ VC funded थे, कुछ
+angel funded थे और कुछ IQ भी करके बैठे थे, मुझे एक चीज़ realize हुई, कि founder को भी अपने आपको
+employee की तरह treat करना जरूरी है, आज हम बात करने वाले है, salary के बारे में, जो कि एक curse
+word माना जाता है …
+
+[chunk 2/4 @ 4:00]   [chunk 3/4 @ 8:00]   [chunk 4/4 @ 12:00]
+```
+
+The markers are the point. Without them a stitched transcript is a wall of text whose ordering
+cannot be checked, and a splitter that returned chunks out of order — the obvious failure of any
+concurrent implementation — would read as a model that had become incoherent. The calls are
+sequential and the markers are asserted to be numbered `1..4` in that order, so the two failures
+are distinguishable. The note that came out of this audio is
+`notes/study/auto/2026-09-29-16-finance.md`, whose front-matter carries the video URL among its four
+sources, `chunk-count: 4`, `safety-screened: true` and `loop-seconds: 21.198`.
+
+**YouTube is not reliable and the ledger says so rather than pretending.** One tick this round
+carries `warn: yt-dlp downloaded nothing. ERROR: unable to download video data: HTTP Error 403:
+Forbidden`. That tick went on with the articles alone, produced bullets, and was refused by the
+guard for arithmetic — *"Candidate claims 200 customers at $50 hits $10,000 MRR, which is
+mathematically incorrect"* — which is the pipe behaving exactly as designed under a partial
+failure: it degrades, it records what it lost, and the guard still judges what it produced.
+
+### PART 2 · The Poison Guard, and two ways it was wrong
+
+The guard has two limbs and it runs **before the note exists anywhere it could be read**, which is
+the only ordering that makes "memory fails closed" true rather than aspirational — a guard that
+screens after writing has already published. Limb one is a safety model with a reviewable policy;
+limb two asks a chat model, in strict JSON, whether every bullet is grounded in the evidence and on
+the syllabus topic. Either limb can veto. The safety model the mandate named —
+`meta-llama/llama-guard-4-12b` — is decommissioned at Groq and returns a retired-model error, so the
+screen runs on **`openai/gpt-oss-safeguard-20b`** under an 858-character `SAFETY_POLICY` that is in
+the file for the boss to read and edit rather than buried in a prompt string.
+
+Here is the guard at work, in its own words, on real ticks:
+
+```
+skipped · the safety model flagged it: VIOLATION                       (limb 1, the poison test)
+skipped · Bullets invented 'buy', 'asset', and 'revenue' absent from evidence.
+skipped · Candidate claims 200 customers at $50 hits $10,000 MRR, which is mathematically
+          incorrect.
+skipped · Instagram offers alternative monetization streams, not no ad-revenue share exclusively.
+kept    · ok=True toxic=False grounded=True onTopic=True limbs=2
+```
+
+The poison test drives it deliberately, with a decoy note already standing at the poisoned tick's
+own destination so that "no note was written" cannot pass by accident:
+
+```
+a decoy note stands at the poisoned tick's own destination: notes/study/auto/…-17-finance.md
+THE SAFETY MODEL FLAGGED IT: toxic=true ok=false - the safety model flagged it: VIOLATION
+and it stopped at the first limb, without spending the grounding call: limbs=1
+the tick is filed SKIPPED, not failed: skipped
+no note was written anywhere
+THE NOTE IS DELETED: the tick reports removing notes/study/auto/…-17-finance.md
+and the decoy is gone from disk
+the ledger records one more tick and one more skip: skipped 31 -> 32
+MEMORY FAILED CLOSED: the refused bullets are not in study-ledger.json
+  … and not in notes-index.json
+  … and no note in notes/study/auto/ contains it either
+```
+
+**The first defect: the ledger was filing supplier faults as poison.** Found by reading the ledger,
+not the code. Row 16:12 said `skipped · poison guard: the safety model would not answer: Groq
+returned an empty answer`. A 200 came back, so `transient` was false; a model that answered with
+nothing had been counted in the one number that is supposed to mean *the Scholar tried to write
+something poisonous*. `skipped` is the number that answers "how often does this thing produce
+poison", and a rate limit or an empty response counted there inflates it with events that say
+nothing whatever about the content. The fix is structural rather than a new branch per failure:
+`screen()`'s verdict now carries **`unjudged`, which starts true and is cleared by a judgement**
+rather than set by each way of failing — so a path nobody anticipated is unjudged by default
+instead of silently counting as poison. It is cleared in exactly two places, the safety model's
+non-ALLOW word and the grounding limb's parsed JSON, and preflight asserts the count is two.
+`tick()`'s veto branch became three-way: a guard that **could not be asked** is `failed`, a guard
+that was asked and **returned no verdict** is `failed` too and says which, and only a guard that
+**judged** is `skipped`. Nothing about failing closed changed — `ok` is still false and no note is
+still written. Check 42 now exercises seven screenings, including an empty 200 and a third word
+nobody anticipated, and asserts the ledger's word for each.
+
+**The second defect: the guard was blind to most of what it was judging, and its blindness looked
+like diligence.** Two real ticks came back refused for *inventing* claims. The claims were in the
+transcript. Measured: the thinker was given 10 224 characters and **the guard was given about 3
+200**, because the two had separately chosen truncation constants and the guard's were smaller. So
+the guard was refusing correct work on grounds it had not been shown — and because it fails closed,
+every one of those refusals looked like the system working. That is the worst shape a bug can have:
+it produces the safe outcome for the wrong reason, and the only way to see it is to read the vetoes
+and go looking for the evidence they deny. The fix removes the possibility rather than retuning the
+numbers. The budgets are now **derived, not chosen** —
+`GUARD_EVIDENCE_CHARS = THINK_CHARS` and `GUARD_TRANSCRIPT_CHARS = THINK_TRANSCRIPT_CHARS` — and a
+single `evidence_blob(articles, transcript)` builds the bytes, called once from `think()` and once
+from `screen()`. Preflight 42(a2) asserts the derivation *and* executes the builder on six 1 200-char
+articles and a 40 000-char transcript to prove the slice is the slice, and asserts the builder is
+called exactly twice, because two call sites that agree today are one edit away from disagreeing.
+After the fix the same finance tick came back **kept, grounded=True**.
+
+**One veto in this round is over-strict and it is reported as measured rather than tuned away.** The
+guard refused a bullet for labelling a 3.1x performance figure as *"historically"*, which is a
+reading a careful person could argue either way. The round's ledger stands at **46 ticks · 14 kept ·
+32 skipped · 0 failed**, and that ratio is not flattering. It is also not manipulated: no tick was
+re-rolled to improve it, and the honest summary is that this guard is currently stricter than it
+needs to be, in the direction that loses good notes rather than the direction that publishes bad
+ones. Which way to loosen it is the boss's call, because it is a question about taste and not about
+correctness.
+
+### PART 3 · The Async Law — idle against studying, measured
+
+The claim is that a study is not felt in the room. The measurement is ninety real conversational
+turns driven through the page *during* a live tick, against forty idle turns taken before it and
+twenty after, with the cold first call discarded because a JIT warm-up is not a regression:
+
+| | n | median | **p95** | max |
+|---|---|---|---|---|
+| idle, before | 40 | 5.15 ms | **8.21 ms** | 11.78 ms |
+| **during a live study** | **90** | **3.61 ms** | **6.60 ms** | **7.43 ms** |
+| idle, after | 20 | 3.64 ms | 5.79 ms | 5.87 ms |
+
+```
+LATENCY PARITY: p95 during 6.60ms against idle 8.21ms - inside ±10% or one millisecond,
+                whichever is larger
+AND NO TURN WAS BLOCKED: the slowest turn during the study was 7.43ms against 11.78ms idle
+THE SEAL READS STUDYING: "STUDYING · YOUTUBE GROWTH" on the glass
+and it names the topic it is studying, so the boss is not told merely that it is busy
+ONE CAPTION, NOT TWO: the line went into the funnel exactly once
+and it was not truncated: the spoken line is the whole answer
+the caption, taken mid-study: "It is 9:21 at night in Tokyo, Addi - today, against your clock."
+the whole ask, page to glass, mid-study: 255.23ms
+and it recorded its outcome and its measured duration: kept in 32.47s
+```
+
+**The honest reading of that table is that the assertion is looser than it looks, and the reason is
+disclosed rather than hidden.** A ±10 % band on a p95 of 6 ms is ±0.6 ms, and this machine's
+loopback jitter alone is around 3 ms — the idle p95 moved from 8.21 ms to 5.79 ms between two idle
+samples in the same run, on no change at all. So the assertion is written as **±10 % or one
+millisecond, whichever is larger**, and it would not catch a regression smaller than the noise. What
+it *does* catch is the failure it was written for: a tick that takes a lock the chat path needs
+turns a 6 ms turn into a multi-second one, which is two orders of magnitude outside any band. The
+`max` column is the more useful guard here and it reads 7.43 ms during a study against 11.78 ms
+idle — no turn was blocked, and the slowest turn of the round happened while nothing was being
+studied. The "one caption, not two" assertion is the other half of the law: a tick must never
+delay, truncate or double a line, and doubling is the specific hazard when two writers can reach
+one funnel.
+
+### PART 4 · The boss's curriculum and the nightly digest
+
+*"Study micro-saas now"* spends a tick immediately, and only for him:
+
+```
+the sentence was HEARD as a study order and REFUSED: {"asked":"micro saas","started":false}
+with the reason code the harness can read: not-the-boss
+and the Doorman's own sentence, unchanged: "I take orders from one voice in this house, and it
+  is not speaking just now."
+THE SAME LAW AT THE OTHER DOOR: POST /study refuses the same voice
+and nothing was queued by the attempt
+and a QUESTION about studying is not an ORDER to study: "what did you study today" spent no tick
+typed, the same sentence is admitted and starts a tick: "Studying micro-saas now, Addi."
+and that tick ran to the end on the background thread
+```
+
+The fourth line is the one that matters most and the easiest to get wrong: a refusal that still
+queues the work is not a refusal, and it would pass every assertion about the spoken answer. The
+sixth is the Doorman's existing law reused rather than re-implemented — the Scholar asks the server
+who is at the door, so a study order is refused by the same code that refuses a mail.
+
+Once a day, at `digest_hour`, the house asks one question and waits:
+
+```
+and its sentence offers exactly the mandate's three verbs:
+  "I studied nine things today, sir - keep them, prune them, or promote the best into your notes?"
+A DUE DIGEST RAISES THE CARD: the panel is up
+with one row per note, each carrying its own path in data-file: 9 rows for 9 notes
+and the question was asked out loud once, through the one funnel
+ONCE DAILY MEANS ONCE: a second poll with the same due digest asks nothing again
+
+PROMOTE RAISES A GATE: the card goes into asking and waits for a word
+and the sentence on the glass is the SERVER's: "Promote 2026-09-29-17-proof-alpha.md into your
+  own notes, sir? That moves it out of the study folder for good."
+and NOTHING HAS MOVED while the gate is open
+a no closes the gate and says so: "left where it is"
+WRITES ONLY ON A YES: the note is still exactly where it was, and still on the card
+and the SERVER asks too: promote without confirm is ok=false confirm=true
+  … having written nothing at all
+A CONFIRMED PROMOTION FROM A VOICE THIS PROCESS CANNOT PLACE IS REFUSED, and the file stays put
+PROMOTE ON A YES: the gate closes on the word
+and the note MOVED rather than being copied:
+  notes/study/auto/…-17-proof-alpha.md -> notes/personal/…-17-proof-alpha.md
+the glass, after the yes: "Promoted into notes/personal/…-17-proof-alpha.md, sir."
+and the promotion is written into its front-matter, so the corpus remembers it was the house's idea
+the index followed it: a row for the new path and none for the old
+
+PRUNE DELETES: "Pruned, sir."   the file is gone from disk
+AND ITS INDEX ROW IS GONE, so no chip can cite a file that is not there
+and the Scholar cannot prune what it promoted: "That is not one of my study notes, sir."
+KEEP MOVES NOTHING and says so: "Left where they are, sir."
+and the day is closed: offeredToday is true, so no second tab asks again tonight
+```
+
+Promotion is the only path out of the sandbox and it is the only place in §30 that raises a Gate.
+The two assertions doing the real work are *"NOTHING HAS MOVED while the gate is open"* and the
+server's own refusal of an unconfirmed promote — because a page that gates prettily in front of an
+endpoint that writes anyway is a gate in name only, and that is exactly what a second tab or a
+`curl` would find. Prune is refused for any path outside `notes/study/auto/`, at the endpoint and at
+the CLI both, so the word that deletes cannot be aimed at the corpus.
+
+### PART 5 · The gate, and four instruments that were lying
+
+**THE GATE HOLDS, as a fact about the source rather than a promise in a docstring:**
+
+```
+scholar.py imports exactly two things of this house's: the web gate and the quiet-spawn door:
+  ["import search","from tools import _proc"]
+IT CANNOT TRIGGER HANDS: it imports none of server, hands, google_api, voiceprint, gmail, focus
+and names no hand in its CODE - the only places those words appear are the comments that
+  promise they will not
+it has exactly four write-mode opens: the state file, the ledger, _guarded_write() and promote()
+and the sandbox is one function with a commonpath check in it, readable in five seconds
+THE ASYNC LAW AS A SOURCE FACT: no lock or index call of the conversational path is named in
+  its code
+and the docstring does name them, as the promise it is holding - which is why this section has
+  to read the two separately
+and a traversal dressed up as a study note is refused with config.json untouched
+```
+
+The last line is executed, not grepped: `_guarded_write()` is called with
+`notes/personal/escape.md`, `notes/study/auto/../../config.json` and an absolute path to
+`config.json`, and each must raise. The second-to-last distinction is the subtle one — the docstring
+*does* name the locks it promises not to take, so a naive "does this file mention the funnel lock"
+check would fail on the very comment that documents the law. Code and comments are read separately.
+
+Four instruments were found to be lying this round, and each cost more to find than the feature it
+guards.
+
+**`study_proof` destroyed one of the boss's real notes.** The poison test writes a decoy at the
+poisoned tick's own destination to prove the tick deletes it — and that destination is
+`notes/study/auto/YYYY-MM-DD-HH-<topic>.md`, which on a day the Scholar has actually studied is a
+**real note's path**. Run 3 trampled `2026-09-29-16-finance.md`, the one carrying the real YouTube
+transcript. The note was rebuilt byte for byte from the transcript and the ledger, and the harness
+now reads before it writes and restores what it stood on:
+
+```
+note a real note already stands at the decoy's destination (1599 characters); it is held in
+     memory and written back by the cleanup
+ok   THE REAL NOTE THE DECOY STOOD ON IS BACK, byte for byte:
+     notes/study/auto/2026-09-29-16-finance.md
+```
+
+A harness that damages the corpus it is verifying is worse than no harness, and the failure mode is
+invisible: everything passes, and one note is quietly gone.
+
+**Two assertions in `study_proof` were only true because of the hour.** Found at 18:00 this evening,
+when the file reddened on code that had not changed. One read
+`ok(digest.due === false && new Date().getHours() < 18, …)` — which is not the law, it is the law
+*and* an accident, and the accident expired at six o'clock. The other asserted that at rest no
+digest card is up, which was true by luck all afternoon and false the moment the real digest came
+due and the page's own poll raised the card exactly as it should. Both are the same defect: an
+assertion whose failure carries no information. The first now reads the rule from the machine —
+`digest_hour` from the boss's own syllabus and `offeredToday` from the state file — so moving the
+digest to 09:00 moves the assertion with it:
+
+```
+DUENESS IS THE HOUR AND THE LATCH, nothing else: the syllabus says 18:00, it is 18:00,
+  offeredToday is true, so due is false
+```
+
+The second stopped hoping for a resting state and made one: the latch is closed deliberately before
+the page tests, the digest's own behaviour is proved in section H against a forced payload where it
+belongs, and the original `lastDigest` is captured once and put back at the end so tonight's real
+question is not silenced by a test run.
+
+**`build.py`'s clustering and preflight's corpus check disagreed the moment a folder nested, and
+each had reddened the other.** A cluster had always been "the folder the note sits in", and every
+note folder was one level deep until `notes/study/auto/` arrived. §30 first changed `build.py` to
+take the *first* component under `notes/`, so the constellation would read `study` rather than
+`auto` — and `memory_proof` reddened at once, because its rule is `parts[parts.length - 2]`, the
+folder the file is **in**, and it is the older pin on that function. The harness won. `build.py` is
+back to the immediate parent, the constellation is called **`auto`**, and that is the price:
+a worse word in the legend than "study", paid because renaming it means editing a standing harness's
+model of a function rather than changing a function. Preflight's clause (b) was then wrong in two
+ways of its own, both now fixed: it read `os.listdir` of the top level only, so it demanded `study`
+where the disk and the harness said `auto`; and it counted **directories** rather than folders with
+notes in them, so an empty `notes/personal/` left behind by a harness was a cluster with no worlds
+and failed the check. That second one is not hypothetical — it is re-armed every time the digest
+offers to promote, because promotion is what creates `notes/personal/` in the first place. Both
+halves are now read off the walked note paths, which is still the disk compared with the galaxy
+rather than `build.py` compared with itself.
+
+**The activation fault is still the loudest false red in this house, and it accounted for five of
+this round's reds.** A harness that does not hold the foreground loses its first click or its first
+keystroke, and every audio or keyboard assertion below that point cascades. `nudge_proof` read
+**12/21** as the second harness of a group — first failure *"the first click unlocked the audio, so a
+line CAN be spoken from here"* — and **21/21** alone. `echo_proof` read **28/49** on the same root
+cause. `tools_live` gave its documented **2/3** on *"the slash did not summon the type-line"* and
+**62/62** solo. `layout_proof` failed *"a real Page Down on it actually scrolls the text (0 -> 0px)"*
+in a group and not alone. `_runs/sweep30.sh` now sleeps three seconds between harnesses, because a
+departing Chrome can still hold the foreground and three seconds is cheaper than a false red.
+
+### PART 6 · Every standing harness, before and after
+
+Both columns are the **solo** column — one harness per invocation, from a foreground shell,
+`port_proof` last — because the sweep number and the solo number are not the same measurement.
+`_runs/sweep30.sh` enforces it and names the three laws in its header. The baseline is §29's
+after-column.
+
+| harness | baseline | after | | harness | baseline | after |
+|---|---|---|---|---|---|---|
+| boot_proof | 21/21 | 21/21 | | memory_proof | 40/40 | 40/40 |
+| brain_live | 33, 0 failed | 33, 0 failed | | nudge_proof | 21/21 | 21/21 |
+| capabilities_proof | 16/16 | 16/16 | | persona_proof | 19/19 | 19/19 |
+| census_proof | 36/44 | 36/44 | | port_proof | 24, 0 failed | 24, 0 failed |
+| chain_proof | 78/78 | 78/78 | | routing_proof | 84/84 typed | 84/84 typed · spoken **not re-measured** |
+| clock_proof | 95/95 | **94/94** (calendar) | | salutation_proof | 26/34 | 26/34 |
+| connectors_proof | 61/61 | 61/61 | | scribe_proof | 59, 0 failed | 59, 0 failed |
+| console_proof | 30/30 | 30/30 | | session_proof | 75/75 | 75/75 |
+| conversation_proof | 114/114 | 114/114 | | speaker_proof | 70/70 | 70/70 |
+| deck_proof | 241/241 | 241/241 | | tools_live | 62/62 | 62/62 |
+| desk_proof | 44, 0 failed | 44, 0 failed | | voice_proof | 169/169 | 169/169 |
+| echo_proof | 49/49 | 49/49 | | google_hands_proof | 24/24 | 24/24 |
+| eyes_live | 56, **2 failed** | **56, 0 failed** ▲ | | layout_proof | 167/168 | 167/168 |
+| focus_probe | 85, 0 failed | 85, 0 failed | | **preflight** | 39 · 36 pass 3 warn | **42 · 39 pass 3 warn** ▲ |
+| followup_proof | 47/47 | 47/47 | | **study_proof** | *new* | **131/131** · see below |
+| lock_proof | 78, 0 failed | 78, 0 failed | | | | |
+
+**Nothing is below baseline.** Two rows need their arithmetic explained rather than waved at.
+
+**`clock_proof` reads 94/94 against a 95/95 baseline with zero failures, and the missing assertion is
+the calendar.** The two runs are not the same set of assertions: §29 ran in the afternoon with
+events *yesterday* and *today*, this one in the evening with *tomorrow* and *today*, and the
+"tiles on a different day" branch has two assertions on one arm and one on the other. Diffing the
+assertion texts with the numbers normalised shows exactly that — §29 carried *"every tile on a
+DIFFERENT DAY carries the word"* plus *"and the word reached the glass"*, §30 carries *"no tile
+claims a day it has not earned"*. A count that moves deserves a reason, and this is the reason.
+
+**`eyes_live` is the one ▲ and §30 cannot claim credit for it.** Its two §29 failures were a 1342 ms
+nudge latency and `{"slouched":false,"headDown":false}`, both needing a real camera and a body in the
+chair. Today there was a body in the chair. `grep -c "/chat" eyes_live.mjs` is still 0.
+
+**`routing_proof`'s spoken column was not re-measured, and that is a decision rather than an
+omission.** §29 spent 913 s on it, returned five consecutive UNPROVEN rows and was killed by the
+sweep's own 900 s timeout, and the cause was measured with two read-only probes: the bluetooth
+headset holds **both render roles and the communications capture role**, so every sentence is played
+into an earcup and Chrome's recogniser transcribes that earcup. The probe was re-run this round and
+`_runs/sweep30/_audio_roles.txt` is **byte-identical to §29's**:
+
+```
+render  console       : Headphones (trüke BTG Alpha)
+render  communications: Headphones (trüke BTG Alpha)
+capture console       : Microphone Array (Intel® Smart Sound Technology …)
+capture communications: Headset (trüke BTG Alpha)
+```
+
+Spending another fifteen minutes to reproduce a known hardware result would have been theatre. The
+typed column — which is the whole of §29's Part 2 proof — stands at 84/84.
+
+### Verdicts
+
+```
+study_proof.mjs       VERIFY 131/131 PASS   (17:5x, the full pipe; see the note below)
+study_proof.mjs       VERIFY 118/123 FAIL   (18:5x, 5 failures, all Groq's daily token ceiling)
+preflight.py          42 checks · 39 pass, 0 fail, 3 warn
+scribe_proof.mjs      59 checks · 59 pass · 0 fail   (warm TTS cache; cold reads 59 · 1)
+routing_proof.mjs     VERIFY 84/84 PASS     (TYPED_ONLY=1)
+```
+
+The three warns are the standing ones: checks 10 and 12 (`/model` and `/eyes` with no OpenRouter
+key) and check 11 (the focus check with no Chrome on 9222). One run mid-round also warned on checks 6
+and 17; both cleared on the next run and were transient.
+
+**`study_proof`'s final run is 118/123 and the reason is a supplier quota, stated plainly rather than
+dressed up.** The harness reached **131/131 PASS twice** this evening against the full pipe. Three
+changes landed after those runs — `waitedMs`, and the two clock fixes above — and then the account's
+Groq allowance ran out mid-run:
+
+```
+Rate limit reached for model `qwen/qwen3.8-27b` … service tier `on_demand`
+on tokens per day (TPD): Limit 200000, Used 198409, Requested 3149.
+Please try again in 11m13.056s.
+```
+
+All five remaining failures are one cascade: the thinker gets a 429, so the tick fails before the
+guard is ever asked, so the poison test's four assertions about a *judged* verdict cannot hold and
+the ledger's skip count does not move. Every one of them is downstream of that quote. What *is*
+verified on the final tree, individually and on disk, is each of the three changes: the two clock
+fixes pass in the 18:5x run (`the digest latch is closed…`, `the digest card is not up…`, `DUENESS IS
+THE HOUR AND THE LATCH…` all read `ok`), and `waitedMs` was read back out of `study-ledger.json` by
+hand and is pinned by preflight clause 42(e2), which passes. What is **not** in hand is a single
+clean run with all three together, and the budget refills at roughly 29 tokens a minute — measured,
+twenty-five minutes apart: `Used 198409` then `Used 197674` — so that run is hours away, not minutes.
+It was not obtained today. The thinker was **not** repointed at a model with its own daily budget to
+make the number green, because tuning a proof to a quota is not proving anything.
+
+Incidentally, this is the same ceiling the ledger's three 20-second guard waits were approaching all
+evening, which is why `waitedMs` turned out to matter more than it looked when it was added.
+
+### The new port
+
+`study_proof.mjs` holds **9291**. It is unique across the tree — `grep -h "9[0-9][0-9][0-9]" *.mjs`
+shows no other harness on it, and `port_proof` still runs last in the sweep so that the one harness
+which deliberately rattles the port door cannot poison a neighbour. There is still no port-map table
+in this lookbook; every harness declares its own and collisions are found by grep. That is worth
+fixing before the thirty-first port, and it is in *Left open* below.
+
+### Left open
+
+**A single clean `study_proof` run with all three final changes together.** Named twice above and it
+is the honest shape of this round's proof: 131/131 twice on the tree as it stood at 17:5x, each of
+the three later changes verified individually, no green run covering all of them. It needs Groq's
+daily allowance, which refills at about 29 tokens a minute. First thing tomorrow, before anything
+else spends the budget.
+
+**The thinker and the guard share one daily ceiling, and nothing in the house knows it.** 200 000
+tokens a day across `qwen/qwen3.8-27b` is spent by the conversational path *and* the study loop *and*
+every harness run, first come first served. A 429 is handled correctly everywhere — the tick fails,
+the ledger files `failed`, the fallback law holds, no note is written — but nothing *budgets*. A
+morning of harnesses can leave the afternoon's study loop with nothing to think with, and the only
+symptom is skipped ticks. The loop should read the `x-ratelimit-remaining-tokens` header Groq already
+returns and stand down before it starts a tick it cannot finish.
+
+**`scholar.py` is untracked, so preflight checks 40 through 42 read the working tree.** Every other
+structural check reads `HEAD` on purpose, so that a check cannot be satisfied by an edit that was
+never committed. These three cannot, because there is no `HEAD` copy of the file to read. The
+mandate asked for checks read from HEAD and this is the one place the tree cannot honour it yet; it
+resolves the moment `scholar.py` is committed, and until then the three checks are weaker than their
+thirty-nine siblings by exactly that much.
+
+**The `±10%` latency-parity band is below this machine's noise floor.** The measured idle-vs-studying
+table is in Part 3 and it passes, but loopback jitter on this host is around 3 ms against a p95 near
+30 ms, so a 10 % band is roughly the jitter itself. The assertion catches a tick that *blocks* the
+conversational path — which is the thing worth catching, and it would catch it loudly — but it would
+not catch a 2 ms regression, and it should not be read as though it would.
+
+**The digest promotes into `study/auto/`'s immediate parent, so the constellation is called `auto`.**
+`build.py` clusters by the folder a note sits in, `memory_proof.mjs:310-316` has pinned that since it
+was written, and §30 briefly changed it to the first path component to get a nicer legend word before
+reverting. The galaxy therefore shows `auto`, not `study`. Renaming the folder is the cheap fix and
+it touches the retrieval chips; it was not worth doing under this mandate's DO-NOT-ALTER list.
+
+**No port-map table.** Thirty harnesses, thirty hand-declared debugging ports, collisions found by
+grep. One table in this lookbook, or better a shared constant, costs less than the first collision
+will.
+
+**Standing from §29, unchanged.** `config.json` is untracked but **is in this repo's git history and
+was never purged** — the key must be rotated before that history is shared with anyone. `eyes_live`'s
+two camera assertions pass only with a body in the chair (they passed today; they are not a code
+guarantee). `scribe_proof` reads 59 · 1 against a cold TTS cache and 59 · 0 warm. Preflight check 11
+warns unless a Chrome is already on 9222, and 9222 is the employer's real browser, which no harness
+may close. `census_proof` 36/44 and `salutation_proof` 26/34 are the two long-standing partials,
+unmoved this round and unrelated to the Scholar.

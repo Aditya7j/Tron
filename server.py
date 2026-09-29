@@ -91,6 +91,14 @@ except Exception as _ingest_exc:                               # noqa: BLE001
 # focus.MANAGER, focus.handle and focus.is_focus_request.
 import focus
 
+# THE SCHOLAR. §30's daemon: it reads scholar_syllabus.json, studies one topic at a time and
+# writes notes into notes/study/auto/. Its own file for a reason stronger than tidiness - it
+# owns a thread that must share NO LOCK with anything in this file, and keeping it out here
+# where it cannot import server makes that a property of the import graph instead of a promise.
+# Nothing in this file reaches into it except through scholar.MANAGER, scholar.tick and the
+# four callbacks injected below.
+import scholar
+
 # The live lookup. Query in, at most three snippets out, and it NEVER raises - a dead
 # network, a captcha or a redesigned results page all come back as an empty list, which
 # is the one case this file has to handle anyway. No key, no pip, no SDK.
@@ -2253,7 +2261,14 @@ PROTECTED_CLASSES = ("confirmation", "meta", "identity", "directive")
 # the four are the mandate's own list. It is tried BELOW all four and ABOVE the clock - below the
 # four because they are fixed, above the clock because worldclock.asked() scans for place names
 # and a town called Fulscreen must never stop the deck obeying.
-UNPAID_CLASSES = PROTECTED_CLASSES + ("clock", "fullscreen")
+#
+# AND A SEVENTH, §30's, ON THE SAME TERMS. "study micro-saas now" is an INSTRUCTION the daemon
+# can take from state - it queues a tick and returns - so it costs no retrieval either, and it
+# stands in the same place for the same two reasons: below all four because the four are the
+# mandate's fixed list, above the clock because a place table is not a reason for the Scholar to
+# stop obeying. It is the only member of this tuple that STARTS something rather than answering
+# something, which is why it is also the only one behind a Doorman gate: see study_allowed().
+UNPAID_CLASSES = PROTECTED_CLASSES + ("clock", "fullscreen", "study")
 
 
 def _addressless(question):
@@ -2575,6 +2590,128 @@ def fullscreen_allowed(spoken, seal):
     return False, FULLSCREEN_REFUSAL
 
 
+# ---- §30: "STUDY X NOW" ---------------------------------------------------------------------
+#
+# ANCHORED ON THE WHOLE ADDRESSLESS UTTERANCE, like FULLSCREEN_ON_RE and for the same reason:
+# "what did you study today?" and "how should I study for this?" must reach the brain as
+# ordinary questions, and the ^...$ anchors are what make that true rather than a hope. The
+# topic is the capture group, so "study micro-saas now" arrives with its topic and a bare
+# "study something now" arrives without one and takes the rotation's next pick.
+#
+# THE TWO "ANYTHING" ALTERNATIVES COME FIRST, and the order is load-bearing rather than tidy.
+# The capturing alternative is greedy enough to swallow them: written below the topic branch,
+# "study something new" matched with topic="something new", and the Scholar then invented a
+# one-off topic called "something new" instead of taking the next thing on the syllabus. An
+# alternation is tried left to right, so the specific phrasings have to stand to the left of
+# the general one.
+STUDY_NOW_RE = re.compile(r"""^(?:
+      (?:go\s+)?(?:study|research)\s+(?:something|anything)
+        (?:\s+(?:now|new|else|useful|today))*
+    | (?:do|run)\s+(?:a\s+)?(?:study|research)(?:\s+(?:tick|now|run))?
+    | (?:go\s+)?(?:study|research|read\s+up\s+on|look\s+in\s*to|dig\s+in\s*to)
+        \s+(?P<topic>.{2,60}?)
+        (?:\s+(?:now|today|please|for\s+me|next))?
+  )$""", re.IGNORECASE | re.VERBOSE)
+
+# WHAT MUST NOT MATCH, and study_proof carries it as a control: "what did you study today",
+# "should I study finance", "why did you study that". Every one of them has a question stem in
+# front of the verb, so the ^ anchor refuses them before any capture group is considered. The
+# failure mode if these anchors are ever loosened is the expensive one - the butler silently
+# spending a study tick and a minute of Groq tokens every time the boss asks him a question
+# with the word "study" in it, and answering the question he was not asked.
+_STUDY_NOT = ("what did you study today", "should i study finance",
+              "why did you study that", "what is a study", "how do you study",
+              "tell me about your studying")
+
+# THE REFUSAL. It is the Doorman's own sentence, verbatim, and not a new one: a guest asking
+# this house to study something is at the same door as a guest asking it to send mail, and
+# giving that door a second, differently-worded refusal would be two laws to keep in step.
+# It carries no name - not the boss's, not the guest's - for the reason the Hands refusal
+# carries none.
+STUDY_REFUSAL = "I take orders from one voice in this house, and it is not speaking just now."
+
+
+# A BARE DEICTIC IS NOT A TOPIC, AND IT IS NOT THIS BRANCH'S SENTENCE TO ANSWER. "study it",
+# "study that", "look into this" all name something by pointing at it, and what they point at
+# lives in the antecedent memory - which is DO-NOT-ALTER and which this funnel branch sits
+# above. Matched here, "study it" would have commissioned a study of a topic literally called
+# "it": no syllabus row, no queries, three web searches for the word, and a note filed under
+# a pronoun. Refusing to match sends the sentence on to the brain, which knows what "it" was.
+_STUDY_DEICTIC = ("it", "this", "that", "them", "these", "those", "him", "her", "us",
+                  "there", "then", "one", "the same", "it now", "that now", "this now")
+
+
+def study_asked(question):
+    """The topic to study, "*" for "whatever is next", or "" for a message that is not it."""
+    for form in _addressless_forms(question):
+        got = STUDY_NOW_RE.match(form)
+        if not got:
+            continue
+        topic = (got.groupdict().get("topic") or "").strip(" .,!?;:")
+        if topic and topic.lower() in _STUDY_DEICTIC:
+            return ""
+        return topic or "*"
+    return ""
+
+
+def study_allowed(spoken, seal):
+    """(True, "") if this voice may spend a study tick, else (False, the refusal).
+
+    A FOURTH GATE, NARROWER THAN THE ROOM'S AND WIDER THAN THE HANDS'. The three that exist
+    already sit at different costs and this one has its own, so it gets its own function rather
+    than a reused one:
+
+      - the Hands gate turns a word into an email leaving the house, and it SPENDS the
+        speaker's verdict when it admits somebody, because a number that authorises twice is a
+        number worth stealing.
+      - the room gate admits BOSS or any enrolled name, because filling the screen sends
+        nothing and one press of Escape undoes it.
+      - this gate admits the BOSS SEAL ONLY - the mandate's words are "from the boss's
+        voiceprint", which is stricter than the room's "boss or a name", so an enrolled
+        colleague may fill the screen and may not commission a study into his corpus - and it
+        does NOT spend the verdict, because a study writes into the boss's own notes and costs
+        tokens but sends nothing and reaches nobody. Spending his verdict on a study would
+        make his next spoken "yes" at the Hands card need a fresh sentence to be measured
+        from: a real cost, paid for a file in his own notes folder.
+
+    IT READS THE SEAL AND NOT THE HANDS FLAG, which is a deliberate narrowing rather than a
+    shortcut. The hands privilege is a per-row flag on the voiceprint store and reading it here
+    would mean plumbing the verdict through protected_answer()'s signature - the funnel's, which
+    is not ours to widen. The seal already answers the question the mandate actually asked:
+    "BOSS" is the boss's voiceprint and nothing else is.
+
+    THE KEYBOARD IS ALWAYS THE BOSS'S, as at every other door - a typed message has no
+    `speaker` block, so `spoken` is False and this returns True. The mandate says "from the
+    boss's voiceprint OR KEYBOARD", and that is this clause.
+
+    WITH NOBODY ENROLLED THE LAW STANDS DOWN SILENTLY. has_hands_voice() is the switch, exactly
+    as at the other three doors: identify() answers GUEST to an empty roster, so without this
+    clause a house that had never been taught a voice would refuse every spoken study - the
+    same seal a stranger gets, for an entirely different reason.
+
+    AND IT FAILS CLOSED ON A SPOKEN TURN WITH AN EMPTY SEAL. "Somebody spoke and this process
+    could not say who" is not an identification, and it is the case that is easiest to write by
+    accident: a stale turn number, one this server never issued, or a page that asked nothing.
+    An empty seal is not "BOSS", so the last line refuses it without needing a clause.
+    """
+    if not spoken:
+        return True, ""
+    if voiceprint is None:
+        return True, ""
+    try:
+        if not voiceprint.has_hands_voice():
+            return True, ""
+    except Exception:                                          # noqa: BLE001
+        # A store that will not read is not a reason to spend the boss's tokens on a voice
+        # nobody could place. This is the Hands gate's choice on the same failure and not the
+        # room's, because what is behind this door is written into the corpus he will be
+        # quoted back from, and a bigger window is not.
+        return False, STUDY_REFUSAL
+    if str(seal or "") == "BOSS":
+        return True, ""
+    return False, STUDY_REFUSAL
+
+
 def _google_row():
     """(label, line, state) for the Command Panel's Google row, computed server-side.
 
@@ -2735,6 +2872,11 @@ def protected_answer(question, cfg=None, ear_open=False, offer_standing=False,
     # about", "" is impossible, and "on"/"off" are the two answers.
     gfull = None
     grefused = ""
+    # Same sentinel discipline again: None means the Scholar was not asked about at all, and a
+    # dict means it was - whether or not the tick was allowed to start. A refused study and a
+    # started one are both "asked", and the page and the proof tell them apart by the fields
+    # inside rather than by the presence of the key.
+    gstudy = None
     if said_it(META_RE):
         name = "meta"
         # FROM LIVE STATE, not from a hopeful fixed string. He is asking whether the ear
@@ -2809,6 +2951,49 @@ def protected_answer(question, cfg=None, ear_open=False, offer_standing=False,
                                  "refused at the doorman; the room is untouched\n"
                                  % (want, seal or "?"))
 
+    # ---- §30: THE CURRICULUM, BESIDE THE ROOM AND ABOVE THE CLOCK ------------------------
+    # PLACED FOR THE SAME THREE REASONS §29's ROOM BRANCH WAS, and the placement is the whole
+    # of its safety:
+    #   below the four, because PROTECTED_CLASSES is fixed by the mandate at four and nothing
+    #     new may shadow a sentence one of them already catches. Checked, not assumed: none of
+    #     the four's patterns can match "study micro-saas now", and they keep their precedence
+    #     regardless.
+    #   below the room, because the two cannot collide - no fullscreen alternative contains the
+    #     word study - and putting the cheaper, older branch first keeps §29's reading exactly
+    #     as it was measured.
+    #   above the clock, because worldclock.asked() reads a sentence looking for a PLACE off a
+    #     long table, and a table that one day lists a town called Study is not a reason for the
+    #     Scholar to stop obeying.
+    #
+    # AND IT RETURNS IMMEDIATELY. request() queues the tick on the daemon's thread and comes
+    # straight back with a sentence - it does NOT run a study here. That is the Async Law at its
+    # only load-bearing point: this function is on the conversational thread, and a ninety-second
+    # study inside it would hold the turn open for ninety seconds. The seal is what reports
+    # progress afterwards, not this reply.
+    if not name:
+        topic = study_asked(question)
+        if topic:
+            name = "study"
+            allowed, refusal = study_allowed(spoken, seal)
+            if not allowed:
+                gstudy = {"asked": topic, "started": False, "refused": "not-the-boss"}
+                line = refusal
+                sys.stderr.write("  route: study - asked for %r by a voice sealed %r, refused "
+                                 "at the doorman; no tick was queued\n" % (topic, seal or "?"))
+            else:
+                # THE ADDRESS FORM IS THE BOSS'S ALONE, and here that is trivially true because
+                # this gate admits nobody else - but it is passed in the same way §29's is, so
+                # that a later widening of study_allowed() cannot quietly hand a colleague his
+                # name, and so that scholar.py never holds an address form of its own.
+                mine = (not spoken) or str(seal or "") == "BOSS"
+                started, line = scholar.MANAGER.request(
+                    topic=(None if topic == "*"
+                           else scholar.resolve_topic_name(topic)), why="boss",
+                    boss_call=(who["boss_call"] if mine else ""))
+                if not mine:
+                    line = line.replace(", .", ".").replace(" , ", " ")
+                gstudy = {"asked": topic, "started": bool(started), "refused": ""}
+
     # ---- THE CLOCK, AND IT IS LAST ON PURPOSE -------------------------------------------
     # THE FOUR FUNNEL CLASSES ABOVE ARE UNTOUCHED. This branch is reached only when all four
     # have declined, it cannot shadow any of them, and PROTECTED_CLASSES still names the four
@@ -2861,6 +3046,16 @@ def protected_answer(question, cfg=None, ear_open=False, offer_standing=False,
         # without reading English, and so that the page can be certain there is nothing to do.
         said["refused"] = grefused
         said["fullscreen"] = False
+    if gstudy is not None:
+        # WHAT A HARNESS READS INSTEAD OF PARSING THE SENTENCE BACK, exactly as `clockPlace` is.
+        # A refused study is the pair (studyAsked non-empty, studyStarted false) plus the reason
+        # code, so study_proof's guest assertion is a fact rather than a string match on English
+        # that _strip_address() may since have rewritten.
+        said["study"] = True
+        said["studyAsked"] = gstudy["asked"]
+        said["studyStarted"] = gstudy["started"]
+        if gstudy["refused"]:
+            said["refused"] = gstudy["refused"]
     if gclock is not None:
         # WHAT A HARNESS READS INSTEAD OF PARSING THE SENTENCE BACK. `clockPlace` is empty for
         # his own clock, the canonical LABEL for a city that resolved, and empty for one that
@@ -5848,6 +6043,30 @@ def call_groq_speech(text, cfg=None, status=None):
     return data, ""
 
 
+# ---- THE SCHOLAR GETS THE §28 CLIENT, BY REFERENCE, AND NOTHING ELSE ----------------------
+#
+# HERE AND NOT BESIDE focus.ASK_HAND because the four names below do not exist yet at line 214;
+# this is the first point in the file where all of them do. Module attributes rather than an
+# import, for the reason every other organ in this house uses them: scholar.py must never
+# import server, or the two files could not be reasoned about separately and a test could not
+# load one without the other.
+#
+# IT IS THE SAME CLIENT THE CONVERSATION USES, deliberately. call_groq_whisper carries its own
+# 8 MB refusal and its own fallback rules, and a Scholar with a private HTTP client would be a
+# second thing that could drift from this one - the drift showing up as a study pipe that
+# passes its proof and disagrees with the house.
+#
+# WHAT IS NOT INJECTED IS THE POINT OF THE GATE: no hands.execute, no google_api, no calendar,
+# no say. The Scholar cannot reach them because it was never handed them, which is a stronger
+# statement than a policy about not calling them.
+#
+# NOT wear_persona'd, on purpose and for judge_ground.py's reason: the Scholar is a researcher
+# reading a source, not the butler talking. Dressing its screening calls in the butler's
+# costume would have the Poison Guard answering "certainly, sir" instead of ALLOW.
+scholar.configure(chat=call_groq, whisper=call_groq_whisper, ready=groq_ready,
+                  config=lambda: load_config()[0])
+
+
 def wear_persona(cfg, messages):
     """Put who he is and what he can do in front of the system prompt. Every call.
 
@@ -8171,6 +8390,26 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
         if route == "/focus/stream":
             return self._focus_stream()
 
+        if route == "/study":
+            # THE SEAL'S POLL. Whitelisted by scholar.PUBLIC_KEYS on the way out, so a field
+            # added to the Scholar's internals for its own bookkeeping cannot reach the browser
+            # by accident - focus.public_state()'s discipline, for focus.py's reason.
+            #
+            # NO LOCK OF THIS SERVER'S IS TAKEN HERE. state() takes the Scholar's own lock for
+            # the microseconds it needs to copy four values, and nothing else. That is what makes
+            # a 2.5-second poll from the page free: see scholar.Scholar's class docstring.
+            cfg = load_config()[0]
+            state = scholar.MANAGER.state()
+            digest = scholar.digest(boss_call=str(cfg.get("boss_call") or "sir"))
+            return self._send_json(200, {
+                "ok": True, "kind": "study", "nodes": [], "study": state,
+                # The digest rides along rather than getting a route of its own: the page is
+                # already asking every 2.5 seconds, and a second timer for a once-a-day question
+                # is a second thing that can drift out of step with the first.
+                "digest": {"due": digest["due"], "line": digest["line"],
+                           "notes": digest["notes"], "offeredToday": digest["offeredToday"]},
+                "syllabus": [t["name"] for t in scholar.read_syllabus()["topics"]]})
+
         if route == "/clock":
             # THE BOARD'S TRUTH ANCHOR, and it is not an animation frame. The page ticks its
             # own tiles between reads using the offsets in this payload, so the cadence of this
@@ -8431,6 +8670,14 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 # send it. `keepsAudio: false` is the privacy law, published where a
                 # harness can assert it instead of only in a comment.
                 "scribe": scribe_state(),
+                # AND WHETHER THE SCHOLAR IS AT WORK. Published on the same trip as the Scribe's
+                # state and for the same reason: the page paints the seal, so it must know
+                # before the first word whether a study is running and whether the three
+                # binaries a study needs are even on this machine. `tools` is three booleans -
+                # a missing yt-dlp is a fact about the desk the page is entitled to show,
+                # rather than something discovered when a tick fails. Counts and booleans only;
+                # scholar.PUBLIC_KEYS is the whitelist and it carries no note text and no key.
+                "studying": scholar.MANAGER.state(),
                 # AND WHETHER THIS HOUSE KNOWS ANY VOICES. Published on the same trip and
                 # for the same reason as the Scribe's: the Command Panel has to know whether
                 # there is a model to embed with and whether anybody is enrolled BEFORE it
@@ -9610,6 +9857,103 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 payload.get("focus", {}).get("state", "?")))
             return self._send_json(status, payload)
 
+        if route == "/study":
+            # {"cmd": "tick"|"digest"|"keep"|"prune"|"promote", ...}
+            #
+            # THE GATE HOLDS AT THIS DOOR TOO, and that is why the Doorman is read here and not
+            # only in the funnel. protected_answer() guards the SPOKEN sentence; this route is
+            # what the page's own digest card posts, and a law written at one of the two is a
+            # law with one way round it - which is doorman_refusal()'s own lesson, learned at
+            # three doors before this one was the fourth.
+            data = self._read_json()
+            if not isinstance(data, dict):
+                return self._send_json(400, {
+                    "ok": False, "kind": "study", "nodes": [],
+                    "error": "Send a JSON body like {\"cmd\": \"tick\"}.",
+                    "study": scholar.MANAGER.state()})
+            cmd = str(data.get("cmd") or "").strip().lower()
+            session = str(data.get("session") or "default")[:120]
+            cfg = load_config()[0]
+            boss_call = str(cfg.get("boss_call") or "sir")
+            verdict, spoken, _why = _speaker_turn(data, session)
+            seal = (voiceprint.seal_for(verdict)
+                    if (voiceprint is not None and spoken) else "")
+            allowed, refusal = study_allowed(spoken, seal)
+            if not allowed:
+                sys.stderr.write("  study: %s from a voice sealed %r, refused at the "
+                                 "doorman\n" % (cmd or "(nothing)", seal or "?"))
+                return self._send_json(200, {
+                    "ok": False, "kind": "study", "nodes": [], "answer": refusal,
+                    "refused": "not-the-boss", "seal": seal,
+                    "study": scholar.MANAGER.state()})
+
+            if cmd == "tick":
+                # QUEUED, NEVER RUN HERE. This handler is on a request thread that the page is
+                # holding open; a study inside it would block that socket for the whole tick.
+                started, line = scholar.MANAGER.request(
+                    topic=(str(data.get("topic") or "").strip() or None),
+                    why="endpoint", url=(str(data.get("url") or "").strip() or None),
+                    audio=(str(data.get("audio") or "").strip() or None),
+                    boss_call=boss_call)
+                return self._send_json(200, {
+                    "ok": bool(started), "kind": "study", "nodes": [], "answer": line,
+                    "queued": bool(started), "study": scholar.MANAGER.state()})
+
+            if cmd == "digest":
+                got = scholar.digest(boss_call=boss_call)
+                return self._send_json(200, {
+                    "ok": True, "kind": "study", "nodes": [], "answer": got["line"],
+                    "digest": got, "study": scholar.MANAGER.state()})
+
+            if cmd == "keep":
+                # KEEP IS A NO-OP ON PURPOSE, and saying so is the point. The mandate's three
+                # words are keep, prune and promote; keep means the note stays exactly where the
+                # Scholar put it, so the only thing this branch does is close the digest so it is
+                # not offered again today. A "keep" that copied or re-indexed anything would be a
+                # promote wearing the safer word.
+                scholar.mark_digest()
+                return self._send_json(200, {
+                    "ok": True, "kind": "study", "nodes": [],
+                    "answer": "Left where they are, %s." % boss_call,
+                    "study": scholar.MANAGER.state()})
+
+            if cmd == "prune":
+                ok, said = scholar.prune(str(data.get("file") or ""))
+                if ok:
+                    ensure_index()
+                return self._send_json(200, {
+                    "ok": bool(ok), "kind": "study", "nodes": [], "answer": said,
+                    "study": scholar.MANAGER.state()})
+
+            if cmd == "promote":
+                # THE ONE PATH OUT OF THE SANDBOX, AND IT IS BEHIND A GATE, which is the reason
+                # this branch is longer than the two above it. scholar._guarded_write() refuses
+                # every destination outside notes/study/auto/, so promote() had to be written
+                # around it deliberately - and the thing that makes that safe is not the code in
+                # scholar.py, it is the confirmation raised here and the spoken Yes that answers
+                # it. `confirm` false means "ask him"; the page shows the card and posts again
+                # with confirm true only after a word it heard.
+                rel = str(data.get("file") or "")
+                if not bool(data.get("confirm")):
+                    return self._send_json(200, {
+                        "ok": False, "kind": "study", "nodes": [], "confirm": True,
+                        "file": rel,
+                        "answer": ("Promote %s into your own notes, %s? That moves it out of "
+                                   "the study folder for good." % (rel.split("/")[-1],
+                                                                   boss_call)),
+                        "study": scholar.MANAGER.state()})
+                ok, said, dest = scholar.promote(rel, str(data.get("folder") or "personal"))
+                if ok:
+                    ensure_index()
+                return self._send_json(200, {
+                    "ok": bool(ok), "kind": "study", "nodes": [], "answer": said,
+                    "file": dest, "study": scholar.MANAGER.state()})
+
+            return self._send_json(400, {
+                "ok": False, "kind": "study", "nodes": [],
+                "error": "Unknown study command %r." % cmd[:40],
+                "study": scholar.MANAGER.state()})
+
         if route == "/chain/execute":
             # THE CHAIN'S DOOR, and it is a NAME rather than a second way in. Every line
             # below is the same as /execute's, deliberately and by delegation: the same
@@ -9925,6 +10269,22 @@ def main():
     if scribe is not None and scribe.warm():
         print("  transcriber       :  %s warming on a thread (cpu, int8)"
               % scribe.MODEL_NAME)
+
+    # ---- AND THE SCHOLAR, ON ITS OWN THREAD, SHARING NO LOCK WITH ANY OF THE ABOVE.
+    # After the socket is listening, like the two warmers - but for a different reason: those
+    # two are spending a cost early, this one is a loop that will run all day. It takes
+    # scholar.MANAGER's own lock and nothing of this file's, so a study in progress cannot
+    # delay a question; the note it writes is published by build.py in a subprocess and picked
+    # up by the next turn's own mtime check in ensure_index(). Daemon, so ctrl-c still exits at
+    # once, and the loop's exceptions are its own business - tick() reports and returns rather
+    # than raising, and a failed study is a ledger row, not a dead server.
+    tools = scholar.tool_report()
+    missing = [n for n, r in tools.items() if not r["found"]]
+    if scholar.MANAGER.start():
+        print("  scholar           :  %s on a thread · %s"
+              % (", ".join(t["name"] for t in scholar.read_syllabus()["topics"]) or "no topics",
+                 "yt-dlp, ffmpeg, ffprobe present" if not missing
+                 else "MISSING %s - audio study will refuse and say so" % ", ".join(missing)))
 
     try:
         httpd.serve_forever()

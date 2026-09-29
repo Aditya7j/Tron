@@ -1,0 +1,73 @@
+{
+  "_comment": [
+    "THE SYLLABUS. This file is the boss's, and it is the only place the Scholar is told what",
+    "to care about. Edit it freely: the daemon re-reads it at the top of every tick, so a",
+    "topic added here is studied without restarting anything, and a weight changed here",
+    "changes the rotation on the next tick rather than the next boot.",
+    "",
+    "weight     how much of the Scholar's attention this topic deserves, relative to the",
+    "           others. A weight of 3 against a weight of 1 is studied roughly three times",
+    "           as often. Zero parks a topic without deleting what it already learned.",
+    "queries    what to search the web gate for. The same door a conversational question",
+    "           opens, read-only.",
+    "youtube    either a full watch URL or a plain phrase. A phrase becomes a yt-dlp search",
+    "           for one result; a URL is taken as given. Leave empty to study articles only.",
+    "revenue_goals  carried into the thinking prompt verbatim, because a bullet that does not",
+    "           serve one of these is off-syllabus and the Poison Guard is entitled to say so."
+  ],
+  "version": 1,
+  "revenue_goals": [
+    "one product that earns while I sleep",
+    "an audience that trusts me before it buys from me",
+    "revenue that does not depend on my hours"
+  ],
+  "tick_budget_s": 90,
+  "digest_hour": 18,
+  "topics": [
+    {
+      "name": "finance",
+      "weight": 3,
+      "queries": [
+        "index fund allocation for founders",
+        "cash runway management small business"
+      ],
+      "youtube": "how founders should think about personal finance"
+    },
+    {
+      "name": "creator economics",
+      "weight": 2,
+      "queries": [
+        "creator economy revenue per subscriber benchmarks",
+        "newsletter sponsorship pricing"
+      ],
+      "youtube": "creator economy business model breakdown"
+    },
+    {
+      "name": "youtube growth",
+      "weight": 2,
+      "queries": [
+        "youtube retention curve first 30 seconds",
+        "youtube thumbnail click through rate testing"
+      ],
+      "youtube": "youtube algorithm retention explained"
+    },
+    {
+      "name": "micro-saas",
+      "weight": 3,
+      "queries": [
+        "micro saas pricing first 100 customers",
+        "solo founder saas churn benchmarks"
+      ],
+      "youtube": "micro saas idea validation"
+    },
+    {
+      "name": "react.js",
+      "weight": 4,
+      "queries": [
+        "react.js hooks basics for building a micro saas dashboard",
+        "react vs next.js which to choose for a solo founder product"
+      ],
+      "youtube": "react hooks explained in ten minutes"
+    }
+  ]
+}

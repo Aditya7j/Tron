@@ -720,6 +720,16 @@
   .chip i{width:6px;height:6px;border-radius:50%;background:currentColor;
     display:inline-block;margin-right:7px;box-shadow:0 0 7px currentColor}
 
+  /* AUTO-STUDIED, the Scholar's mark on a retrieval chip. A badge INSIDE the chip and not a
+     chip of its own, for a reason two suites would otherwise catch: clock_proof,
+     followup_proof, routing_proof and salutation_proof all count #a-chips.children, and a
+     note the house studied by itself is still one source. Violet, the Scholar's hue - see
+     #seal-study - so the eye can tell "I filed this" from "the house read this while I was
+     asleep" without having to read the path. */
+  .chip b.auto{font-weight:500;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:#b79cff;margin-left:8px;
+    border:1px solid rgba(183,156,255,.4);border-radius:999px;padding:1px 6px 0}
+
   /* ---------- the other world: live web sources ----------
      Cyan throughout, and cyan nowhere else in this file, so the eye learns the rule in
      one glance: gold-and-folder-coloured means your own notes, cyan means the web. The
@@ -1270,6 +1280,69 @@
     min-width:0;overflow:hidden;text-overflow:ellipsis}
   #scribepanel.strip .head .meta{white-space:nowrap;flex:0 0 auto}
 
+  /* ---------- THE DIGEST, ONCE A DAY ----------
+     What is offered here is not a hand. Nothing on this panel sends, books or writes
+     anywhere except the one row behind a gate, so it must not borrow the Hands' card or the
+     Hands' Yes/No pair: dressing the two the same way teaches the eye that they are the same
+     weight of question, and one of them can spend money.
+
+     IT IS A CHILD OF #brain for #scribepanel's reason, stated in full up there and true
+     here: the Layout Governor owns this column's rectangle and measures its height, so six
+     notes listed in this panel cannot walk over the presence well or under the rail. That is
+     also why it is not a second top-right card - that lane has an authority and three
+     tenants already.
+
+     Violet throughout, which is the Scholar's hue and nothing else's on this glass: not the
+     web's cyan, not a filed document's amber, not the boss's green. */
+  #digestpanel{display:none;
+    --st-accent:#b79cff;
+    background:linear-gradient(196deg,rgba(22,18,34,.93),rgba(12,10,20,.96));
+    border:1px solid rgba(183,156,255,.24);border-radius:16px;padding:12px 15px 11px;
+    backdrop-filter:var(--blur);
+    box-shadow:0 18px 54px rgba(0,0,0,.58),inset 0 0 40px rgba(183,156,255,.05)}
+  #digestpanel.show{display:block;
+    animation:digestrise .32s cubic-bezier(0.16,1,0.3,1)}
+  @keyframes digestrise{from{opacity:0;transform:translateY(14px)}
+    to{opacity:1;transform:none}}
+  /* Transform and opacity only, and stood down entirely for a machine that has asked for
+     less movement - the deck's law, and this panel is measured by a harness. */
+  @media (prefers-reduced-motion:reduce){#digestpanel.show{animation:none}}
+  #digestpanel .head{display:flex;align-items:center;gap:10px;margin-bottom:7px;
+    border-bottom:1px solid rgba(183,156,255,.15);padding-bottom:7px}
+  #digestpanel .lbl{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--st-accent)}
+  #digestpanel .meta{margin-left:auto;font-family:var(--mono);font-size:10.5px;
+    color:rgba(183,156,255,.62);font-variant-numeric:tabular-nums}
+  /* A CEILING AND A SCROLL, for the reason #scribepanel .lines has one: the syllabus can
+     hand the daemon a busy day, and a column that grew would take the toast's rectangle
+     with it. */
+  #digestpanel .lines{max-height:186px;overflow-y:auto;overscroll-behavior:contain;
+    display:flex;flex-direction:column;gap:7px}
+  #digestpanel .row{display:flex;align-items:center;gap:8px;font-size:12px;
+    color:#e8e2ff;min-width:0}
+  #digestpanel .row .t{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap}
+  #digestpanel .row .g{flex:0 0 auto;font-family:var(--mono);font-size:9.5px;
+    letter-spacing:.12em;text-transform:uppercase;color:rgba(183,156,255,.7)}
+  #digestpanel button{flex:0 0 auto;border:1px solid var(--line);border-radius:999px;
+    cursor:pointer;font-family:inherit;font-size:10.5px;letter-spacing:.08em;
+    padding:4px 10px;background:transparent;color:var(--muted);
+    transition:color .18s,border-color .18s}
+  #digestpanel button:hover:not(:disabled){color:#fff;border-color:rgba(183,156,255,.6)}
+  #digestpanel button:disabled{opacity:.45;cursor:default}
+  /* The one button that moves a file out of the sandbox is the one that looks like it
+     might. It still raises a gate; the colour is not the consent. */
+  #digestpanel button.pro{color:#dccfff;border-color:rgba(183,156,255,.45)}
+  /* THE GATE'S OWN FOOT, and it is display:none until there is a question in it: a Yes
+     sitting on the glass with nothing pending is the panel implying it asked something. */
+  #digestpanel .foot{display:none;align-items:center;gap:9px;margin-top:10px;
+    padding-top:9px;border-top:1px solid rgba(183,156,255,.15);
+    font-size:11.5px;color:rgba(226,220,255,.84)}
+  #digestpanel.asking .foot{display:flex}
+  #digestpanel .foot #digest-ask{flex:1 1 auto;min-width:0}
+  #digestpanel .foot .said{flex:0 0 auto;font-family:var(--mono);font-size:10px;
+    letter-spacing:.06em;color:rgba(183,156,255,.6)}
+
   /* THE CAPTION STANDS DOWN WHILE A GATE IS OPEN. The line the butler speaks when he offers a
      hand is already on the card, verbatim, with the parameters he is asking about underneath
      it. A subtitle repeating that same sentence two inches below is the same words twice in
@@ -1383,6 +1456,19 @@
      for SPEAKING: it is the one reading on this deck that means "this person can make
      something happen", and it should look different from a guest at a glance. */
   #seal-who.boss{color:#4be0b8;border-color:rgba(75,224,184,.42)}
+  /* THE STUDY CELL, and it is a third pill rather than a third state of the seal's word.
+     #seal-text says what this room is doing WITH the boss - ready, listening, thinking,
+     speaking - and a background study is none of those: it starts while the room is idle and
+     it must go on running while the room thinks. Writing STUDYING into the word would have
+     made the two mutually exclusive, and then §30's own latency-parity assertion could not
+     be read off the glass at all, because that assertion is precisely that a turn taken
+     DURING a tick is an ordinary turn - both readings true at once, or the Async Law is not
+     being shown. So it sits beside #seal-ear and #seal-who under exactly their rule.
+     Violet, and nothing else on this deck is: see #digestpanel. */
+  #seal-study{display:none;font-weight:600;color:#b79cff;
+    border:1px solid rgba(183,156,255,.42);border-radius:999px;padding:3px 9px 2px;
+    letter-spacing:.15em}
+  #seal-study.on{display:inline-block}
   #seal-text{opacity:.9}
   /* THE SPACER, which is why the organ rail ends up centre-right without anything being
      positioned absolutely: one flexible element between the seal and the organs, and the
@@ -2650,6 +2736,24 @@
       <span class="said" id="scribe-said"></span>
     </div>
   </div>
+  <!-- THE DIGEST. Once a day, and only ever the day's own study notes: three buttons a
+       hand can press and three words a voice can say, with the promotion behind a gate
+       because it is the only path out of notes/study/auto/. Inside #brain on purpose - see
+       #digestpanel in the stylesheet. Nothing in it is composed on this page: every
+       sentence it reads out is the server's. -->
+  <div id="digestpanel">
+    <div class="head">
+      <span class="lbl">studied today</span>
+      <span class="meta" id="digest-meta"></span>
+    </div>
+    <div class="lines" id="digest-lines"></div>
+    <div class="foot" id="digest-foot">
+      <span id="digest-ask"></span>
+      <button id="digest-yes" type="button">Yes</button>
+      <button id="digest-no" type="button">No</button>
+      <span class="said" id="digest-said"></span>
+    </div>
+  </div>
   <!-- THE CAPTION. A subtitle for the voice, above the bar, gone four seconds after he
        stops. The answer itself is kept in the card above; this is what you read while
        you listen, which is why it has no chrome of any kind. -->
@@ -2669,6 +2773,7 @@
       <span class="dot" id="dot"></span>
       <b id="seal-ear">ear open</b>
       <b id="seal-who"></b>
+      <b id="seal-study"></b>
       <span id="seal-text">ready</span>
     </span>
     <span class="gap"></span>
@@ -4649,7 +4754,17 @@ async function loadLib() {
     const b = document.createElement('button');
     b.className = 'chip';
     b.style.color = groupColor(n);
-    b.innerHTML = '<i></i><span style="color:var(--ink)">' + esc(n.label) + '</span>';
+    /* AUTO-STUDIED, AND IT IS DERIVED FROM THE PATH RATHER THAN SENT AS A FLAG. A note under
+       notes/study/auto/ was written by the Scholar and by nothing else - scholar.py's
+       _guarded_write() refuses every other destination, which is what makes the path itself
+       the provenance - so reading it here means /ask and ingest.citations() keep the fixed
+       key sets two Python suites already assert on, and no server payload had to grow a
+       field for a label. The badge goes INSIDE the chip: four harnesses count
+       #a-chips.children, and the house reading something by itself is still one source. */
+    const auto = String(n.file || '').indexOf(STUDY_AUTO_DIR) === 0;
+    b.innerHTML = '<i></i><span style="color:var(--ink)">' + esc(n.label) + '</span>' +
+      (auto ? '<b class="auto">auto-studied</b>' : '');
+    if (auto) b.title = 'studied by the house, unprompted \u00b7 ' + String(n.file || '');
     b.onclick = function () { focusNode(n, true); };
     return b;
   }
@@ -10780,6 +10895,31 @@ async function loadLib() {
       else hideProposal();
     }
 
+    /* AND THE DIGEST'S OWN GATE, WHICH IS NOT THE HANDS' GATE. It is read only while a
+       promotion is pending, so a page with no digest on it behaves exactly as it did before
+       this branch existed - which is the whole of why it is safe to put a second gate in
+       front of the organs. The same three outcomes as the proposal above it: the word yes
+       promotes, the word no refuses, and a change of subject WITHDRAWS, because an ambiguous
+       answer is not consent about a file leaving the sandbox.
+
+       THE SERVER STILL DECIDES. studyPost() sends the doorman's turn number, /study reads
+       study_allowed() before it moves a byte, and a guest saying yes into this branch is
+       refused at the door. The page recognises the word so that the panel does not sit there
+       for a fifth of a second after the word that settled it - hands' own reason. */
+    if (study.gate) {
+      if (SAID_YES_RE.test(question)) return studyGateYes(spoken ? 'voice' : 'button');
+      if (SAID_NO_RE.test(question)) return studyGateRefuse('word');
+      studyGateRefuse('withdrawn');
+    }
+    /* AND THE DAY'S QUESTION, while the panel is up: keep, prune, promote. Whole-message
+       forms only - see the three patterns - so every other sentence said into an open digest
+       is an ordinary question and reaches the brain untouched. */
+    if (study.open) {
+      if (STUDY_KEEP_RE.test(question)) return studyDo('keep', '', spoken ? 'voice' : 'button');
+      if (STUDY_PRUNE_RE.test(question)) return studyPruneAll(spoken ? 'voice' : 'button');
+      if (STUDY_PROMOTE_RE.test(question)) return studyPromoteFirst(spoken ? 'voice' : 'button');
+    }
+
     // Growing the brain is not asking it a question. The server checks this too,
     // so a stale tab cannot answer a capture instead of performing it.
     if (CAPTURE_RE.test(question)) return capture(question);
@@ -11490,6 +11630,17 @@ async function loadLib() {
          the same distinction seal_for() draws on the server. */
       whoCell.classList.toggle('boss', !!(said && speaker.hands));
     }
+    /* AND WHAT THE HOUSE IS READING WHILE NOBODY IS TALKING. Its own cell, for the reason
+       written above #seal-study in the stylesheet, and shown whether or not the ear is open -
+       a tick the daemon started at four in the morning with no microphone in the room is
+       exactly the case a transparency law is for. studyWord() is empty unless the Scholar
+       says it is running, so this cell is dark on a page that has never polled. */
+    const studyCell = $('seal-study');
+    if (studyCell) {
+      const studying = studyWord();
+      if (studyCell.textContent !== studying) studyCell.textContent = studying;
+      studyCell.classList.toggle('on', !!studying);
+    }
     el.classList.toggle('open', open);
     /* THE DATA-STATE IS NOT OVERRIDDEN BY A REFUSAL, and that is deliberate rather than an
        oversight: data-state drives the seal's COLOUR, and the colour is the transparency
@@ -11498,6 +11649,332 @@ async function loadLib() {
     const state = earFault.on ? 'fault' : open ? 'open' : (cls || 'ready');
     if (el.getAttribute('data-state') !== state) el.setAttribute('data-state', state);
   }
+
+  /* ============================================ THE SCHOLAR, ON THE GLASS ==
+     §30's daemon studies on a background thread that shares no lock with anything on the
+     conversational path, and this is the whole of what the page is allowed to know about it:
+     a state read every STUDY_POLL_MS, a pill on the seal, and once a day the digest's
+     question. No note text, no transcript, no key - scholar.PUBLIC_KEYS is the whitelist on
+     the server and it carries none of those.
+
+     WHY IT POLLS AND DOES NOT STREAM. The focus card has a stream because a callout must be
+     heard within three seconds in a BACKGROUND tab, where Chrome throttles timers to about
+     once a minute. A study is not a callout: nothing here has to arrive by a deadline, and
+     the seal only has to be right in the tab a person is looking at. So this is the cheaper
+     half of fxFetch's arrangement - one interval, at the focus card's own cadence, and the
+     server's handler takes no lock of the conversation's to answer it.
+
+     NOTHING HERE HOLDS A PRIVILEGE. Every post carries speakerBlock() and nothing else - a
+     turn number this server issued - and /study reads the Doorman before it acts on any of
+     them. A guest pressing Promote in a tab of his own is refused at the door, which is why
+     this page is allowed to recognise the word "yes" without being trusted with it.
+     ======================================================================== */
+  const STUDY_POLL_MS = 2500;        // the focus card's fallback cadence, for its reason
+  const STUDY_AUTO_DIR = 'notes/study/auto/';
+  /* HOW LONG A PROMOTION WAITS FOR A WORD. Longer than the Hands' gate because the question
+     is read out of a panel of six titles rather than out of a single sentence, and shorter
+     than the digest is offered for, because an unanswered gate must not be sitting open when
+     tomorrow's digest arrives. Expiry REFUSES: silence is not consent, here least of all. */
+  const STUDY_GATE_MS = 60000;
+  /* THE THREE WORDS THE DIGEST WILL TAKE BY VOICE, and nothing else. Whole-message forms in
+     SAID_YES_RE's own shape, for SAID_YES_RE's own reason: "keep them" answers the question
+     that was asked, and "keep going" is a question for the brain. They are consulted only
+     while the panel is open - see ask() - so a page with no digest up behaves exactly as it
+     did before this block existed. */
+  const STUDY_KEEP_RE = /^[\s"'(]*keep(?:\s+(?:them|those|it|that|all))?(?:\s+where\s+(?:they|it)\s+(?:are|is))?[\s.!,"')]*$/i;
+  const STUDY_PRUNE_RE = /^[\s"'(]*(?:prune|bin|delete|drop)(?:\s+(?:them|those|it|that|all))?[\s.!,"')]*$/i;
+  const STUDY_PROMOTE_RE = /^[\s"'(]*promote(?:\s+(?:the\s+best|the\s+best\s+one|it|that|them|one))?[\s.!,"')]*$/i;
+
+  let studyPoll = null, studyGateTimer = null;
+  const study = {
+    state: null,      // the server's whitelisted state, or null before the first read
+    digest: null,     // {due, line, notes, offeredToday}
+    offered: '',      // the digest line this tab has already spoken - once, not once a poll
+    open: false,      // is the panel up
+    gate: null,       // {file, line, at} while a promotion is awaiting a word
+    said: '',         // the server's last sentence about a study, never one of ours
+    reads: 0, errors: 0, posts: 0
+  };
+
+  /* THE SEAL'S WORDS, and the case is the STYLESHEET's: #seal is text-transform:uppercase,
+     so this reads STUDYING - FINANCE on the glass and 'studying · finance' in the DOM.
+     Anything asserting on it must fold case, exactly as it must for 'ear open'. */
+  function studyWord() {
+    const st = study.state;
+    if (!st || !st.studying) return '';
+    return 'studying · ' + (st.topic || 'the syllabus');
+  }
+
+  function studyApply(data) {
+    if (!data || typeof data !== 'object') return null;
+    if (data.study) study.state = data.study;
+    if (data.digest) study.digest = data.digest;
+    sealPaint();
+    studyDigestOffer();
+    return data;
+  }
+
+  async function studyFetch() {
+    try {
+      const res = await fetch('/study');
+      const data = await res.json();
+      study.reads++;
+      return studyApply(data);
+    } catch (e) {
+      /* A poll that failed changes nothing on the glass: the pill keeps saying whatever was
+         last true, which is the same discipline fxFetch() keeps. A page that blanked the
+         cell on a dropped request would report the study as finished. */
+      study.errors++;
+      return null;
+    }
+  }
+
+  function studyUp() {
+    if (studyPoll) return;
+    studyFetch();
+    studyPoll = setInterval(studyFetch, STUDY_POLL_MS);
+  }
+
+  function studyDown() {
+    if (studyPoll) { clearInterval(studyPoll); studyPoll = null; }
+  }
+
+  /* EVERY POST GOES THROUGH HERE AND CARRIES THE DOORMAN'S NUMBER AND NOTHING ELSE.
+     `door` is 'voice' when a word settled it and 'button' when a hand did, and the block is
+     sent for the voice door only - exactly as confirmProposal() sends it, so the server reads
+     a verdict IT reached from real audio under a turn number IT issued. The page cannot name
+     itself the boss here any more than it can at /execute. */
+  async function studyPost(body, door) {
+    study.posts++;
+    try {
+      const res = await fetch('/study', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(Object.assign({
+          session: SESSION,
+          speaker: door === 'voice' ? speakerBlock('voice') : null
+        }, body || {}))
+      });
+      const data = await res.json();
+      if (data && data.study) study.state = data.study;
+      if (data && data.digest) study.digest = data.digest;
+      study.said = (data && (data.answer || data.error)) || '';
+      sealPaint();
+      return data;
+    } catch (e) {
+      study.said = '';
+      return null;
+    }
+  }
+
+  /* ---- the day's question ----
+     OFFERED ONCE, AND THE ONCE IS THE SERVER'S TO DECIDE. `due` goes false the moment any
+     answer is given, because keep, prune and promote all write lastDigest into the Scholar's
+     state file - so a second tab opened at seven in the evening is told there is nothing to
+     ask. study.offered is the tab's own guard against a 2.5-second poll asking twice inside
+     one second, and it holds the LINE rather than a boolean so tomorrow's digest is a
+     different question rather than a repeat. */
+  function studyDigestOffer() {
+    const d = study.digest;
+    if (!d || !d.due || study.open) return false;
+    if (study.offered === d.line) return false;
+    study.offered = d.line;
+    studyDigestShow(d);
+    /* THROUGH speak(), which is the one funnel: the caption comes with it, a muted tab still
+       reads the question on the glass, and the sentence lands in the same record every other
+       spoken line lands in. The words are the server's - DIGEST_LINE in scholar.py - because
+       a page that composed this would be a page inventing how many things were studied. */
+    speak(d.line);
+    return true;
+  }
+
+  function studyDigestShow(d) {
+    const panel = $('digestpanel'), lines = $('digest-lines');
+    if (!panel || !lines) return false;
+    const notes = (d && d.notes) || [];
+    lines.innerHTML = '';
+    notes.forEach(function (n) { lines.appendChild(studyDigestRow(n)); });
+    $('digest-meta').textContent = notes.length + (notes.length === 1 ? ' note' : ' notes');
+    $('digest-said').textContent = '';
+    studyGateClose();
+    study.open = true;
+    panel.classList.add('show');
+    /* THE GOVERNOR IS TOLD, because this panel is a child of the toast and the toast's height
+       is what the presence well is sized from. renderAnswer() ends this way for the same
+       reason: a surface that grew without saying so is the overlap law failing quietly. */
+    layout();
+    return true;
+  }
+
+  function studyDigestClose() {
+    study.open = false;
+    studyGateClose();
+    const panel = $('digestpanel');
+    if (panel) panel.classList.remove('show');
+    layout();
+  }
+
+  function studyDigestRow(n) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    /* THE PATH IS THE ROW'S IDENTITY and it is an attribute rather than a closure, so a
+       harness can read which notes are on the glass without the page having to tell it. */
+    row.setAttribute('data-file', String((n && n.file) || ''));
+    const g = document.createElement('span');
+    g.className = 'g';
+    g.textContent = String((n && n.topic) || '');
+    const t = document.createElement('span');
+    t.className = 't';
+    /* textContent, throughout: a title came out of a model and a model's output is text. */
+    t.textContent = String((n && (n.title || n.file)) || '');
+    t.title = String((n && n.file) || '');
+    row.appendChild(g);
+    row.appendChild(t);
+    row.appendChild(studyBtn('Keep', 'keep', n, ''));
+    row.appendChild(studyBtn('Prune', 'prune', n, ''));
+    row.appendChild(studyBtn('Promote', 'promote', n, 'pro'));
+    return row;
+  }
+
+  function studyBtn(label, cmd, n, cls) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    if (cls) b.className = cls;
+    b.textContent = label;
+    b.onclick = function () { studyDo(cmd, (n && n.file) || '', 'button'); };
+    return b;
+  }
+
+  /* THE THREE WORDS, AND ONLY THE THIRD IS A GATE.
+       keep     closes the day's question and moves nothing. The server's branch is a no-op
+                on purpose; a keep that copied anything would be a promote in a safer word.
+       prune    deletes the note and rebuilds the index. The rebuild is the server's - this
+                page never edits notes-index.json and could not.
+       promote  is the only path out of the sandbox, so it is NEVER posted with confirm true
+                from a click or a word that was not given in answer to the question. The
+                first post asks, the server writes the sentence, the butler reads it out, and
+                the word that follows is what posts again. */
+  async function studyDo(cmd, file, door) {
+    if (cmd === 'keep') {
+      const data = await studyPost({ cmd: 'keep' }, door);
+      if (data && data.ok) studyDigestClose();
+      if (data && data.answer) speak(data.answer);
+      return data;
+    }
+    if (cmd === 'prune') {
+      const data = await studyPost({ cmd: 'prune', file: file }, door);
+      if (data && data.ok) studyRowGone(file);
+      if (data && data.answer) speak(data.answer);
+      if (!studyRowsLeft()) studyDigestClose();
+      await studyFetch();
+      return data;
+    }
+    if (cmd === 'promote') {
+      const data = await studyPost({ cmd: 'promote', file: file, confirm: false }, door);
+      if (data && data.confirm) studyGateOpen(file, data.answer || '');
+      if (data && data.answer) speak(data.answer);
+      return data;
+    }
+    return null;
+  }
+
+  function studyGateOpen(file, line) {
+    studyGateClose();
+    study.gate = { file: String(file || ''), line: String(line || ''), at: Date.now() };
+    const panel = $('digestpanel');
+    if ($('digest-ask')) $('digest-ask').textContent = String(line || '');
+    if ($('digest-said')) $('digest-said').textContent = 'awaiting your word';
+    if (panel) panel.classList.add('asking');
+    /* EXPIRY REFUSES. A gate that promoted on a timeout would be consent by exhaustion. */
+    studyGateTimer = setTimeout(function () { studyGateRefuse('timeout'); }, STUDY_GATE_MS);
+    layout();
+  }
+
+  function studyGateClose() {
+    clearTimeout(studyGateTimer);
+    studyGateTimer = null;
+    study.gate = null;
+    const panel = $('digestpanel');
+    if (panel) panel.classList.remove('asking');
+    if ($('digest-ask')) $('digest-ask').textContent = '';
+  }
+
+  async function studyGateYes(door) {
+    const g = study.gate;
+    if (!g) return null;
+    studyGateClose();
+    const data = await studyPost({ cmd: 'promote', file: g.file, confirm: true }, door);
+    if (data && data.ok) studyRowGone(g.file);
+    if (data && data.answer) speak(data.answer);
+    if (!studyRowsLeft()) studyDigestClose();
+    await studyFetch();
+    return data;
+  }
+
+  function studyGateRefuse(why) {
+    if (!study.gate) return false;
+    studyGateClose();
+    if ($('digest-said')) {
+      $('digest-said').textContent = why === 'timeout' ? 'not promoted · no word came'
+                                                       : 'left where it is';
+    }
+    layout();
+    return true;
+  }
+
+  function studyFiles() {
+    const lines = $('digest-lines');
+    if (!lines) return [];
+    return Array.prototype.slice.call(lines.children).map(function (r) {
+      return r.getAttribute('data-file') || '';
+    }).filter(Boolean);
+  }
+
+  function studyRowsLeft() { return studyFiles().length > 0; }
+
+  function studyRowGone(file) {
+    const lines = $('digest-lines');
+    if (!lines) return;
+    Array.prototype.slice.call(lines.children).forEach(function (row) {
+      if (row.getAttribute('data-file') === String(file || '')) row.remove();
+    });
+    $('digest-meta').textContent = lines.children.length +
+      (lines.children.length === 1 ? ' note' : ' notes');
+    layout();
+  }
+
+  /* "PRUNE THEM" IS PLURAL AND IS TAKEN AS PLURAL - the digest offered the day as a set, so
+     the answer is about the set. Each note is still its own post: prune() is per file on the
+     server, and a page that invented a prune-everything command would hold a power the CLI
+     does not have. The loop stops on a refusal, because a refusal is about the VOICE and
+     repeating it five times would be five doorman lines for one answer. */
+  async function studyPruneAll(door) {
+    const files = studyFiles();
+    let said = '', last = null;
+    for (let i = 0; i < files.length; i++) {
+      last = await studyPost({ cmd: 'prune', file: files[i] }, door);
+      if (last && last.answer) said = last.answer;
+      if (last && last.refused) break;
+      if (last && last.ok) studyRowGone(files[i]);
+    }
+    if (said) speak(said);
+    if (!studyRowsLeft()) studyDigestClose();
+    await studyFetch();
+    return last;
+  }
+
+  /* "PROMOTE THE BEST" NAMES NO FILE, so the page does not quietly choose one: it raises the
+     gate on the FIRST row - the earliest of the day, the order studied_today() returns - and
+     the server's confirmation sentence names that file out loud, so the yes that follows is a
+     yes to something whose name has been heard. */
+  function studyPromoteFirst(door) {
+    const files = studyFiles();
+    if (!files.length) return null;
+    return studyDo('promote', files[0], door);
+  }
+
+  if ($('digest-yes')) $('digest-yes').onclick = function () { studyGateYes('button'); };
+  if ($('digest-no')) $('digest-no').onclick = function () { studyGateRefuse('button'); };
 
   $('reset').onclick = async function () {
     try {
@@ -21010,6 +21487,10 @@ async function loadLib() {
        already in progress shows the right countdown on its first frame rather than
        after the first push - and adopts the say-sequence before any of it is spoken. */
     fxFetch(document.hasFocus()).then(fxConnect);
+    /* AND THE SCHOLAR'S POLL, inside the else with everything else that talks to the server:
+       a hermetic probe page must not carry a 2.5-second background request, which is exactly
+       what case `hermetic` exists to catch. */
+    studyUp();
     if (DEBUG_ON) fxDebugStart();
     /* THE DECK, last and unawaited: it is the one thing on this page that nothing else
        waits for. It is also not started on the probe page at all - a battery that shares
@@ -21493,6 +21974,45 @@ async function loadLib() {
         get fitted() { return deskFits; },
         get sawLive() { return deskSawLive; }
       }
+    },
+    /* THE SCHOLAR, read back off the GLASS and out of the state this page polled - never
+       out of a note, because the page is never sent one. `seal` is the DOM's own text so a
+       harness reads what a person reads; everything under state() is scholar.PUBLIC_KEYS and
+       nothing else. act() is the same call the three buttons make. */
+    study: {
+      POLL_MS: STUDY_POLL_MS, AUTO_DIR: STUDY_AUTO_DIR, GATE_MS: STUDY_GATE_MS,
+      get state() { return study.state; },
+      get digest() { return study.digest; },
+      get studying() { return !!(study.state && study.state.studying); },
+      get topic() { return (study.state && study.state.topic) || ''; },
+      /* THE PILL, exactly as the glass has it - lowercase in the DOM, uppercased by the
+         sheet. See studyWord(): anything matching STUDYING here must fold case. */
+      get seal() { return ($('seal-study') || {}).textContent || ''; },
+      get sealOn() {
+        const cell = $('seal-study');
+        return !!(cell && cell.classList.contains('on'));
+      },
+      get word() { return studyWord(); },
+      get open() { return study.open; },
+      get gate() { return study.gate; },
+      get asking() {
+        const panel = $('digestpanel');
+        return !!(panel && panel.classList.contains('asking'));
+      },
+      get shown() {
+        const panel = $('digestpanel');
+        return !!(panel && panel.classList.contains('show'));
+      },
+      get rows() { return studyFiles(); },
+      get said() { return study.said; },
+      get reads() { return study.reads; },
+      get errors() { return study.errors; },
+      get posts() { return study.posts; },
+      get polling() { return !!studyPoll; },
+      poll: studyFetch, post: studyPost, act: studyDo, up: studyUp, down: studyDown,
+      offer: studyDigestOffer, show: studyDigestShow, close: studyDigestClose,
+      yes: function () { return studyGateYes('button'); },
+      no: function () { return studyGateRefuse('button'); }
     },
     /* THE VISAGE. Which pose is worn, how open the mouth is, how fast it is moving, and
        the geometry it is made of - so a harness can read the face the way the eye reads

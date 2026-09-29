@@ -237,9 +237,19 @@ def build_nodes(notes_root, project_root):
         raw = read_text(path)
         prose = clean_for_excerpt(raw, label)
 
-        parent = os.path.basename(os.path.dirname(os.path.abspath(path)))
-        if os.path.abspath(os.path.dirname(path)) == os.path.abspath(notes_root):
-            parent = "unfiled"
+        # A CLUSTER IS THE FOLDER THE FILE SITS IN - the immediate parent, not the first name on
+        # the way down. Every note folder was one level deep until the Scholar arrived with
+        # notes/study/auto/, and the two readings only differ once something nests. §30 tried the
+        # first component, so that notes/study/auto/x.md would read "study" rather than "auto",
+        # and memory_proof.mjs:310-316 reddened at once: its rule is parts[parts.length - 2], the
+        # folder the file is IN, and it is the older pin on this line. It won. A constellation
+        # named "auto" reads worse in the legend than one named "study" and that is the price;
+        # renaming it means editing a standing harness's model of this function, which is a
+        # bigger thing than a nicer word. The AUTO-STUDIED badge is derived from the note's PATH
+        # in the viewer, so the badge is unaffected either way.
+        here = os.path.abspath(os.path.dirname(path))
+        inside = os.path.relpath(here, os.path.abspath(notes_root)).replace("\\", "/")
+        parent = "unfiled" if inside in (".", "") else inside.split("/")[-1]
 
         rel = os.path.relpath(path, project_root).replace("\\", "/")
         nodes.append({

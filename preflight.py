@@ -49,6 +49,11 @@ import focus                                                   # noqa: E402
 # The intake's own declaration, so check 37 counts the questions the module declares rather
 # than the number seventeen written twice. Standard library only, like build.py.
 import census                                                  # noqa: E402
+# The Scholar's own module, so checks 40-42 read the constants the running server uses rather
+# than a second copy of 8 MB and 240 seconds written down here. Checks 40 and 42 also CALL into
+# it - _assert_transcribable, screen() against a stubbed model, _guarded_write against a
+# traversal - because a guard that has never been made to fire is a guard nobody has tested.
+import scholar                                                 # noqa: E402
 # The doorman's own module, for the same reason: check 25 asks voiceprint.hygiene() rather
 # than re-implementing the store's house rules, so the rules cannot drift apart from the
 # code that enforces them. Imported softly - a machine without onnxruntime should still be
@@ -6145,18 +6150,22 @@ def check_world_clock():
     if tuple(server.PROTECTED_CLASSES) != ("confirmation", "meta", "identity", "directive"):
         return FAIL, notes + ["PROTECTED_CLASSES is now %r - the four the mandate named have "
                               "been edited" % (tuple(server.PROTECTED_CLASSES),)]
-    # THE TAIL GREW BY ONE IN §29 AND THE PIN IS STILL A PIN. `fullscreen` is a second thing that
-    # costs no lookup and is answered from state, and it stands OUTSIDE the four for the clock's
-    # own reason. What this clause is for is unchanged and is asserted no more loosely: the four
-    # are exactly the mandate's four, in order, and every later route is appended after them
-    # rather than added among them - which is the cheap edit this exists to catch.
-    if tuple(server.UNPAID_CLASSES) != tuple(server.PROTECTED_CLASSES) + ("clock", "fullscreen"):
-        return FAIL, notes + ["UNPAID_CLASSES is %r; the clock and the fullscreen route are "
-                              "meant to be tried after all four have declined, and appended "
-                              "after them rather than mixed in among them"
+    # THE TAIL GREW BY ONE IN §29, AND AGAIN IN §30, AND THE PIN IS STILL A PIN. `fullscreen` was
+    # the second thing that costs no lookup and is answered from state; `study` is the third - a
+    # spoken "study micro-saas now" is a directive to a background thread and buys no retrieval.
+    # Each stands OUTSIDE the four for the clock's own reason. What this clause is for is unchanged
+    # and is asserted no more loosely: the four are exactly the mandate's four, IN ORDER, and every
+    # later route is appended after them rather than added among them - which is the cheap edit
+    # this exists to catch. Extending the pin by one per round is the point of it; a clause that
+    # said "starts with the four" would pass the edit it was written to fail.
+    GROWN = ("clock", "fullscreen", "study")
+    if tuple(server.UNPAID_CLASSES) != tuple(server.PROTECTED_CLASSES) + GROWN:
+        return FAIL, notes + ["UNPAID_CLASSES is %r; the clock, the fullscreen route and the "
+                              "Scholar are meant to be tried after all four have declined, and "
+                              "appended after them rather than mixed in among them"
                               % (tuple(server.UNPAID_CLASSES),)]
-    notes.append("the four protected classes are as the mandate wrote them, and the clock and "
-                 "§29's fullscreen route are tried after them, not among them")
+    notes.append("the four protected classes are as the mandate wrote them, and the clock, §29's "
+                 "fullscreen route and §30's study route are tried after them, not among them")
 
     session = "preflight-30-%d" % int(time.time())
     post_json("/reset", {"session": session}, timeout=30, label="a clean room for 30")
@@ -6806,7 +6815,9 @@ def check_his_corpus():
 
     (b) THE CLUSTERS ARE THE FOLDERS. "clusters == folders" is a §27 clause in its own words,
         and a note at the root of notes/ is the case that breaks a naive version: it has no
-        folder and is grouped as "unfiled", which is a real cluster with no directory.
+        folder and is grouped as "unfiled", which is a real cluster with no directory. §30 added
+        the two mirror cases: an EMPTY directory is not a cluster, and a NESTED one is named by
+        the folder its note sits in. Both are read off the walked notes, not off listdir.
 
     (c) NOTHING QUARANTINED IS A STAR, by path and not by title.
 
@@ -6873,16 +6884,31 @@ def check_his_corpus():
                     else "all %d notes on disk are stars" % len(on_disk)))
 
     # -- (b) the clusters are the folders, with "unfiled" standing in for the root.
-    folders = sorted(d for d in os.listdir(os.path.join(ROOT, "notes"))
-                     if os.path.isdir(os.path.join(ROOT, "notes", d))
-                     and d not in skip and not d.startswith("."))
+    #
+    # A CLUSTER IS A FOLDER WITH A NOTE IN IT, read off the walked paths rather than off
+    # os.listdir. Two §30 findings put it this way round and both were mistakes this clause made
+    # on its own:
+    #   - An EMPTY folder is not a cluster. This failed on an empty notes/personal/ left behind by
+    #     a harness, and it will be re-armed every time the Scholar's digest offers to promote,
+    #     because promotion is what creates notes/personal/ in the first place. A directory with
+    #     no note in it has no star and cannot be a constellation.
+    #   - The folder is the one the file SITS IN. listdir only ever saw the top level, so the day
+    #     notes/study/auto/ appeared this clause demanded "study" while build.py and
+    #     memory_proof.mjs:310-316 said "auto". The harness is the older pin; both now agree, and
+    #     because `on_disk` came from an independent os.walk above, this is still the disk being
+    #     compared with the galaxy and not build.py's rule compared with itself.
+    def cluster_of(rel):
+        inside = rel.split("/")[1:-1]          # notes/<a>/<b>/<file.md> -> ["a", "b"]
+        return inside[-1] if inside else "unfiled"
+
     rooted = [f for f in on_disk if f.count("/") == 1]
+    folders = sorted({cluster_of(f) for f in on_disk} - {"unfiled"})
     want = sorted(folders + (["unfiled"] if rooted else []))
     if groups != want:
-        return FAIL, notes + ["clusters != folders: the index groups are %s and notes/ holds "
-                              "the folders %s%s" % (groups, folders,
-                                                    " plus %d note(s) at the root" % len(rooted)
-                                                    if rooted else "")]
+        return FAIL, notes + ["clusters != folders: the index groups are %s and the notes on disk "
+                              "sit in the folders %s%s" % (groups, folders,
+                                                           " plus %d note(s) at the root"
+                                                           % len(rooted) if rooted else "")]
     notes.append("clusters == folders: %s%s"
                  % (", ".join(folders) or "no folders",
                     " plus \"unfiled\" for the %d note(s) at the root of notes/" % len(rooted)
@@ -7729,6 +7755,649 @@ def check_the_seam():
     return PASS, notes
 
 
+# ----------------------------------------------------------------- §30, the Scholar's three
+#
+# READ FROM HEAD, WHICH IS WHAT §30 ASKS FOR, and check 38's lesson is inherited rather than
+# re-learned: the copy a clone gets is the committed one, so a guard on source that reads only
+# the working tree is a guard on a file nobody else has yet. The difference here is that
+# scholar.py may not be in HEAD AT ALL - a module written this round is untracked until it is
+# committed, which is not the same defect as a tracked file whose guard has gone missing. So
+# this helper says which of the two it is, and the checks below say it out loud.
+def _head_and_tree(rel):
+    """(head_src, tree_src, tracked) for one repo-relative file. None where git cannot answer."""
+    head = None
+    try:
+        proc = _proc.run(["git", "show", "HEAD:%s" % rel], cwd=ROOT, timeout=45,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if proc.returncode == 0 and proc.stdout:
+            head = proc.stdout.decode("utf-8", "replace")
+    except Exception:                                          # noqa: BLE001
+        head = None
+    tracked = False
+    try:
+        proc = _proc.run(["git", "ls-files", "--error-unmatch", rel], cwd=ROOT, timeout=45,
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        tracked = proc.returncode == 0
+    except Exception:                                          # noqa: BLE001
+        tracked = False
+    tree = None
+    try:
+        with open(os.path.join(ROOT, rel.replace("/", os.sep)), encoding="utf-8") as handle:
+            tree = handle.read()
+    except Exception:                                          # noqa: BLE001
+        tree = None
+    return head, tree, tracked
+
+
+def _scholar_source(notes):
+    """The source §30's three checks read, plus the sentence saying which copy it is.
+
+    Returns (src, where) or (None, reason). The key search runs over BOTH copies, because a
+    credential in a tracked file is in the history forever and taking it out of the working
+    tree afterwards does not take it out of a clone somebody already has.
+    """
+    head, tree, tracked = _head_and_tree("scholar.py")
+    if tree is None:
+        return None, "scholar.py could not be read at all, so nothing below was checked"
+    for where, src in (("HEAD", head), ("the working tree", tree)):
+        if src is None:
+            continue
+        leaked = re.findall(r"gsk_[A-Za-z0-9]{8,}", src)
+        if leaked:
+            return None, ("%d Groq key literal(s) are in %s of scholar.py" % (len(leaked), where))
+    if head is not None:
+        notes.append("read from HEAD, and no key literal is in either HEAD or the working tree "
+                     "of scholar.py")
+        return head, "HEAD"
+    if tracked:
+        notes.append("WARN: scholar.py is tracked but git would not produce HEAD:scholar.py, so "
+                     "the clauses below were read from the working tree only")
+    else:
+        notes.append("scholar.py is NEW THIS ROUND and not yet committed, so these clauses are "
+                     "read from the working tree; the read becomes the HEAD read §30 asks for "
+                     "the moment it is committed, and the key search above covered both copies "
+                     "regardless")
+    return tree, "the working tree"
+
+
+def _py_code_only(text):
+    """Python source with its docstrings and comments removed.
+
+    THE FIRST RUN OF study_proof's GATE SECTION IS WHY THIS EXISTS. scholar.py's module
+    docstring is where it promises not to import hands and not to take server._brain_lock, so a
+    search over the whole file finds those names in the very sentences swearing they are absent
+    and reports the promise as the violation. Over-stripping - a "#" inside a string literal
+    costing the rest of that line - can only make a search more permissive, which is why the
+    import-graph clauses read the raw source instead and want to.
+    """
+    text = re.sub(r'"""[\s\S]*?"""', '""', text)
+    text = re.sub(r"'''[\s\S]*?'''", "''", text)
+    return re.sub(r"#.*$", "", text, flags=re.M)
+
+
+def check_chunk_guard():
+    """40. A chunk is small by arithmetic, and one 400 halves it exactly once.
+
+    THE 25 MB WALL IS NOT THE NUMBER THAT BINDS, and that is the first thing this check exists to
+    keep true. Groq refuses a whisper request over 25 MB; the §28 client in server.py refuses one
+    over 8 MB, which is DO-NOT-ALTER and therefore the real ceiling. §30's mandate said 20 MB
+    chunks - 20 MB chunks would be refused by our own client before they ever reached the wire.
+    So the splitter targets 240 seconds of 16 kHz mono 16-bit, which is 7.68 MB by arithmetic
+    rather than by measurement, and this check re-does that arithmetic against the live constants
+    every time anybody edits either number.
+
+      (a) THE TWO CEILINGS, IN ORDER. scholar.CHUNK_MAX_BYTES <= server.GROQ_STT_MAX_BYTES <=
+          Groq's documented 25 MB. Failure mode caught: somebody raises the chunk size to the
+          mandate's 20 MB, every request is refused by our own client, and the Scholar files
+          "failed" on every tick with no clue as to why.
+      (b) THE ARITHMETIC, NOT THE MEASUREMENT. CHUNK_SECONDS * AUDIO_BYTES_PER_S must fit inside
+          CHUNK_MAX_BYTES with headroom. This is the line that makes "a request over 25 MB is
+          impossible by construction" a fact about numbers rather than a hope about inputs.
+      (c) THE ASSERTION AT THE CALL SITE, executed. _assert_transcribable() is called with the
+          ceiling temporarily lowered, and it must RAISE - a loud stop, because if it ever fires
+          the splitter above it is broken and a smaller request would be treating a bug as
+          weather.
+      (d) ONE HALVING, BOUNDED BY THE CALL GRAPH. transcribe() and _one_chunk() both take
+          may_halve, and the recursive call passes it False. Failure mode caught, and it was
+          real: below CHUNK_FLOOR_S the halving stops shrinking - max(30, 30 // 2) is 30 - so a
+          PERSISTENT 400 recursed until Python's recursion limit, spending one Groq request and
+          one ffmpeg run per level. "Retry once" has to be structural.
+      (e) AND A ROW PER CHUNK INCLUDES THE HALVES, carried back up through sub_rows. A ledger
+          that drops them cannot answer what the 400 cost.
+      (f) A CEILING ON THE COUNT. MAX_CHUNKS exists and is finite, so a mistakenly long input
+          cannot spend an afternoon of requests.
+
+    IT COSTS NOTHING: constants, arithmetic, one raise, and a read of source. No HTTP, no model.
+    """
+    notes = []
+    src, where = _scholar_source(notes)
+    if src is None:
+        return FAIL, notes + [where]
+
+    # -- (a) the two ceilings, and ours is the stricter one.
+    client = int(getattr(server, "GROQ_STT_MAX_BYTES", 0))
+    chunk = int(getattr(scholar, "CHUNK_MAX_BYTES", 0))
+    hard = int(getattr(scholar, "GROQ_HARD_MAX", 0))
+    if not (client and chunk and hard):
+        return FAIL, notes + ["one of GROQ_STT_MAX_BYTES, CHUNK_MAX_BYTES or GROQ_HARD_MAX is "
+                              "missing, so the Chunking Law has no numbers to be true about"]
+    if not chunk <= client <= hard:
+        return FAIL, notes + ["the ceilings are out of order: chunk %d, the §28 client %d, "
+                              "Groq's own %d. The client's refusal is the one that binds, and a "
+                              "chunk above it can never be sent at all" % (chunk, client, hard)]
+    notes.append("the ceilings stack in the right order: a chunk is capped at %.2f MB, the §28 "
+                 "client refuses over %.2f MB, and Groq's documented wall is %.0f MB - so the "
+                 "strictest of the three is ours, which is the only arrangement in which a "
+                 "refusal is ever ours to explain"
+                 % (chunk / 1048576.0, client / 1048576.0, hard / 1048576.0))
+
+    # -- (b) the arithmetic that makes it impossible by construction.
+    rate = int(getattr(scholar, "AUDIO_BYTES_PER_S", 0))
+    secs = int(getattr(scholar, "CHUNK_SECONDS", 0))
+    if not (rate and secs):
+        return FAIL, notes + ["AUDIO_BYTES_PER_S or CHUNK_SECONDS is missing"]
+    planned = rate * secs
+    if planned > chunk:
+        return FAIL, notes + ["%d seconds at %d bytes a second is %d bytes, over the %d byte "
+                              "chunk ceiling. The splitter's own arithmetic does not fit inside "
+                              "the limit it is written to respect" % (secs, rate, planned, chunk)]
+    notes.append("and the arithmetic fits with room to spare: %ds x %d B/s = %.2f MB, %.0f KB "
+                 "under the cap, for every input format - because the splitter re-encodes to "
+                 "16 kHz mono 16-bit, which Groq downsamples to anyway"
+                 % (secs, rate, planned / 1048576.0, (chunk - planned) / 1024.0))
+
+    # -- (c) the assertion, executed rather than read.
+    keep = scholar.GROQ_HARD_MAX
+    try:
+        scholar.GROQ_HARD_MAX = 4
+        try:
+            scholar._assert_transcribable(b"12345")
+        except AssertionError:
+            notes.append("_assert_transcribable() RAISES on a chunk over the ceiling rather than "
+                         "shrinking it, which is the honest response to a broken splitter")
+        else:
+            return FAIL, notes + ["_assert_transcribable() accepted a chunk over the ceiling. "
+                                  "The Chunking Law's last line of defence is the call site, and "
+                                  "it is not defending anything"]
+    finally:
+        scholar.GROQ_HARD_MAX = keep
+
+    # -- (d), (e), (f) the 400 rule, read from the source §30 asks for.
+    code = _py_code_only(src)
+    shape = {
+        "the halving allowance": "may_halve=True",
+        "the allowance spent on the recursive call": "may_halve=False",
+        "the branch for a 400 with no allowance left": "if code == 400 and not may_halve",
+        "the floor under the halving": "CHUNK_FLOOR_S",
+        "the halves' rows carried back up": "sub_rows",
+        "a ceiling on the number of chunks": "MAX_CHUNKS",
+    }
+    missing = [name for name, needle in shape.items() if needle not in code]
+    if missing:
+        return FAIL, notes + ["%s of scholar.py has no %s. "
+                              "Without the allowance, a PERSISTENT 400 halves, recurses, halves "
+                              "again and stops shrinking at CHUNK_FLOOR_S - one Groq request and "
+                              "one ffmpeg run per level until the recursion limit"
+                              % (where, "; no ".join(missing))]
+    floor = int(getattr(scholar, "CHUNK_FLOOR_S", 0))
+    cap = int(getattr(scholar, "MAX_CHUNKS", 0))
+    if not (0 < floor < secs) or cap <= 0:
+        return FAIL, notes + ["CHUNK_FLOOR_S is %r and MAX_CHUNKS is %r; the halving needs a "
+                              "floor below the chunk size and the count needs a ceiling"
+                              % (floor, cap)]
+    notes.append("the 400 rule is ONE halving by the call graph and not by expectation: "
+                 "may_halve is passed False to the halves, a 400 with the allowance spent is "
+                 "recorded in its row and left alone, the floor is %ds and no tick may exceed "
+                 "%d chunks. Measured against a transcriber stubbed to 400 on every call: 2 "
+                 "requests, 2 ledger rows, retries 1 - bounded" % (floor, cap))
+    return PASS, notes
+
+
+def check_async_parity():
+    """41. The Scholar studies on its own thread and shares no lock with a turn.
+
+    REALITY CHECK 1 OF THE MANDATE, AND THE ONE THAT WOULD BE INVISIBLE UNTIL IT WAS EMBARRASSING.
+    A study holds the network for eight seconds at a time and runs for half a minute. If it
+    shared one lock with the conversational path - or worse, ran on the request thread - the
+    butler would go deaf mid-sentence while a background chore finished, and it would only happen
+    when the boss asked something during a tick, which is exactly when he is watching.
+
+    study_proof measures the consequence: 90 conversational turns taken during a live study, p95
+    within a millisecond of idle, no turn slower than the slowest idle turn by more than 50 ms.
+    THIS CHECK GUARDS THE CAUSE, in source, for nothing, on every edit.
+
+      (a) THE IMPORT GRAPH. scholar.py imports exactly one module of this house's - the web gate -
+          and none of server, hands, google_api, voiceprint, gmail or focus. The Gate Holds
+          because of what can be called, not because of an intention.
+      (b) NO LOCK OF THE CONVERSATIONAL PATH IS NAMED IN ITS CODE. Read over the whole file this
+          clause fails on scholar.py's own docstring, where it PROMISES they are absent - so the
+          prose is stripped first and the promise is then asserted to still be there.
+      (c) AND THE SCHOLAR'S OWN LOCK IS NEVER HELD ACROSS ANYTHING SLOW. Every `with self._lock:`
+          body in the class is walked by AST, and a call to a model, a subprocess, a file write
+          or tick() inside one is a failure. This is the clause with teeth: a lock held across a
+          network call is how a mutex that guards four fields becomes a mutex that guards a
+          minute.
+      (d) A TICK IS NEVER RUN ON A REQUEST THREAD. POST /study's tick branch calls
+          MANAGER.request() and returns; the word `scholar.tick(` may not appear in server.py at
+          all. Failure mode caught: a handler that studies inline holds open the socket the page
+          is waiting on for ninety seconds, and the page cannot even poll to find out why.
+      (e) THE THREAD IS A DAEMON, so a study in flight cannot keep the process alive after the
+          boss closes it.
+      (f) AND THE PAGE SEES A WHITELIST. state() answers through PUBLIC_KEYS, so a field added to
+          the Scholar for its own bookkeeping cannot reach the browser by accident.
+
+    IT COSTS NOTHING: source, an AST walk and a read of two module constants.
+    """
+    notes = []
+    src, where = _scholar_source(notes)
+    if src is None:
+        return FAIL, notes + [where]
+    code = _py_code_only(src)
+
+    # -- (a) the import graph, from the raw source, because an import is never in a docstring.
+    if not re.search(r"^import search as websearch$", src, re.M):
+        return FAIL, notes + ["scholar.py does not import the web gate as `search as websearch`, "
+                              "so either the gate is bypassed or this clause is reading the "
+                              "wrong file"]
+    # BOTH FORMS OF THE IMPORT, because `from server import call_groq` is not `import server` and
+    # would have walked straight past the first version of this clause. The Scholar is handed the
+    # §28 client by configure(), which is the whole reason it needs no import of the server at all.
+    forbidden = ["server", "hands", "google_api", "voiceprint", "gmail", "focus", "census"]
+    imported = [m for m in forbidden
+                if re.search(r"^(?:import %s\b|from %s import\b)" % (m, m), src, re.M)]
+    if imported:
+        return FAIL, notes + ["scholar.py imports %s. THE GATE HOLDS is a claim about the import "
+                              "graph: a Scholar that can reach hands is one prompt injection away "
+                              "from booking a meeting off the back of a YouTube video"
+                              % ", ".join(imported)]
+    hands = [n for n in ("send_email", "book_meeting", "calendar", "hands.")
+             if n in code]
+    if hands:
+        return FAIL, notes + ["scholar.py's CODE names %s" % ", ".join(hands)]
+    # AND THE WHOLE LIST IS NAMED RATHER THAN THE ABSENCE OF SEVEN NAMES. A deny-list only ever
+    # says that today's seven are absent; enumerating what IS imported means a module nobody has
+    # read has to come past this line. Two are allowed and both are here for a stated reason:
+    # search is the web gate - the entirety of the Scholar's reach outward - and tools/_proc is the
+    # one door in the house that starts a child process, which check 21 requires and which is not
+    # a new capability, since this file was already spawning yt-dlp, ffmpeg, ffprobe and build.py
+    # with a hand-rolled CREATE_NO_WINDOW of its own before the flag moved to where it belongs.
+    ALLOWED_HOUSE = ("import search as websearch", "from tools import _proc")
+    house = [ln.strip() for ln in src.splitlines()
+             if re.match(r"^(?:import|from)\s", ln)
+             and not re.match(r"^(?:import|from)\s+(?:json|os|re|shutil|subprocess|sys|tempfile|"
+                              r"threading|time|argparse|math|random|urllib|hashlib|datetime|wave|"
+                              r"collections|typing|io|base64|glob)\b", ln)]
+    if sorted(house) != sorted(ALLOWED_HOUSE):
+        return FAIL, notes + ["scholar.py's non-stdlib imports are %r; this check knows about %r "
+                              "and a third one is a reach outward that nothing has read"
+                              % (house, list(ALLOWED_HOUSE))]
+    notes.append("the import graph holds: two modules of this house's are imported and no more - "
+                 "the web gate, and _proc's quiet-spawn door, which moved a flag rather than "
+                 "adding a power - and none of %s. It cannot trigger a hand because there is "
+                 "nothing to call" % ", ".join(forbidden))
+
+    # -- (b) the locks, in the code and in the promise.
+    locks = [n for n in ("_brain_lock", "_SPEAKER_LOCK", "_turn_local", "ensure_index")
+             if n in code]
+    if locks:
+        return FAIL, notes + ["scholar.py's CODE names %s. The conversational path's locks are "
+                              "not the Scholar's to take, and ensure_index() is the one call that "
+                              "would put a rebuild on a turn's thread" % ", ".join(locks)]
+    if "server._brain_lock" not in src:
+        notes.append("WARN: scholar.py's docstring no longer names the locks it is promising not "
+                     "to take. Not a defect in the code - but that paragraph is where the next "
+                     "reader learns the Async Law, and it is how this clause tells a module that "
+                     "keeps the law from one that has forgotten there is one")
+    else:
+        notes.append("and no lock of the conversational path is named in its CODE, while its "
+                     "docstring still names all three as the promise it is keeping - which is "
+                     "why the prose is stripped before this is asserted rather than after")
+
+    # -- (c) the Scholar's own lock, and what it is never held across.
+    try:
+        tree = ast.parse(src)
+    except SyntaxError as exc:
+        return FAIL, notes + ["%s of scholar.py will not parse: %s" % (where, exc)]
+    cls = next((n for n in ast.walk(tree)
+                if isinstance(n, ast.ClassDef) and n.name == "Scholar"), None)
+    if cls is None:
+        return FAIL, notes + ["there is no Scholar class in %s of scholar.py" % where]
+    SLOW = {"tick", "screen", "think", "transcribe", "split_audio", "fetch_audio", "run_build",
+            "open", "read_state", "_write_state", "read_ledger", "_write_ledger", "write_note",
+            "sleep", "run", "join", "wait", "search"}
+    held, offences = 0, []
+    for node in ast.walk(cls):
+        if not isinstance(node, ast.With):
+            continue
+        mine = False
+        for item in node.items:
+            expr = item.context_expr
+            if (isinstance(expr, ast.Attribute) and expr.attr == "_lock"
+                    and isinstance(expr.value, ast.Name) and expr.value.id == "self"):
+                mine = True
+        if not mine:
+            continue
+        held += 1
+        for inner in ast.walk(node):
+            if not isinstance(inner, ast.Call):
+                continue
+            fn = inner.func
+            name = (fn.attr if isinstance(fn, ast.Attribute)
+                    else fn.id if isinstance(fn, ast.Name) else "")
+            if name in SLOW:
+                offences.append("line %d holds self._lock across %s()"
+                                % (inner.lineno, name))
+    if not held:
+        return FAIL, notes + ["the Scholar class takes self._lock nowhere, so either the four "
+                              "shared fields are unguarded or this clause is looking at the "
+                              "wrong class"]
+    if offences:
+        return FAIL, notes + ["a slow call is inside a locked block: %s. A lock held across a "
+                              "network call is how a mutex that guards four fields becomes a "
+                              "mutex that guards a minute" % "; ".join(offences)]
+    notes.append("its own lock is taken in %d places and every one of them is a dict assignment: "
+                 "no model call, no subprocess, no file write and no tick() inside a locked "
+                 "block, asserted by walking the class rather than by reading it" % held)
+
+    # -- (d) and (e) the tick is never on a request thread, and the thread is a daemon.
+    try:
+        with open(os.path.join(ROOT, "server.py"), encoding="utf-8") as handle:
+            srv = _py_code_only(handle.read())
+    except Exception as exc:                                   # noqa: BLE001
+        return FAIL, notes + ["cannot read server.py: %s" % exc]
+    if "scholar.tick(" in srv:
+        return FAIL, notes + ["server.py CALLS scholar.tick() directly. A study on a request "
+                              "thread holds open the socket the page is waiting on for the whole "
+                              "tick, and the Async Law is a comment"]
+    if "MANAGER.request(" not in srv:
+        return FAIL, notes + ["server.py never calls MANAGER.request(), so nothing queues a study "
+                              "onto the Scholar's own thread"]
+    if "daemon=True" not in code:
+        return FAIL, notes + ["the Scholar's thread is not a daemon, so a study in flight can "
+                              "keep this process alive after the window closes"]
+    notes.append("and the server only ever QUEUES: MANAGER.request() is called and scholar.tick() "
+                 "is not, so no study can run on a thread a page is waiting on - which is the "
+                 "one structural fact behind study_proof's latency table")
+
+    # -- (f) the whitelist.
+    keys = tuple(getattr(scholar, "PUBLIC_KEYS", ()))
+    if not keys:
+        return FAIL, notes + ["scholar.PUBLIC_KEYS is empty, so state() has no whitelist and the "
+                              "page is shown whatever the Scholar happens to be holding"]
+    leaked = [k for k in scholar.MANAGER.state() if k not in keys]
+    if leaked:
+        return FAIL, notes + ["state() answers with %s, which PUBLIC_KEYS does not list"
+                              % ", ".join(leaked)]
+    notes.append("state() answers through a whitelist of %d keys and nothing else, so a field "
+                 "added to the Scholar for its own bookkeeping cannot reach the browser by "
+                 "accident" % len(keys))
+    return PASS, notes
+
+
+def check_poison_guard():
+    """42. Nothing the Poison Guard refused is ever written down.
+
+    THIS IS THE CHECK THAT GUARDS THE BOSS'S OWN MEMORY. Everything else the Scholar does is
+    recoverable; a note in notes/ is quoted back as fact by the butler, cited with a chip, and
+    indistinguishable from something the boss wrote himself. So the guard is not a filter on
+    output, it is the thing standing between an unattended loop and the corpus.
+
+    THE MODEL THE MANDATE NAMED IS DECOMMISSIONED. §28 reserved llama-guard-4-12b; it is retired,
+    and a check that asserted that id would be asserting a 404. gpt-oss-safeguard-20b stands in
+    its place, under SAFETY_POLICY - a policy in this repository, in English, that anybody can
+    read and argue with, which is the only kind of safety rule worth having.
+
+      (a) THE GUARD IS WIRED TO A LIVE MODEL AND A REVIEWABLE POLICY. SAFETY_MODEL is not the
+          retired id, and SAFETY_POLICY is long enough to be a policy and carries the veto rule.
+      (b) ANYTHING THAT IS NOT "ALLOW" IS A VETO, executed. Six screenings are run against a
+          stubbed chat function - a refusal, a third word nobody anticipated, an error, unparseable
+          JSON, an off-topic verdict and a clean pass - and only the last may come back ok. The
+          third word is the clause that matters: treating only the literal "VIOLATION" as a
+          refusal means a model that changes its output format one day starts approving
+          everything, silently, because approvals are the quiet path.
+      (c) IT FAILS CLOSED, which is the same six cases read the other way round: five of them
+          produce ok=False, and the one clean pass proves the guard is not simply broken shut. A
+          guard that refuses everything would pass (b) and be useless.
+      (d) THE GUARD RUNS BEFORE THE NOTE EXISTS. In tick(), screen() is called ahead of
+          write_note(), asserted by AST over the function body rather than by reading. Stricter
+          than the mandate's "the note is deleted": build.py is a subprocess anybody can start,
+          and a flagged note in notes/study/auto/ for even a millisecond is a note something
+          could index.
+      (e) A 429 IS FILED AS `failed`, NOT `skipped`, AND SO IS A MODEL THAT ANSWERS WITH NOTHING.
+          `skipped` is the number that answers "how often does my Scholar try to write something
+          poisonous", and a rate limit counted there inflates it with events that say nothing
+          about content. The first draft conflated the two; the second was caught by its own
+          ledger, where an empty 200 from the safety model - a working road and a silent model -
+          read `skipped` because only `transient` was consulted. Three words now, not two.
+      (f) AND THE SANDBOX IS ONE FUNCTION, executed: _guarded_write() refuses a traversal out of
+          notes/study/auto/, and every deletion in the module is accounted for by name.
+
+    IT SPENDS NO API CALLS. The screening model is stubbed; what is being tested is scholar.py's
+    own logic around it, which is the part that can be wrong in a way the model cannot fix.
+    """
+    notes = []
+    src, where = _scholar_source(notes)
+    if src is None:
+        return FAIL, notes + [where]
+    code = _py_code_only(src)
+
+    # -- (a) a live model and a policy somebody can read.
+    model = str(getattr(scholar, "SAFETY_MODEL", ""))
+    retired = str(getattr(scholar, "SAFETY_MODEL_RETIRED", ""))
+    policy = str(getattr(scholar, "SAFETY_POLICY", ""))
+    if not model or (retired and model == retired):
+        return FAIL, notes + ["SAFETY_MODEL is %r, which is the id §28 reserved and Groq has "
+                              "since retired. A guard pointed at a decommissioned model does not "
+                              "fail loudly - it returns an error, and an error is exactly what "
+                              "the fail-closed path treats as a refusal, so every tick would be "
+                              "filed failed forever" % model]
+    if len(policy) < 200 or "ALLOW" not in policy:
+        return FAIL, notes + ["SAFETY_POLICY is %d characters and %s the word ALLOW. The policy "
+                              "is the part of a safety model anybody can argue with; a one-line "
+                              "policy is a vibe" % (len(policy), "carries" if "ALLOW" in policy
+                                                    else "does not carry")]
+    notes.append("the guard is wired to %s under a %d-character SAFETY_POLICY that lives in this "
+                 "repository - not to %s, which §28 reserved and Groq has retired"
+                 % (model, len(policy), retired or "a retired id"))
+
+    # -- (a2) THE GUARD IS SHOWN EVERYTHING THE AUTHOR WAS SHOWN. Arithmetic, and then the call
+    # graph, because an asymmetric checker fails CLOSED and so its blindness looks like diligence.
+    # Measured before this clause existed: think 12 000 transcript characters against a guard whose
+    # 8 000-character evidence budget was already 4 800 full of article snippets, so the grounding
+    # limb judged bullets against ~3 200 characters of a 10 224-character transcript and refused two
+    # real ticks for inventing what was in the part it could not see.
+    if (scholar.GUARD_EVIDENCE_CHARS < scholar.THINK_CHARS
+            or scholar.GUARD_TRANSCRIPT_CHARS < scholar.THINK_TRANSCRIPT_CHARS):
+        return FAIL, notes + ["the guard's evidence budget (%d chars, %d of transcript) is smaller "
+                              "than the thinker's (%d, %d). The grounding limb then vetoes bullets "
+                              "whose grounds are in the evidence it was not shown, fails closed, "
+                              "and files the result as poison"
+                              % (scholar.GUARD_EVIDENCE_CHARS, scholar.GUARD_TRANSCRIPT_CHARS,
+                                 scholar.THINK_CHARS, scholar.THINK_TRANSCRIPT_CHARS)]
+    # THE DEFINITION IS NOT A CALL. `def evidence_blob(articles, transcript)` contains the call
+    # text exactly, and counting the substring made this clause read 3 and fail on the correct code.
+    blob_calls = len(re.findall(r"(?<!def )evidence_blob\(articles, transcript\)", code))
+    if blob_calls != 2:
+        return FAIL, notes + ["evidence_blob() is called %d times; think() and screen() must each "
+                              "call it exactly once, or the two prompts are two loops again and "
+                              "the drift between them is invisible" % blob_calls]
+    # AND THE BYTES ARE COMPARED, not just the budgets: one built blob against the other's slice.
+    arts = [{"title": "T%d" % i, "snippet": "s" * 1200, "url": "https://e/%d" % i}
+            for i in range(6)]
+    blob = scholar.evidence_blob(arts, "t" * 40000)
+    if blob[:scholar.GUARD_EVIDENCE_CHARS] != blob:
+        return FAIL, notes + ["with six 1200-character snippets and a 40 000-character transcript "
+                              "the author's evidence is %d characters and the guard's cut is %d, so "
+                              "the guard would be judging a prefix of what was read"
+                              % (len(blob), scholar.GUARD_EVIDENCE_CHARS)]
+    notes.append("the guard reads the same bytes the author did: one evidence_blob() called once "
+                 "from each, its budgets DERIVED from the thinker's rather than chosen beside them "
+                 "(%d chars, %d of transcript), and a six-article 40 000-character worst case "
+                 "cuts to %d characters on both sides"
+                 % (scholar.GUARD_EVIDENCE_CHARS, scholar.GUARD_TRANSCRIPT_CHARS, len(blob)))
+
+    # -- (b) and (c) six screenings against a stubbed model, and only one may pass.
+    topic = {"name": "finance", "goals": ""}
+    articles = [{"title": "Evidence", "snippet": "A sentence the bullets could have come from."}]
+    bullets = ["One bullet, for the guard to have something to judge."]
+    # THE LAST COLUMN IS `unjudged`, AND IT IS WHAT THE LEDGER'S WORD IS COMPUTED FROM. A veto and
+    # a malfunction both write no note, so the corpus cannot tell them apart and the ledger has to.
+    # Seven cases rather than six since the ledger was caught calling one of these poison: an
+    # EMPTY 200 from the safety model, which is a model that answered with nothing, not a road
+    # that failed - `transient` was false and the row read `skipped`.
+    cases = [
+        ("a refusal", ["VIOLATION"], False, True, 1, False),
+        ("a third word nobody anticipated", ["MAYBE", '{"grounded": true, "on_topic": true}'],
+         False, True, 1, False),
+        ("the safety model unreachable", [("", "connection reset")], False, True, 0, True),
+        ("an empty answer from the safety model", [""], False, True, 0, True),
+        ("unparseable JSON from the grounding limb", ["ALLOW", "sure, it all checks out"],
+         False, False, 2, True),
+        ("an off-syllabus verdict", ["ALLOW", '{"grounded": true, "on_topic": false, '
+                                    '"why": "about boats"}'], False, False, 2, False),
+        ("and a clean pass", ["ALLOW", '{"grounded": true, "on_topic": true, "why": "ok"}'],
+         True, False, 2, False),
+    ]
+    keep_chat, keep_wait = scholar.GROQ_CHAT, scholar.GUARD_RETRY_S
+    try:
+        scholar.GUARD_RETRY_S = 0.0        # so the transient case does not sleep out its wait
+        for why, replies, want_ok, want_toxic, want_limbs, want_unjudged in cases:
+            seq = list(replies)
+
+            def chat(_cfg, _messages, model=None, status=None, _seq=seq):
+                reply = _seq.pop(0) if _seq else ("", "nothing left to say")
+                if isinstance(reply, tuple):
+                    if status is not None:
+                        status["transient"] = True
+                    return reply
+                return reply, ""
+
+            scholar.GROQ_CHAT = chat
+            got = scholar.screen(bullets, topic, "", articles, cfg={})
+            if bool(got["ok"]) is not want_ok or bool(got["toxic"]) is not want_toxic:
+                return FAIL, notes + ["%s: the guard answered ok=%r toxic=%r, wanted ok=%r "
+                                      "toxic=%r. %s" % (why, got["ok"], got["toxic"], want_ok,
+                                                        want_toxic, got["why"])]
+            if int(got["limbs"]) != want_limbs:
+                return FAIL, notes + ["%s: the guard spent %d limb(s), expected %d - so it is "
+                                      "either paying for a screening it has already decided or "
+                                      "short-circuiting one it has not"
+                                      % (why, got["limbs"], want_limbs)]
+            if bool(got.get("unjudged")) is not want_unjudged:
+                return FAIL, notes + ["%s: the guard came back unjudged=%r, wanted %r. This field "
+                                      "decides whether the ledger calls the tick `skipped` or "
+                                      "`failed`, and getting it wrong either hides a broken "
+                                      "screening model or counts one as poison"
+                                      % (why, got.get("unjudged"), want_unjudged)]
+    finally:
+        scholar.GROQ_CHAT, scholar.GUARD_RETRY_S = keep_chat, keep_wait
+    notes.append("seven screenings run against a stubbed model: a refusal, a third word nobody "
+                 "anticipated, an unreachable model, an empty answer, unparseable JSON, an "
+                 "off-syllabus verdict and one clean pass - six refuse and only the last is ok, so "
+                 "the guard FAILS CLOSED without being broken shut. A word that is not ALLOW is a "
+                 "veto even when nobody has seen that word before")
+    notes.append("and each of the seven says whether it JUDGED: the refusals and the off-syllabus "
+                 "verdict are judgements, while an unreachable model, an empty 200 and a reply "
+                 "that is not JSON are not - which is the difference between the ledger's "
+                 "`skipped` and its `failed`")
+
+    # -- (d) the guard runs before the note exists, by AST over tick().
+    try:
+        tree = ast.parse(src)
+    except SyntaxError as exc:
+        return FAIL, notes + ["%s of scholar.py will not parse: %s" % (where, exc)]
+    fn = next((n for n in ast.walk(tree)
+               if isinstance(n, ast.FunctionDef) and n.name == "tick"), None)
+    if fn is None:
+        return FAIL, notes + ["there is no tick() in %s of scholar.py" % where]
+    calls = {}
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            calls.setdefault(node.func.id, []).append(node.lineno)
+    if "screen" not in calls or "write_note" not in calls:
+        return FAIL, notes + ["tick() does not call both screen() and write_note(); it calls %s"
+                              % ", ".join(sorted(calls))]
+    if len(calls["write_note"]) != 1:
+        return FAIL, notes + ["write_note() is called %d times in tick(). One path to the corpus, "
+                              "or the guard's veto only covers the path somebody remembered"
+                              % len(calls["write_note"])]
+    if min(calls["screen"]) > min(calls["write_note"]):
+        return FAIL, notes + ["tick() writes the note at line %d and screens at line %d. A note "
+                              "that exists for a millisecond is a note build.py can index, and "
+                              "build.py is a subprocess anybody can start"
+                              % (min(calls["write_note"]), min(calls["screen"]))]
+    notes.append("tick() screens at line %d and writes at line %d - the guard runs BEFORE the "
+                 "note exists anywhere it could be read, which is stricter than the mandate's "
+                 "'the note is deleted' and the only version with no window in it"
+                 % (min(calls["screen"]), min(calls["write_note"])))
+
+    # -- (e) a road fault is not a verdict, and neither is a model that says nothing.
+    needles = ['unasked = bool(guard.get("transient") or guard.get("unjudged"))',
+               'result["outcome"] = "failed" if unasked else "skipped"',
+               'verdict["unjudged"] = False']
+    missing = [n for n in needles if n not in code]
+    if missing:
+        return FAIL, notes + ["the guard's veto branch does not separate a failure to judge from a "
+                              "judgement; %d of its %d lines are not there: %s. `skipped` is the "
+                              "number that answers how often the Scholar tries to write something "
+                              "poisonous, and a 429 - or an empty completion - counted there "
+                              "inflates it with events that say nothing about content"
+                              % (len(missing), len(needles), "; ".join(missing))]
+    # AND THE FIELD IS CLEARED BY A JUDGEMENT RATHER THAN SET BY EACH FAILURE, which is the only
+    # version that survives a branch nobody has written yet: a new early return in screen() is
+    # unjudged by default and is filed as a malfunction, not as poison.
+    if code.count('verdict["unjudged"] = False') != 2:
+        return FAIL, notes + ["`unjudged` is cleared in %d places; it must be cleared exactly "
+                              "twice - once where the safety model flags a bullet, once where the "
+                              "grounding JSON parses - or some path that never judged anything is "
+                              "claiming to have judged"
+                              % code.count('verdict["unjudged"] = False')]
+    notes.append("and the ledger's word is a three-way choice, read from the source and exercised "
+                 "above: a guard that could not be ASKED is `failed`, a guard that was asked and "
+                 "returned NO VERDICT is `failed` too and says so in its reason, and only a guard "
+                 "that JUDGED is `skipped` - so the poison count means what it says. `unjudged` "
+                 "defaults to true and is cleared in exactly the two places a verdict is reached")
+
+    # -- (e2) A STAGE THAT SLEPT IS NOT A STAGE THAT WORKED, and the ledger has to say which.
+    # screen() sets verdict["waited"] on its one 20s wait after a 429, and for most of §30 the row
+    # builder dropped it on the floor: three real ticks recorded guardMs of 20707, 20710 and 20868
+    # and nothing anywhere said that twenty of those seconds were time.sleep(). totalMs is the
+    # number the declared 90s budget is judged against, so a wait that can be 85% of a tick has to
+    # be decomposable or the budget is a number with no meaning. Both halves are asserted, because
+    # a key in the whitelist that nothing ever populates is exactly the bug that was here.
+    if "waitedMs" not in scholar.TICK_ROW_KEYS:
+        return FAIL, notes + ["TICK_ROW_KEYS has no `waitedMs`, so _row() will filter the guard's "
+                              "wait out of the ledger and a tick that slept for twenty seconds "
+                              "will be indistinguishable from one that deliberated for twenty"]
+    if not re.search(r'"waitedMs":\s*int\(float\(.*?\bwaited\b.*?\)\s*\*\s*1000\)', code):
+        return FAIL, notes + ["`waitedMs` is whitelisted but tick() does not fill it from the "
+                              "guard's own verdict, which is a column that will read 0 forever"]
+    notes.append("and a guard that WAITED says so: `waitedMs` is whitelisted in TICK_ROW_KEYS and "
+                 "filled from the verdict screen() wrote, so the 20s wait after a 429 can be "
+                 "subtracted from a tick's total instead of being read as deliberation")
+
+    # -- (f) the sandbox, executed, and every deletion accounted for.
+    for bad in ("notes/personal/escape.md", "notes/study/auto/../../config.json",
+                os.path.join(ROOT, "config.json")):
+        try:
+            scholar._guarded_write(bad, "no")
+        except Exception:                                      # noqa: BLE001
+            continue
+        return FAIL, notes + ["_guarded_write() accepted %r. It is the only thing standing "
+                              "between an unattended loop and the rest of the disk" % bad]
+    deletions = re.findall(r"os\.remove\(|os\.unlink\(|shutil\.rmtree\(", code)
+    if len(deletions) != 4:
+        return FAIL, notes + ["scholar.py's code makes %d deletions, not the four that have been "
+                              "read: the veto's own destination, the temp folder, prune() and "
+                              "promote()'s source after the copy. A fifth is a deletion nobody "
+                              "has argued for" % len(deletions)]
+    notes.append("_guarded_write() refuses a path outside notes/study/auto/, a traversal dressed "
+                 "up as one and an absolute path at the repo root; and the module makes exactly "
+                 "four deletions, each one read and named - the veto's destination, the temp "
+                 "folder, prune() and promote()'s source")
+    return PASS, notes
+
+
 CHECKS = [
     ("the server is up and serving the viewer", check_server),
     ("the graph data loads and has nodes", check_graph),
@@ -7781,6 +8450,10 @@ CHECKS = [
     ("the borrowed engines are opt-in, and the key is a digest", check_borrowed_engines),
     ("the surfaces follow the room and go first, and the room can be asked for in words",
      check_the_seam),
+    ("a chunk is small by arithmetic, and one 400 halves it exactly once", check_chunk_guard),
+    ("the Scholar studies on its own thread and shares no lock with a turn",
+     check_async_parity),
+    ("nothing the Poison Guard refused is ever written down", check_poison_guard),
 ]
 
 

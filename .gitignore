@@ -50,6 +50,13 @@ notes-index.json
 vector-store/
 focus-ledger.json
 tools-ledger.json
+# THE SCHOLAR'S TWO FILES, and they are both local state rather than source. study-ledger.json
+# is the per-tick record - counts, durations, one row per chunk - and scholar-state.json is
+# what the rotation and the once-a-day digest remember across a restart. A machine that has
+# studied and a machine that has not are the same repository; the syllabus is the source, and
+# scholar_syllabus.json IS tracked because it is the boss's own instruction.
+study-ledger.json
+scholar-state.json
 calendar.json
 
 # PROOF ARTEFACTS (screenshots the harnesses write)
