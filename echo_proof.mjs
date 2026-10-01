@@ -196,9 +196,22 @@ const profile = mkdtempSync(join(tmpdir(), 'echo-'));
    A fake DEVICE would replace the microphone with Chrome's generated tone, which is a signal
    this harness invented - and the whole subject here is what a real microphone does with a
    real speaker in the same room. The device stays real; only the prompt is automated. */
+/* THE THREE OCCLUSION FLAGS, AND WHAT THEY COST THIS HARNESS TO LEARN. §32 PART 3's sweep read
+   28/49 here against a baseline of 49/49, and the whole of the shortfall hung off ONE red line:
+   "a real mouse gesture unlocked the audio". unlockAudio() in the page sets its flag on the
+   first line of its body, from a window listener on pointerdown - so a false reading there does
+   not mean the unlock is broken, it means NO POINTERDOWN ARRIVED. It did not, because on this
+   desktop Chrome marks a covered window's page hidden while still reporting windowState normal
+   and document.hasFocus() true, and a synthesized click into that page vanishes. Every one of
+   the twenty-one reds below it was an audio bus that had never been switched on.
+   So the flags, the same three eyes_live and console_proof already carry. FAILURE MODE if this
+   is ever reverted: the harness reports a broken echo law on a machine where the echo law is
+   fine, and it does it with twenty-one different sentences, none of which says "covered". */
 const chrome = spawn(exe, ['--remote-debugging-port=' + PORT, '--user-data-dir=' + profile,
   '--no-first-run', '--no-default-browser-check', '--window-size=1200,820',
   '--use-fake-ui-for-media-stream', '--autoplay-policy=no-user-gesture-required',
+  '--disable-features=CalculateNativeWinOcclusion',
+  '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding',
   '--new-window', GALAXY], { detached: true, stdio: 'ignore' });
 
 let target = null;

@@ -207,6 +207,10 @@ export function Mouth(page, log) {
   /* WARM THE ROOM BEFORE THE EAR IS OPEN (finding 5). */
   async function warm(text) {
     if (warmed) return false;
+    /* AND FINDING 9 FIRST, BECAUSE A MUTED SPEAKER IS NOT A ROOM. See ensureRoom below: this
+       desk's render endpoint is found muted again and again, and every spoken fixture in the
+       project reads that as a page that cannot hear. */
+    ensureRoom(note);
     watch();
     /* CHROME HAS TO HAVE RENDERED SOMETHING ITSELF. Every spike that produced a transcript
        had Chrome render audio before the recogniser was armed; every one that armed into a
@@ -350,6 +354,170 @@ export function Mouth(page, log) {
 /* The flags a spoken fixture's Chrome needs. A harness that forgets one of these does not
    fail loudly - it falls back to a silent room and reports "no transcript" as though the
    page were at fault. HEADED IS NOT OPTIONAL: --headless=new returns no transcripts. */
-export const SPOKEN_FLAGS = ['--use-fake-ui-for-media-stream'];
+/* ---------------------------------------------------------------------------------------
+   FINDING 9, AND IT INVALIDATED A DAY OF CONCLUSIONS: THE RENDER ENDPOINT IS FOUND MUTED.
+   Not wound down - MUTED, repeatedly, by something outside this project. It was found at 2%
+   and muted; raised to 90% and unmuted; and read again hours later at 92% AND MUTED. Nothing
+   in this repository calls SetMute except the four diagnostics in _runs/, and Windows'
+   communications ducking is off (UserDuckingPreference 3, "do nothing"). So it comes back on
+   its own, and a spoken harness that checks the room once at the top of a twenty-minute sweep
+   is checking a fact that expires.
+
+   WHY THIS WAS NOT CAUGHT FOR SO LONG, and it is worth writing down because the instrument
+   lied with a straight face: _runs/_playprobe.ps1 plays a wav and reports the render PEAK
+   METER, and that meter reports the session's stream level WITHOUT REGARD TO MUTE. Measured,
+   both ways, one minute apart: muted, RENDER PEAK 0.7303; unmuted, RENDER PEAK 0.6403. The
+   probe printed "the room carried it" on a device that was outputting silence. On the strength
+   of that one number the acoustic loop was written off as a property of this desk.
+
+   WHAT IT ACTUALLY COSTS. With the endpoint unmuted and no other process holding the
+   microphone, _runs/_aecprobe.mjs reads the page's own analyser at 1.0000 while the sentence
+   plays against a 0.0168 quiet-room floor - a ratio of 59.5, which is clipping. The same probe
+   with the endpoint muted and two leaked harness Chromes on the microphone read 0.0391 against
+   a 0.0378 floor, which is silence. Same desk, same speakers, same wav.
+
+   SO THIS RAISES IT, AND PUTS IT BACK. The level belongs to the employer and not to a test,
+   so the previous value and mute state are captured and restored on process exit - including
+   an exit by exception, which is the case that matters, because that is how the room got left
+   at 90% unmuted in a room the employer was sitting in.
+   FAILURE MODE IF THIS IS REMOVED: every spoken fixture reports an empty transcript, the empty
+   transcript is read as a defect in the ear, the funnel or the recogniser, and the conclusion
+   drawn is that the machine cannot do it. The machine can. The speaker was off.
+   --------------------------------------------------------------------------------------- */
+const ROOM_FLOOR_PCT = 55;      // below this a far-field synthetic voice does not survive the room
+const ROOM_WORKING_PCT = 90;    // what _aecprobe measured a 59.5 ratio at
+let ROOM_WAS = null;            // { pct, muted } - the employer's own setting, to be handed back
+
+/* One PowerShell child, one inline type, used for both the read and the write - a second
+   Add-Type in a second process costs a second of start-up per call. */
+const ROOM_PS = `
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+[Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAEV {
+  int f1(); int f2(); int GetChannelCount(out uint c);
+  int SetMasterVolumeLevel(float v, Guid g);
+  int SetMasterVolumeLevelScalar(float v, Guid g);
+  int GetMasterVolumeLevel(out float v);
+  int GetMasterVolumeLevelScalar(out float v);
+  int f7(); int f8(); int f9(); int f10();
+  int SetMute([MarshalAs(UnmanagedType.Bool)] bool m, Guid g);
+  int GetMute([MarshalAs(UnmanagedType.Bool)] out bool m);
+}
+[Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IMMD { int Activate(ref Guid i, int c, IntPtr p, [MarshalAs(UnmanagedType.IUnknown)] out object o); }
+[Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IMMDE { int f(); int GetDefaultAudioEndpoint(int flow, int role, out IMMD d); }
+[ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class En { }
+public class Room {
+  static IAEV Ep() {
+    IMMDE en = (IMMDE)(new En()); IMMD d; en.GetDefaultAudioEndpoint(0, 0, out d);
+    Guid i = typeof(IAEV).GUID; object o; d.Activate(ref i, 23, IntPtr.Zero, out o);
+    return (IAEV)o;
+  }
+  public static string Read() {
+    var e = Ep(); float v; bool m;
+    e.GetMasterVolumeLevelScalar(out v); e.GetMute(out m);
+    return ((int)Math.Round(v * 100)) + " " + (m ? "1" : "0");
+  }
+  public static string Write(int pct, bool mute) {
+    var e = Ep(); e.SetMasterVolumeLevelScalar(pct / 100.0f, Guid.Empty);
+    e.SetMute(mute, Guid.Empty); return Read();
+  }
+}
+'@
+`;
+
+function roomRead() {
+  const r = spawnSync('powershell', ['-NoProfile', '-Command', ROOM_PS + '[Room]::Read()'],
+    { encoding: 'utf8' });
+  const m = String(r.stdout || '').trim().match(/(\d+)\s+([01])/);
+  return m ? { pct: Number(m[1]), muted: m[2] === '1' } : null;
+}
+
+function roomWrite(pct, muted) {
+  spawnSync('powershell', ['-NoProfile', '-Command',
+    ROOM_PS + '[Room]::Write(' + pct + ', $' + (muted ? 'true' : 'false') + ')'],
+    { encoding: 'utf8' });
+}
+
+/* Called once per Mouth, from warm(). Idempotent: the employer's setting is captured the FIRST
+   time only, so a second harness in the same process cannot record the level a first one
+   raised and then "restore" it to that. */
+export function ensureRoom(note) {
+  const now = roomRead();
+  if (!now) {
+    if (note) note('   the render endpoint could not be read, so the room is being taken on ' +
+                   'trust - if every transcript below is empty, that is the first thing to check');
+    return null;
+  }
+  if (!now.muted && now.pct >= ROOM_FLOOR_PCT) {
+    if (note) note('   the room is open: render ' + now.pct + '%, unmuted');
+    return now;
+  }
+  if (ROOM_WAS === null) {
+    ROOM_WAS = now;
+    /* ON EXIT, AND ON EVERY EXIT. An uncaught throw is the case this is really for: that is how
+       a sweep left this machine at 90% unmuted overnight. spawnSync because an exit handler gets
+       no event loop - a promise here would never resolve. */
+    process.on('exit', () => {
+      if (ROOM_WAS) {
+        roomWrite(ROOM_WAS.pct, ROOM_WAS.muted);
+        console.log('  note the room was handed back: render ' + ROOM_WAS.pct + '%, ' +
+                    (ROOM_WAS.muted ? 'muted' : 'unmuted') + ' - as it was found');
+      }
+    });
+  }
+  roomWrite(ROOM_WORKING_PCT, false);
+  const after = roomRead();
+  if (note) {
+    note('   THE ROOM WAS SHUT AND HAS BEEN OPENED FOR THIS RUN: render was ' + now.pct + '%' +
+         (now.muted ? ' and MUTED' : '') + ', now ' + ((after && after.pct) || '?') +
+         '% unmuted. It is put back exactly as found when this process exits, including on a ' +
+         'throw. A muted speaker reads in this log as a page that cannot hear.');
+  }
+  return after;
+}
+
+/* AND THE THREE OCCLUSION FLAGS, WHICH THE PARAGRAPH ABOVE PREDICTED AND THIS LIST DID NOT
+   HAVE. It said a harness that forgets one of these "falls back to a silent room and reports
+   'no transcript' as though the page were at fault", and that is precisely what routing_proof
+   has been reporting: five attempts, "the room gave back nothing at all" every time, and then
+   a Runtime.evaluate that outran its 40s bomb and killed the file before it could sign off.
+   THE MECHANISM, MEASURED TWICE ELSEWHERE. This desktop minimizes a harness's Chrome window a
+   second or two after it opens, and Chrome marks a covered or minimized window occluded: the
+   page becomes a BACKGROUND page, its timers are clamped to about one a second and its audio
+   graph is starved. echo_proof went from 28/49 to 49/49 on these three flags alone, and
+   _runs/_aecprobe.mjs sampled an analyser across one 3.4-second sentence and got THREE samples
+   without the cure and 173 with it. A recogniser in that state is not mishearing the room, it
+   is barely being run.
+   FAILURE MODE IF THESE ARE REMOVED: every spoken fixture in this project reports an empty
+   transcript, the empty transcript is read as a defect in the ear or the funnel, and the days
+   go into a recogniser that was never given a chance to tick. */
+export const SPOKEN_FLAGS = ['--use-fake-ui-for-media-stream',
+  '--disable-features=CalculateNativeWinOcclusion',
+  '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding'];
+
+/* PUT THE WINDOW BACK WHERE IT CAN BE SEEN, because the flags above are necessary and not
+   sufficient: they stop Chrome treating a covered window as hidden, but a MINIMIZED window is
+   still a minimized window and this desk minimizes it anyway. setWindowBounds AND NEVER
+   bringToFront - bringToFront steals the keyboard off whatever the employer is typing into,
+   and the employer is sitting at this machine while the sweep runs. Every failure is swallowed
+   on purpose: a harness that cannot restore its window should go on and measure what it can,
+   and say so, rather than die at the first CDP call. */
+export async function unminimise(page, targetId, note) {
+  try {
+    const { windowId } = await page.send('Browser.getWindowForTarget',
+      targetId ? { targetId } : {});
+    await page.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } });
+    await page.send('Browser.setWindowBounds',
+      { windowId, bounds: { left: 30, top: 30, width: 1200, height: 820 } });
+    return true;
+  } catch (e) {
+    if (note) note('   the window could not be restored: ' + (e && e.message));
+    return false;
+  }
+}
 
 export function pythonPresent() { return existsSync(PY); }

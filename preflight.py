@@ -6765,9 +6765,32 @@ def check_face_shading():
                               "the term that catches whether the key can see the edge or not, "
                               "and the rim is the same band multiplied by the key - dropping "
                               "either one leaves a head the boss will call flat"]
-    if not re.search(r"vec3 col = mix\(uTint, uRimTint, vR\);", src):
-        return FAIL, notes + ["the fragment no longer mixes uRimTint by vR: a brighter edge in "
-                              "the SAME hue is an exposure push and not a rim light"]
+    # The OUTER mix is the clause, and it is matched by shape rather than by its §32 text.
+    # §33 put a second axis under it - the base hue became mix(uTint, uTint2, vC) so the shell
+    # can be cold while the heart is amber - and the §32 line `mix(uTint, uRimTint, vR)` is the
+    # vC-free special case of what is there now. Pinning the old literal would have reported a
+    # correct generalisation as a regression, which is exactly what it did once; pinning only
+    # "uRimTint appears somewhere" would have let the rim fall out of the colour entirely. So
+    # the shape is required: SOMETHING is run toward uRimTint by vR, and nothing else may be the
+    # outer blend.
+    outer = re.search(r"vec3 col = mix\((.+), uRimTint, vR\);", src)
+    if not outer:
+        return FAIL, notes + ["the fragment no longer runs the base colour toward uRimTint by "
+                              "vR: a brighter edge in the SAME hue is an exposure push and not "
+                              "a rim light, and that outer mix is the only thing making it one"]
+    base = outer.group(1)
+    # AND THE §32 MODES MUST STILL COMPUTE §32's COLOUR. The generalisation is only safe because
+    # the inner blend collapses to uTint wherever vC is zero, and vC is zero in RING, CUBE and
+    # FACE by being initialised at the top of main() and written only inside the core arm. That
+    # is an arithmetic identity, so it is asserted rather than trusted: without the zero-init a
+    # mode that never writes vC reads whatever the last core point left in the interpolator, and
+    # the failure is a VISIBLE wrong hue on the face - not a crash, not a red harness.
+    if base != "uTint" and not re.search(r"'\s*vC = 0\.0;'", src):
+        return FAIL, notes + ["the base colour is now %r rather than uTint, but vC is not "
+                              "initialised to 0.0 at the top of the vertex program: the inner "
+                              "blend then no longer collapses to uTint, so RING, CUBE and FACE "
+                              "stop being bit-identical to the §32 colour they are still "
+                              "asserted to draw" % base]
     notes.append("the rim and the fresnel are declared, assigned from PRES.* and read in both "
                  "programs - measured on the plates at 0.69->1.11, 0.90->1.88, 1.07->1.75 and "
                  "1.74->2.89 keyed-arc over away-arc, at yaw -30/0/30/90")
@@ -7737,18 +7760,86 @@ def check_the_seam():
                      "no seal at all")
 
     # -- (f) stored addressed, delivered peeled, by the vocative peel that was already there.
-    line = getattr(server, "FULLSCREEN_REFUSAL", "")
-    if "fills the room" not in line:
-        return FAIL, notes + ["FULLSCREEN_REFUSAL is %r, not the sentence the mandate wrote" % line]
+    # THIS CLAUSE WAS GREEN OVER THE LIVE DEFECT, AND THE REASON IS WORTH MORE THAN THE FIX.
+    # It used to read the module constant FULLSCREEN_REFUSAL - the hardcoded
+    # "Only the boss fills the room, Addi." - call `deaddress(line, None)`, and fail if
+    # `persona(None)["boss_call"]` survived. Every one of those three steps used the DEFAULT
+    # persona, so they agreed with each other perfectly: the default word is "Addi", the constant
+    # said "Addi", the peel was built from "Addi" and took it off, and the clause saw a sentence
+    # that arrived properly de-addressed. Measured just now as a negative control, that is exactly
+    # what it still reports: deaddress("...Addi.", None) -> "Only the boss fills the room."
+    # THE EDGE DOES NOT PEEL WITH THE DEFAULT PERSONA. It peels with the live one
+    # (`deaddress(payload[key], load_config()[0])`), config.json's warm form is not "Addi", and a
+    # peel built from the configured word walks straight past a hardcoded one. So the guest got
+    # "Only the boss fills the room, Addi." - told the room was not theirs and called by the
+    # boss's name for it, the precise failure the comment beside the constant claimed to prevent.
+    # The clause was not too weak. It was SELF-CONSISTENT in a persona nobody is served under,
+    # which is the failure mode of every fixture that supplies both halves of its own round trip.
+    # routing_proof caught it by asserting the absence of the literal in what a guest received;
+    # that is why two instruments on one sentence is not redundancy.
+    # SO: one persona for both halves, and the live one - plus a probe persona below, because
+    # agreement between a sentence and a persona proves nothing until the persona is one no
+    # default and no config could have supplied.
+    # AND IT IS ASSERTED UNDER A PERSONA NOBODY IS CONFIGURED WITH FIRST. A round trip measured
+    # only against the live block cannot tell "the sentence is built from the persona" apart from
+    # "a literal in the sentence happens to equal the persona's word today" - and the second of
+    # those is the bug. A probe form that is in no default and in no config can only arrive in the
+    # sentence by being read out of the block it was passed in.
+    form = getattr(server, "FULLSCREEN_REFUSAL_FORM", "")
+    if "fills the room" not in form or form.count("%s") != 1:
+        return FAIL, notes + ["FULLSCREEN_REFUSAL_FORM is %r: it must be the mandate's sentence "
+                              "with exactly one interpolated address form, because a name written "
+                              "into it as a literal is a name the peel is not built from" % form]
+    probe = {"persona": {"boss_call": "Zarquil"}}
     try:
-        peeled = server.deaddress(line, None)
+        pline = server.fullscreen_refusal(probe)
+        ppeel = server.deaddress(pline, probe)
     except Exception as exc:                                   # noqa: BLE001
-        return FAIL, notes + ["deaddress() would not peel the refusal: %s" % exc]
-    call = str((server.persona(None) or {}).get("boss_call") or "")
+        return FAIL, notes + ["the refusal would not compose or peel for a given persona: %s" % exc]
+    if "Zarquil" not in pline:
+        return FAIL, notes + ["composed under a persona whose boss_call is 'Zarquil', the refusal "
+                              "is %r - the sentence is not reading the block it was handed, so "
+                              "whatever address form it does carry is one the peel cannot remove"
+                              % pline]
+    if "Zarquil" in ppeel or "fills the room" not in ppeel:
+        return FAIL, notes + ["the peel left %r: the vocative must come off and the refusal must "
+                              "survive it, or a guest is either named or told nothing" % ppeel]
+
+    # THEN THE LIVE ROUND TRIP, READ THE WAY THE EDGE READS IT - one persona for both halves,
+    # load_config()[0], exactly as the outbound peel does at /chat. Reading the composed sentence
+    # against the DEFAULT persona is what made this clause green over a live defect: the default
+    # 'Addi' was absent from a sentence that said 'Addi', because the question was about the
+    # configured word and the sentence carried the hardcoded one.
+    # The warm form is printed as a length and a digest rather than as itself: this clause is
+    # about the round trip and not about the word, and a note that does not need a value should
+    # not carry one.
+    try:
+        cfg = server.load_config()[0]
+    except Exception as exc:                                   # noqa: BLE001
+        return FAIL, notes + ["config.json would not load for the live round trip: %s" % exc]
+    try:
+        line = server.fullscreen_refusal()
+        peeled = server.deaddress(line, cfg)
+    except Exception as exc:                                   # noqa: BLE001
+        return FAIL, notes + ["the live refusal would not compose or peel: %s" % exc]
+    call = str((server.persona(cfg) or {}).get("boss_call") or "")
+    shown = "%d chars, sha256 %s" % (len(call),
+                                     hashlib.sha256(call.encode("utf-8")).hexdigest()[:12])
+    if "fills the room" not in line:
+        return FAIL, notes + ["the live refusal is %r, not the sentence the mandate wrote" % line]
+    if call and call not in line:
+        return FAIL, notes + ["the live refusal does not carry the house's configured warm form "
+                              "(%s) at all, so there is nothing for the peel to remove and "
+                              "whatever name IS in it reaches a stranger unpeeled" % shown]
     if call and call in peeled:
-        return FAIL, notes + ["the refusal still carries the boss's address form after the peel: "
-                              "%r. A stranger being told the room is not theirs must not be "
-                              "called by his name while being told it" % peeled]
+        return FAIL, notes + ["the refusal still carries the boss's address form (%s) after the "
+                              "peel. A stranger being told the room is not theirs must not be "
+                              "called by his name while being told it" % shown]
+    notes.append("and the sentence is PEELABLE rather than coincidentally peeled: composed under a "
+                 "persona set to 'Zarquil' it says 'Zarquil' and peels to %r, and the live form "
+                 "(%s) goes in and comes off through the one persona the /chat edge peels with - "
+                 "the clause that used to read the module constant against the DEFAULT persona "
+                 "stayed green while a guest was addressed by the boss's name" % (ppeel, shown))
     notes.append("the refusal is stored addressed as the mandate wrote it and arrives peeled for "
                  "anybody who is not him - %r - and that is the EXISTING vocative peel doing it, "
                  "with no special case added for this route" % peeled)

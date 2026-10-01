@@ -13,11 +13,16 @@
  *
  * The sequence, once, nothing mocked:
  *
- *   ask "what is react"           -> a web answer; the memory now holds that question
+ *   ask "what is kubernetes"      -> a web answer; the memory now holds that question
  *   ask "who created it?"         -> the card and the sources panel quote "who created it?"
- *                                    the reply's searchedFor says "who created react"
- *                                    the sources are Walke / Facebook / react.dev, and
+ *                                    the reply's searchedFor says "who created kubernetes"
+ *                                    the sources are Google / Beda / kubernetes.io, and
  *                                    Tim Berners-Lee is nowhere in them
+ *
+ *   The first subject was "react" until the boss put react.js in the syllabus and the Scholar
+ *   wrote a note about it - see the long comment at act 1. It is a CONSTANT now, checked
+ *   against the corpus before the run starts, because a fixture the house has since learned
+ *   about proves nothing about the web gate.
  *                                 -> and the SERVER's own trace log says the same thing,
  *                                    read off disk, because the log is what a human would
  *                                    check at three in the morning
@@ -199,10 +204,39 @@ async function main() {
   await page.evaluate('document.getElementById("reset").click()', true);
   await sleep(800);
 
+  /* THE SUBJECT HAS TO BE A STRANGER, and that is an assertion now rather than an assumption.
+     This act proves a WEB-gate behaviour - the rewriter runs on the way out to DuckDuckGo - so
+     its subject must be one the local corpus has never heard of. It was "react" until
+     2026-09-29, when the boss added `react.js` to scholar_syllabus.json at weight 4 and the
+     Scholar studied it inside the minute. After that "what is react" was not a web question at
+     all: the funnel answered kind=notes out of notes/study/auto/2026-09-29-19-react-js.md and
+     six assertions below went red without one line of the rewriter changing. The funnel was
+     right, the note was right, the FIXTURE was wrong. So the subject is named once, and its
+     absence from the corpus is checked BEFORE it is used - because the next topic the boss adds
+     could collide the same way, and one honest failure beats six baffling ones. */
+  const SUBJECT = 'kubernetes';
+  const MADE_BY = /google|beda|burns|mcluckie|kubernetes\.io|kubernetes/i;
+  const SUBJ_RE = new RegExp('\\b' + SUBJECT + '\\b', 'i');
+  const corpus = (() => {
+    try {
+      const idx = JSON.parse(readFileSync('notes-index.json', 'utf8'));
+      return (idx.notes || []).map((n) => (n.label || '') + ' ' + (n.text || '')).join(' ');
+    } catch (e) { return null; }
+  })();
+  const owned = corpus === null ? -1 : (corpus.match(new RegExp('\\b' + SUBJECT + '\\b', 'gi')) || []).length;
+  note('corpus: ' + (owned < 0 ? 'no readable notes-index.json' : owned + ' mention(s) of "' + SUBJECT + '"'));
+  ok(owned === 0,
+     'THE SUBJECT IS A STRANGER TO THE CORPUS: "' + SUBJECT + '" appears in no indexed note, so ' +
+     'the funnel has to go to the web for it and the rewriter is on the path being measured',
+     owned < 0 ? 'notes-index.json unreadable - cannot tell, so this is not a pass'
+               : 'notes-index.json has ' + owned + ' note(s) mentioning "' + SUBJECT +
+                 '". The funnel will answer kind=notes and every rewrite check below is void. ' +
+                 'Pick a subject the corpus does not know, or prune the note.');
+
   /* ---- 1. the predecessor ------------------------------------------------ */
-  const first = await turn(page, 'what is react');
+  const first = await turn(page, 'what is ' + SUBJECT);
   note('1: ' + JSON.stringify(first.got.searchedFor) + ' -> kind=' + first.got.kind);
-  ok(first.got.kind === 'web' && first.got.searchedFor === 'what is react',
+  ok(first.got.kind === 'web' && first.got.searchedFor === 'what is ' + SUBJECT,
      'the first question went out as itself: ' + JSON.stringify(first.got.searchedFor),
      JSON.stringify({ kind: first.got.kind, searchedFor: first.got.searchedFor }));
   ok(!first.got.rewrote, 'and nothing was rewritten - there was nothing to inherit');
@@ -221,11 +255,11 @@ async function main() {
   ok(second.panel === 'who created it?',
      'THE LAW, in the sources panel: the same words again, not the rewrite',
      JSON.stringify(second.panel));
-  ok(!/react/i.test(second.card) && !/react/i.test(second.panel),
-     'nothing on the screen claims they said "React"');
+  ok(!SUBJ_RE.test(second.card) && !SUBJ_RE.test(second.panel),
+     'nothing on the screen claims they said "' + SUBJECT + '"');
 
-  ok(/\breact\b/i.test(sent),
-     'THE REWRITE: the query that left the machine names React',
+  ok(SUBJ_RE.test(sent),
+     'THE REWRITE: the query that left the machine names ' + SUBJECT,
      'searchedFor=' + JSON.stringify(sent));
   ok(!/\b(it|its|it\u2019s)\b/i.test(sent),
      'and the pronoun is gone from it, which is the whole complaint',
@@ -236,20 +270,21 @@ async function main() {
      'so the sentence searched is NOT the sentence asked - by design',
      JSON.stringify({ asked: second.sent, searched: sent }));
 
-  ok(srcs.length > 0 && srcs.some(s => /walke|facebook|react\.dev|react/i.test(s)),
-     'the ' + srcs.length + ' sources are about React',
+  ok(srcs.length > 0 && srcs.some(s => MADE_BY.test(s)),
+     'the ' + srcs.length + ' sources are about ' + SUBJECT,
      JSON.stringify(srcs));
   ok(!srcs.some(s => /berners|world wide web|w3\.org/i.test(s)),
      'and Tim Berners-Lee is nowhere among them - the old wrong answer is gone',
      JSON.stringify(srcs.filter(s => /berners|world wide web|w3\.org/i.test(s))));
 
   /* ---- 3. and the log a human would actually read ------------------------ */
-  const traced = logSays(/web lookup \([^)]*\) '[^']*react[^']*' \[(quick|heuristic) rewrite of 'who created it\?'\]/i);
+  const traced = logSays(new RegExp(
+    "web lookup \\([^)]*\\) '[^']*" + SUBJECT + "[^']*' \\[(quick|heuristic) rewrite of 'who created it\\?'\\]", 'i'));
   if (traced === null) note('skipped the log checks: no readable log');
   else {
     ok(traced === true,
        'the server trace log shows the rewritten query and what it was a rewrite OF');
-    ok(logSays(/a bare follow-up: 'who created it\?' after 'what is react'/) === true,
+    ok(logSays(new RegExp("a bare follow-up: 'who created it\\?' after 'what is " + SUBJECT + "'")) === true,
        'and names the predecessor it inherited from');
   }
 
@@ -428,8 +463,11 @@ async function main() {
   ok(!third.got.rewrote,
      'no rewrite is claimed, because there was nothing to inherit',
      JSON.stringify(third.got.rewrote));
-  ok(!/\breact\b/i.test(again),
-     'and no subject was invented out of an empty memory',
+  /* Both subjects, not one. This used to name only the first act's subject, which made it
+     vacuous the moment that word changed: the word most likely to be invented here is the one
+     the memory held LAST, and by this point that is svelte. */
+  ok(!SUBJ_RE.test(again) && !/\bsvelte\b/i.test(again),
+     'and no subject was invented out of an empty memory - neither ' + SUBJECT + ' nor svelte',
      'searchedFor=' + JSON.stringify(again));
   ok(third.card === '\u201cwho created it?\u201d',
      'the card still quotes them, rewrite or no rewrite', JSON.stringify(third.card));

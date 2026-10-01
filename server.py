@@ -1314,6 +1314,26 @@ DEFAULT_CONFIG = {
     # browser by /health for the same reason voice_name is: the page owns the camera.
     "galaxy_spin": False,
 
+    # ---- §33: WHAT THE PRESENCE MAY SPEND. Two booleans, and they default the OPPOSITE way
+    # round from galaxy_spin, which is worth saying out loud because the two sit next to each
+    # other and look like the same kind of knob.
+    #
+    # galaxy_spin is False by default because a camera that moves by itself takes the page out
+    # from under the reader's hands, and there is no measurement that can make that acceptable.
+    # bloom_on and smoke_on are True by default because §33's mandate says so AND because the
+    # thing that protects a slow machine from them is not a cautious default - it is the page's
+    # own auto-revert, which measures the frame rate with the effect running and turns the
+    # offending effect off with a line naming what it cost. A cautious default would simply mean
+    # nobody ever sees the cinema and nobody ever learns what it costs on their hardware.
+    #
+    # NEITHER IS A CREDENTIAL and neither carries a value: they are published to the browser by
+    # /health as bare booleans, for the same reason galaxy_spin is - the page owns the renderer
+    # and cannot be told by any other route. Set either false here and the next /health poll
+    # turns it off without a reload; set it back and the poll turns it on again UNLESS the page's
+    # own guard reverted it, which outranks the wish. See cineFlags in viewer/index.html.
+    "bloom_on": True,
+    "smoke_on": True,
+
     # ---- SEMANTIC RECALL. The four knobs of the vector store, and not one of them is a
     # credential: a model name, a loopback address, a float and a boolean. ingest.py reads
     # this file itself, server-side, exactly as send_email.py does, and /health reports the
@@ -2537,7 +2557,55 @@ def fullscreen_asked(question):
 # guest is "Only the boss fills the room." That is the existing peel doing its job and it is
 # not special-cased here. Measured, not assumed: routing_proof asserts the string the guest
 # receives rather than the string written on this line.
-FULLSCREEN_REFUSAL = "Only the boss fills the room, Addi."
+# AND THE FORM IS A TEMPLATE RATHER THAN A WORD, because the paragraph above is only true when
+# the word in the sentence is the one the peel is built from. It was not, and a stranger was
+# addressed by the boss's name for it; see fullscreen_refusal() for the whole account.
+FULLSCREEN_REFUSAL_FORM = "Only the boss fills the room, %s."
+
+
+_LIVE_CFG = "live"          # the sentinel below, named so the signature reads as a sentence.
+
+
+def fullscreen_refusal(cfg=_LIVE_CFG):
+    """The mandate's line, carrying the address form the peel actually knows how to remove.
+
+    THE BUG THIS FIXES, AND IT WAS A REAL ONE RATHER THAN A FIXTURE'S OPINION. The line used to
+    be the constant "Only the boss fills the room, Addi." with the comment above arguing that a
+    guest receives it de-addressed because _strip_address() peels the vocative off. That argument
+    only holds while the boss's warm form IS "Addi": the peel is built from
+    [who["boss_call"]] + _ADDRESS_WORDS (see _strip_address), so it removes the CONFIGURED form
+    and nothing else. config.json's persona sets boss_call to something else, so the peel walked
+    past the hardcoded "Addi" and the sentence that reached a stranger was "Only the boss fills
+    the room, Addi." - a guest being told the room is not theirs while being called by the boss's
+    name, which is the exact failure the comment above says this arrangement exists to prevent.
+    Caught by routing_proof's `said.indexOf('Addi') < 0`, which was right and was being read as
+    a stale fixture.
+    SO THE FORM IS INTERPOLATED FROM THE LIVE PERSONA, like every other addressed line in this
+    file (`% who["boss_call"]`), and the peel is then guaranteed to recognise it because it is
+    the same string the peel builds itself from. The vocative peel is a DO-NOT-ALTER and is not
+    touched: this makes the sentence peelable rather than making the peel cleverer.
+    Failure mode if boss_call is empty: "%s" would leave a dangling comma, so an unset form falls
+    back to "sir" - which the peel also carries in _ADDRESS_WORDS.
+
+    cfg: the sentinel "live" reads config.json, which is what the doorman wants and what the
+    outbound peel at the /chat edge already does (`deaddress(payload[key], load_config()[0])`), so
+    the two halves of the round trip read ONE persona and cannot drift apart the way the constant
+    and the peel did. A dict is used as given - which is the whole reason the parameter exists:
+    preflight can compose this sentence for a persona nobody is configured with and prove the name
+    arrives from the block rather than from a coincidence between a literal and a default. That
+    proof is impossible against a no-argument function, and the absence of it is precisely how the
+    bug above survived a green check.
+    """
+    if cfg is _LIVE_CFG:
+        try:
+            cfg = load_config()[0]
+        except Exception:                                      # noqa: BLE001
+            cfg = None
+    try:
+        call = persona(cfg)["boss_call"]
+    except Exception:                                          # noqa: BLE001
+        call = ""
+    return FULLSCREEN_REFUSAL_FORM % (str(call).strip() or "sir")
 
 
 def fullscreen_allowed(spoken, seal):
@@ -2587,7 +2655,7 @@ def fullscreen_allowed(spoken, seal):
         return True, ""
     if str(seal or "") and str(seal) not in ("GUEST", "UNVERIFIED"):
         return True, ""
-    return False, FULLSCREEN_REFUSAL
+    return False, fullscreen_refusal()
 
 
 # ---- §30: "STUDY X NOW" ---------------------------------------------------------------------
@@ -8577,6 +8645,9 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             # this list is derived from the allowlist itself - never typed into the
             # page, where it would drift the first time a model was retired.
             state = brain_state()
+            # Read through the same funnel the chip reads through, so the provider flag this
+            # route reports and the one /chat would honour cannot disagree - see load_config.
+            cfg = load_config()[0]
             return self._send_json(200, {
                 "ok": True, "kind": "model", "nodes": [], "answer": "",
                 "models": [{"say": say, "id": mid, "label": display_label(mid),
@@ -8585,6 +8656,24 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                            for say, mid in sorted(SPOKEN_MODELS.items(),
                                                   key=lambda kv: kv[1])],
                 "pinned": sorted(spoken_aliases()),
+                # §31 PART 3 - WHAT THE PROVIDER ROW IS BUILT FROM. The menu above is a list
+                # of MODELS on the house's own provider; Groq is a provider, so it can never
+                # be one of those rows - the page has always had to be told about it
+                # separately or not at all, and "not at all" is why "/model groq" typed at the
+                # deck fell through to the notes funnel. This block is additive and carries no
+                # credential: a boolean for whether a key exists, the model id the borrowed
+                # engine would serve, and the written form of it. The page prints these; it
+                # cannot invent them, and preflight forbids a model id typed into the page for
+                # exactly that reason.
+                # THE FAILURE MODE if `model` were omitted and the page named the model
+                # itself: a retired Groq id would linger on the picker for as long as nobody
+                # reread the HTML, which is the drift /brains exists to prevent.
+                "groq": {
+                    "active": provider_of(cfg) == "groq",
+                    "ready": groq_ready(cfg)[0],
+                    "model": model_label(dict(cfg, provider="groq")),
+                    "label": display_label(model_label(dict(cfg, provider="groq"))),
+                },
                 "brain": state})
 
         if route == "/voices":
@@ -8690,6 +8779,15 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 # rests, which is the default and the answer for everybody who has not
                 # gone looking for the key.
                 "sky": {"spin": bool(cfg.get("galaxy_spin"))},
+                # AND WHAT THE PRESENCE MAY SPEND, beside the camera's own preference and for
+                # the identical reason: the browser owns the renderer. TWO BOOLEANS, and the
+                # default is TRUE - which is why the expression is `is not False` rather than
+                # bool(): an absent key, an old config.json or a typo must leave the cinema ON,
+                # because the page has a guard that measures the frame and turns it off with a
+                # reason, and that is a better outcome than a reader who never sees it and never
+                # finds out why. Explicit false is the only thing that reads as no.
+                "cine": {"bloom": cfg.get("bloom_on", True) is not False,
+                         "smoke": cfg.get("smoke_on", True) is not False},
                 # AND HOW LONG THE EAR WAITS. The page runs the conversation - the voice
                 # detector, the re-arm, the closers - so it needs the one number that
                 # decides when a silent room means goodbye. Clamped here rather than

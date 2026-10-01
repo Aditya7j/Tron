@@ -96,12 +96,26 @@ const CHROMES = [
   process.env.LOCALAPPDATA + '/Google/Chrome/Application/chrome.exe',
 ];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* NOTHING THIS HARNESS PRINTS MAY CARRY THE ACCOUNT ADDRESS. This is the harness that reads the
+   grant in order to decide which sentence is the true one, and it said so in the log by printing
+   the address - which is the one thing the standing rule forbids outside a digest. The cure is
+   at the printer rather than at that one line, because reading the grant is exactly what this
+   harness is for and the next assertion that quotes the server's answer would breach it again.
+   `detail` is masked too: a FAIL prints the server's words verbatim, and a breach that only
+   happens on a red line is the one nobody goes looking for.
+   Eight hex characters keep the only property two logs need compared - whether it is the SAME
+   account - and carry nothing back. See deck_proof.mjs, which had the same hole in `orders:`. */
+const ADDR = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+const noaddr = (m) => String(m).replace(ADDR, (a) =>
+  '<account · sha256 ' + createHash('sha256').update(a).digest('hex').slice(0, 8) + '>');
+
 let checks = 0; const bad = [];
 const ok = (c, claim, detail) => {
-  checks++; console.log((c ? '  ok   ' : '  FAIL ') + claim);
-  if (!c) { bad.push(claim); if (detail) console.log('         ' + detail); }
+  checks++; console.log((c ? '  ok   ' : '  FAIL ') + noaddr(claim));
+  if (!c) { bad.push(noaddr(claim)); if (detail) console.log('         ' + noaddr(detail)); }
 };
-const note = (m) => console.log('  note ' + m);
+const note = (m) => console.log('  note ' + noaddr(m));
 /* Held out here so the cleanup below runs even if the run dies in the middle: a harness
    that crashes must not leave a browser open or an appointment in someone's diary. */
 const procs = []; const profiles = [];
@@ -210,10 +224,21 @@ async function main() {
      and a voice they can hear. --autoplay-policy is what lets the first line be spoken
      without waiting for a click, which matters because the FIRST thing spoken here is
      the proposal itself - the sentence a person is about to answer. */
+  /* THE THREE OCCLUSION FLAGS. This harness is HEADED on purpose - it says real sentences out
+     loud through the page's own funnel - and a headed window on this desktop gets covered by
+     whatever the employer is working in. Chrome then marks the page hidden while still
+     reporting windowState normal and document.hasFocus() true, and a synthesized click or
+     keystroke into it vanishes. §32 PART 3's sweep read 2/3 here, aborting on "the slash did
+     not summon the type-line", which is a keystroke that never arrived rather than a slash that
+     stopped working. Same three flags as echo_proof, eyes_live and console_proof.
+     FAILURE MODE if reverted: this harness fails at its FOURTH check and never reaches the
+     calendar, the Hands gate or the ledger - 59 assertions silently not run, reported as one. */
   const chrome = spawn(exe, [
     '--remote-debugging-port=' + PORT, '--user-data-dir=' + profile,
     '--no-first-run', '--no-default-browser-check',
     '--autoplay-policy=no-user-gesture-required',
+    '--disable-features=CalculateNativeWinOcclusion',
+    '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding',
     '--window-size=1400,940', '--new-window', GALAXY,
   ], { detached: true, stdio: 'ignore' });
   procs.push(chrome);
@@ -337,6 +362,56 @@ async function main() {
        (connected ? 'WRITE A REAL EVENT' : 'REFUSE, naming the missing road'));
   note('calendar.json is no longer a backend; the ledger is the witness. ' +
        'add_calendar_event has run ' + runs('add_calendar_event') + ' times before this run');
+
+  /* AN EMPTY ROOM, ASSERTED BEFORE A WORD IS TYPED INTO IT - and this guard is here because
+     its absence cost this file twenty-seven red lines that all blamed the page for something
+     the SERVER was doing.
+     WHAT HAPPENED. A focus session outlives the harness that started it: it lives in the
+     server process, it runs for its planned half hour, and it has first claim on a typed
+     sentence. A sweep that was killed mid-run left one standing - plannedS 1800, elapsedS
+     1801 - and it was AWAITING INTENT, having asked "And what are we focusing on?". So the
+     round below typed "remind me to call the client at four" and the session ate it as the
+     NAME OF THE WORK, not as an instruction. No proposal was ever composed. Meanwhile the
+     session's own queued notes were draining into speakLine(), so the recorder below heard
+     "Every 5 seconds, then, sir." and the reader of the log had to chase a sentence out of
+     focus.py's registry to find out why a calendar assertion had failed.
+     WHY A PRECONDITION AND NOT A FIX. There is nothing to fix. Asking for the calendar while
+     a session is asking you what you are working on is genuinely ambiguous, and the session
+     winning is correct. What was wrong was this file proceeding anyway and reporting the
+     consequence as twenty-seven defects in the hands.
+     FAILURE MODE IF THIS IS REMOVED: the next red run of this harness is a half-hour hunt
+     through a registry, and the run before it - the one that left the session - is long gone
+     from the terminal. A precondition that is cheap to check belongs above the assertions it
+     would otherwise corrupt. */
+  const foc = await (await fetch(GALAXY + '/focus')).json();
+  const fst = (foc && foc.focus) || {};
+  const busy = fst.state === 'running' || fst.state === 'arming' || !!fst.awaitingIntent;
+  ok(!busy,
+     'THE ROOM IS EMPTY: no focus session is holding first claim on a typed sentence - ' +
+     'a session that is arming, running or awaiting its intent would swallow every ' +
+     'instruction below as the name of the work, and none of them would reach the hands',
+     JSON.stringify({ state: fst.state, awaitingIntent: !!fst.awaitingIntent,
+                      plannedS: fst.plannedS, remainingS: fst.remainingS }));
+  if (busy) {
+    console.log('\n  STOPPING HERE ON PURPOSE. Everything below this line asserts what the ' +
+                'hands do with a\n  typed instruction, and a live focus session means no ' +
+                'instruction gets to them. Restart the\n  server (the session lives in that ' +
+                'process, not on disk) and run this file again.\n');
+    /* A bare return, because the sign-off and the teardown both live in main()'s .finally -
+       the count printed is therefore the two preconditions and nothing more, which is an
+       honest 1/2 rather than a 35/62 that implies sixty assertions were tried. */
+    return;
+  }
+  /* AND NOTHING IS ALREADY ON THE CARD. Same class, different holder: the gate reads the
+     next message as an answer to whatever is pending, so a proposal left standing by an
+     earlier run turns the first instruction below into a yes-or-no about somebody else's
+     question. It is not enough to trust that the page is fresh - the pending proposal is
+     SERVER state, and a new tab inherits it. */
+  const already = await page.json('__galaxy.hands.pending');
+  ok(!already,
+     'AND NOTHING IS ALREADY PENDING: no proposal left over from an earlier run is holding ' +
+     'the gate, which would read the first instruction below as an answer to it',
+     JSON.stringify(already));
 
   /* THE DOORMAN, READ BEFORE ANY WORD IS GIVEN OUT LOUD.
      With at least one hands-privileged voiceprint enrolled, a spoken yes at this gate is

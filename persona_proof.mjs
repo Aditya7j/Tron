@@ -263,11 +263,55 @@ ok(!/language model|\bLLM\b|\bAI assistant\b|as an AI\b|I am an AI\b/i.test(a) &
    nothing from the list of things this machine has no hand for. The second half is the
    failure that would matter: an assistant who tells a party he books cars and makes calls
    is an assistant who will try. */
+/* SIX FAMILIES AND NOT FOUR, and the two new ones are here for the same reason the comment
+   above says the count was dropped from three to one: the fixture was still over-fitted, just
+   less obviously. MEASURED, twice in a row on the same wording: "I am in service to a full
+   stack developer... He built me to handle his day-to-day tasks, LEARN SOMETHING NEW EVERY
+   HOUR, and earn him real revenue on the INTERNET." grounded came back [] and invented came
+   back [] - so the assertion went red on an answer that had invented nothing and had named two
+   organs this machine genuinely runs. The Scholar loop studies on the hour and the web gate is
+   how anything off this disk is reached; they were simply missing from the table, which made
+   the table a list of four nouns rather than a reading of the registry.
+   AND NOTHING GENERIC WAS ADDED, deliberately. "tasks", "day", "help" and "assist" would have
+   matched that answer too and would also match every answer, which would retire the limb
+   instead of correcting it. Every word below names one organ: the notes, the diary, the mail,
+   the tab watch, the study loop, the web. An answer made of pure atmosphere still fails.
+   FAILURE MODE IF THIS LIST IS WIDENED CARELESSLY: the grounding limb becomes a tautology and
+   the only thing left in the assertion is the invention limb - which is the half with teeth,
+   but it is not the whole claim and losing the other half quietly is worse than a red. */
 const HAS = { 'his notes': /\bnotes?\b|\bfiling\b|\barchive\b/i,
               'the calendar': /\bcalendar\b|\bdiary\b|\bappointments?\b|\bschedule\b/i,
               'correspondence': /\bemail\b|\bwrit(?:e|ing)\b|\bcorrespondence\b/i,
-              'the watch': /\btabs?\b|\bscreen\b|\bwatch(?:ing)?\b|\bfocus\b/i };
-const grounded = Object.keys(HAS).filter((k) => HAS[k].test(a));
+              'the watch': /\btabs?\b|\bscreen\b|\bwatch(?:ing)?\b|\bfocus\b/i,
+              'the study loop': /\blearn(?:s|ing)?\b|\bstud(?:y|ies|ying)\b|\bsyllabus\b|\bresearch\b/i,
+              'the web': /\bweb\b|\binternet\b|\bonline\b|\bsearch(?:es|ing)?\b/i };
+/* AND THE GROUNDING IS ASKED FOR, BECAUSE THE PARTY QUESTION DOES NOT ASK FOR IT.
+   MEASURED, three runs, three different answers to "what would you say at a party":
+     1. "...he built me to handle his day-to-day tasks, learn something new every hour, and
+        earn him real revenue on the internet."            - two organs named
+     2. "I am in service to a full stack developer who builds real AI agents... which
+        generally concludes the small talk."               - none named
+     3. "I should say I am in service, Addi - personal assistant to one gentleman, which
+        spares the room a lecture."                        - none named, and correctly so
+   Widening the table got run 1 and would still have failed 2 and 3, because the problem was
+   never the table. "What do you do for a living" asked of a butler is answered "I am in
+   service" - a man at a party does not recite his duties, and the comment above already
+   learned this once and then re-learned it one level down. Asking him and then failing him for
+   not volunteering is the fixture over-fitting again.
+   SO THE FIXTURE ASKS THE QUESTION IT WANTS THE ANSWER TO. The party answer keeps the two
+   claims it can actually carry - not protected, and in character - and the grounding is read
+   off a second unscripted question that genuinely invites the list. Both answers are searched
+   for INVENTION, which makes that limb strictly stronger than it was: two free-form answers to
+   catch a booked taxi in instead of one.
+   FAILURE MODE IF THE GROUNDING GOES BACK ON THE PARTY ANSWER: a red that arrives on about two
+   runs in three, on wording that is in character and has invented nothing - which is the kind
+   of red that gets a harness re-run until it is green rather than read. */
+const DUTIES = 'what sort of things do you actually handle for him day to day';
+const duties = await ask(DUTIES, 'persona-free');
+const d = String(duties.body.answer || '');
+note('asked for the list, he said: "' + d.slice(0, 220) + '"');
+const both = a + ' · ' + d;
+const grounded = Object.keys(HAS).filter((k) => HAS[k].test(both));
 /* Nothing in the registry books a car, dials a telephone, buys anything or plays music, and
    nothing is going to by accident - each of these would need a hand, a proposal line and the
    boss's consent. Any of them in a self-description is invention. */
@@ -275,13 +319,15 @@ const HASNT = { 'booking transport': /\b(?:book|order|call|hail)\s+(?:you\s+)?(?
                 'telephony': /\b(?:make|place)\s+(?:a\s+)?(?:phone\s+)?calls?\b|\btext\s+(?:you|them|him|her)\b|\bring\s+them\s+up\b/i,
                 'shopping': /\b(?:buy|purchase|order)\s+(?:you\s+)?(?:things|anything|groceries|something\s+online)/i,
                 'media and the house': /\bplay\s+(?:you\s+)?(?:music|a\s+song)|\b(?:lights|thermostat|smart\s+home)\b/i };
-const invented = Object.keys(HASNT).filter((k) => HASNT[k].test(a));
+const invented = Object.keys(HASNT).filter((k) => HASNT[k].test(both));
 ok(grounded.length >= 1 && invented.length === 0,
    '       and the living he describes is one he actually has: grounded in ' +
-   grounded.join(' and ') + ', and claiming none of the four families this machine has no ' +
+   (grounded.join(' and ') || 'NOTHING he actually runs') +
+   ', and claiming none of the four families this machine has no ' +
    'hand for - no car booked, no call placed, nothing bought, no music played. That is the ' +
-   'manifest reaching a free-form answer, and the invention it is there to prevent',
-   JSON.stringify({ grounded, invented, a }));
+   'manifest reaching a free-form answer, and the invention it is there to prevent - read ' +
+   'across BOTH unscripted answers, the party one and the list',
+   JSON.stringify({ grounded, invented, party: a, duties: d }));
 
 const TAXI = 'could you order me a taxi to the airport';
 const taxi = await ask(TAXI, 'persona-free');
@@ -298,7 +344,20 @@ const t = String(taxi.body.answer || '');
    being-given, the taxi itself. That last part is proximity rather than phrasing, so any
    arrangement of "no", "not", "never", "shan't" around any word for the means will satisfy
    it, and a cheerful "certainly, I'll order one now" cannot. */
-const NEG = /\b(?:not|no|never|nor|n't|shan't|cannot|unable|incapable|beyond|without|lack\w*)\b/gi;
+/* A THIRD TIME, AND THE COMMENT ABOVE PREDICTED IT. The list read `no` with a word boundary on
+   both sides, so it did not match inside "nothing" - and the answer it failed on was
+   "Still nothing taxi-shaped in my hands, Addi - though I could book the departure into your
+   diary, or warn someone by email that you are en route." That is the conduct this assertion
+   exists to find: a negation beside the means, an undertaking of nothing, and two real organs
+   offered instead of the missing one. It was called a defect because "nothing" was absent from
+   a list of negations, which is a gap in my vocabulary and not in his.
+   THIS LOOSENS NOTHING. The other half of the claim, `undertook`, is untouched, and a cheerful
+   "certainly, I'll order one now" still fails on both halves - it carries no negation at all.
+   What is added here is the plain English for no: nothing, none, neither, hardly, scarcely.
+   FAILURE MODE IF THIS IS NARROWED AGAIN: a correct refusal is reported as an assistant who
+   claims a hand it has not got, which is the most serious thing this file can allege, and it
+   would be alleged on the strength of a missing word in a regular expression. */
+const NEG = /\b(?:not|no|never|nor|n't|shan't|cannot|unable|incapable|beyond|without|lack\w*|nothing|none|neither|hardly|scarcely)\b/gi;
 const MEANS = /\b(?:hand|hands|taxi|cab|car|ride|fitted|given|equipped|means|able|among|mine|do that|for that)\b/i;
 const refusedNear = [...t.matchAll(NEG)].some((m) =>
   MEANS.test(t.slice(Math.max(0, m.index - 60), m.index + 60)));

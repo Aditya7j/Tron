@@ -256,9 +256,20 @@ async function main() {
      JSON.stringify(st0.budgetS));
   ok(!/gsk_[A-Za-z0-9]/.test(JSON.stringify(r0.body)),
      'NO CREDENTIAL IS IN THE PAYLOAD: nothing key-shaped anywhere in GET /study');
+  /* READ THE BOSS'S FILE, DO NOT REMEMBER IT. This said `syl.length === 4` until 2026-09-29,
+     when the boss added react.js to scholar_syllabus.json - a file §30 deliberately made his to
+     edit, re-read at the top of every tick - and a harness that had memorised its contents went
+     red for the feature working. The count is not the claim; the claim is that the page shows
+     the syllabus and nothing but the syllabus. */
   const syl = (r0.body || {}).syllabus || [];
-  ok(syl.length === 4 && syl.indexOf('micro-saas') >= 0,
-     'the syllabus reaches the page as four topic names: ' + syl.join(', '));
+  const wantTopics = (JSON.parse(readFileSync(join(ROOT, 'scholar_syllabus.json'), 'utf8'))
+    .topics || []).map((t) => t.name);
+  ok(wantTopics.length > 0 && syl.length === wantTopics.length &&
+     wantTopics.every((n) => syl.indexOf(n) >= 0),
+     'the syllabus reaches the page as its ' + wantTopics.length + ' topic names: ' + syl.join(', '),
+     'failure mode: the page inventing a topic, dropping one, or showing a stale copy from ' +
+     'before the file was edited. the file says ' + JSON.stringify(wantTopics) +
+     ', the page says ' + JSON.stringify(syl));
   const dg0 = (r0.body || {}).digest || {};
   ok(typeof dg0.due === 'boolean' && typeof dg0.line === 'string' && Array.isArray(dg0.notes),
      'and the digest rides along with the poll rather than on a timer of its own',
@@ -282,6 +293,24 @@ async function main() {
      (t1.reason ? ' - ' + String(t1.reason).slice(0, 90) : ''),
      'failure mode: outcome "failed" means the guard could not be ASKED - a 429 or an ' +
      'unreachable host - which is a road fault and not a verdict. Re-run it.');
+  /* AND THE TOTAL AT THE BOTTOM OF THIS FILE MOVES WITH THAT ONE WORD, which is worth saying
+     out loud because a changing denominator looks exactly like lost coverage. A KEPT tick leaves
+     a note behind, and a note can be opened: seven front-matter provenance fields, the sandbox
+     it was written inside, the index that now cites it, and the duration written into it - about
+     eleven assertions that exist only because there is a file to read. A SKIPPED tick is the
+     poison guard doing its job, and the honest thing to assert about it is that it wrote NOTHING
+     - four assertions, not eleven. So this file signs off 131/131 on a day the web hands the
+     Scholar something usable and 123/123 on a day it does not, and both are full passes.
+     WHY THIS NOTE AND NOT A FIXED COUNT: the alternative is asserting the outcome, which would
+     make this harness fail whenever the guard correctly refused a page - it would be a test that
+     demands the Scholar swallow poison to stay green.
+     FAILURE MODE IF THIS LINE IS REMOVED: the next reader compares two sweep tables, sees eight
+     checks missing with no failure anywhere, and goes looking for the eight assertions that
+     silently stopped running. There are none. */
+  note('the check count below depends on this word: a kept tick has a note to inspect and adds ' +
+       'about eleven assertions a skipped tick has nothing to make - ' +
+       (t1.outcome === 'kept' ? 'this run KEPT, so the fuller count applies'
+                              : 'this run SKIPPED, so roughly eight of them are not asked'));
   const STAGES = ['fetchMs', 'splitMs', 'sttMs', 'thinkMs', 'guardMs', 'writeMs', 'buildMs'];
   const allNum = STAGES.every((k) => typeof t1[k] === 'number' && t1[k] >= 0);
   const sum = STAGES.reduce((a, k) => a + Number(t1[k] || 0), 0);
@@ -712,12 +741,31 @@ async function main() {
   ok(during.length >= 20,
      'there were ' + during.length + ' conversational turns inside the study window to judge on',
      'fewer than twenty and the p95 is a guess');
-  const band = Math.max(p95(idle) * 1.10, p95(idle) + 1.0);
+  /* THE BAND IS CALIBRATED BY THE MACHINE, NOT GUESSED AT. §30 shipped this as ±10% with a flat
+     1 ms floor and named the problem in its own Left open: at a p95 of 4 ms, ±10% is 0.4 ms and
+     a loopback socket on this host jitters by more than that, so the assertion was a coin toss
+     dressed as a measurement. It came up tails on 2026-09-29: 5.64 ms during against 4.23 ms
+     idle, a 1.41 ms difference between two windows of the same idle-shaped work.
+     The fix uses evidence this file was already collecting and throwing away - `after`, twenty
+     more IDLE turns taken once the study has finished. Two idle windows on an unloaded machine
+     differ by the host's own jitter and nothing else, so that difference IS the noise floor, and
+     the band is never tightened below it. The 10% rule and the 1 ms floor both still stand; this
+     only forbids the band from being narrower than the instrument's demonstrated precision.
+     Failure mode of the fix itself: if a tick were slow enough to still be running through the
+     `after` window it would inflate the floor and hide a real regression - which is why `after`
+     is taken after the studying flag has cleared, and why the assertion below, comparing the
+     SLOWEST turns with fifty milliseconds of room, is the one with teeth and is untouched. */
+  const jitter = Math.abs(p95(after) - p95(idle));
+  const band = Math.max(p95(idle) * 1.10, p95(idle) + Math.max(1.0, jitter));
+  note('this machine\'s own idle-to-idle jitter: ' + ms2(jitter) + 'ms (p95 idle ' +
+       ms2(p95(idle)) + 'ms, p95 idle again ' + ms2(p95(after)) + 'ms), so the band is ' +
+       ms2(band) + 'ms');
   ok(p95(during) <= band,
      'LATENCY PARITY: p95 during ' + ms2(p95(during)) + 'ms against idle ' + ms2(p95(idle)) +
-     'ms - inside ±10% or one millisecond, whichever is larger',
-     'the floor is stated because ±10% of a 3 ms turn is 0.3 ms, which is below the jitter of ' +
-     'a loopback socket on this machine and would make the assertion a coin toss');
+     'ms - inside ±10%, or this machine\'s measured idle-to-idle jitter, whichever is larger',
+     'the floor is measured rather than stated because ±10% of a 4 ms turn is 0.4 ms, which is ' +
+     'below the jitter of a loopback socket on this machine and would make the assertion a coin ' +
+     'toss. band ' + ms2(band) + 'ms, jitter ' + ms2(jitter) + 'ms');
   ok(Math.max(...during) <= Math.max(...idle) + 50,
      'AND NO TURN WAS BLOCKED: the slowest turn during the study was ' +
      ms2(Math.max(...during)) + 'ms against ' + ms2(Math.max(...idle)) + 'ms idle',

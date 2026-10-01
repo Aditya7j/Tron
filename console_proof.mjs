@@ -268,6 +268,17 @@ if (!exe) { say('\n  no Chrome on this machine'); process.exit(1); }
 const profile = mkdtempSync(join(tmpdir(), 'console-'));
 const chrome = spawn(exe, ['--remote-debugging-port=' + PORT, '--user-data-dir=' + profile,
   '--no-first-run', '--no-default-browser-check', '--window-size=1200,820',
+  /* §32 - OCCLUSION OFF, because this file is nothing but clicks and keystrokes.
+     Chrome on Windows stops compositing a window it believes is fully covered, and an
+     uncomposited page has nothing for a synthesized event to hit: document.visibilityState
+     reads 'hidden' while the window still reports 'normal' and hasFocus() still says true.
+     Measured on this desktop, in eyes_live first: the press landed nowhere and the page
+     said nothing about it. Here it read as "the first click unlocked the audio" failing and
+     then "the slash did not summon the type-line" throwing - the same two symptoms §28
+     blamed on a detached shell. bringToFront below is kept, but it cannot help a window
+     that is merely covered rather than behind; this flag can. */
+  '--disable-features=CalculateNativeWinOcclusion',
+  '--disable-backgrounding-occluded-windows',
   '--new-window', GALAXY], { detached: true, stdio: 'ignore' });
 
 let target = null;
@@ -284,6 +295,16 @@ const page = await new Page(target.webSocketDebuggerUrl).open();
 await page.send('Runtime.enable');
 await page.send('Page.enable');
 try { await page.send('Page.bringToFront'); } catch (e) { note('bringToFront: ' + e.message); }
+/* AND THE TAB IS CONFIRMED TO BE PAINTING, before a single click is sent. Not a check
+   about the application - the instrument inspecting its own hands - so it throws rather
+   than counting, because a hidden page swallows input in silence and that is the one
+   failure indistinguishable from a broken feature. */
+if (!await waitFor(page, 'document.visibilityState === "visible"', 8000)) {
+  say('\n  the viewer tab is not painting (visibilityState=' +
+      await page.json('document.visibilityState') + '), so no click below would land. ' +
+      'Nothing was pressed.');
+  process.exit(1);
+}
 ok(await waitFor(page, '!!(window.__galaxy && __galaxy.speech && __galaxy.voice)', 30000),
    'the viewer is up and the speech doors are open');
 

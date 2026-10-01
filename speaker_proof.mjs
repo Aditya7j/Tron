@@ -659,6 +659,28 @@ const cdpGet = async (p) => {
   const r = await fetch(CDP + p); const t = await r.text();
   try { return JSON.parse(t); } catch (e) { return t; }
 };
+/* THE PORT HAS TO BE EMPTY BEFORE THE NEXT BROWSER ASKS FOR IT, and this wait is here because
+   its absence cost this file twenty of its own assertions.
+   WHAT HAPPENED. Section E runs pageRound twice on ONE port, 9263, and the teardown killed the
+   first browser and slept a flat 600ms. Chrome is a process tree, and the listening socket is
+   not always released inside 600ms - so the second browser launched while 9263 was still held,
+   could not bind its own DevTools server, and answered nothing. The warm-up loop below swallows
+   every error by design, so it simply ran out of tries in silence; the next call, cdpGet
+   ('/json/list'), was the first one not wrapped, and it threw `TypeError: fetch failed`. That
+   throw left the single try/catch around the whole run, so sections F and G never ran: the file
+   signed off 49/50 against a baseline of 70 and named the cause "the harness threw".
+   A FLAT SLEEP IS A GUESS ABOUT ANOTHER PROCESS. This asks the port instead. Both directions
+   are bounded and neither is fatal on its own - a port that never frees is reported by the
+   assertion in pageRound, not by an exception from a helper three frames down.
+   FAILURE MODE IF REMOVED: the second round of section E fails on a busy machine and takes
+   twenty unrelated assertions with it, under a message that blames this harness. */
+const portQuiet = async (tries = 60) => {
+  for (let i = 0; i < tries; i++) {
+    try { await cdpGet('/json/version'); } catch (e) { return true; }
+    await sleep(250);
+  }
+  return false;
+};
 /* CHROME LOOPS THE FILE IT IS GIVEN, and a loop with no pause in it never ends an utterance:
    the VAD closes a turn on silence, so a gap is stapled on the end. 48 kHz because that is
    what the flag wants; linear resampling because what is being measured is a larynx and a
@@ -683,6 +705,14 @@ async function pageRound(which, source, want) {
   const loop = loopFile(profile, source, 1.6);
   const exe = CHROMES.find((p) => existsSync(p));
   if (!exe) { ok(false, 'a Chrome-family browser is on this machine'); return null; }
+  /* An empty port, asked for rather than assumed - see portQuiet. On the first round this
+     returns at once; on the second it is the whole of the fix. */
+  if (!await portQuiet()) {
+    ok(false, '[' + which + '] port ' + CDP_PORT + ' was free for this round to launch on - ' +
+       'something is still listening there fifteen seconds after the previous round was ' +
+       'killed, so this round could not have bound its own debugging port');
+    return null;
+  }
   const chrome = spawn(exe, [
     '--remote-debugging-port=' + CDP_PORT, '--user-data-dir=' + profile,
     '--no-first-run', '--no-default-browser-check',
@@ -694,8 +724,18 @@ async function pageRound(which, source, want) {
     '--window-size=1400,900', '--new-window', GALAXY + '/?mute=1',
   ], { detached: true, stdio: 'ignore' });
   try {
+    /* THE WARM-UP IS NOW AN ASSERTION AND NOT A HOPE. It still swallows the errors - a
+       browser that is not up yet SHOULD refuse the connection, and twenty of those are
+       normal - but running out of tries is now reported here, where the reason is known,
+       instead of surfacing as a bare `fetch failed` from the unwrapped call below. */
+    let up = false;
     for (let i = 0; i < 80; i++) {
-      try { await cdpGet('/json/version'); break; } catch (e) { await sleep(250); }
+      try { await cdpGet('/json/version'); up = true; break; } catch (e) { await sleep(250); }
+    }
+    if (!up) {
+      ok(false, '[' + which + '] the browser answered on its debugging port within twenty ' +
+         'seconds of launch - it never did, so nothing below this line was measured');
+      return null;
     }
     let target = null;
     for (let i = 0; i < 40; i++) {
@@ -794,6 +834,11 @@ async function pageRound(which, source, want) {
     try { process.kill(-chrome.pid); } catch (e) { }
     try { chrome.kill(); } catch (e) { }
     await sleep(600);
+    /* AND THE PORT IS WAITED OUT HERE TOO, not only before the next launch, so that the
+       profile directory is removed after the browser that owns it has actually let go of it -
+       a rmSync against a live Chrome's profile fails silently on Windows and leaves litter in
+       the temp directory under a harness whose whole point is that it leaves nothing behind. */
+    await portQuiet();
     try { rmSync(profile, { recursive: true, force: true }); } catch (e) { }
   }
 }

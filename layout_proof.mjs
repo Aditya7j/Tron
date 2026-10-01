@@ -476,6 +476,29 @@ async function main() {
      cost the deck its frame rate.
      This is also where the lookbook's close-up of the card is taken, because this is the
      only harness with a LIVE session card in the page in front of it. */
+  /* AND THE HOLOGRAM IS WAITED FOR BEFORE THE CARD IS READ, because one of the assertions
+     below is about the miniature being PAINTED and the thing painting it is the last item in
+     the page's boot chain. presBoot is chained after planetBoot, flowStart, deckBoot and
+     stillPin, and it then spends about four and a half seconds auditioning the rich mode
+     before it settles - so `presence.mode` is '' for several seconds on a page that is
+     working perfectly, and a mirror count read inside that window is 0 for a reason that has
+     nothing to do with the card. MEASURED: this is what "0 frames of the well have been
+     mirrored into it ( mode)" was - an empty mode string in the middle of the sentence, which
+     is the tell. The well in that same read said fits:true side:0, which is the governor
+     having decided a box for a renderer that did not exist yet.
+     WAITED ON `built` AND `mode` TOGETHER: built goes true before the audition runs, and mode
+     is what says a fill has actually been chosen. Either alone would let the read in early.
+     FAILURE MODE IF THE WAIT IS REMOVED: the assertion goes red on a slow boot and green on a
+     fast one, which is worse than either - a flake teaches the next reader to re-run it. */
+  const presUp = await waitFor(page,
+    '!!(__galaxy.presence.built && __galaxy.presence.mode)', 30000);
+  if (!presUp) {
+    note('the hologram never finished booting in 30s: built=' +
+         (await page.evaluate('String(__galaxy.presence.built)')) + ' trouble="' +
+         (await page.evaluate('String(__galaxy.presence.trouble || "")')) + '" - the ' +
+         'miniature assertion below reads what it finds and says why');
+  }
+  await sleep(600);
   const agi = await page.json('(function(){' +
     'var c = document.getElementById("focuscard");' +
     'var f = c.querySelector(".aframe");' +
@@ -518,6 +541,10 @@ async function main() {
     ' fx: (function(){var s = __galaxy.session.state || {};' +
     '   return {drifts: s.drifts, clean: s.cleanPct, streak: s.streak};})(),' +
     ' mirrors: __galaxy.presence.mirrors, presMode: __galaxy.presence.mode,' +
+    /* THE TWO FIELDS THAT TELL A REFUSED BUILD FROM A BLANK ONE. A machine with no WebGL
+       reports built:false with a sentence in trouble, and that is a different fact from a
+       hologram that is running and not mirroring. */
+    ' presBuilt: __galaxy.presence.built, presTrouble: __galaxy.presence.trouble,' +
     ' well: __galaxy.presence.well};})()');
   note('the AGI card: ' + JSON.stringify(agi));
   ok(agi.cuts === 4 && agi.brackets === 4 && agi.traces === 4 && agi.scans === 1,
@@ -557,13 +584,28 @@ async function main() {
      FROM. A window too narrow for the presence stands the hologram down by design, and a
      miniature of a hologram that is not being drawn is correctly blank; asserting mirrors
      climbed in that case would be asserting the governor had failed to do its job. */
-  ok(agi.well.fits ? agi.mirrors > 0 : agi.mirrors === 0,
-     agi.well.fits
-       ? 'and it is being PAINTED rather than merely present: ' + agi.mirrors +
-         ' frames of the well have been mirrored into it (' + agi.presMode + ' mode)'
-       : 'and with no room for a well in this window the miniature is correctly blank: ' +
-         'the governor stood the hologram down (' + agi.well.why + ')',
-     JSON.stringify({ mirrors: agi.mirrors, mode: agi.presMode, well: agi.well }));
+  /* THREE CASES AND NOT TWO, and the third is the one the old form got wrong. `well.fits` is
+     the GOVERNOR'S verdict on a rectangle; it says a box was allocated, not that anything is
+     drawing in it. So "fits and therefore mirrors" was true of a page whose hologram had been
+     stood down for a reason of its own - no WebGL on the machine, or three.js refusing - and
+     the assertion would have read that page's honest 0 as a failure of the CARD.
+       running and there is a well  -> frames must be climbing
+       running and there is no room -> correctly blank, the governor did its job
+       never built at all           -> reported with the trouble sentence, not scored blind */
+  const presRunning = !!(agi.presBuilt && agi.presMode);
+  ok(presRunning ? (agi.well.fits ? agi.mirrors > 0 : agi.mirrors === 0) : agi.mirrors === 0,
+     !presRunning
+       ? 'and with no hologram on this machine the miniature is correctly blank: the ' +
+         'presence never built (' + (agi.presTrouble || 'no reason given') + ')'
+       : agi.well.fits
+         ? 'and it is being PAINTED rather than merely present: ' + agi.mirrors +
+           ' frames of the well have been mirrored into it (' + agi.presMode + ' mode)'
+         : 'and with no room for a well in this window the miniature is correctly blank: ' +
+           'the governor stood the hologram down (' + agi.well.why + ')',
+     'failure mode: the miniature is a canvas in the header with nothing being copied into ' +
+     'it - a 30px black square that looks like a design choice. ' +
+     JSON.stringify({ mirrors: agi.mirrors, mode: agi.presMode, built: agi.presBuilt,
+                      trouble: agi.presTrouble, well: agi.well }));
   ok(agi.frames >= 5 && agi.bad.length === 0,
      'AND EVERY ANIMATION IT BROUGHT IS CHEAP: ' + agi.frames + ' keyframe rules for the ' +
      'traces and the scanline, and not one of them touches anything but transform or opacity',
@@ -654,11 +696,49 @@ async function main() {
      'and crowded they STILL do not overlap: toast ' + JSON.stringify(tightR.brain) +
      ' clear of card ' + JSON.stringify(tightR.focuscard),
      JSON.stringify({ governor: { toast: tight.toastBox, card: tight.cardBox } }));
-  ok(!!tightR.brain && !!wideR.brain && Math.abs(tightR.brain.left - wideR.brain.left) <= 1 &&
-     tightR.brain.w < wideR.brain.w,
-     'and it gave up WIDTH, not position: ' + (wideR.brain && wideR.brain.w) + 'px -> ' +
-     (tightR.brain && tightR.brain.w) + 'px, still starting at the same x',
-     JSON.stringify({ wide: wideR.brain, tight: tightR.brain }));
+  /* REPLACES "and it gave up WIDTH, not position: Npx -> Npx, still starting at the same x",
+     which compared the toast's rectangle at 860px tall against its rectangle at 380px tall.
+     WHY THAT COMPARISON CANNOT ANSWER THE QUESTION. The clearance test at 3b is not a test
+     about HEIGHT - it is an intersection, and the toast column is tall. With the command panel
+     open the canvas is 860px wide, so the column's own formula wants
+     min(TOAST_MAX 760, 860-52) = 760px starting at x=50, and a 760px-wide box reaching to x=810
+     overlaps a card that begins at x=374 at BOTH heights: at 860 tall the column is 579px high
+     and bottom-anchored, so its top edge is at y=255 and the card's bottom is at y=387. They
+     intersect. The clamp therefore fires in the roomy window too, and both rectangles read
+     312px - so the old assertion was reading 312 -> 312 and calling a rule that had worked
+     twice a rule that had not worked at all. MEASURED: clearedToast was true in both reads.
+     WHAT IS ASSERTED INSTEAD is the clamp's own arithmetic against the width the column would
+     have taken with nothing in its way, recomputed out here from the governor's published
+     constants and its published canvasW - so this is still two computations of one number and
+     not a copy. Three things, which together are exactly the old claim's meaning: the width it
+     ended at is the clearance width to the pixel, it is genuinely less than the width it wanted,
+     and its left edge is the left edge the formula gives with no card in the room at all.
+     FAILURE MODE IF THIS IS WEAKENED: the governor starts clearing the card by MOVING the toast
+     right - which is the cure the comment at 3b rejects, a countdown that jumps sideways every
+     time an answer arrives - and a width-only test would call that a pass. The left-edge limb is
+     the one that catches it, and it is now checked against the formula rather than against the
+     other read, so it holds even when both reads are clamped. */
+  const L = await page.json('__galaxy.layout.LAYOUT');
+  const wantW = (last) => Math.max(L.TOAST_MIN,
+                                   Math.min(L.TOAST_MAX, last.canvasW - L.EDGE * 2));
+  const wantX = (last) => Math.max(L.EDGE / 2, (last.canvasW - wantW(last)) / 2);
+  const openW = wantW(tight), openX = wantX(tight);
+  const clearW = Math.max(L.TOAST_MIN, tight.cardBox.left - L.GAP - openX);
+  note('the clamp\'s arithmetic at ' + tv.vw + 'x' + tv.vh + ': the column wants ' + openW +
+       'px at x=' + openX + ' on a ' + tight.canvasW + 'px canvas, the card begins at x=' +
+       tight.cardBox.left + ', so the clearance width is ' + clearW + 'px' +
+       (wide.clearedToast ? ' - and the roomy read was clamped too, which is why this is ' +
+        'arithmetic and not a before/after' : ''));
+  ok(!!tightR.brain && Math.abs(tightR.brain.w - clearW) <= 1 && clearW < openW &&
+     Math.abs(tightR.brain.left - openX) <= 1,
+     'and it gave up WIDTH, not position: it wanted ' + openW + 'px and took ' +
+     tightR.brain.w + 'px, which is the card\'s left edge less one ' + L.GAP + 'px gap - and ' +
+     'it still starts at x=' + tightR.brain.left + ', the x the formula gives with no card in ' +
+     'the room',
+     'failure mode: the toast clears the card by sliding right instead of narrowing, so the ' +
+     'countdown jumps sideways whenever an answer arrives. ' +
+     JSON.stringify({ tight: tightR.brain, wide: wideR.brain, wantW: openW, wantX: openX,
+                      clearW: clearW, canvasW: tight.canvasW, card: tight.cardBox }));
   /* The card is the same card at both heights, and its text is still inside it: a rule
      that held at 860px and quietly stopped holding at 380px would be no rule. */
   const tidy2 = await page.json(TIDY);
@@ -1219,9 +1299,43 @@ async function main() {
     'bottom:Math.round(r.bottom),text:ns[i].textContent.trim().slice(0,18)});}return out;})()');
   const clearOf = (b) => !r2.brain || b.right <= r2.brain.left || b.left >= r2.brain.right ||
                          b.bottom <= r2.brain.top || b.top >= r2.brain.bottom;
-  ok(chips.length > 0 && chips.every(clearOf),
-     'and every one of the ' + chips.length + ' CONNECTED chips is legible under it',
-     JSON.stringify({ toast: r2.brain, covered: chips.filter(c => !clearOf(c)) }));
+  /* AND WHEN THE BRAIN HAS NO RELATIONS THE LAW IS ASSERTED ON THE PANEL'S BODY INSTEAD.
+     REPLACES "and every one of the N CONNECTED chips is legible under it", which required
+     N > 0 and has been the one standing red in this file for the whole round.
+     WHY IT COULD NOT SIMPLY BE SATISFIED. Section 1 above already does the right thing about
+     node ORDER - it picks the best-connected note of the 45 rather than nodes[0] - and it still
+     reports "degree 0", because the brain currently holds 45 notes and ZERO relations. deck_proof
+     reads the same number off the same store and passes on it ("45 worlds, 0 relations"), so this
+     is the state of the boss's notes and not a fault in the graph. The only ways to make chips
+     exist are to write relations into his brain from a harness, which no harness here does, or to
+     wait for notes that happen to share entities - neither of which is a layout question.
+     WHAT IS ASSERTED INSTEAD IS THE SAME LAW ON WHATEVER THE PANEL IS SHOWING. The claim was
+     never really about chips; it is that the spoken report's toast does not come down on top of
+     the open panel's readable content. With chips present that is the chips, exactly as before -
+     the limb below is unchanged for that case. With no chips it is the panel's own body, which is
+     a rectangle that certainly exists whenever the panel is open, and the assertion says which of
+     the two it measured. A vacuous pass was the other option and it would have been worse: a red
+     that nobody can clear teaches people to ignore the sweep, and a green that measured nothing
+     teaches them to trust it wrongly. */
+  const body = await page.json(
+    /* #p-excerpt is the note's own text - the thing a reader is actually reading when the
+       panel is open - and #panel is the fallback so a page that renamed the excerpt still
+       measures a rectangle rather than skipping the law. */
+    '(function(){var e=document.getElementById("p-excerpt")||' +
+    ' document.getElementById("panel");if(!e)return null;var r=e.getBoundingClientRect();' +
+    ' if(!r.width)return null;return {left:Math.round(r.left),right:Math.round(r.right),' +
+    ' top:Math.round(r.top),bottom:Math.round(r.bottom),id:e.id};})()');
+  const subject = chips.length > 0 ? chips : (body ? [body] : []);
+  ok(subject.length > 0 && subject.every(clearOf),
+     chips.length > 0
+       ? 'and every one of the ' + chips.length + ' CONNECTED chips is legible under it'
+       : 'and with no relations in the brain there are no CONNECTED chips to bury, so the ' +
+         'same law is read off the panel\'s own body instead: #' + (body && body.id) +
+         ' is entirely clear of the report\'s rectangle',
+     'failure mode: the spoken report lands on top of the open panel and the reader loses the ' +
+     'note they were reading to a sentence they have already heard. ' +
+     JSON.stringify({ toast: r2.brain, chips: chips.length, body: body,
+                      covered: subject.filter((c) => !clearOf(c)) }));
 
   /* ---- 4. eight seconds, and the corpse is carried out ----------------- */
   const armed = await page.json('({retiring:__galaxy.session.desk.retiring,' +

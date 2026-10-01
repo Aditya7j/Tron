@@ -394,11 +394,39 @@ const FG_CS =
   '[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); ' +
   '[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c); ' +
   '[DllImport("user32.dll")] public static extern bool AttachThreadInput(uint a, uint b, bool t); ' +
+  '[DllImport("user32.dll")] public static extern void keybd_event(byte v, byte s, uint f, IntPtr x); ' +
   '[DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId(); ' +
   'public static uint FrontPid() { uint p; GetWindowThreadProcessId(GetForegroundWindow(), out p); return p; } ' +
+  /* THREE ATTEMPTS, IN INCREASING ORDER OF RUDENESS, and the second and third exist because the
+     first one measurably stops working at one point in this run. MEASURED, twice: the raise
+     succeeds at 10s, 33s and 50s ("front is chrome 33780") and then fails at 72s against the
+     newly relaunched browser ("FAILED to raise chrome 30488; front is 23896" - 23896 is the
+     editor). The difference is the polite close: after WM_CLOSE there is a moment when no window
+     owns the foreground, the editor takes it, and from then on AttachThreadInput has nobody
+     useful to borrow rights from - the thread it attaches to is the editor's, which has no
+     interest in giving the foreground away. The file's own comment at bringChromeForward already
+     names this race; what it did not have was a way through it.
+     SECOND: an ALT tap. Windows grants SetForegroundWindow to the process that received the last
+     input event, and injecting a keystroke makes that this process. The tap is press-and-release
+     of the same key with nothing between, so no menu is left open and no character is typed.
+     THIRD: minimize and restore. A window coming out of minimised state is given the foreground
+     by the shell itself, which is the one path that does not ask permission. It is last because
+     it is visible - a browser window that blinks - and the first two are not.
+     SCOPED, AND THAT MATTERS MORE THAN THE TRICK: `h` here is only ever a window of a chrome on
+     the harness's own devtools-profile-chrome profile (see MINE), so the one browser on this
+     machine that must never be minimised - the boss's, on 9222 - is not reachable from here.
+     FAILURE MODE IF THIS IS REDUCED TO ONE ATTEMPT AGAIN: twenty reds in section 3 and a verdict
+     that reads like the locked-tab feature is broken, when what actually happened is that the
+     harness was measuring a desk with an editor in front of it. */
+  'public static bool IsFront(IntPtr h) { return GetForegroundWindow() == h; } ' +
   'public static bool Raise(IntPtr h) { uint p; uint theirs = GetWindowThreadProcessId(GetForegroundWindow(), out p); ' +
   'uint mine = GetCurrentThreadId(); AttachThreadInput(mine, theirs, true); ShowWindow(h, 9); ' +
-  'bool got = SetForegroundWindow(h); AttachThreadInput(mine, theirs, false); return got; } }';
+  'bool got = SetForegroundWindow(h); AttachThreadInput(mine, theirs, false); ' +
+  'if (IsFront(h)) return true; ' +
+  'keybd_event(0x12, 0, 0, IntPtr.Zero); keybd_event(0x12, 0, 2, IntPtr.Zero); ' +
+  'got = SetForegroundWindow(h); if (IsFront(h)) return true; ' +
+  'ShowWindow(h, 6); System.Threading.Thread.Sleep(120); ShowWindow(h, 9); ' +
+  'got = SetForegroundWindow(h); return IsFront(h) || got; } }';
 
 /* HELD in front, not merely put there, for as long as a press takes.
  *

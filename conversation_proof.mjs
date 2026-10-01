@@ -307,6 +307,28 @@ async function main() {
   await page.open();
   await page.send('Runtime.enable');
   await page.send('Page.enable');
+  /* THE WINDOW IS PUT BACK WHERE IT CAN BE SEEN, and this is not cosmetic.
+     Something on this desktop minimizes a harness's Chrome window a second or two after it
+     opens. A minimized window is a BACKGROUND page: Chrome clamps its timers to roughly one a
+     second and starves its audio graph. This file counts things that happen on timers - how many
+     times getUserMedia was asked for, how many times the recogniser was raised inside one
+     session, whether the ear re-armed by itself, whether a .start() raced an instance that had
+     not yet ended - and every one of those counts is wrong in a throttled renderer. It read
+     105/114 against a baseline of 114/114 and all nine reds were of that kind.
+     MEASURED, NOT GUESSED. _runs/_aecprobe.mjs sampled an analyser every 20ms across a 3.4
+     second sentence and got THREE samples before this call and 173 after it. That is a page
+     running at about a fiftieth of its speed.
+     setWindowBounds AND NOT bringToFront. bringToFront takes the keyboard focus off whatever the
+     employer is typing into, mid-sentence; setWindowBounds restores the window where it already
+     is and touches nothing of his.
+     FAILURE MODE IF REMOVED: this file reports the ear as leaking microphones and racing its own
+     restarts, on a desk where the ear is fine and only the clock was slow. */
+  try {
+    const { windowId } = await page.send('Browser.getWindowForTarget', { targetId: target.id });
+    await page.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } });
+    await page.send('Browser.setWindowBounds',
+      { windowId, bounds: { left: 30, top: 30, width: 1600, height: 1000 } });
+  } catch (e) { note('the window could not be restored: ' + (e && e.message)); }
   if (!await waitFor(page, '!!(window.__galaxy && __galaxy.ear)', 40000)) {
     throw new Error('the viewer never came up');
   }
@@ -1150,11 +1172,19 @@ async function main() {
   note('   the governor at the end of it: ' + JSON.stringify({
     vw: docked.gov.vw, vh: docked.gov.vh, panelOpen: docked.gov.panelOpen,
     canvasW: docked.gov.canvasW, toast: docked.gov.toast, well: docked.gov.wellBox }));
-  note('   the audition: ' + docked.probation + ' - ' + docked.trial + 'fps with the face' +
+  note('   the audition: ' + docked.probation + ' - ' + docked.trial + 'fps with the presence' +
        ' against ' + docked.baseline + 'fps with the ring' +
        (docked.degraded ? ' -> ' + docked.degraded : ''));
+  /* §32 PART 1 CHANGED THE ONE WORD IN THIS LINE THAT NAMES THE RICH MODE. The claim has not
+     moved: "kept" and the rich mode are the same fact said twice, and a verdict that disagreed
+     with the glass would be the failure worth catching. What changed is which mode is rich -
+     PRES.RICH is 'core' since §32, so a boot that keeps its audition wears the core and one that
+     drops it wears the ring. The literal is written out here rather than read from
+     __galaxy on purpose: reading the page's own idea of its rich mode would turn this into
+     "the page agrees with itself". The face is still a mode and still auditions when asked for
+     by hand - voice_proof does exactly that - but nothing in this file asks. */
   ok(docked.built === true && docked.well.fits === true && docked.frames > 100 &&
-     docked.fps >= 55 && (docked.probation === 'kept') === (docked.mode === 'face'),
+     docked.fps >= 55 && (docked.probation === 'kept') === (docked.mode === 'core'),
      'AND THE PRESENCE WAS DOCKED THROUGH ALL OF IT: a ' + docked.well.side +
      'px well ' + docked.well.why + ', ' + docked.frames + ' frames at ' + docked.fps +
      'fps in "' + docked.mode + '" mode (the audition said ' + docked.probation +

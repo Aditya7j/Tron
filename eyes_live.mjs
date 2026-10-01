@@ -48,11 +48,24 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 
 const GALAXY = 'http://127.0.0.1:4700/';
 const VIEWER = GALAXY + '?mute=1';            // the ear law's other half, in a URL
-const CDP = 'http://127.0.0.1:9222';
+/* §32 - THIS HARNESS USED TO DRIVE PORT 9222, AND THAT WAS THE WHOLE BUG.
+   9222 is the port the employer's own browser is started on, and it is also the port a
+   previous run of THIS file leaves behind when its teardown loses the browser (see the
+   finally block, which now kills by profile for that reason). Two Chromes cannot share a
+   debugging port: the second one simply fails to bind and says nothing about it, so every
+   CDP call in this file went to whatever was already listening. That produced a
+   reproducible 30-failure run in which the first press of the EYE button CLOSED a camera
+   the previous run had left open - "Eyes closed, sir." - and the twenty-nine failures
+   after it were the same run reading a browser it never opened.
+   So: a port of this harness's own, and a guard that refuses to run if anything answers
+   on it. Failure mode if the guard is removed: the run passes or fails according to the
+   state of a browser nobody in this file launched. */
+const CDP_PORT = 9296;                        // next free after camprobe's 9295
+const CDP = 'http://127.0.0.1:' + CDP_PORT;
 const NUDGE_DEADLINE_MS = 1000;               // "inside a second", in one number
 const SUSTAIN_MS = 700;                       // EYE_SUSTAIN_MS, for the log line
 const COOLDOWN_S = 30;                        // EYE_COOLDOWN_S
@@ -240,11 +253,25 @@ async function main() {
   const exe = CHROMES.find((p) => existsSync(p));
   if (!exe) throw new Error('no chrome.exe found in the usual places');
 
+  /* THE PORT MUST BE SILENT BEFORE THIS RUN OWNS IT. Asked as a question with a short
+     fuse, because the answer that matters is "nobody is there" and that answer arrives as
+     a refused connection, not as a reply. */
+  let squatter = null;
+  try {
+    const r = await fetch(CDP + '/json/version', { signal: AbortSignal.timeout(2500) });
+    squatter = (await r.json()).Browser || 'something';
+  } catch { /* nothing listening, which is the only acceptable state */ }
+  if (squatter) {
+    throw new Error('port ' + CDP_PORT + ' is already held by ' + squatter +
+      ' - this run will not drive a browser it did not launch. Close it and re-run ' +
+      '(a leftover from this harness is killable by its temp profile: eyes-live-*).');
+  }
+
   // 1. A real, headed Chrome with a real - if fictional - camera. Headed is not
   //    optional: the session's reader asks the window manager what is in front, and a
   //    headless browser has no window to be in front of anything.
   chrome = spawn(exe, [
-    '--remote-debugging-port=9222',
+    '--remote-debugging-port=' + CDP_PORT,
     '--user-data-dir=' + profile,
     '--no-first-run', '--no-default-browser-check',
     // The camera. The first flag makes one exist; the second answers the permission
@@ -252,6 +279,22 @@ async function main() {
     '--use-fake-device-for-media-stream',
     '--use-fake-ui-for-media-stream',
     '--autoplay-policy=no-user-gesture-required',
+    /* §32 - AND THE PAGE MUST BE ALLOWED TO STAY VISIBLE WHILE SOMETHING COVERS IT.
+       Chrome on Windows watches for a fully occluded window and stops compositing it:
+       document.visibilityState goes to 'hidden' while Browser.getWindowForTarget still
+       reports windowState 'normal' and document.hasFocus() still says true. A page that
+       is not composited has nothing for a synthesized mouse event to hit, so every
+       Input.dispatchMouseEvent in this file landed on nothing - measured, on this
+       desktop: the EYE press did nothing at all, while the same button reached by
+       element.click() opened the camera and said the ear law. That reads as thirty-three
+       page defects and is none.
+       Occlusion is turned off rather than the window raised, deliberately: this run takes
+       eleven minutes on somebody else's desktop, and a harness that keeps grabbing the
+       foreground is worse than one that quietly keeps painting behind whatever is in
+       front of it. Failure mode if these go: the run reports a blind, mute, camera-less
+       viewer, and every line of it is about the window manager. */
+    '--disable-features=CalculateNativeWinOcclusion',
+    '--disable-backgrounding-occluded-windows',
     '--new-window', VIEWER,
   ], { detached: true, stdio: 'ignore' });
 
@@ -274,6 +317,31 @@ async function main() {
   await page.send('Network.setBlockedURLs', { urls: BLOCKED });
   await cdp('/json/activate/' + target.id);
   await sleep(600);
+
+  /* AND THE PAGE IS CHECKED TO BE PAINTING BEFORE ANYTHING IS PRESSED. This is not an
+     assertion about the application - it is the instrument checking its own hands, so it
+     throws rather than counting a check. A hidden page swallows clicks in silence, which
+     is the one failure that looks exactly like a broken feature. Minimised is put back;
+     covered is handled by the occlusion flag above; anything left is said out loud. */
+  for (let i = 0; i < 8; i++) {
+    if (await page.evaluate('document.visibilityState') === 'visible') break;
+    try {
+      const { result } = await page.send('Browser.getWindowForTarget');
+      if (result && result.bounds && result.bounds.windowState === 'minimized') {
+        await page.send('Browser.setWindowBounds',
+          { windowId: result.windowId, bounds: { windowState: 'normal' } });
+      } else {
+        await page.send('Page.bringToFront');
+      }
+    } catch (e) { /* the next poll decides */ }
+    await sleep(700);
+  }
+  const vis = await page.evaluate('document.visibilityState');
+  if (vis !== 'visible') {
+    throw new Error('the viewer tab is ' + vis + ', so a dispatched click would land on ' +
+      'nothing and every check below would be a lie about the page. Nothing was pressed.');
+  }
+  log('the tab is painting (visibilityState=visible), so a press can land');
 
   ok(await page.evaluate('!!window.__galaxy && !!window.__galaxy.eyes'),
      'the viewer exposes the eyes handle');
@@ -641,6 +709,27 @@ async function main() {
 
   /* ---- 10. THE RELIEF VALVE ------------------------------------------- */
   await page.evaluate('void __hold("neutral")');
+  /* AND THEN THE PAGE IS LET FINISH TALKING BEFORE THE MARK IS TAKEN. Sitting up straight
+     ENDS the drift phase 9 just earned, and a drift that ends is answered - "Back. Thank
+     you, sir." - which is correct behaviour arriving a second or two later. A flat
+     sleep(1200) put the mark in front of it, so the first line after the mark was the
+     drift-return rather than the relief bargain and this phase read a red against a
+     feature that had worked: measured twice, the same way both times. So the wait is for
+     SILENCE, not for a duration - two seconds with nothing new said - which is strictly
+     stronger than the sleep it replaces and asserts nothing new.
+     Failure mode if this goes back to a fixed sleep: a green or red decided by which of
+     two correct sentences the page happened to reach first. */
+  {
+    const settleFrom = mark();
+    let lastCount = -1, still = 0;
+    for (let i = 0; i < 25; i++) {                 // 20s of patience, no more
+      const n = (await saidAfter(settleFrom)).length;
+      still = (n === lastCount) ? still + 1 : 0;
+      if (still >= 2) break;                       // 1.6s with nothing new: quiet
+      lastCount = n;
+      await sleep(800);
+    }
+  }
   await sleep(1200);
   const reliefMark = mark();
   // Said out loud, through the door a dictated sentence comes in by.
@@ -706,6 +795,16 @@ main().catch((e) => {
 }).finally(async () => {
   try { await galaxy('/focus', { cmd: 'abort' }); } catch { /* server may be gone */ }
   if (chrome) { try { chrome.kill(); } catch { /* ignore */ } }
+  /* AND THEN BY PROFILE, because chrome.kill() demonstrably does not finish the job on
+     this machine: a headed Chrome launched detached survived its kill() and went on
+     holding the debugging port, which is how one run came to be driven by the previous
+     run's browser. The filter is this run's own temp-profile directory - never a window
+     title, and never a port, so it cannot reach the employer's browser. */
+  spawnSync('powershell.exe', ['-NoProfile', '-Command',
+    'Get-CimInstance Win32_Process | Where-Object { $_.Name -eq \'chrome.exe\' -and ' +
+    '$_.CommandLine -match \'' + basename(profile) + '\' } | ' +
+    'ForEach-Object { taskkill /PID $_.ProcessId /F | Out-Null }'],
+    { encoding: 'utf8', timeout: 30000 });
   await sleep(700);
   try { rmSync(profile, { recursive: true, force: true }); } catch { /* windows */ }
   console.log('\n  ' + checks + ' checks, ' + failures.length + ' failed\n');

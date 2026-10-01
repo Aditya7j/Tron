@@ -40,7 +40,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, statSync, openSync, readSync, closeSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Mouth, TAP, SPOKEN_FLAGS, pythonPresent } from './tools/mouth.mjs';
+import { Mouth, TAP, SPOKEN_FLAGS, pythonPresent, unminimise } from './tools/mouth.mjs';
 
 const GALAXY = 'http://127.0.0.1:4700';
 const CDP_PORT = 9241;
@@ -239,10 +239,27 @@ const MATRIX = [
   },
   {
     say: "what's my name", setup: 'none',
+    /* THE WARM FORM IS READ FROM THE HOUSE, NOT WRITTEN DOWN HERE. This row used to assert the
+       literal 'Addi', which is server.py's DEFAULT boss_call - and config.json's persona sets a
+       different one, so the row went red against an answer that was correct. A fixture that
+       hardcodes a configurable value tests the fixture's memory of the config rather than the
+       server, and the first thing it does when they part company is blame the server.
+       So `answerHas` is filled in at run time from /speaker's own bossCall, which is the same
+       string the persona block hands the composer and the vocative peel. Set below, before the
+       typed column runs; the placeholder here is never matched against anything.
+       AND THE LIMIT OF THE CLAUSE IS STATED RATHER THAN QUIETLY ENJOYED. The row's point is
+       "the answer names the formal address AND the one he is called, because both are his", but
+       only ONE of those two can be checked from out here: boss_formal is deliberately not
+       published to the browser, while bossCall is (/speaker sends it so the Command Panel can
+       offer the first enrolment a name). And if the configured boss_call happens to be a
+       substring of boss_formal, one substring cannot tell the two apart at all. So what this
+       row proves is the narrower claim - the identity answer carries the house's warm form -
+       and the formal half rests on the `who am i` row above, which asserts the surname. */
     want: { status: 200, kind: 'chat', route: 'identity', lookups: 0 },
-    answerHas: 'Addi',
+    answerHas: null, fromPersona: 'boss_call',
     why: 'The warm form too - the answer names the formal address and the one he is ' +
-         'called, because both are his.'
+         'called, because both are his. Both forms are read from the live persona rather ' +
+         'than remembered here.'
   },
   {
     say: 'galaxy what can you do', setup: 'none',
@@ -416,6 +433,20 @@ const MATRIX = [
 /* ================================ THE TYPED COLUMN ================================ */
 async function typedPass() {
   say('\n  ---- TYPED: the twelve sentences at the wire ----------------------------');
+  /* THE PERSONA'S OWN WORDS, FETCHED ONCE, BEFORE ANY ROW IS JUDGED. Any row carrying
+     `fromPersona` has its expected substring filled in from the running server instead of from
+     this file - see the comment on the "what's my name" row. A row whose form cannot be read is
+     left with answerHas null, which `okAnswer` treats as "no substring required", so a /speaker
+     that cannot answer SKIPS the clause rather than inventing a red: the alternative is a
+     routing harness reporting an identity regression because the voiceprint store was busy. */
+  const persona = await (await fetch(GALAXY + '/speaker')).json().catch(() => null);
+  const warm = persona && typeof persona.bossCall === 'string' ? persona.bossCall.trim() : '';
+  for (const row of MATRIX) {
+    if (row.fromPersona === 'boss_call') row.answerHas = warm || null;
+  }
+  say('       the house\'s warm form, read from /speaker: ' +
+      (warm ? JSON.stringify(warm) + ' (' + warm.length + ' chars)'
+            : 'NOT PUBLISHED - the rows that need it will skip their substring clause'));
   const rows = [];
   for (const row of MATRIX) {
     const label = '"' + row.say + '"' + (row.label ? ' · ' + row.label : '');
@@ -827,10 +858,26 @@ async function chipHonesty() {
       const label = '"' + f.say + '"' + (f.label ? ' · ' + f.label : '');
       step('chips for ' + label);
       say('       ' + f.why);
-      await page.evaluate('__galaxy.ask(' + JSON.stringify(f.say) + ')');
-      /* WAIT FOR THE ANSWER AND NOT FOR A CLOCK. The interim line reads "Thinking across N
+      /* FIRED AND NOT AWAITED, and the `; 1` on the end is the whole point of this line.
+         page.evaluate sends Runtime.evaluate with awaitPromise:true, so handing it the bare
+         call `__galaxy.ask(q)` handed it ask()'s PROMISE - and that promise is not resolved
+         when the answer arrives, it is resolved when the page has finished with the turn,
+         speech and all. POST /say takes 4.4s to synthesise a long reply and hands back 621612
+         bytes of RIFF, which is fourteen seconds of audio that a muted element still plays at
+         real speed. Add the turn itself and one slow answer walks past send()'s 40000ms bomb.
+         That bomb rejects, and NOTHING in this file caught it: the run died at the sixth
+         fixture with `Error: Runtime.evaluate timed out` on stderr, 82 green lines, no sign-off
+         line at all, and the spoken column below never spawned. A file that cannot say what it
+         proved has proved nothing. Returning 1 makes the result a number instead of a promise,
+         so the call returns at once and the wait happens where the wait belongs - in the poll
+         loop, which is built for it and gives the turn two minutes.
+         FAILURE MODE IF THE `; 1` IS DROPPED AGAIN: routing_proof stops reporting. Not fails -
+         stops, with a stack trace where a verdict should be, and the reader has to count the
+         green lines by hand to find out it was one assertion short of a pass.
+         WAIT FOR THE ANSWER AND NOT FOR A CLOCK. The interim line reads "Thinking across N
          notes…", so a fixed sleep would measure the placeholder on a slow turn - and the
          placeholder carries no chips, which would make every row pass for the wrong reason. */
+      await page.evaluate('(function () { __galaxy.ask(' + JSON.stringify(f.say) + '); return 1 })()');
       let read = null;
       for (let i = 0; i < 240; i++) {
         read = await page.json(READ);
@@ -862,6 +909,21 @@ async function chipHonesty() {
                   rowShown: !!(read && read.rowShown), lbl: (read && read.label) || '' });
       await sleep(200);
     }
+  } catch (err) {
+    /* A THROW IN THIS SECTION IS ONE RED LINE, NOT THE END OF THE FILE - and the difference is
+       eight assertions and a verdict. The section spawns its own browser and talks to it over a
+       socket, so it has failure modes the typed column does not: a headless Chrome that dies
+       under it, a CDP call that outruns its bomb, a page that never finishes loading. Every one
+       of those used to propagate to the top of the module, where there is no catch, and take the
+       SPOKEN COLUMN and the sign-off down with it - sections that have nothing to do with chips
+       and were not the thing that broke. This is speaker_proof's lesson in a second file: one
+       unwrapped call there skipped sections F and G and signed off 49/50 against a baseline of
+       70, and the number looked like a regression in the deck rather than a race in the harness.
+       FAILURE MODE IF THIS CATCH IS REMOVED: the next reader of a red routing_proof cannot tell
+       a broken chip renderer from a Chrome that failed to start, because both print a stack
+       trace and no table. */
+    ok(false, 'the chip column threw and the rest of the run was kept alive: ' +
+       scrub(String((err && err.message) || err)));
   } finally {
     spawnSync('taskkill', ['/PID', String(chrome.pid), '/T', '/F']);
   }
@@ -1037,6 +1099,13 @@ const SPOKEN = MATRIX.filter((r) => !(r.say === 'can you listen to me' && r.ear 
      three spellings the recogniser can produce are covered by the typed variants above. */
   .filter((r) => !r.wantsFullscreen && !r.noFullscreen);
 
+/* THE PID THE GUARD AT THE BOTTOM OF THIS FILE NEEDS. spokenPass has no try/finally, so a throw
+   anywhere inside it used to leave its headed Chrome running - with the microphone still held.
+   The next harness to want a room then finds it taken, which this very file's own budget message
+   tells its reader to go and check: "that this harness is the only thing holding the microphone".
+   Kept at module scope because the catch that kills it cannot be inside the function that died. */
+let SPOKEN_CHROME = null;
+
 async function spokenPass() {
   say('\n  ---- SPOKEN: the same sentences, out of the speakers -------------------');
   if (!pythonPresent()) {
@@ -1050,6 +1119,7 @@ async function spokenPass() {
     '--user-data-dir=' + profile, '--no-first-run', '--no-default-browser-check',
     ...SPOKEN_FLAGS, '--window-size=1200,820', '--new-window', 'about:blank'],
     { detached: true, stdio: 'ignore' });
+  SPOKEN_CHROME = chrome.pid;
   let target = null;
   for (let i = 0; i < 100 && !target; i++) {
     try { target = (await (await fetch(CDP + '/json/list')).json()).find((t) => t.type === 'page'); }
@@ -1060,6 +1130,12 @@ async function spokenPass() {
   const page = await new Page(target.webSocketDebuggerUrl).open();
   await page.send('Runtime.enable');
   await page.send('Page.enable');
+  /* AND THE WINDOW IS PUT BACK BEFORE ANYTHING IS SPOKEN INTO IT. The occlusion flags in
+     SPOKEN_FLAGS stop Chrome calling a covered window hidden; they do not stop this desk
+     MINIMIZING it a second after it opens, and a minimized page is a throttled page with a
+     starved audio graph. This is the second half of the same cure, and it is re-asserted after
+     the navigate below as well, because the minimize is not a one-off event. */
+  await unminimise(page, target.id, say);
   /* BEFORE NAVIGATING, both of them, or the page's own script gets the real constructor
      and the real fetch first and neither tap sees anything. */
   await page.send('Page.addScriptToEvaluateOnNewDocument', { source: TAP });
@@ -1078,6 +1154,12 @@ async function spokenPass() {
     if (local && ['available', 'no-api', 'unavailable'].indexOf(local.state) >= 0) break;
     await sleep(1000);
   }
+  /* AGAIN, AFTER THE NAVIGATE AND THE ENGINE WAIT. The loop above can spend two hundred
+     seconds asking whether on-device recognition is available, which is ample time for this
+     desk to have minimized the window a second time - and the first sentence is spoken a few
+     lines below. Cheap to repeat; the alternative is a whole spoken column measured through a
+     throttled renderer, which reads in the log as a room that carries nothing. */
+  await unminimise(page, target.id, say);
   note('the recognition engine: ' + JSON.stringify(local));
   ok(!!local && local.state === 'available',
      'THE WORDS STAY IN THE ROOM: on-device recognition is the engine for this column, so ' +
@@ -1263,7 +1345,29 @@ if (!SPOKEN_ONLY) await fullscreenDoorman();
    headed Chrome can hold its own clicks at a time and the chip pass kills its own headless
    one before returning. TYPED_ONLY keeps it: it is a wire-and-DOM claim, not a room claim. */
 const chips = SPOKEN_ONLY ? [] : await chipHonesty();
-const spoken = TYPED_ONLY ? [] : await spokenPass();
+/* AND THE SPOKEN COLUMN CANNOT TAKE THE SIGN-OFF WITH IT EITHER. Twice in one afternoon this
+   file died on `Error: Runtime.evaluate timed out` - once at the sixth chip fixture and once at
+   the second spoken sentence - and both times the cost was the same: a stack trace on stderr
+   where a verdict line belongs, and a reader left counting green lines by hand to discover the
+   run was two assertions short. There is no catch anywhere above this line, so a single stalled
+   CDP call in a column that speaks into a real room silences the whole report.
+   THE CHROME IS KILLED HERE TOO, because spokenPass has no finally: a leaked headed browser goes
+   on holding the microphone, and the next spoken harness in the sweep then fails for a reason
+   that is nowhere in its own log.
+   FAILURE MODE IF THIS IS REMOVED: routing_proof stops reporting rather than reporting a
+   failure, and the room it could not measure gets blamed on the deck. */
+let spoken = [];
+if (!TYPED_ONLY) {
+  try {
+    spoken = await spokenPass();
+  } catch (err) {
+    ok(false, 'the spoken column threw and the sign-off was kept alive: ' +
+       scrub(String((err && err.message) || err)));
+    if (SPOKEN_CHROME) {
+      spawnSync('taskkill', ['/PID', String(SPOKEN_CHROME), '/T', '/F']);
+    }
+  }
+}
 
 /* ---- the table the lookbook wants, printed here so it is copied rather than retyped ---- */
 say('\n  ---- THE FIXTURE TABLE ------------------------------------------------');
