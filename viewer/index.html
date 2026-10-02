@@ -1179,6 +1179,52 @@
      reason and in the opposite direction - whichever of the two surfaces is not in use
      must cost nothing. */
   #a-ask .rows:empty{display:none;margin:0}
+  /* §40 - THE PLATE. display:none until showProposal() has a video id, and the default is
+     the hidden one deliberately: an <img> with no src is a broken-image glyph on every card
+     in the house, and a card about a subject line has no business reserving space for a
+     picture. No :empty trick can do it - an <img> is a replaced element and is never empty -
+     so the class is set in script, where the id is known.
+     NO ANIMATION AND NO TRANSITION on it. The deck's law allows transform and opacity, but
+     this element appears inside a card the harness screenshots the instant it is shown, and
+     a plate fading in is a plate that is half there in the plate. */
+  #a-ask #ask-plate{display:none}
+  #a-ask #ask-plate.show{display:block;width:196px;max-width:100%;height:auto;
+    border-radius:9px;margin:0 0 12px;border:1px solid rgba(255,196,100,.3);
+    /* The poster is 16:9 and this box is 16:9; object-fit is the belt and braces for a film
+       the Director ever renders at another shape, because a stretched thumbnail misrepresents
+       the thing being approved. */
+    aspect-ratio:16/9;object-fit:cover;background:rgba(10,14,24,.6)}
+  /* AND UNDER THE CAP THE PLATE GIVES WAY BEFORE THE PARAMETERS DO, which is the one rule in
+     this block that was written from a measurement rather than from an intention.
+     WHAT WENT WRONG WITHOUT IT. Every child of a capped #a-ask is flex:0 0 auto except the
+     scrolling rows, so the plate took its 110px unconditionally and the rows - the only
+     yielding thing left - absorbed the entire squeeze. At a 723px viewport, which is what a
+     1280x900 window actually gives a page on this desktop, broadcaster_proof measured
+     #ask-rows at 723x0 with a scrollHeight of 142: all six parameters present in the DOM,
+     readable by textContent, every assertion about them green, and NOT ONE PIXEL OF THEM ON
+     SCREEN. A publish card whose title, tags, description and URL have been squeezed to
+     nothing by its own thumbnail is the worst possible version of this feature: the boss says
+     yes to a picture, and the thing he is consenting to is the text.
+     WHY SHRINK AND NOT min-height ON THE ROWS. A floor under the rows would push the Yes
+     button off a short window, and the deck's law is that the two buttons are always
+     reachable. So the yielding happens here instead, in §40's own element, and the shrink
+     factor is 3 so that the plate loses three pixels for every one the rows lose. The plate
+     is object-fit:cover, so what shrinking costs is crop and never distortion - a thumbnail
+     that is shorter than it was still shows the film it is about.
+     AND IT YIELDS IN TWO STAGES, NOT BY SHRINKING. flex:0 3 auto was tried first and measured:
+     it works, and what it produces is a ONE-PIXEL SLIVER of a poster above the rows, which is
+     not a thumbnail yielding gracefully but a smear of visual noise where a picture used to be.
+     So the stages are stated outright instead. Under the cap the plate is 96px wide - 54 tall at
+     16:9, confirmation of WHICH film rather than a presentation of it - which leaves the rows
+     their two-or-three scrolling lines at a 723px viewport. And below 700px there is no room
+     for both, measured: the rows get 47px with no plate at all at 640, so a plate of any height
+     takes all of it. There the picture goes and the TEXT STAYS. That is the priority in one
+     rule: the boss is consenting to the title, the description and the URL; the poster only
+     tells him which film they belong to, and he has one unlisted film in front of him. */
+  #answer.capped #a-ask #ask-plate.show{flex:0 0 auto;width:96px;margin-bottom:8px}
+  @media (max-height:700px){
+    #answer.capped #a-ask #ask-plate.show{display:none}
+  }
   /* ----------------------------------------------------------------- THE CHAIN CARD
      The numbered plan, and it is the one part of this card that is PROSE rather than
      parameters - so it is in the reading font, not the mono. That is the opposite of the
@@ -3070,6 +3116,13 @@
          not what was typed, and not what the model said it would do. -->
     <div id="a-ask">
       <div class="lbl" id="ask-lbl">Awaiting your word</div>
+      <!-- §40 - THE THUMBNAIL PLATE, and the only picture any card in this house shows. It is
+           here because the one thing a Chain Card could not previously show is the thing the
+           world actually sees first: a boss approving a film going public should be looking at
+           the frame strangers will click on, not at the path to it. Its src is set by
+           showProposal() to /poster?video=<id> and never to a path - see that route. Empty and
+           unshown for every other tool, so a card with no film is the card it always was. -->
+      <img id="ask-plate" alt="" />
       <div class="rows" id="ask-rows"></div>
       <!-- THE PLAN, when there is more than one step. Empty and unshown for a single
            proposal: showProposal() fills exactly ONE of these two and empties the other, so
@@ -6016,6 +6069,13 @@ async function loadLib() {
        the Yes would be the new proposal's. */
     $('ask-steps').innerHTML = '';
     $('ask-clock').textContent = '';
+    /* §40 - AND THE PLATE, which is a THIRD surface and so needs saying here. Hidden first and
+       then emptied: clearing the src on a visible <img> paints the broken-image glyph for the
+       frame before display:none lands. removeAttribute and not src='' - an empty src is a
+       request for this very page, which the browser issues and then fails to decode. */
+    const plate = $('ask-plate');
+    plate.classList.remove('show');
+    plate.removeAttribute('src');
     /* §39 PART 2 - AND THE EXEMPTION LIFTS. A gate card is held on the glass for as long as
        the butler is waiting for a word; this is the one function every ending comes through -
        a Yes, a No, a spoken yes, the proposal's own timeout - so the grace that was refused
@@ -6105,6 +6165,24 @@ async function loadLib() {
     const plan = (pending.chain && (pending.steps || []).length > 1) ? pending.steps : null;
     if (plan) renderChain(steps, plan);
     else paramGrid(rows, pending.fields, pending.params);
+    /* §40 - THE THUMBNAIL PLATE, from the id and never from the `thumbnail` parameter sitting
+       right beside it. That parameter is a PATH, it is on this card for the boss to read, and
+       an <img src> built from it would be the server serving a file the page named - which is
+       the one thing /poster exists to make impossible. The id is the key; the ledger is the
+       map; the route holds both.
+       THE ID IS SHAPE-CHECKED HERE TOO, because the parameters of a proposal can have come
+       from a language model and an eleven-character test is cheaper than a 400. A chain's
+       steps are not searched for one: a plan is read as a plan. */
+    const vid = String(((plan ? {} : pending.params) || {}).video || '');
+    if (/^[A-Za-z0-9_-]{11}$/.test(vid)) {
+      const plate = $('ask-plate');
+      /* onerror and not a HEAD first: a film whose poster never rendered is a real case, and
+         the honest card for it is the one without a picture rather than a glyph where the
+         picture goes. The rows below still carry the title, the tags and the URL. */
+      plate.onerror = function () { plate.classList.remove('show'); };
+      plate.onload = function () { plate.classList.add('show'); };
+      plate.src = '/poster?video=' + encodeURIComponent(vid);
+    }
     $('ask-lbl').textContent = (pending.name || 'Awaiting your word') + ' · your word?';
     $('ask-yes').disabled = false;
     $('ask-no').disabled = false;

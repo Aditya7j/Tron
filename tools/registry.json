@@ -285,6 +285,73 @@
    "timeout_s": 15,
    "proposal": "That would go into your collection as '{title}', sir, a note of its own. The card carries what it says. Shall I write it down?",
    "step": "Write a note titled '{title}'."
+  },
+  {
+   "id": "publish_video",
+   "name": "Make a film public",
+   "script": "publish_video.py",
+   "_why": [
+    "THE ONLY HAND THAT PUBLISHES, and it is a hand rather than a server route for one reason:",
+    "this is the instant a film becomes visible to the world, and the Hands' gate exists to put",
+    "a human between this house and an act that strangers can see. The upload itself is NOT a",
+    "hand - it takes a minute and lands unlisted, so it runs behind the Doorman with a progress",
+    "bus, which is the Director's shape.",
+    "",
+    "EVERY PARAMETER IS A ROW OF THE CHAIN CARD, which is why there are six of them and why",
+    "four are only ever read and never used. S40 asks the card to show title, description, tags,",
+    "thumbnail and the unlisted URL before the boss says yes - and in this house the card IS the",
+    "slot's parameters. So they are parameters: not because the script needs them, but because",
+    "approving something invisible is not approving it. publish_video.py uses `video` alone, and",
+    "checks even that against the ledger rather than trusting the request.",
+    "",
+    "NO CAPABILITY SENTENCE MENTIONS A TOPIC OR A TITLE, so the brain cannot be led into",
+    "proposing this for a film that does not exist: the only legitimate source of a video id is",
+    "an upload this machine has already done, and the script refuses any id that is not in its",
+    "own ledger."
+   ],
+   "capabilities": [
+    "make a film that is already uploaded and unlisted visible to everybody on YouTube",
+    "publish, release or go public with the video that was just put up unlisted"
+   ],
+   "triggers": [
+    "\\b(?:publish|go\\s+public|make\\s+it\\s+public|release\\s+it)\\b",
+    "\\bunlist(?:ed)?\\b[^.]{0,30}\\bpublic\\b"
+   ],
+   "params": [
+    {
+     "name": "video",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "title",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "url",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "tags",
+     "type": "string",
+     "required": false
+    },
+    {
+     "name": "thumbnail",
+     "type": "string",
+     "required": false
+    },
+    {
+     "name": "description",
+     "type": "text",
+     "required": false
+    }
+   ],
+   "timeout_s": 60,
+   "proposal": "'{title}' is up and unlisted, sir - {url}. The card carries the description, the tags and the thumbnail. Shall I make it public?",
+   "step": "Make '{title}' public on YouTube."
   }
  ]
 }

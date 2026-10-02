@@ -6162,15 +6162,21 @@ def check_world_clock():
     # video about micro-saas pricing" hands a topic to a daemon thread and answers with one
     # sentence, so the turn itself retrieves nothing. The render's own retrieval happens on that
     # thread, under its own job, and is not this turn's cost.
-    GROWN = ("clock", "fullscreen", "study", "direct")
+    # §40's `broadcast` IS THE FIFTH, AND IT IS TWO ROUTES UNDER ONE NAME. "put it on youtube"
+    # hands a folder to a daemon thread; "make it public" raises a proposal and asks a question.
+    # Neither reads a note, an archive page or the web to produce its sentence - the title and tags
+    # come off the film's own script.md and the publish card off jobs-ledger.json, both written by
+    # this machine - so the turn retrieves nothing. The upload's minute of network is the
+    # Broadcaster's own thread's cost, exactly as the render's five chunks are the Director's.
+    GROWN = ("clock", "fullscreen", "study", "direct", "broadcast")
     if tuple(server.UNPAID_CLASSES) != tuple(server.PROTECTED_CLASSES) + GROWN:
         return FAIL, notes + ["UNPAID_CLASSES is %r; the clock, the fullscreen route, the "
                               "Scholar and the Director are meant to be tried after all four "
                               "have declined, and appended after them rather than mixed in "
                               "among them" % (tuple(server.UNPAID_CLASSES),)]
     notes.append("the four protected classes are as the mandate wrote them, and the clock, §29's "
-                 "fullscreen route, §30's study route and §35's direct route are tried after "
-                 "them, not among them")
+                 "fullscreen route, §30's study route, §35's direct route and §40's broadcast "
+                 "route are tried after them, not among them")
 
     session = "preflight-30-%d" % int(time.time())
     post_json("/reset", {"session": session}, timeout=30, label="a clean room for 30")
@@ -8494,6 +8500,216 @@ def check_poison_guard():
     return PASS, notes
 
 
+def check_delete_prohibition():
+    """43. The Broadcaster can put a film up and has no way to take one down.
+
+    §40's ONE IRREVERSIBLE LAW, and the only check in this file whose subject is an absence.
+    Everything else here asks "does this work"; this asks "is this impossible", which is a
+    harder thing to measure and the reason it is six clauses rather than two.
+
+    WHY IT HAS TO BE A PROPERTY OF THE SOURCE and cannot be a property of the grant: Google's
+    own discovery document, read live and kept at _runs/sweep40/discovery.json, says that
+    youtube.videos.update and youtube.videos.delete accept the IDENTICAL scope set. There is no
+    token this house can hold that may change a film's privacy and may not delete it. So the
+    narrow-scope argument is unavailable, the prohibition lives in the transport, and the only
+    thing that can keep it true over time is a check that reads the code.
+
+      (a) THE TRANSPORT ALLOWS THREE VERBS, by constant, and `DELETE` appears nowhere in
+          broadcast.py's code - docstrings stripped first, because the module's own docstring is
+          where it swears the thing off and a plain search finds the promise and calls it the
+          crime (see _py_code_only).
+      (b) EVERY REQUEST GOES THROUGH THE GUARD, by AST rather than by reading: _refuse_method is
+          the FIRST statement of _http(), and _http is the only function in the module that
+          touches urlopen. A second door that skipped the guard would pass a text search for
+          "DELETE" and still delete.
+      (c) THE GUARD IS MADE TO FIRE. Seven spellings - DELETE, delete, " Delete ", PATCH, HEAD,
+          OPTIONS and the empty string - and each must raise Prohibited. A guard nobody has ever
+          made fire is a guard nobody has tested, and this one is asserted as an EXCEPTION and
+          not a return value: a falsy return gets ignored at a call site, a raise cannot be.
+      (d) AND IT FIRES THROUGH THE REAL ENTRY POINT, _http("DELETE", <a real videos URL>), which
+          must raise before a socket is opened. This is the clause that would catch the guard
+          being present, correct and not called.
+      (e) UNLISTED-FIRST IS STRUCTURAL. insert() takes no privacy argument at all - asserted off
+          its signature - so there is no caller anywhere, today or later, that can ask for the
+          first state to be anything but PRIVACY_FIRST. "Public only on the boss's spoken Yes"
+          then needs no discipline from callers to stay true.
+      (f) THE LEDGER GUARD REFUSES AN ID THIS HOUSE DID NOT UPLOAD, executed as a subprocess the
+          way hands.py would run it. A video id is eleven characters a language model can invent,
+          and an invented one is a request to publish a stranger's film; this spends no API call
+          to prove it, because the refusal happens before a token is read.
+
+    NOTHING HERE REACHES THE NETWORK and nothing here needs a connected channel, which is the
+    point: these are the clauses that must hold on a machine where YouTube has never been
+    connected at all.
+    """
+    notes = []
+    try:
+        import broadcast
+    except Exception as exc:                                   # noqa: BLE001
+        return FAIL, ["broadcast.py would not import (%s: %s), so the Broadcaster's laws are "
+                      "unmeasurable and the server's own guarded import would have skipped the "
+                      "route silently" % (type(exc).__name__, exc)]
+
+    path = os.path.join(ROOT, "broadcast.py")
+    with open(path, encoding="utf-8") as fh:
+        src = fh.read()
+    code = _py_code_only(src)
+
+    # -- (a) three verbs, and the fourth word absent from the code.
+    allowed = tuple(getattr(broadcast, "METHODS_ALLOWED", ()))
+    if allowed != ("GET", "POST", "PUT"):
+        return FAIL, notes + ["METHODS_ALLOWED is %r. An upload needs POST and PUT and a "
+                              "verification needs GET; a fourth verb here is the whole of the "
+                              "prohibition undone in one tuple" % (allowed,)]
+    stray = sorted(set(re.findall(r"\bDELETE\b", code)))
+    if stray:
+        return FAIL, notes + ["the word DELETE appears in broadcast.py's code (not its prose) "
+                              "%d time(s). Whatever it is doing there, the module's promise is "
+                              "that no such path exists" % len(re.findall(r"\bDELETE\b", code))]
+    notes.append("the transport allows %s and nothing else, and the word DELETE appears nowhere "
+                 "in %d characters of code" % (", ".join(allowed), len(code)))
+
+    # -- (b) the guard is the first statement of the one function that opens a socket.
+    tree = ast.parse(src)
+    funcs = {n.name: n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    http_fn = funcs.get("_http")
+    if http_fn is None:
+        return FAIL, notes + ["broadcast.py has no _http(), so the request path has been renamed "
+                              "or split and this check is measuring a function that is no longer "
+                              "the one carrying the traffic"]
+    body = [n for n in http_fn.body if not (isinstance(n, ast.Expr)
+                                            and isinstance(n.value, ast.Constant))]
+    first = ast.dump(body[0]) if body else ""
+    if "_refuse_method" not in first:
+        return FAIL, notes + ["_http()'s first statement is %s, not the call to _refuse_method. "
+                              "A guard that runs after a URL has been built is a guard that can "
+                              "be reached around" % (type(body[0]).__name__ if body else "nothing")]
+    openers = sorted({n.func.attr for n in ast.walk(tree)
+                      if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                      and n.func.attr in ("urlopen", "request")})
+    callers = sorted({fn.name for fn in funcs.values() for n in ast.walk(fn)
+                      if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                      and n.func.attr == "urlopen"})
+    if callers != ["_http"]:
+        return FAIL, notes + ["urlopen is called from %s. Every request must go through _http(), "
+                              "which is where the guard stands; a second door is a second "
+                              "policy" % (", ".join(callers) or "nowhere")]
+    notes.append("_refuse_method() is _http()'s first statement, and _http() is the only function "
+                 "in the module that opens a socket (%s)" % ", ".join(openers))
+
+    # -- (c) seven spellings, each of which must raise.
+    refused, slipped = [], []
+    for verb in ("DELETE", "delete", " Delete ", "PATCH", "HEAD", "OPTIONS", ""):
+        try:
+            broadcast._refuse_method(verb)
+        except broadcast.Prohibited:
+            refused.append(verb or "(empty)")
+        except Exception as exc:                               # noqa: BLE001
+            slipped.append("%r raised %s instead of Prohibited" % (verb, type(exc).__name__))
+        else:
+            slipped.append("%r was allowed through" % verb)
+    for verb in ("GET", "post", " Put "):
+        try:
+            broadcast._refuse_method(verb)
+        except Exception as exc:                               # noqa: BLE001
+            slipped.append("%r was refused (%s), and an upload needs it" % (verb, exc))
+    if slipped:
+        return FAIL, notes + slipped
+    notes.append("the guard refuses %s - as an exception, which a call site cannot ignore the way "
+                 "it can ignore a falsy return - and still passes GET, post and ' Put '"
+                 % ", ".join(refused))
+
+    # -- (d) through the real door, against a real URL, with no socket opened.
+    try:
+        broadcast._http("DELETE", broadcast.API_BASE + "/videos?id=aaaaaaaaaaa")
+    except broadcast.Prohibited:
+        notes.append("_http('DELETE', <the real videos URL>) raises before a socket is opened, "
+                     "so the refusal is in the path traffic actually takes")
+    except Exception as exc:                                   # noqa: BLE001
+        return FAIL, notes + ["_http('DELETE', ...) raised %s rather than Prohibited, which means "
+                              "it got far enough to fail at something else"
+                              % type(exc).__name__]
+    else:
+        return FAIL, notes + ["_http('DELETE', ...) returned instead of raising. The guard exists, "
+                              "the constant is right, and the one path that matters does not use "
+                              "it"]
+
+    # -- (e) unlisted first, by signature.
+    params = list(inspect.signature(broadcast.insert).parameters)
+    if any("privac" in p.lower() for p in params):
+        return FAIL, notes + ["insert() takes %r. A privacy argument on the upload is a caller's "
+                              "chance to land a film public on the first PUT, and §40's "
+                              "unlisted-first stops being structural" % (params,)]
+    if broadcast.PRIVACY_FIRST != "unlisted":
+        return FAIL, notes + ["PRIVACY_FIRST is %r, not 'unlisted'" % broadcast.PRIVACY_FIRST]
+    notes.append("insert(%s) has no privacy argument of any kind, so every upload lands %r and the "
+                 "flip is a separate, gated act"
+                 % (", ".join(params), broadcast.PRIVACY_FIRST))
+
+    # -- (f) the ledger guard, run as a subprocess, spending nothing.
+    script = os.path.join(ROOT, "tools", "publish_video.py")
+    if not os.path.exists(script):
+        return FAIL, notes + ["tools/publish_video.py is missing, so the registry's publish hand "
+                              "cannot be the only road to public"]
+    # THE NINTH HAND, AND ITS SIX ROWS. The Chain Card IS the parameters - the page renders one
+    # row per declared field - so §40's "the Chain Card shows title, description, tags, thumbnail
+    # plate and the unlisted URL" is a claim about this schema and nothing else. A field dropped
+    # from here is a field the boss approves without having seen.
+    import hands
+    entry = [t for t in hands.registry() if t["id"] == "publish_video"]
+    if not entry:
+        return FAIL, notes + ["the registry has no publish_video, so a spoken yes has no hand to "
+                              "reach and the public flip would have no gate at all"]
+    rows = [p["name"] for p in entry[0]["params"]]
+    want_rows = ("video", "title", "url", "tags", "thumbnail", "description")
+    if tuple(rows) != want_rows:
+        return FAIL, notes + ["publish_video declares the rows %r. The card is drawn from this "
+                              "list, so the five things §40 says the boss must see have to be "
+                              "in it: %r" % (rows, list(want_rows))]
+    notes.append("the registry's ninth hand declares the card's six rows in order (%s), and the "
+                 "page draws one row per field" % ", ".join(rows))
+    # ELEVEN WELL-FORMED CHARACTERS, deliberately: a ten-character id would be refused by the
+    # shape test in front of the guard, and the clause would pass while proving the wrong refusal.
+    # This id is the shape Google uses and is not in the ledger, which is the only reason it fails.
+    done = _proc.run([sys.executable, script],
+                     input=json.dumps({"video": "Zq1_inventX", "title": "x"}).encode("utf-8"),
+                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+    said = done.stdout.decode("ascii", "replace").strip()
+    if done.returncode == 0 or "no record" not in said:
+        return FAIL, notes + ["the publish hand answered %r (exit %d) to a well-formed video id "
+                              "this house never uploaded. It must refuse it for being absent from "
+                              "the LEDGER - a refusal on the id's shape would let any eleven "
+                              "plausible characters through" % (first_line(said), done.returncode)]
+    notes.append("the publish hand refuses an id the ledger does not carry - %r - and does it "
+                 "without reading a token" % first_line(said, 72))
+
+    # -- AND THE TOKEN IS OUT OF REACH, both halves: ignored by git, and unservable.
+    with open(os.path.join(ROOT, ".gitignore"), encoding="utf-8") as fh:
+        ignored = fh.read()
+    if not re.search(r"^\s*secrets/?\s*$", ignored, re.M):
+        return FAIL, notes + [".gitignore does not ignore secrets/ on a line of its own, and "
+                              "%s is a refresh token for the boss's own channel"
+                              % os.path.relpath(broadcast.TOKEN_FILE, ROOT).replace("\\", "/")]
+    if state["up"]:
+        # THE PLATE'S ROUTE TAKES AN ID AND NEVER A PATH, live. Check 9 proves the viewer folder
+        # is the only servable tree; /poster is the one deliberate exception to that, so the
+        # exception gets its own probes: a traversal, a path, and a well-formed id with no film.
+        for probe, want in (("/poster", 400), ("/poster?video=../../secrets/x", 400),
+                            ("/poster?video=output/videos/x/poster.jpg", 400),
+                            ("/poster?video=aaaaaaaaaaa", 404)):
+            status, _head, _data = http_call("GET", probe, label="poster probe")
+            if status != want:
+                return FAIL, notes + ["GET %s answered %d, not %d. /poster is the one route "
+                                      "serving bytes from outside viewer/, and it may only ever "
+                                      "be asked about a video id this house's own ledger or "
+                                      "pending slot knows" % (probe, status, want)]
+        notes.append("the poster route refuses a missing id, a traversal and a path with 400 and "
+                     "an unknown film with 404 - it cannot be asked about a file")
+    else:
+        notes.append("the server is not up, so the poster route's four probes were not run")
+    return PASS, notes
+
+
 CHECKS = [
     ("the server is up and serving the viewer", check_server),
     ("the graph data loads and has nodes", check_graph),
@@ -8550,6 +8766,8 @@ CHECKS = [
     ("the Scholar studies on its own thread and shares no lock with a turn",
      check_async_parity),
     ("nothing the Poison Guard refused is ever written down", check_poison_guard),
+    ("the Broadcaster can put a film up and has no way to take one down",
+     check_delete_prohibition),
 ]
 
 

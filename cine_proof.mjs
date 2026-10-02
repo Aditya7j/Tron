@@ -1474,6 +1474,37 @@ async function main() {
      was actually broken: the core must grow when the room grows. On the old build it did not -
      at 1600 the fullscreen fraction was LOWER than the windowed one (0.2770 against 0.3011)
      because the well sat pinned at 420 while the viewport grew around it. */
+  /* FIRST, THE GLASS IS PUT IN A DEFINED STATE, and this is not tidiness - it is the only way
+     the six numbers below are a measurement of the SIZING LAW rather than of what the Scholar
+     happened to read this morning. §40 MEASURED THE FAULT: the deck's toast is a column, and on
+     a day the house has studied, #digestpanel is in it at 241.8px - so #brain stands 451.3px
+     tall with nothing spoken, the band above it collapses below PRES_MIN, and five of the six
+     states fall to the SECOND choice ("beside the toast"), where the well's side is bound by a
+     HORIZONTAL term and is therefore identical at both heights of one width. `grew` then cannot
+     hold at any width - not because the presence stopped scaling, but because nothing vertical
+     is binding it - and at 1600 the two heights land either side of the 192px flip (191 against
+     192), so the windowed well reads 382px beside the toast and the taller fullscreen one reads
+     263px above it. Measured both ways in _runs/sweep40/well_probe.mjs: digest on the glass,
+     grew false/false/false with the 1600 gap at 0.579; digest dismissed, #brain 199.5px, all six
+     above the toast, grew true/true/true and every gap inside SCALE_GAP. 199.5+26+12+149 is the
+     387 this part's own comment records from §39, which is the state §39 measured and did not
+     name. THE PAGE'S OWN HAND DOES IT - __galaxy.study.close() is what the digest's own dismiss
+     button calls, and it ends in layout() - so nothing here reaches past the API a person has. */
+  const digestWas = await page.json('(function(){var p=document.getElementById("digestpanel");' +
+    'var h=document.getElementById("brain").getBoundingClientRect().height;' +
+    'return {shown:!!(p&&p.classList.contains("show")),brain:+h.toFixed(1)};})()');
+  await page.evaluate('(window.__galaxy && __galaxy.study && __galaxy.study.close) ? ' +
+                      '(__galaxy.study.close(), 1) : 0');
+  await sleep(700);
+  const digestNow = await page.json('(function(){var p=document.getElementById("digestpanel");' +
+    'var h=document.getElementById("brain").getBoundingClientRect().height;' +
+    'return {shown:!!(p&&p.classList.contains("show")),brain:+h.toFixed(1)};})()');
+  note('PART 3 setup — the Scholar digest was ' + (digestWas.shown ? 'ON the glass' : 'already off')
+       + ' (toast ' + digestWas.brain + 'px) and is now '
+       + (digestNow.shown ? 'STILL ON' : 'dismissed') + ' (toast ' + digestNow.brain + 'px): the '
+       + 'presence is sized against the deck below it, so the toast is the room this part varies '
+       + 'the viewport against and it is stated rather than inherited');
+
   const SCR = [[1280, 800], [1366, 768], [1600, 900]];
   const srows = [];
   for (const [sw, sh] of SCR) {
@@ -1481,6 +1512,12 @@ async function main() {
       const svh = mode === 'windowed' ? sh - 72 : sh;
       await page.send('Emulation.setDeviceMetricsOverride',
         { width: sw, height: svh, deviceScaleFactor: 1, mobile: false });
+      /* AND AT EVERY READ, not once before the loop: the digest ARRIVES ON A POLL, so a run
+         that closed it at second 0 can have it back at second 4 and measure three states
+         against one toast and three against another. Closing it per state is what makes the
+         six comparable. */
+      await page.evaluate('(window.__galaxy && __galaxy.study && __galaxy.study.close) ? ' +
+                          '(__galaxy.study.close(), 1) : 0');
       await sleep(1500);
       const r = await page.json(
         '(function(){var L=__galaxy.layout.LAYOUT;var W=__galaxy.presence.well;' +

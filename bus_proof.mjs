@@ -267,14 +267,20 @@ async function main() {
     '    r.step(name, "detail %d" % (i + 1))',
     '    time.sleep(0.02)',
     '    shots.append(jobs.public(r.job)["jobs"][0])',
-    '# ALL FIVE RESULT KEYS, because §36 gave the Director two more - sceneTypes and poster -',
-    '# and a fixture that still reported three would make "the result is exactly RESULT_KEYS"',
-    '# a claim about this file rather than about the whitelist. `scratch` is the one key that',
-    '# must still be dropped: that is the whitelist being tested.',
+    '# ALL EIGHT RESULT KEYS, because §36 gave the Director two more - sceneTypes and poster -',
+    '# and §40 gave the Broadcaster three: videoId, url and privacy. A fixture that still',
+    '# reported three would make "the result is exactly RESULT_KEYS" a claim about this file',
+    '# rather than about the whitelist, and THAT IS NOT A HYPOTHETICAL - the first §40 sweep',
+    '# read bus_proof 80/81 here, on this assertion, for exactly the reason this comment had',
+    '# already written down: the whitelist grew by three and the fixture kept filling five.',
+    '# The assertion was not touched to fix it and must not be; the fixture was completed.',
+    '# `scratch` is the one key that must still be dropped: that is the whitelist being tested.',
     'row = r.done("All five, sir.", cited=["a", "b"], durationS=12.5,',
     '             path="output/videos/x/final.mp4",',
     '             sceneTypes=["hook", "chart", "cta"],',
     '             poster="output/videos/x/poster.jpg",',
+    '             videoId="FIXTUREvid", url="https://www.youtube.com/watch?v=FIXTUREvid",',
+    '             privacy="unlisted",',
     '             scratch="/tmp/not-for-the-browser")',
     'after = jobs.public(r.job)["jobs"][0]',
     'again = jobs.finish(r.job, "done", "a second call")',
@@ -364,9 +370,12 @@ async function main() {
   ok(after.result.durationS === 12.5 && after.result.cited.length === 2 &&
      after.result.path === 'output/videos/x/final.mp4' &&
      (after.result.sceneTypes || []).join('·') === 'hook·chart·cta' &&
-     /poster\.jpg$/.test(String(after.result.poster || '')),
+     /poster\.jpg$/.test(String(after.result.poster || '')) &&
+     after.result.videoId === 'FIXTUREvid' && after.result.privacy === 'unlisted' &&
+     after.result.url === 'https://www.youtube.com/watch?v=FIXTUREvid',
      'carrying the duration, the cited notes, the path - and §36\'s two: the scene types the ' +
-     'beats were DRAWN as and the poster beside the mp4',
+     'beats were DRAWN as and the poster beside the mp4 - and §40\'s three, through the same ' +
+     'whitelist and unmangled: the videoId, the watch url and the privacy the film is at NOW',
      JSON.stringify(after.result));
   ok(!JSON.stringify(after).includes('not-for-the-browser'),
      'AND THE FIELD THE LEDGER REFUSED IS NOWHERE ON THE WIRE: `scratch` was passed to ' +

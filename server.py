@@ -306,6 +306,22 @@ except Exception as _director_exc:                             # noqa: BLE001
     director = None
     sys.stderr.write("director: unavailable - %s\n" % _director_exc)
 
+# ---- §40's BROADCASTER, and it is imported in a try for the Director's reason one rung further
+# out. The Director can fail for want of ffmpeg; this can fail for want of a CHANNEL, a consent
+# screen the boss has not yet clicked, or a client file that was never downloaded - and a machine
+# in any of those states must leave a working server working and refuse the one route by name.
+# `broadcast is not None` is the test the branch in protected_answer() uses, exactly as the
+# clock's branch tests worldclock and the Director's tests director.
+#
+# WHAT IT REACHES FROM HERE is broadcast.MANAGER.request(), which queues an upload on a daemon
+# thread and returns a sentence - the Async Law at the same load-bearing point as the Director's,
+# and more so: a four-megabyte PUT over a domestic uplink is a minute of an HTTP request held open.
+try:
+    import broadcast
+except Exception as _broadcast_exc:                            # noqa: BLE001
+    broadcast = None
+    sys.stderr.write("broadcast: unavailable - %s\n" % _broadcast_exc)
+
 # =============================================================================
 #  THE PERSONA - everything the character is, lives in this one block.
 #
@@ -1648,6 +1664,13 @@ FRAME_MAGIC = b"\xff\xd8\xff"        # JPEG start-of-image; PNG would be \x89PNG
 FRAME_MAX_BYTES = 4 * 1024 * 1024    # comfortably inside Bedrock's per-image limit
 FRAME_MIN_BYTES = 900                # below this there is no picture, only a header
 FRAME_MIN_EDGE = 140                 # a 60px sliver is not something to judge
+# §40 - AND WHAT GET /poster WILL READ OFF THE DISK, which is a different number for a
+# different reason. A frame comes IN from the browser and is capped by what a vision model
+# will accept; a poster goes OUT, and this cap exists only because the route reads the whole
+# file into memory to answer it. The Director's posters are around thirty kilobytes, so this
+# is fifty times the real thing: wide enough that a legitimate poster can never trip it, tight
+# enough that a ledger row edited to point at a video file cannot make the server read it.
+POSTER_MAX_BYTES = 2 * 1024 * 1024
 # How old a frame may be when it arrives. The age is measured by the page itself and
 # sent along, so this never compares two clocks - it only catches the failure that
 # matters: a frame from when the share started being answered as though it were now.
@@ -2339,7 +2362,18 @@ PROTECTED_CLASSES = ("confirmation", "meta", "identity", "directive")
 # a lookup this turn paid for, and conflating the two would make every long job look like an
 # expensive question. It stands below the Scholar and above the clock, and it is the second
 # member of this tuple behind a Doorman gate: see director_allowed().
-UNPAID_CLASSES = PROTECTED_CLASSES + ("clock", "fullscreen", "study", "direct")
+# AND A NINTH, §40's, WHICH IS TWO ROUTES UNDER ONE NAME. "put it on youtube" queues an upload on
+# a daemon thread; "make it public" raises a PROPOSAL and returns a question. Neither reads a note,
+# an archive page or the web to produce its sentence - the upload's title and tags are read off the
+# film's own script.md, which the Director already wrote, and the publish card is built from
+# jobs-ledger.json, which this server wrote itself. So `lookups` stays 0 for both, and the one
+# retrieval anywhere near this route - keywords() over the narration - is a regex over a local file
+# and not a trip to the Scholar. The UPLOAD's bytes are a minute of network, but they are a minute
+# on the Broadcaster's thread against the Broadcaster's own budget, exactly as §35 settled for the
+# render; a turn is charged for what it looked up to answer, not for what it set going. It stands
+# last because it is the newest, and it is the third member of this tuple behind a Doorman gate:
+# see broadcast_allowed(), which borrows study_allowed()'s BOSS-only verdict without spending it.
+UNPAID_CLASSES = PROTECTED_CLASSES + ("clock", "fullscreen", "study", "direct", "broadcast")
 
 
 def _addressless(question):
@@ -2910,6 +2944,156 @@ def director_allowed(spoken, seal):
     return study_allowed(spoken, seal)
 
 
+# =============================================================================================
+#  §40 - THE BROADCASTER'S TWO SENTENCES
+# =============================================================================================
+# TWO INTENTS AND NOT ONE, because "put it up" and "make it public" are two different acts with
+# two different gates, and a single regex matching both would have to guess which the boss meant.
+# The first starts a minute of uploading and lands UNLISTED; the second is the instant the world
+# can see it. They are anchored at ^ with the Director's discipline and for its reason: the
+# failure mode of a loose anchor here is not a wasted render, it is a film on the internet.
+BROADCAST_RE = re.compile(r"""^(?:
+      (?:please\s+)?(?:can\s+you\s+)?
+      (?:put|upload|post)\s+(?:it|that|this|the\s+(?:film|video|last\s+one))
+        \s+(?:up\s+)?(?:on|to)\s+(?:youtube|the\s+channel)
+    | (?:please\s+)?(?:can\s+you\s+)?
+      (?:upload|post)\s+(?:it|that|this|the\s+(?:film|video|last\s+one))
+    | (?:put|get)\s+(?:it|that|the\s+(?:film|video))\s+on\s+(?:youtube|the\s+channel)
+    | (?:upload|post)\s+(?:the\s+)?(?:film|video)\s+to\s+youtube
+    )(?:\s+(?:now|today|please|for\s+me|abhi|zara))?[.!]?$""",
+    re.IGNORECASE | re.VERBOSE)
+
+# "MAKE IT PUBLIC". No topic, no id, no title - this sentence names NOTHING, deliberately. The
+# film it refers to is whatever this machine last uploaded, which it reads out of its own ledger;
+# a sentence that could carry a video id would be a sentence a model could fill with an invented
+# one. See broadcast.uploaded().
+PUBLISH_RE = re.compile(r"""^(?:
+      (?:please\s+)?(?:can\s+you\s+)?
+      (?:publish|release)\s*(?:it|that|this|the\s+(?:film|video))?
+    | (?:make|set)\s+(?:it|that|this|the\s+(?:film|video))\s+public
+    | (?:take|put)\s+(?:it|that)\s+public
+    | go\s+public(?:\s+with\s+(?:it|that))?
+    )(?:\s+(?:now|today|please|for\s+me|abhi|zara))?[.!]?$""",
+    re.IGNORECASE | re.VERBOSE)
+
+# WHAT MUST NOT MATCH, and broadcaster_proof carries every one of these as a control. The first
+# four are questions ABOUT the channel, which belong to the brain; the last three are the ones
+# that would be expensive to get wrong - "do not publish it" is a refusal, "unpublish it" asks for
+# something this house cannot do, and "delete the video" must never find a route at all.
+_BROADCAST_NOT = ("what did you upload", "is it on youtube yet", "how do i upload a video",
+                  "what is on the channel", "do not publish it", "don't make it public",
+                  "unpublish it", "delete the video", "take it down", "publish a book")
+
+
+def broadcast_asked(question):
+    """True when this sentence asks for the last film to go up. Nothing else returns True."""
+    return any(BROADCAST_RE.match(form) for form in _addressless_forms(question))
+
+
+def publish_asked(question):
+    """True when this sentence asks for the unlisted film to become public."""
+    return any(PUBLISH_RE.match(form) for form in _addressless_forms(question))
+
+
+def broadcast_allowed(spoken, seal):
+    """(True, "") if this voice may put a film up UNLISTED, else (False, the refusal).
+
+    THE BOSS SEAL ONLY, which is study_allowed()'s test called and not copied - the Director's
+    door, and a fifth name for it so that this one can be found in a log and in broadcaster_proof.
+
+    AND WHY NOT THE HANDS' STRICTER DOOR, since an upload reaches outside the house and cannot be
+    taken back. Because the two halves of §40 are gated SEPARATELY and each at its own cost:
+
+      this door admits a BOSS voice to an UNLISTED upload. What it produces is a URL that nobody
+        has - not indexed, not on the channel's public page, not in a subscriber's feed. It
+        spends bandwidth and a permanent slot on his own channel, which is the Scholar's cost
+        profile plus a minute of uplink, and it is one rung below "a stranger can see this".
+      THE HANDS' DOOR - the real one, which spends the speaker's verdict - is what admits the
+        flip to PUBLIC, because publish_video is a registry tool and goes through hands.execute()
+        like send_email. So the act that strangers can see is behind the strictest gate in the
+        house, and the act that nobody can see is behind the Director's.
+
+    Putting the Hands' door here as well would have cost something real for nothing gained: the
+    verdict is SPENT when it admits somebody, so an upload would consume the measurement his next
+    spoken word at the publish card needs, and the boss would have to say a whole fresh sentence
+    to approve the very thing he just asked for.
+    """
+    return study_allowed(spoken, seal)
+
+
+def broadcast_latest_film():
+    """The folder of the most recent finished film, or "" - what "put IT up" means.
+
+    THE LEDGER FIRST, THE DISK SECOND, and the order is the point. jobs-ledger.json records what
+    the Director actually finished and when, which is the only authority on "the last one"; a
+    folder's mtime is a fact about a filesystem and changes when anything in it is touched. The
+    disk is the fallback for the case the ledger cannot answer - its ring holds fifty rows, so a
+    film made a hundred jobs ago is still on disk and no longer in the record.
+
+    IT NEVER RETURNS A FOLDER WITHOUT A final.mp4 IN IT. A render that failed halfway leaves a
+    directory behind, and "put it up" must not resolve to a half-written file - broadcast.upload()
+    would refuse it at the encode check, but refusing it here means the boss hears "I have no
+    finished film" rather than a reason about streams.
+    """
+    try:
+        import jobs
+        for row in reversed(jobs.ledger() or []):
+            if str(row.get("name") or "") != "director" or row.get("outcome") != "done":
+                continue
+            path = str(row.get("path") or "")
+            if path and os.path.exists(path):
+                return os.path.dirname(path)
+    except Exception as exc:                                       # noqa: BLE001
+        sys.stderr.write("broadcast: the ledger would not read - %s\n" % exc)
+    if director is None:
+        return ""
+    try:
+        best, at = "", -1.0
+        for entry in os.scandir(str(director.OUT_ROOT)):
+            film = os.path.join(entry.path, "final.mp4")
+            if not entry.is_dir() or not os.path.exists(film):
+                continue
+            when = os.path.getmtime(film)
+            if when > at:
+                best, at = entry.path, when
+        return best
+    except OSError:
+        return ""
+
+
+def _publish_card(cfg=None):
+    """(params, why) for the publish Chain Card, built from the LEDGER and never from a sentence.
+
+    §40: "the Chain Card shows title, description, tags, thumbnail plate and the unlisted URL".
+    Every one of those five comes out of the row that upload() wrote, or out of the film's own
+    script.md on disk - so the card the boss approves describes a film that provably exists on
+    his channel, rather than six fields a language model filled in.
+    """
+    if broadcast is None:
+        return None, "the Broadcaster is not available on this machine"
+    rows = broadcast.uploaded()
+    if not rows:
+        return None, ("I have not put any film up yet, sir, so there is nothing to make public")
+    row = rows[-1]
+    video = str(row.get("videoId") or "")
+    folder = os.path.dirname(str(row.get("path") or ""))
+    # THE FILM'S OWN PACKAGE, RE-READ, so the description on the card is the description that is
+    # actually on YouTube rather than a second composition of it. package() is pure and reads
+    # script.md, which outlives the job that made it.
+    kit = broadcast.package(folder, cfg=cfg)
+    if not kit["ok"]:
+        return None, kit["why"]
+    seen = broadcast.verify(video)
+    if seen["ok"] and seen["privacy"] == broadcast.PRIVACY_PUBLIC:
+        return None, "That film is already public, sir - %s" % broadcast.watch_url(video)
+    return {"video": video,
+            "title": kit["title"],
+            "url": str(row.get("url") or broadcast.watch_url(video)),
+            "tags": ", ".join(kit["tags"]),
+            "thumbnail": str(row.get("poster") or kit["thumbnail"] or ""),
+            "description": kit["description"]}, ""
+
+
 def _google_row():
     """(label, line, state) for the Command Panel's Google row, computed server-side.
 
@@ -3080,6 +3264,10 @@ def protected_answer(question, cfg=None, ear_open=False, offer_standing=False,
     # without a topic. All three are "asked", and the page and the proof tell them apart by the
     # fields inside rather than by the presence of the key.
     gdirect = None
+    # Same sentinel discipline as gdirect's: None means the Broadcaster was not asked at all. The
+    # dict's `publish` field is what tells the two branches apart - False is "put it up", True is
+    # "make it public" - so the page and the proof read one key instead of two routes.
+    gcast = None
     if said_it(META_RE):
         name = "meta"
         # FROM LIVE STATE, not from a hopeful fixed string. He is asking whether the ear
@@ -3242,6 +3430,77 @@ def protected_answer(question, cfg=None, ear_open=False, offer_standing=False,
                 started, line, job = director.MANAGER.request(topic, why="boss")
                 gdirect = {"asked": topic, "started": bool(started), "refused": "", "job": job}
 
+    # ---- §40's BROADCASTER, TWO BRANCHES, BELOW THE DIRECTOR ------------------------------
+    #   - below the four, because PROTECTED_CLASSES is fixed by the mandate at four and nothing
+    #     new may shadow one of them. Both branches test `not name`, so every class above wins.
+    #   - and below the DIRECTOR, which matters for one sentence: "upload the video" asks for a
+    #     film that already exists to go up, and DIRECT_RE's anchors do not match it - but if
+    #     they ever loosened, the render is the more expensive mistake and should not be reachable
+    #     from a sentence about uploading. Order settles it rather than a comment.
+    #
+    # NEITHER BRANCH UPLOADS OR PUBLISHES ON THIS THREAD. The first queues on a daemon thread
+    # (the Async Law: a four-megabyte PUT is a minute of a held-open request); the second does not
+    # act at all - it raises a PROPOSAL and returns the question, and the act happens later, in a
+    # subprocess, when a human has said yes.
+    if not name and broadcast is not None and broadcast_asked(question):
+        name = "broadcast"
+        allowed, refusal = broadcast_allowed(spoken, seal)
+        if not allowed:
+            gcast = {"asked": True, "started": False, "refused": "not-the-boss", "job": "",
+                     "publish": False, "pending": ""}
+            line = refusal
+            sys.stderr.write("  route: broadcast - an upload asked by a voice sealed %r, "
+                             "refused at the doorman; nothing left this machine\n" % (seal or "?"))
+        else:
+            folder = broadcast_latest_film()
+            if not folder:
+                gcast = {"asked": True, "started": False, "refused": "no-film", "job": "",
+                         "publish": False, "pending": ""}
+                line = ("I have no finished film to put up, sir - ask me to make one first.")
+            else:
+                started, line, job = broadcast.MANAGER.request(folder, why="boss",
+                                                               cfg=cfg)
+                gcast = {"asked": True, "started": bool(started), "refused": "", "job": job,
+                         "publish": False, "pending": ""}
+                sys.stderr.write("  route: broadcast - uploading %r started=%s job=%r\n"
+                                 % (folder, bool(started), job))
+
+    if not name and broadcast is not None and publish_asked(question):
+        name = "broadcast"
+        allowed, refusal = broadcast_allowed(spoken, seal)
+        if not allowed:
+            # A GUEST ASKING FOR PUBLIC IS REFUSED BEFORE A CARD EXISTS, which is the stronger
+            # half of §40's "guest voice => stays unlisted". The weaker half - a guest saying
+            # "yes" to a card the boss raised - is handshake_open()'s BOSS seal, and both are
+            # asserted in broadcaster_proof. NOTHING IS LEFT PENDING by this path, so there is
+            # no card for a later word to confirm.
+            gcast = {"asked": False, "started": False, "refused": "not-the-boss", "job": "",
+                     "publish": True, "pending": ""}
+            line = refusal
+            sys.stderr.write("  route: broadcast - a publish asked by a voice sealed %r, "
+                             "refused at the doorman; the film stays unlisted\n" % (seal or "?"))
+        else:
+            params, why = _publish_card(cfg)
+            if not params:
+                gcast = {"asked": False, "started": False, "refused": "nothing-to-publish",
+                         "job": "", "publish": True, "pending": ""}
+                line = why
+            else:
+                # THE PROPOSAL IS RAISED HERE AND CONFIRMED NOWHERE NEAR HERE. propose() puts the
+                # six card fields in the slot; the window that lets a one-word "yes" answer it is
+                # opened by handshake_offer() on the way out of /chat, from THIS utterance's own
+                # measured seal; and the parameters hands.execute() eventually sends to the script
+                # come from the slot rather than from whatever sentence confirms it.
+                st, payload = hands.propose("publish_video", params, door="voice")
+                pend = (payload or {}).get("pending") or {}
+                line = str(pend.get("line") or payload.get("answer") or
+                           "Shall I make it public, sir?")
+                gcast = {"asked": False, "started": False,
+                         "refused": "" if st == 200 else "proposal-refused",
+                         "job": "", "publish": True, "pending": str(pend.get("id") or "")}
+                sys.stderr.write("  route: broadcast - publish proposed for %s, status %s\n"
+                                 % (params["video"], st))
+
     # ---- THE CLOCK, AND IT IS LAST ON PURPOSE -------------------------------------------
     # THE FOUR FUNNEL CLASSES ABOVE ARE UNTOUCHED. This branch is reached only when all four
     # have declined, it cannot shadow any of them, and PROTECTED_CLASSES still names the four
@@ -3318,6 +3577,21 @@ def protected_answer(question, cfg=None, ear_open=False, offer_standing=False,
             said["directJob"] = gdirect["job"]
         if gdirect["refused"]:
             said["refused"] = gdirect["refused"]
+    if gcast is not None:
+        # WHAT A HARNESS READS INSTEAD OF PARSING THE SENTENCE BACK, exactly as `directAsked` is.
+        # A refused upload is the pair (broadcast true, broadcastStarted false) plus the reason
+        # code; a refused publish is (broadcastPublish true, broadcastPending empty), which is the
+        # assertion §40's "guest voice => stays unlisted" is written against - an empty pending id
+        # means no card was left standing for any later word to confirm.
+        said["broadcast"] = True
+        said["broadcastAsked"] = bool(gcast["asked"])
+        said["broadcastStarted"] = bool(gcast["started"])
+        said["broadcastPublish"] = bool(gcast["publish"])
+        said["broadcastPending"] = gcast["pending"]
+        if gcast["job"]:
+            said["broadcastJob"] = gcast["job"]
+        if gcast["refused"]:
+            said["refused"] = gcast["refused"]
     if gclock is not None:
         # WHAT A HARNESS READS INSTEAD OF PARSING THE SENTENCE BACK. `clockPlace` is empty for
         # his own clock, the canonical LABEL for a city that resolved, and empty for one that
@@ -9156,6 +9430,78 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 want = (parse_qs(self.path.split("?", 1)[1]).get("job") or [""])[0][:40]
             return self._send_json(200, dict(jobs.public(want or None),
                                              ok=True, kind="jobs", nodes=[]))
+
+        if route == "/poster":
+            # §40 - THE CHAIN CARD'S THUMBNAIL PLATE, and the ONE route in this house that
+            # serves bytes from outside viewer/. Every line of it is about that exception.
+            #
+            # IT TAKES A VIDEO ID AND NEVER A PATH. The law here is that the server serves the
+            # viewer/ folder; a poster lives in output/videos/<slug>/poster.jpg, which is
+            # outside it, so a `?file=` parameter would be a route that serves any file on this
+            # disk to anything that can write `..` - and the browser asking is a browser the
+            # employer's own pages share a machine with. An ID cannot do that: broadcast.
+            # poster_of() looks the id up in jobs-ledger.json, which THIS SERVER wrote when the
+            # bytes were accepted, and takes the path out of the row. The browser names a film
+            # this house published; it never names a file. Then poster_of() checks the suffix
+            # and the parent root anyway, because a ledger is a file on disk and a file on disk
+            # can be edited.
+            #
+            # 11 CHARACTERS OF URL-SAFE BASE64 BEFORE THE LEDGER IS TOUCHED, publish_video.py's
+            # ID_RE for publish_video.py's reason: the id can arrive from a language model by way
+            # of the Chain Card, and a model is perfectly capable of producing a path where an id
+            # belongs. A bad shape is 400 and never a lookup.
+            #
+            # AND THE BODY IS A JPEG, so there is nowhere for a refusal to put a sentence -
+            # which is why a miss is a bare status and the glass hides the plate rather than
+            # printing a reason. 404 means "no such film of ours"; it never means "no such file
+            # on this disk", because this route cannot be asked about files.
+            q = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            want = (q.get("video") or [""])[0].strip()[:16]
+            if broadcast is None:
+                return self.send_error(503, "no broadcaster")
+            if not re.match(r"^[A-Za-z0-9_-]{11}$", want):
+                return self.send_error(400, "not a video id")
+            path = broadcast.poster_of(want)
+            if not path:
+                # SECOND AND LAST PLACE TO LOOK: the pending slot, when the id asked for is the
+                # id the slot itself is about. The ledger is written at the end of an upload, and
+                # there is one real case where a publish card stands in front of a boss and the
+                # row is not there to be read - a card raised for a film whose ledger write did
+                # not land, which is the exact moment the plate matters most and the moment the
+                # id lookup cannot help. The slot is as authoritative as the row: hands.propose()
+                # validated it, and _publish_card() composed it from this server's own files.
+                #
+                # THREE THINGS KEEP IT SAFE. The id must MATCH the slot's own `video`, so no
+                # request can reach a slot it is not about; the path is never trusted for being
+                # in the slot but re-checked by _poster_in_output() for being a jpg inside the
+                # Director's output root; and the slot's parameters can only have come from this
+                # server or from a language model's tool tag, which means the worst a model can
+                # achieve by naming a file here is one of this house's own film posters.
+                slot = hands.pending_public() or {}
+                params = slot.get("params") or {}
+                if str(params.get("video") or "") == want:
+                    path = broadcast.poster_path(params.get("thumbnail"))
+            if not path:
+                return self.send_error(404, "no poster")
+            try:
+                with open(path, "rb") as fh:
+                    data = fh.read(POSTER_MAX_BYTES + 1)
+            except OSError:
+                return self.send_error(404, "no poster")
+            if not data or len(data) > POSTER_MAX_BYTES:
+                # A CAP, because this reads a whole file into memory to answer a poll. The
+                # Director's posters are thirty kilobytes; anything near two megabytes is not
+                # one of ours whatever the ledger says.
+                return self.send_error(404, "no poster")
+            self.send_response(200)
+            self.send_header("Content-Type", FRAME_MEDIA_TYPE)
+            self.send_header("Content-Length", str(len(data)))
+            # no-store like every other route here: the plate must change when the film does,
+            # and a cached poster on a card the boss is about to approve is the wrong picture
+            # above the right title.
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            return self.wfile.write(data)
 
         if route == "/clock":
             # THE BOARD'S TRUTH ANCHOR, and it is not an animation frame. The page ticks its

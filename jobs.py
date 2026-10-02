@@ -91,11 +91,21 @@ PUBLIC_KEYS = ("job", "name", "verb", "topic", "n", "outcome", "elapsedS", "star
 # a pipeline keeps for its own bookkeeping can reach the browser by being passed to finish().
 # §36 adds two: `sceneTypes` so the ledger row records what each beat was DRAWN as, and `poster`
 # so the thumbnail beside final.mp4 is addressable by the Broadcaster that will read these rows.
-RESULT_KEYS = ("cited", "durationS", "path", "sceneTypes", "poster")
+# §40 adds three, and they are the Broadcaster's whole record: `videoId` is the name YouTube gave
+# the film, `url` is where a human can watch it, and `privacy` is what it is RIGHT NOW. The third
+# is the one that earns its place - in a house that may never delete, a film's privacy is the only
+# property of a published thing that can still be changed, so every row says which it was left at.
+RESULT_KEYS = ("cited", "durationS", "path", "sceneTypes", "poster",
+               "videoId", "url", "privacy")
 # And what one may write into the ledger. The Director's row is the reason `cited`, `durationS`
 # and `path` are here - a producer may fill them and may not invent a seventh key.
+# §40's `privacyFrom`/`privacyTo` are ledger-only and deliberately NOT in RESULT_KEYS: the page
+# shows what a film IS, and the TRANSITION - who moved it from unlisted to public, and when - is
+# an audit fact that belongs in the written record rather than in a card. The wide `youtube` scope
+# was taken in exchange for writing them down, so they are written down.
 ROW_KEYS = ("at", "job", "name", "topic", "outcome", "elapsedS", "steps", "detail",
-            "cited", "durationS", "path", "sceneTypes", "poster", "why")
+            "cited", "durationS", "path", "sceneTypes", "poster", "why",
+            "videoId", "url", "privacy", "privacyFrom", "privacyTo")
 
 _LOCK = threading.Lock()
 _JOBS = {}              # job id -> the record below, insertion-ordered (dicts are, since 3.7)

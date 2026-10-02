@@ -9749,3 +9749,286 @@ floor; and **`config.json` is untracked but is in this repository's git history 
 the key must be rotated before that history is shared.**
 
 The Director freeze stands. No geometry or palette changed in §39 beyond the sidebar's material.
+
+# §40 — THE BROADCASTER
+
+## PART 0 — the one-char fix, and the research in three paragraphs
+
+**The hyphen now rests.** `PAUSE_WEIGHT` carries `—` and `–` at 0.45 of a syllable and did not carry
+`-`, which is what everybody actually types; §39's punchlist measured it charged 1 syllable and
+**0.00** pause, handing over in **0.244 s**. The dict now reads `"—": 0.45, "–": 0.45, "-": 0.45`
+and the same token hands over in **0.350 s**. It is safe for hyphenated words because the pause is
+read off the END of a whitespace-separated token: "re-render" ends in `r`, so nothing in
+"state-of-the-art" is charged a rest. `karaoke_proof` re-run at its floor afterwards: **92/92 PASS**,
+exit 0 — `_runs/sweep40/karaoke_proof.txt`.
+
+**The minimum scope set that permits both an insert and a privacy update is `youtube` alone, and that
+is a measurement rather than a reading.** `tools/broadcast_film.py --discovery` fetches Google's own
+discovery document for YouTube Data API v3 and prints the scope list each method actually declares;
+revision **20261001**, kept at `_runs/sweep40/discovery.json`. `videos.insert` and `thumbnails.set`
+accept `{youtube, force-ssl, youtube.upload, youtubepartner}`; `videos.list` accepts `{youtube,
+force-ssl, youtube.readonly, youtubepartner}` — so the narrow pair `youtube.upload + youtube.readonly`
+covers the upload, the thumbnail and the verification, and §40's preference is satisfiable for
+everything except the flip. `videos.update` accepts `{youtube, force-ssl, youtubepartner}` and does
+**not** accept `youtube.upload`, so privacy cannot be changed under the narrow pair at all. The
+decisive row is the next one: `videos.delete` accepts `{youtube, force-ssl, youtubepartner}` — the
+**identical** set. `deleteNeedsSameAsUpdate: true`, `uploadCanDelete: false`. There is therefore no
+grant this house can hold that may make a film public and may not take it down, and the mandate's
+"if privacy update proves impossible under them, take `youtube`" is the branch that applies. `youtube`
+is taken, every `videos.update` is written to the ledger with its `privacyFrom`/`privacyTo`, and the
+Delete Prohibition becomes a property of the client's **source** instead of a property of the token —
+asserted by preflight 43 and by `broadcaster_proof`, because a promise that rests on code must be
+re-measured every time the code changes.
+
+**The channel's shield against the reused-content policy is that every film is derived, disclosed and
+cited.** YouTube's monetisation rules refuse channels whose uploads are repetitious or mass-produced
+with no original commentary or educational value added — the failure mode for an automated channel is
+not a takedown but a channel that can never be monetised, and the judgement is made on the whole
+channel rather than per video. A Director film is not a re-upload: the narration is written for the
+topic, the voice is the house's own, the scenes are rendered by this machine and the footage exists
+nowhere else. What makes that *legible* to a reviewer who watches thirty seconds is the description,
+which is why the package is fixed at three parts and refuses to ship without the third. The hook line
+says what the film teaches; the **cited-notes line** names the note ids the script was built from
+(`2b7aa0777dba00d1#0000` and three others for the premiere) so the film visibly has sources rather
+than a scrape behind it; and the **boss's approved affiliate-disclosure line** carries the commercial
+relationship in his own words. The disclosure is also law and not decoration — a paid relationship
+undeclared in the description is an FTC matter in the account holder's name — so `package()` refuses
+to compose a description at all when `youtube_disclosure` is absent from `config.json`, and will not
+invent one. That refusal is live and is the reason the premiere is blocked below.
+
+**Resumable uploads fail in five ways and only one of them may be retried blindly.** The session is
+opened with a metadata POST to `/upload/youtube/v3/videos?uploadType=resumable`, which returns a
+session URI in `Location`; the bytes then go up in `CHUNK_BYTES` 4 MiB PUTs (two of them for the
+premiere's 4,250,031 bytes, deliberately, so the 308 path really runs). **(1) A 308 between chunks is
+normal** — it is the server saying how far it has got, and the next offset is read from its `Range:
+bytes=0-N` header rather than assumed from what was sent, because the two can differ. **(2) A 429 or
+5xx may be re-sent**, with a doubling backoff from 1 s capped at 16 s and at most 5 attempts; but the
+chunk is never simply re-sent, because a 503 can be returned *after* the bytes were accepted, so the
+client first asks where the session got to with a zero-length `Content-Range: bytes */total` PUT and
+re-sends only from there. That is what keeps an offset from walking backwards. **(3) A transport
+failure with no status** is the same path, counted separately. **(4) A 404 on the session URI means
+the session has expired and the upload must begin from the first byte — and this client stops.** An
+automatic restart is indistinguishable from uploading a second copy: if the first attempt had in fact
+completed and only the reply was lost, a restart puts two identical films on a channel that may never
+delete either. So it reports the byte it reached and `--recent` exists to let a human look before
+deciding. **(5) Every byte accepted and no video id in the reply** is reported as an uncertainty
+rather than a failure, with the same instruction, for the same reason. 404 is deliberately absent from
+`RETRY_STATUSES`.
+
+## PART 1 — the upload-only hand
+
+**The transport knows three verbs and the fourth cannot be spelled.** `broadcast.py` implements the
+four calls §40 asks for — `videos.insert` (resumable, 4 MiB chunks), `thumbnails.set`,
+`videos.update` for privacy, `videos.list` for verification — and the Delete Prohibition is proved
+four ways rather than asserted once, because each of the first three can hold while the thing is
+still deletable. **By constant:** `METHODS_ALLOWED` is `("GET", "POST", "PUT")`. **By source scan:**
+the verb `DELETE` appears nowhere in 50 821 characters of the module, and no `videos.delete` endpoint
+appears outside one place — measured with docstrings and comments stripped, so a comment cannot green
+it. **By AST:** the guard is the *first statement* of `_http()`, and `_http` is the only function in
+the module that opens a socket, so there is one door and therefore one policy; it **raises** rather
+than returning something falsy, because `if not allowed` can be forgotten at a call site and an
+exception cannot. **By execution, through the real door:** `_http("DELETE", <the real videos
+endpoint>)` raises before a socket is opened, on all seven spellings including `PATCH`, `HEAD`,
+`OPTIONS` and the empty string, while `GET`, `post` and `" Put "` still pass. Every refusal is
+counted at `_SEEN.refusedDelete`, so an attempt is an event rather than a silence.
+
+**The one place the word does appear is the evidence, not a call.** `discovery_check()` names
+`videos.delete` twice, to read its scope row out of Google's own document — which is the measurement
+PART 0's decision rests on. A blunt scan for the string would have forbidden the proof of why the
+string is forbidden, so the clause scans two halves: the whole module for the verb, and the module
+*minus* `discovery_check` for the endpoint, with `assert doc in code` so the subtraction cannot
+silently miss. The client also reports the prohibition as a fact about *itself* —
+`deleteIssuable: false` — and never as a claim about the grant, which after PART 0 it could not
+honestly make. `forget()`, the one destructively-named function in the module, touches the local
+token file and nothing on the network.
+
+## PART 2 — the package, and the two gates
+
+**The package is SEO by Galaxy and honesty by law, and it refuses to exist without the third part.**
+For the premiere film the composed title is **"useEffect in React - Explained"** (30/100), carrying
+the topic keyword and no number — the first draft read "Explained in 60 Seconds" over a 50.65-second
+film, and a title is the most-read line this house publishes. Tags come from the cited notes'
+keywords: **103/500 characters, 12 tags, longest 15/30**. The description is **exactly three parts**
+— hook, cited-notes line, the boss's disclosure line — at **389/5000 characters**, and `package()`
+**refuses outright** without an approved disclosure: *"there is no approved disclosure line - put one
+in config.json under `youtube_disclosure` and nothing will be described without it"*. So no Chain
+Card can be raised for a film whose description would be missing it. The notes are cited **by id and
+not by filename**, so a public description cannot leak the shape of the boss's folders. The thumbnail
+is the Director's own `poster.jpg`.
+
+**Unlisted first is not a default a caller can override — there is nothing to pass.**
+`insert(path, snippet, on_note, on_chunk)` has no privacy argument at all; the session body writes
+`PRIVACY_FIRST` and never mentions public. The flip refuses a misspelled status *before* the network
+(*"'publik' is not a privacy status"*), and without the wide scope it refuses **by name** rather than
+letting a 403 land halfway through a premiere. The bus carries §40's own step names in order:
+**encode-check · meta · thumb · verify · publish**.
+
+**Two shapes, deliberately, because the two acts are not alike.** The UPLOAD is the Director's shape —
+its own route, the BOSS seal through `broadcast_allowed()`, a daemon thread, the bus — and the PUBLIC
+FLIP is `send_email`'s: a registry hand, `tools/publish_video.py`, run as a subprocess, which is how
+it inherits the Chain Card, the one-pending slot and the 120-second handshake window without a second
+implementation of any of them. The card **is** the parameters: the slot's six fields *are* the six
+rows on the glass — video · title · url · tags · thumbnail · description — so the card is not a
+second description of what will happen. Eight sentences route (`put it on youtube`, `publish it`,
+`make it public`, …) and **nine lookalikes do not**, including `do not publish it`, `unpublish it`,
+`delete the video` and `take it down`. A guest asking for public is refused **before a card exists**,
+so there is no proposal standing for any later "yes" to inherit — the strong half — and a `yes` with
+no window inherits nothing, which is the weak half. The ledger row carries `videoId`, `url`,
+`privacy` and both `privacyFrom`/`privacyTo`; the publish hand refuses a film this house did not
+upload (*"no record"*, exit 1) and refuses a malformed id **without echoing it back**, because model
+text must not reach a log or a spoken line.
+
+## PART 3 — proof
+
+`broadcaster_proof.mjs` — **85/85 PASS**, ten sections, `_runs/sweep40/broadcaster_proof.txt`.
+Predicate proofs for the SEO lengths, the disclosure's presence and verbatim carriage, the
+delete-prohibition scan and the guest-stays-unlisted law; `/poster` answers **400** to no id, an
+empty id, a traversal, a path and a ten-character id, and **404** to eleven well-formed characters of
+no film of ours.
+
+**The Chain Card is photographed, and the card is real even though the upload is not.** No film has
+been uploaded, so there is no ledger row to paint from — and fabricating one would poison the publish
+guard, which reads exactly that ledger. So §9 raises a **real server slot** over `POST /tools
+cmd=propose` with the real `package()` output and a fictional but well-formed id `PRooF40card`, paints
+it with production's own `showProposal()` through `__galaxy.hands.paint`, and lets the plate resolve
+through `/poster`'s pending-slot fallback — rows, card, countdown, plate and the spoken line are all
+production's, and nothing is written to the ledger. The harness then **withdraws its own card** and
+asserts that `/poster?video=PRooF40card` **404s again**: the slot was the only thing that made that id
+resolvable.
+
+**That photograph found a real §40 regression, and it is the one code change the Glass took.** Under
+the capped answer layout the new 110px thumbnail plate was consuming the six parameters' entire
+vertical allowance: at a 723px viewport `#ask-rows` measured **723×0** with a `scrollHeight` of 142 —
+every parameter present in the DOM, every assertion about them green by `textContent`, and **not one
+pixel of them on screen**. The boss would have been asked to approve a publish with the title, tags,
+description and URL invisible. `flex:0 3 auto` was tried first and measured: it works, and what it
+produces is a **one-pixel sliver** of a poster, which is worse than no poster. The rule now yields in
+two stages — `flex:0 0 auto;width:96px` under the cap, and `display:none` below 700px — and six
+viewport heights assert the priority in order: parameters never zero, Yes always reachable, plate
+present at 54px where there is room (900/760/723/710) and **stood down** where there is not
+(700/640).
+
+**The full solo sweep.** Sequential, attached, one harness at a time, `node --check` parse gate,
+`port_proof` last and alone. All artefacts in `_runs/sweep40/`.
+
+| | after §39 | after §40 |
+|---|---|---|
+| `broadcaster_proof` | — | **85/85 PASS** (new) |
+| `karaoke_proof` | 92/92 | **92/92 PASS** — re-run at its floor after the hyphen fix |
+| `bus_proof` | 81/81 | **81/81 PASS** — 80/81 before the fixture was completed, below |
+| `cine_proof` | 62/62 | **62/62 PASS** — 61/62 before the digest was dismissed, below |
+| `boot_proof` | 21/21 | 21/21 PASS |
+| `console_proof` | 30/30 | 30/30 PASS — zero console errors |
+| `handshake_proof` | 59/59 | **59/59 PASS** — 57/59 against a contaminated server, below |
+| `echo_proof` | 49/49 | 49/49 PASS |
+| `followup_proof` | 48/48 | 48/48 PASS |
+| `layout_proof` | 168/168 | **174/174 PASS** |
+| `conversation_proof` | 114/114 | 114/114 PASS |
+| `roll_proof` | 114/114 | 114/114 PASS |
+| `groq_proof` | 101/106 FAIL | **106/106 PASS** ▲ — the reserved Groq click is no longer blocking |
+| `director_proof` | 275/275 | 275/275 PASS |
+| `eyes_live` | 56 checks, 0 failed | **56 checks, 0 failed** — 1 failed on the first run, a race, below |
+| `port_proof` | 24 checks, 0 failed | **24 checks, 0 failed** attached |
+| `routing_proof` | 111/113 · 1 unproven | 95/97 FAIL · 9 unproven — both reds standing, below |
+| `speaker_proof` | 69/70 | 69/70 FAIL — standing |
+| `scribe_proof` | 58/59 | 58/59 FAIL — standing |
+| `deck_proof` | 248/253 | 247/253 FAIL — the one-link family, 247 at §38 too |
+| `study_proof` | 121/123 | 121/123 FAIL — standing |
+| `census_proof` | 36/44 | 36/44 FAIL — standing |
+| `salutation_proof` | 26/34 | 26/34 FAIL — standing |
+| `preflight.py` | 39 pass, 0 fail, 3 warn (42) | **40 pass, 0 fail, 3 warn** — 43 checks, one added |
+
+**Three reds were mine and each had a different kind of cause.** (1) `bus_proof` **80/81**: §40 grew
+`jobs.RESULT_KEYS` by three and the fixture kept filling five — against an assertion whose own
+comment had already written down why that would happen ("a fixture that still reported three would
+make *the result is exactly RESULT_KEYS* a claim about this file rather than about the whitelist").
+The assertion was not touched; the fixture was completed, and the value check now also proves the
+three pass through unmangled. (2) `handshake_proof` **57/59**: a `publish_video` window, 41 minutes
+old, standing in the live server. Not from the current `broadcaster_proof` — door `"voice"` opens no
+window, and the counters prove it (`opened` stayed at 1 after a full run, which was handshake_proof's
+own) — but from an earlier `door:"button"` iteration of §9. `handshake_close()` mutates only the
+serving process's memory, so **only a restart clears one**, and `handshake_proof`'s "no window left
+standing anywhere" is a global assertion that any earlier harness in the same server can break.
+(3) `eyes_live` 55/56 once and 56/56 on the re-run, on a 90-second live measurement that reads
+`lastPost` immediately after a drift.
+
+**`cine_proof` PART 3 was measuring the Scholar, not the presence.** The deck's toast is a column, and
+on a day the house has studied, `#digestpanel` is in it at **241.8px** — so `#brain` stood **451.3px**
+tall with nothing spoken, the band above it collapsed below `PRES_MIN`, and five of six states fell to
+the second choice ("beside the toast") where the well's side is bound by a *horizontal* term and is
+therefore identical at both heights of one width. `grew` then cannot hold at any width, not because
+the presence stopped scaling but because nothing vertical was binding it; and at 1600 the two heights
+landed either side of the 192px flip (**191 against 192**), so the windowed well read 382px beside the
+toast and the *taller* fullscreen one read 263px above it. Measured both ways in
+`_runs/sweep40/well_probe.mjs`: digest on the glass, `grew` false/false/false with the 1600 gap at
+**0.579**; digest dismissed, `#brain` **199.5px**, all six above the toast, `grew` true/true/true and
+every gap inside `SCALE_GAP`. And 199.5 + 26 + 12 + 149 is the **387** this part's own comment records
+from §39 — that is the state §39 measured and did not name. PART 3 now closes the digest through
+`__galaxy.study.close()`, the page's own dismiss, **at every one of the six reads** rather than once
+before the loop, because the digest arrives on a poll and would otherwise come back mid-measurement.
+
+## PART 4 — §40, the report
+
+**The scope decision, with its evidence.** §40's preferred pair is real and insufficient. Against
+discovery revision **20261001** (`_runs/sweep40/discovery.json`), `youtube.upload` carries
+`videos.insert` *and* `thumbnails.set`, and `youtube.readonly` carries `videos.list` — so the narrow
+pair covers upload, thumbnail and verification. It cannot flip privacy: `videos.update` does not
+accept `youtube.upload` at all. The decisive row is the next one — **`videos.update` and
+`videos.delete` accept the identical set** `{youtube, force-ssl, youtubepartner}` — so there is no
+grant this house can hold that may make a film public and may not take it down
+(`deleteNeedsSameAsUpdate: true`, `uploadCanDelete: false`). The mandate's second branch therefore
+applies: **`youtube` is taken**, every `videos.update` is written to the ledger with its
+`privacyFrom`/`privacyTo`, and the Delete Prohibition is a property of the client's **source** —
+proved by constant, by AST, by execution and through the real door, plus preflight check 43 — because
+a promise that rests on code must be re-measured every time the code changes. Nothing was lost by
+taking the wide scope that could have been kept by refusing it: the narrow upload scope cannot delete,
+and the wide one is the only one that can publish.
+
+**The premiere's ledger row does not exist, and that is the honest line.** `--status` reads state
+**`absent`** — "no channel is connected yet - the boss's consent is a prerequisite" — and the hand
+crank exits **1**, so a shell is told the truth. No film was uploaded, no `videos.insert` was issued,
+`_SEEN.uploads` is 0, and the ledger carries no video row. The three prerequisites are reserved and
+named rather than worked around: **(a)** the one-time OAuth consent in the boss's browser for
+`youtube.upload + youtube.readonly + youtube`, loopback `http://127.0.0.1:4732/`; **(b)** a channel on
+the boss's Google account, created by hand if absent; **(c)** the approved affiliate-disclosure line,
+which goes in `config.json` under `youtube_disclosure`. The token file is
+**`secrets/youtube_token.json`**, untracked and gitignored with the whole of `secrets/` — and the
+`.gitignore` says why in place: a refresh token does not expire on its own, which makes that folder
+strictly worse to leak than `config.json`. The status line carries no token, no secret and no account
+email; the only credential-shaped string in it is a sha256 digest, and it is empty.
+
+**The plates.** `_runs/sweep40/broadcast-card.png` (**42 239 bytes** — the card at 1:1 with all six
+rows, the thumbnail plate and the unlisted URL) and `_runs/sweep40/broadcast-card-room.png` (the whole
+room). **There is no plate of a public video page**, because there is no public video: it is blocked
+on (a), (b) and (c) above and cannot be manufactured.
+
+**Left open, named.**
+
+- **The live premiere and its two plates** — the unlisted upload approved on camera, and the public
+  flip — are the whole of §40 PART 3 that could not be executed. Everything the premiere needs is
+  built and measured against a fixture; what is missing is three acts reserved to the boss.
+- **The disclosure line used in every §40 measurement is a fixture**, passed to `package()` in memory
+  and never written to `config.json`: "Some links in this description are affiliate links (PROOF
+  FIXTURE - not the approved line)." Every claim that rests on it is labelled as resting on it.
+- **`heal_proof.mjs` is in §39's sweep table and is not in the tree.** It was not run here and it
+  cannot be; the 80/80 in that table has no file behind it today.
+- **`deck_proof` 247/253** is the one-link family unchanged: `viewer/graph-data.js` now holds **71
+  nodes and exactly one link**, and all six reds are population floors on that number. It read 247 at
+  §38 and 248 at §39 on the same cause. Writing cross-referencing notes to green it would be
+  manufacturing the evidence.
+- **`routing_proof`'s denominator moved from 113 to 97** because its spoken column counts one check
+  per delivered sentence, and the room delivered **5 of 14** against a declared budget of 2. No
+  headset was paired — only `Speakers (Senary Audio)` and the internal `Microphone Array` — so the
+  four-role fault is not in play, and audio *was* flowing: the recogniser returned words, just not his
+  ("Oh the idea", "What you doing"). That is room recognition quality and not a route fault. Its other
+  red is the expired web-gate fixture carried unchanged since §38 — "what is the web gate" now finds a
+  near-match in the corpus and answers `kind=notes` instead of falling through to the web.
+- **Leaked state is still the one cross-harness contaminant, and §40 answers it for one harness
+  only.** `broadcaster_proof` carries `shutPort()` before its launch and a `process.on('exit')`
+  cleanup hook, after three top-level throws left Chromes holding port 9242 and `/json/list` answered
+  from a survivor carrying an hour-old `index.html` — a correct, served, curl-verified CSS fix read as
+  no fix at all for four assertions and an hour. The other sweep harnesses still lack both. And the
+  handshake window is the *other* kind of leak: it lives in the serving process's memory, nothing
+  expires it out of `live`, and only a restart clears it.
+- **`config.json` is untracked but is in this repository's git history and was never purged** — the
+  key must be rotated before that history is shared. Carried from §38 and §39, unchanged.

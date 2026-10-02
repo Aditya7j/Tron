@@ -51,10 +51,23 @@ import wave
 # are the only taste in this file and they are stated as numbers so a harness can read them.
 PAUSE_WEIGHT = {
     ",": 0.45, ";": 0.70, ":": 0.70,
-    "—": 0.45, "–": 0.45,          # em-dash, en-dash
+    "—": 0.45, "–": 0.45, "-": 0.45,    # em-dash, en-dash, and the hyphen everybody types
     ".": 1.00, "!": 1.00, "?": 1.00,
     "…": 1.20,                          # the ellipsis: the longest rest in prose
 }
+# WHY THE BARE ASCII HYPHEN IS IN THAT DICT (§40, one character, and it was §39's punchlist).
+# §39 measured the fault and deliberately did not fix it, because re-weighting the tokeniser after
+# the drift proof had run is how an unmeasured change ships. The fault: `-` used as a dash is what
+# people actually type, and without an entry here it was charged 1 syllable and NO rest, so the
+# reveal sat a quarter-second on a dash the voice plainly rests at and was that much late for the
+# clause after it. Bounded, because the span is normalised - it could never accumulate past the
+# next mark - but visibly wrong on exactly one word.
+#
+# IT IS SAFE FOR HYPHENATED WORDS, and that is a property of tokens() rather than of this line:
+# the pause is read from the END of a whitespace-separated token, so `word-by-word` ends on `d`
+# and takes nothing, `state-of-the-art,` ends on the comma inside it, and only a token that
+# genuinely FINISHES on a hyphen - the standalone dash, or a line broken mid-compound - collects
+# the rest. karaoke_proof re-ran at its 92 floor with this line in place.
 # Closing marks are transparent: `card."` and `(yes)` end on the mark INSIDE them.
 CLOSERS = "\"')]}»”’"
 # No word is worth less than this many syllables' time. See the docstring.
