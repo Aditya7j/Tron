@@ -13,43 +13,41 @@
     "youtube    either a full watch URL or a plain phrase. A phrase becomes a yt-dlp search",
     "           for one result; a URL is taken as given. Leave empty to study articles only.",
     "revenue_goals  carried into the thinking prompt verbatim, because a bullet that does not",
-    "           serve one of these is off-syllabus and the Poison Guard is entitled to say so."
+    "           serve one of these is off-syllabus and the Poison Guard is entitled to say so.",
+    "",
+    "PHASE 2 ROTATION: B2B AI Agents is the primary engine. Cold outreach is the fuel.",
+    "Micro-SaaS and Derivatives remain active. YouTube/Faceless is parked for now."
   ],
-  "version": 1,
+  "version": 2,
   "revenue_goals": [
-    "one product that earns while I sleep",
-    "an audience that trusts me before it buys from me",
+    "high-ticket recurring B2B retainers ($500-$1000/mo per client)",
+    "AI booking agents that solve missed-call revenue loss for clinics",
+    "client money within thirty days of first contact",
     "revenue that does not depend on my hours"
   ],
   "tick_budget_s": 90,
   "digest_hour": 18,
   "topics": [
     {
-      "name": "finance",
-      "weight": 3,
+      "name": "b2b-ai-agents",
+      "weight": 5,
       "queries": [
-        "index fund allocation for founders",
-        "cash runway management small business"
+        "how to build AI voice receptionist for dental clinics using Vapi or Bland AI",
+        "GoHighLevel GHL AI booking automation for MedSpas",
+        "pricing AI chatbot retainers for US real estate agents",
+        "overcoming objections when selling AI agents to local business owners"
       ],
-      "youtube": "how founders should think about personal finance"
+      "youtube": "how to build AI voice agents for local businesses tutorial"
     },
     {
-      "name": "creator economics",
-      "weight": 2,
+      "name": "cold-outreach",
+      "weight": 4,
       "queries": [
-        "creator economy revenue per subscriber benchmarks",
-        "newsletter sponsorship pricing"
+        "cold email scripts for selling AI receptionists to MedSpa owners",
+        "how to find verified emails of dental clinic owners in US and Australia",
+        "follow up sequences for high ticket B2B AI services"
       ],
-      "youtube": "creator economy business model breakdown"
-    },
-    {
-      "name": "youtube growth",
-      "weight": 2,
-      "queries": [
-        "youtube retention curve first 30 seconds",
-        "youtube thumbnail click through rate testing"
-      ],
-      "youtube": "youtube algorithm retention explained"
+      "youtube": "cold email masterclass for B2B tech services"
     },
     {
       "name": "micro-saas",
@@ -61,13 +59,37 @@
       "youtube": "micro saas idea validation"
     },
     {
-      "name": "react.js",
-      "weight": 4,
+      "name": "indian-derivatives",
+      "weight": 2,
       "queries": [
-        "react.js hooks basics for building a micro saas dashboard",
-        "react vs next.js which to choose for a solo founder product"
+        "open interest analysis nifty support resistance explained",
+        "backtesting trading strategies with fees and slippage"
       ],
-      "youtube": "react hooks explained in ten minutes"
+      "youtube": "open interest analysis explained in hindi"
+    },
+    {
+      "name": "faceless-video",
+      "weight": 0,
+      "queries": [],
+      "youtube": ""
+    },
+    {
+      "name": "react.js",
+      "weight": 0,
+      "queries": [],
+      "youtube": ""
+    },
+    {
+      "name": "finance",
+      "weight": 0,
+      "queries": [],
+      "youtube": ""
+    },
+    {
+      "name": "creator economics",
+      "weight": 0,
+      "queries": [],
+      "youtube": ""
     }
   ]
 }

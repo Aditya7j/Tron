@@ -816,7 +816,14 @@ async function main() {
      itself off", the only useful answer is the two numbers and which reference they came
      from. The taken episode must carry both readings, the ratio and the hold. */
   const taken = (barge.log || []).filter(function (e) { return e.taken; }).pop();
-  ok(!!taken && taken.output > 0 && taken.reference === 'calibrated' &&
+  /* THE REFERENCE IS JUDGED BY ITS NUMBER AND NOT BY ITS LABEL. Either measurement may win -
+     §36 made bargeReference() take the LARGER of the live bus and the calibrated leak - and
+     which one does depends on whether this answer's wav happened to be mid-syllable on that
+     frame, which is not a fact about the law. What IS the law: whatever reference was used
+     stood at or above the leak the microphone actually measured, so no episode can be taken
+     against a reference that had fallen below the room's own evidence. */
+  ok(!!taken && taken.output >= barge.measured.calibrated * 0.99 &&
+     ['bus', 'calibrated'].indexOf(taken.reference) >= 0 &&
      taken.ratio >= gate.ratio && taken.sustainedMs >= gate.sustainMs &&
      taken.intoAnswerMs >= gate.deafMs,
      'AND THE EPISODE IS ON THE RECORD WITH BOTH NUMBERS: input ' +

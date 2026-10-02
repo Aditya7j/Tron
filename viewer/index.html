@@ -51,6 +51,11 @@
        something published. */
     --answermax:min(46vh,560px);
     --accent:#7cc4ff;
+    /* §39 - HOW LONG THE CARD TAKES TO LEAVE. The grace before it starts is a script
+       constant (VANISH_GRACE_MS) because it is a decision about attention; this is only the
+       dissolve, and it is here so the stylesheet and the script cannot disagree about it -
+       vanishNow() reads this value back out of the cascade rather than carrying a copy. */
+    --vanish-ms:420ms;
     /* The web's colour, and nothing else's. Kept in step with WEB_CYAN in the script
        below, which washes the galaxy with the same value. */
     --web:#22e0ff;
@@ -797,8 +802,25 @@
   /* ---------- side panel ---------- */
   /* Its width is the governor's, because the width is what every other surface's
      rectangle is derived FROM: the canvas is the window less this. */
+  /* §39 PART 4 - THE SIDEBAR'S MATERIAL IS THE HOUSE'S, and it was not.
+     WHAT IT WAS: a 200deg linear-gradient from rgba(17,17,24,.72) to rgba(8,8,13,.8) - two
+     invented colours, two invented alphas, and a direction nothing else on this deck has.
+     At .72-.80 over a blur it reads as a painted slab with a sheen, which is why a panel
+     opened over a dense cluster showed no stars and the deck appeared to end at its edge.
+     WHAT IT IS: var(--glass). The SAME TOKEN as the answer card, so the alpha is read out of
+     the one declaration at the top of this file rather than chosen again here, and the two
+     surfaces cannot drift - change --glass once and every panel on the deck follows, which
+     is what that token was created for. backdrop-filter was already var(--blur) and is
+     untouched; the 1px hairline is border-left, because this sheet is against the right wall
+     and a panel lit on all four sides reads as a rectangle rather than as glass (see THE RIM
+     above, which gives it its one edge of light).
+     NO INNER GLOW, ASSERTED RATHER THAN INTENDED: there is no box-shadow on this rule at all,
+     and karaoke_proof reads the computed value and refuses any `inset`.
+     GEOMETRY, WIDTH AND THE OPEN/CLOSE ANIMATION ARE BYTE-FOR-BYTE WHAT THEY WERE - position,
+     z-index, transform, transition, display, padding and the governor's width are all
+     untouched, which is what keeps layout_proof's lane assertions asserting the same panel. */
   #panel{position:fixed;z-index:10;
-    background:linear-gradient(200deg,rgba(17,17,24,.72),rgba(8,8,13,.8));
+    background:var(--glass);
     border-left:1px solid var(--line);backdrop-filter:var(--blur);
     transform:translateX(102%);transition:transform var(--spring-ms) var(--spring);
     display:flex;flex-direction:column;padding:26px 26px 22px}
@@ -812,10 +834,19 @@
      rather than as what it is: long words at 25px sit too loose at default tracking. */
   #panel h2{margin:14px 0 4px;font-size:25px;line-height:1.16;font-weight:600;color:#fff;
     letter-spacing:-.05em}
-  #panel .meta{font-size:11px;color:rgba(143,160,192,.7);letter-spacing:.05em;
+  /* §39 PART 4 - AND THE INK COMES UP TO MEET THE THINNER SHEET.
+     The panel's background went from .72-.80 to .60, so more of the starfield is behind every
+     line of text than there was; ink at 86% and 70% of itself was already the weakest text on
+     the deck and over the new material it would be weaker still. Both are now at FULL ALPHA
+     in the colours they were already wearing - the prose in the answer card's own #f2f6ff and
+     the meta line in var(--muted), which is exactly what the card's question line uses. So
+     the two surfaces now set prose in one colour and metadata in one colour, and
+     karaoke_proof measures the panel's contrast against the card's and refuses anything
+     below it. Sizes, weights, tracking and the mono face are untouched: this is alpha only. */
+  #panel .meta{font-size:11px;color:var(--muted);letter-spacing:.05em;
     font-variant-numeric:tabular-nums;font-family:var(--mono)}
   #panel .body{margin-top:18px;overflow-y:auto;flex:1;font-size:13.5px;line-height:1.6;
-    color:rgba(232,238,252,.86)}
+    color:#f2f6ff}
   #panel .body p{margin:0 0 14px}
   #panel h3{margin:22px 0 10px;font-size:10.5px;letter-spacing:.2em;
     text-transform:uppercase;color:var(--muted);font-weight:600}
@@ -857,7 +888,9 @@
   a.src-item .t{display:block;font-size:13px;line-height:1.35;color:#fff}
   a.src-item .u{display:block;margin-top:5px;font-size:11px;color:var(--web);
     word-break:break-all;letter-spacing:.01em}
-  .src-note{font-size:11.5px;color:rgba(143,160,192,.8);margin:0 0 16px;line-height:1.5}
+  /* Full alpha for the same reason as #panel .body above: this is the docs panel's standfirst
+     and it sits on the thinner sheet now. Same hue, same size. */
+  .src-note{font-size:11.5px;color:var(--muted);margin:0 0 16px;line-height:1.5}
   a.wchip{border:1px solid rgba(34,224,255,.3);background:rgba(34,224,255,.07);
     color:var(--web);border-radius:999px;padding:5px 11px;font-size:11.5px;
     text-decoration:none;max-width:100%;overflow:hidden;
@@ -1030,7 +1063,63 @@
   /* A reveal that is not running leaves nothing behind: a stray unlit span would be an
      invisible answer, which is a worse bug than no animation. */
   #answer .a.typed .ch{transition:opacity .09s linear}
+  /* ---------- §39 - THE WORD LAYER ----------
+     THE SAME LAW AS THE TYPEWRITER, ONE SCALE UP. Every word of the answer is in the DOM
+     before any of them is visible, so the paragraph is its final size from the first frame
+     and nothing below it moves while the voice reads. The whitespace BETWEEN the words is
+     left as plain text nodes rather than wrapped, which is what keeps `white-space:pre-wrap`
+     honouring the model's own line breaks and what keeps textContent character-for-character
+     equal to the answer - eight harnesses read #a-text and none of them may learn that a
+     reveal is running.
+
+     visibility AND NOT opacity, and the difference is load-bearing twice over. A
+     visibility:hidden box still takes its space - which is the zero-reflow guarantee - and a
+     visibility:hidden box is ALSO absent from a hit test and from the accessibility tree, so
+     a half-read answer does not offer a screen reader half a sentence and does not give the
+     pointer a word it cannot see. The character layer uses opacity because it is fading
+     ninety spans a second and opacity is the cheaper property to animate; nothing here
+     animates at all.
+
+     AND THE ACCENT IS A STATE, NOT AN ANIMATION. One class on the word being spoken, in the
+     deck's own accent, with no transition on it: there is nothing in flight for a harness to
+     measure mid-way and nothing for a reduced-motion reader to object to. The word is lit
+     while it is being said and plain afterwards, which is the whole of the effect. */
+  #answer .a .w{visibility:hidden}
+  #answer .a .w.said{visibility:visible}
+  #answer .a .w.now{color:var(--accent)}
+  /* AND THE SAME THREE RULES ON THE OTHER SURFACE. §38's ONE SURFACE AT A TIME hands the
+     sentence to the caption whenever the caption is carrying it word for word, which is true
+     of every short spoken answer - so the reveal has to be able to run there too or the
+     feature is invisible in the commonest case in the house. Three rules and no fourth: the
+     caption's own geometry, fade and pointer law are untouched. See karaSurface(). */
+  #caption .w{visibility:hidden}
+  #caption .w.said{visibility:visible}
+  #caption .w.now{color:var(--accent)}
+  /* ---------- §39 - THE VANISH ----------
+     OPACITY ONLY, on the card's own element, and then the card is taken out of the flow
+     entirely by losing .show. The fade exists so that the sky arrives rather than snaps;
+     the REMOVAL is what the mandate is about, and it happens in script at the end of the
+     fade rather than here, because a card left at opacity 0 is still a card standing in
+     the layout governor's column and still a card a pointer can land on.
+     html.nomove kills the transition, so a probe gets the end state on the next frame. */
+  #answer.vanishing{opacity:0;transition:opacity var(--vanish-ms) linear;
+    pointer-events:none}
   #answer.err .a{color:#ffc9a8}
+  /* §35 PART 3 - THE JOB'S OWN LINE, INSIDE THE PARAGRAPH THAT IS ALREADY THERE.
+     The law is "the bus writes text into existing strips only", so this is not a panel, not a
+     row and not a surface: it is one span appended to #a-text, which makes three things true
+     that a new element could not make true. typeOut() rebuilds #a-text's children for every
+     answer, so the next answer DELETES this line with no code to remove it - and the moment the
+     card is about to say something else is exactly the moment a stale step list should go. The
+     card's own scroll, border and width are untouched, so nothing layout_proof counts moves.
+     And it inherits the paragraph's colour discipline rather than introducing a fourth.
+     display:block because it is a line and not a word - inline it would wrap into the end of
+     the announcement and read as part of the sentence. Dim, because it is machinery reporting
+     on itself underneath a sentence somebody is reading: the answer stays the brightest thing
+     in the card. No animation of any kind - see the deck's law; this text changes every 2.5
+     seconds and a transition on it would be a card that never settles. */
+  #job-line{display:block;margin-top:11px;font-size:12px;letter-spacing:.07em;
+    color:#9fb4d8;opacity:.86;overflow-wrap:anywhere}
   #answer .src{margin-top:13px}
   #answer .src .lbl{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
     color:var(--muted);margin-bottom:8px}
@@ -2622,6 +2711,13 @@
        motion is not. */
     .mind .mgimbal,.mind .mcore,.mind .mspoke,.mind .mlens{animation:none}
     #answer .a .ch,#answer .a.typed .ch{opacity:1;transition:none}
+    /* §39's word layer, defeated exactly as the character layer is: the words are MADE
+       VISIBLE rather than never built, so textContent is unaffected and a reader who has
+       asked for stillness gets the answer whole, at once, with the voice reading it. The
+       accent stays - it is a colour, and which word is being said is information. */
+    #answer .a .w{visibility:visible}
+    #caption .w{visibility:visible}
+    #answer.vanishing{transition:none}
     .chip:hover,a.src-item:hover,a.wchip:hover,.dchip:hover,#slash:hover,
     #reset:hover,.organ:hover:not(:disabled),#ask-yes:hover:not(:disabled),
     #ask-no:hover:not(:disabled){transform:none}
@@ -4418,6 +4514,11 @@ async function loadLib() {
     hiNodes.clear(); hiLinks.clear();
     refresh();
     $('panel').classList.remove('open');
+    /* §39 PART 3: and the idle clock goes down with it. This is the page's ONE close - the ✕,
+       Escape, a background click, a compose answer putting the web panel away, and all three
+       of the sidebar's own closes come through here - so a timer disarmed on this line is a
+       timer that cannot survive any of them. */
+    panelIdleDown();
   }
 
   /* ======================== THE CALM SKY ========================
@@ -5129,6 +5230,7 @@ async function loadLib() {
     $('p-nb-head').style.display = nb.length ? '' : 'none';
     nb.forEach(function (m) { box.appendChild(chip(m)); });
     $('panel').classList.add('open');
+    panelUp();                   // §39 PART 3: the idle clock starts here
   }
 
   function chip(n) {
@@ -5214,6 +5316,7 @@ async function loadLib() {
     box.innerHTML = '';
     list.forEach(function (s) { box.appendChild(sourceLink(s, false)); });
     $('panel').classList.add('open');
+    panelUp();                   // §39 PART 3
   }
 
   /* ---- the same panel, the third world: your own filed documents ----
@@ -5297,9 +5400,23 @@ async function loadLib() {
       box.appendChild(p);
     });
     $('panel').classList.add('open');
+    panelUp();                   // §39 PART 3
   }
 
   $('close').onclick = clearSelection;
+  /* §39 PART 3 (b) - WHAT COUNTS AS SOMEBODY BEING IN THE PANEL. Pointer movement, a wheel, a
+     scroll, a key and a click, all captured on #panel itself so nothing outside it can reset
+     a clock about it; `passive` because none of these handlers prevents anything and a
+     non-passive wheel listener on a scroller is a scroll-blocking listener. The pointer
+     RESTING inside is tracked separately as a hold - see panelIdleArm(). */
+  (function () {
+    const p = $('panel');
+    if (!p) return;
+    ['pointermove', 'pointerdown', 'wheel', 'scroll', 'keydown', 'touchstart']
+      .forEach(function (ev) { p.addEventListener(ev, panelTouch, { passive: true }); });
+    p.addEventListener('pointerenter', function () { panelAuto.hover = true; panelTouch(); });
+    p.addEventListener('pointerleave', function () { panelAuto.hover = false; panelTouch(); });
+  })();
   /* THE KEYBOARD'S ONE DOOR. There is no field standing open any more, so a key press
      has to MEAN something: Escape puts things away, and any printable key summons the
      line and becomes its first character. See THE SUMMONED LINE for typeLineUp(). */
@@ -5787,6 +5904,17 @@ async function loadLib() {
   }
 
   function renderAnswer(question, text, isError, ids, sources, cites) {
+    /* AND §39'S VANISH IS CALLED OFF FIRST OF ALL, before a single character is written. A
+       card painted into the grace period of the one before it would inherit its timer and
+       dissolve in the middle of being read, and a card painted while .vanishing was still on
+       the element would be born at opacity 0 - an answer that never appeared, which is the
+       worst defect this feature could possibly have. See THE VANISH. */
+    vanishClear();
+    /* And the word reveal, for the other half of the same reason: typeOut() below replaces
+       every child of the paragraph, so the spans kara is holding are about to be detached.
+       A rAF walk lighting words that are no longer in the document is not a visible defect,
+       but it is a frame a minute spent on nothing. */
+    karaReset();
     /* Every answer starts by clearing the frame thumbnail. A picture left sitting
        beside the next answer would read as the evidence for it, which it is not. */
     hideProof();
@@ -5888,6 +6016,14 @@ async function loadLib() {
        the Yes would be the new proposal's. */
     $('ask-steps').innerHTML = '';
     $('ask-clock').textContent = '';
+    /* §39 PART 2 - AND THE EXEMPTION LIFTS. A gate card is held on the glass for as long as
+       the butler is waiting for a word; this is the one function every ending comes through -
+       a Yes, a No, a spoken yes, the proposal's own timeout - so the grace that was refused
+       while the question stood is given now. `pending` is the test rather than a flag of its
+       own: it is true only if a vanish was armed and then held, which is exactly the case
+       this line is for. renderAnswer() calls vanishClear() BEFORE it calls this, so a new
+       answer being painted cannot re-arm a timer against its own fresh card. */
+    if (vanish.pending && !vanishTimer) vanishArm(VANISH_GRACE_MS, 'the gate resolved');
   }
 
   function hideProposal() {
@@ -6001,6 +6137,11 @@ async function loadLib() {
     });
     let data = null;
     try { data = await res.json(); } catch (e) { data = null; }
+    /* §35 PART 1, at the ONE funnel every card door already goes through - /execute,
+       /chain/execute and /tools cmd=cancel all post from here. The page recognises "yes" itself
+       while a card is up and never sends that word to /chat, so a handshake read only on the
+       /chat reply would be a handshake the boss never sees on the door he actually uses. */
+    try { handshakeSeen(data); } catch (e) { /* the outcome is still owed */ }
     return data;
   }
 
@@ -11720,6 +11861,10 @@ async function loadLib() {
           (data.fullscreenWant === 'on' || data.fullscreenWant === 'off')) {
         try { fullAsked(data.fullscreenWant); } catch (e) { /* the answer is still owed */ }
       }
+      /* §35 PART 1, on the same rule as the room above and in the same place: BEFORE the answer
+         is shown, so the chip already reads BOSS · HANDSHAKE as the sentence it authorised
+         appears, and only on the two named fields the server sends. See handshakeSeen(). */
+      try { handshakeSeen(data); } catch (e) { /* the answer is still owed */ }
       if (!data) {
         respond('The server replied with something that was not JSON (HTTP ' +
           res.status + ').', true, null, 'chat');
@@ -11730,6 +11875,11 @@ async function loadLib() {
         respond(data.answer || '(empty answer)', false, data.nodes, kind, sources,
                 backend, data.pending, cites, scans);
       }
+      /* §35 PART 3, and this one is AFTER the answer rather than before it - the opposite of
+         the two above, deliberately. jobSeen() pins the render to the answer now on the card
+         and respond() is what put it there; pinned before, the follow would belong to the
+         previous answer and the step list would never appear. See jobSeen(). */
+      try { jobSeen(data); } catch (e) { /* the render reports itself on the next poll */ }
     } catch (e) {
       respond('Could not reach the brain. Start it with "python server.py" and open ' +
         'http://localhost:4700 (opening index.html straight from disk will not work).',
@@ -11946,6 +12096,676 @@ async function loadLib() {
     answerYield('');                 // a cancelled subtitle gives the paragraph back at once
     if (!el) return;
     el.classList.remove('up');
+  }
+
+  /* ==================================================================
+     §39 - THE WORD-BY-WORD REVEAL
+     ==================================================================
+     THE SAME LAW AS THE TYPEWRITER, ONE SCALE UP, and the three traps it avoids are the
+     typewriter's three (see THE TYPEWRITER): every word is in the DOM before anything is
+     revealed, so the paragraph is its final size from the first frame and nothing below it
+     moves; the text is never hidden from anything that READS the page, because
+     `#a-text.textContent` is complete whatever the reveal is doing; and one rAF walk lights
+     however many words the audio clock has earned, so a dropped frame costs a frame.
+
+     WHAT IS DIFFERENT, AND IT IS THE WHOLE OF §39: the typewriter runs on a wall clock at
+     ten milliseconds a character and is only LOOSELY synced - it waits 200ms for the voice
+     and then runs on its own. This runs on the audio clock itself. `actx.currentTime` is the
+     sample position of the bus the butler's WAV is playing through; `item.clock` is that
+     position at the instant src.start() was called; so `actx.currentTime - item.clock` is how
+     far into THIS CHUNK the speakers are, to the sample, and it cannot drift from the voice
+     because it IS the voice's clock. A timer cannot do that: a 10ms setInterval on a busy
+     main thread loses tens of milliseconds a second and a long answer ends a word or two out.
+
+     WHERE THE PER-WORD TIMES COME FROM. timings.py, server-side, off the real WAV: the
+     duration is read out of the bytes piper just produced and divided across the words by
+     syllables plus the rest each word ends on. They arrive as X-Word-Timings on /say and are
+     NUMBERS ONLY - no sentence of the employer's goes into a response header.
+
+     WHICH WORDS. The surface's own words, split on whitespace and nothing else, because that
+     is exactly how timings.py splits the string it was given; the two sides agree on what word
+     number seven is by construction rather than by two regexes that have to stay in step.
+
+     AND WHICH SURFACE, which is §38's ONE SURFACE AT A TIME law read from the other side, and
+     the single most important thing in this section. The card's paragraph stands down whenever
+     the caption is carrying the same sentence - and that is true of EVERY short spoken answer,
+     which is to say of most of them. A reveal wired only to #a-text would therefore have lit
+     its words perfectly inside a display:none element while the caption showed the whole line
+     at once: a feature with a passing proof and nothing on the glass. So the reveal FOLLOWS
+     THE SENTENCE. The card's paragraph when the card is holding it - a long answer, a capped
+     one, an error line softened for the ear - and the caption when the caption is. The yield is
+     decided in captionShow(), one line above the call that arms this, so the surface is settled
+     before the reveal starts and cannot move under it. karaSurface() is the whole of the
+     choice and it names its refusals.
+
+     THE FOUR SILENCE EDGES, every one of them ending in the whole sentence on the glass:
+       A MUTED TAB, a tab with no voice at all, and a tab before its first click never reach
+         karaArm() - speakLine() returns above it - so the paragraph is plain text, which is
+         what it was before this section existed. Every harness runs ?mute=1.
+       THE BROWSER'S OWN VOICE has no audio clock to read, so the web path is not armed
+         either, and a piper run that falls back mid-answer calls karaAll() on its way out.
+       A CHUNK THAT ARRIVES WITHOUT TIMINGS is spread evenly over its own real duration,
+         counted in kara.flats - a worse reveal, never a hidden one.
+       AND THE QUEUE'S ENDING IS THE BACKSTOP THAT COVERS THE REST. speakFinish() and
+         speakCancel() both call karaAll(), and the completion contract says every chunk ends
+         exactly once however it went, so there is no path on which a word stays hidden after
+         the voice has stopped. KARA_PATIENCE_MS covers the one case that is not an ending:
+         a first chunk that never arrives at all.
+
+     AND THE 260-CHARACTER CAP, which is the one case where the card holds more than the voice
+     will ever say. The words past the cap are not hidden one at a time - they are not being
+     spoken, and the law of this deck is that nothing the voice is not pointing at is held
+     back. They are revealed in the same frame as the last spoken word, so the reveal runs
+     cleanly through what is being said and the tail arrives when the saying is done. */
+  const KARA_ACCENT_MS = 420;        // how long the just-spoken word keeps its accent
+  const KARA_WORD_MAX = 400;         // beyond this, too many spans to be worth it
+  const KARA_PATIENCE_MS = 14000;    // nothing lit by now ⇒ show the sentence and give up
+  const kara = {
+    on: false, run: 0, spans: [], words: 0, said: 0, now: -1, accent: -1, nowAt: 0,
+    spoken: 0, cur: null, raf: 0, arms: 0, instants: 0, flats: 0, scrolls: 0,
+    /* h0 is the settled height, taken on the first tick; hArm is what the box measured in the
+       tick that armed it, which on every path in this file is the tick that rendered it. The
+       two differ by the card's own entrance and the difference is reported, not hidden. */
+    mismatches: 0, why: '', h0: 0, hArm: 0, moves: 0,
+    /* WHERE IT IS RUNNING: 'card' or 'caption', '' for nowhere. `box` is the element whose
+       children the spans are and which scrolls; `owner` is the box whose height must not move,
+       which is the CARD on the card path - a paragraph that grew inside a card is a card that
+       grew - and the caption itself on the other. */
+    where: '', box: null, owner: null
+  };
+  let karaPatience = null;
+
+  /* The build. Whitespace is left as PLAIN TEXT NODES between the spans rather than wrapped
+     in anything, so `white-space: pre-wrap` still sees the runs it indents by and
+     textContent still reads back the original string character for character. */
+  function karaBuild(el, text) {
+    const s = String(text == null ? '' : text);
+    const frag = document.createDocumentFragment();
+    const spans = [];
+    const re = /\s+|\S+/g;
+    let m;
+    while ((m = re.exec(s)) !== null) {
+      if (/\s/.test(m[0].charAt(0))) { frag.appendChild(document.createTextNode(m[0])); continue; }
+      const sp = document.createElement('span');
+      sp.className = 'w';
+      sp.textContent = m[0];
+      frag.appendChild(sp);
+      spans.push(sp);
+    }
+    el.textContent = '';
+    el.appendChild(frag);
+    return spans;
+  }
+
+  function karaWords(s) {
+    return String(s == null ? '' : s).split(/\s+/).filter(Boolean).length;
+  }
+
+  /* Does the card hold the sentence about to be spoken? The SAME comparison answerYield()
+     makes, and deliberately the same one: if those two ever disagreed, the reveal would be
+     lighting a paragraph the caption had taken away. */
+  function karaFits(line) {
+    const body = $('a-text');
+    if (!body) return false;
+    const held = capCollapse(body.textContent), spoken = capCollapse(line);
+    if (!held || !spoken) return false;
+    return held.indexOf(spoken) === 0 || spoken.indexOf(held) === 0;
+  }
+
+  /* WHICH SURFACE IS HOLDING THIS SENTENCE, or null with the reason in kara.why. The card is
+     preferred because when the card has the paragraph the card is where a person is reading;
+     the caption is the fallback and is the commonest answer. Both tests are measurements - a
+     rectangle and a string comparison - rather than readings of the yield counter, because the
+     question being asked is "can this be seen", and `display:none` is the one state a counter
+     cannot describe. */
+  function karaSurface(line) {
+    const card = $('answer'), body = $('a-text'), cap = $('caption');
+    const yielded = !!(card && card.classList.contains('yield'));
+    if (card && body && card.classList.contains('show') && !yielded &&
+        body.getClientRects().length && karaFits(line)) {
+      return { where: 'card', box: body, owner: card };
+    }
+    if (cap && cap.classList.contains('up') &&
+        capCollapse(cap.textContent) === capCollapse(line)) {
+      return { where: 'caption', box: cap, owner: cap };
+    }
+    kara.why = !cap || !cap.classList.contains('up')
+      ? 'no surface is holding this sentence'
+      : 'the caption is up but does not hold this sentence word for word';
+    return null;
+  }
+
+  function karaReset() {
+    karaDown();
+    kara.spans = [];
+    kara.words = kara.said = kara.spoken = 0;
+    kara.now = kara.accent = -1;
+    kara.nowAt = 0;
+    kara.cur = null;
+    kara.h0 = kara.hArm = kara.moves = 0;
+    kara.where = ''; kara.box = null; kara.owner = null;
+  }
+
+  function karaDown() {
+    kara.on = false;
+    if (kara.raf) { cancelAnimationFrame(kara.raf); kara.raf = 0; }
+    clearTimeout(karaPatience); karaPatience = null;
+  }
+
+  /* Armed from speakLine, after the chunks are queued and only on the path that is actually
+     going to produce audio through the bus. Returns false - loudly, with a reason in
+     kara.why - on every case it declines, and a declined reveal is a plain paragraph. */
+  function karaArm(line, spokenWords) {
+    /* THE REVEAL IN PROGRESS GIVES ITS WORDS UP FIRST, and this line is not housekeeping - it
+       is the fix for the one case that would otherwise hide text permanently. A second line
+       APPENDED to a draining queue (speakLine does not cancel; it appends) arms this function
+       again while the card is still holding the first line's half-revealed paragraph. Reset
+       alone would drop the span list and leave every un-lit word at visibility:hidden with
+       nothing left that could ever light it. */
+    karaAll('a new reveal is being armed');
+    karaReset();
+    kara.run++;
+    kara.why = '';
+    const surf = karaSurface(line);
+    if (!surf) return false;                       // karaSurface() said why
+    const box = surf.box;
+    const whole = box.textContent;
+    const total = karaWords(whole);
+    if (!total) { kara.why = 'the ' + surf.where + ' holds no words'; return false; }
+    if (total > KARA_WORD_MAX) { kara.why = total + ' words is past the ceiling'; return false; }
+    /* AND THE TYPEWRITER STANDS DOWN, on the card path and only there - the typewriter has
+       never run on the caption. Two reveals on one paragraph would fight over the same
+       children - the character walk rebuilds them - and the word reveal is the one with a
+       clock behind it. Bumping the watermark is how the typewriter is told, because that is
+       the mechanism it already has for "a newer answer owns this element now". */
+    if (surf.where === 'card') {
+      typeRun++;
+      typeLit = typeTotal = whole.length;
+      box.classList.remove('typed');
+    }
+    kara.where = surf.where; kara.box = box; kara.owner = surf.owner;
+    kara.spans = karaBuild(box, whole);
+    kara.words = kara.spans.length;
+    kara.spoken = Math.max(0, Math.min(kara.words, spokenWords || kara.words));
+    kara.said = 0; kara.now = kara.accent = -1;
+    kara.on = true;
+    kara.arms++;
+    /* THE SURFACE'S HEIGHT, BEFORE A SINGLE WORD IS VISIBLE, which is the number the reflow
+       assertion is written against: visibility:hidden keeps a box, so this is the height the
+       surface will still be at the last word. karaReflow() compares every frame it lights.
+       AND IT IS offsetHeight RATHER THAN A CLIENT RECT, which was measured rather than
+       reasoned. getBoundingClientRect() returns the PAINTED box, transform included, and
+       `@keyframes rise` brings a card in at `translateY(12px) scale(.985)` - so a rect read
+       during the entrance reads 196px of a card whose layout is 199px, and 198px one frame
+       later, and 199px when the spring settles. The reflow counter spent a whole reveal
+       reporting the CARD'S OWN ENTRANCE as 82 moves on exactly that arithmetic: 199 x .985 =
+       196.0. That is a true measurement of the wrong thing - the claim §39 makes is that
+       REVEALING WORDS does not move the box, and a word going from hidden to visible cannot
+       change a layout height at all, which is the whole point of reserving it.
+       offsetHeight is the layout box: an integer, no transform in it, and forced to be current
+       by the read itself. So it is the same number here, on the first frame, and at the last
+       word, whatever the spring is doing. hArm is kept beside h0 because the two agreeing is
+       itself worth being able to read from a harness. */
+    kara.hArm = kara.owner.offsetHeight;
+    kara.h0 = 0;
+    kara.moves = 0;
+    karaPatience = setTimeout(function () {
+      karaPatience = null;
+      if (kara.on && !kara.said) karaAll('no audio within ' + KARA_PATIENCE_MS + 'ms');
+    }, KARA_PATIENCE_MS);
+    return true;
+  }
+
+  /* The reveal is MONOTONIC: words only ever light, never go dark, so a chunk boundary or a
+     clock that reads a hair backwards cannot make the sentence flicker. */
+  function karaLight(n) {
+    if (!kara.on) return false;
+    const spans = kara.spans;
+    let want = Math.max(0, Math.min(spans.length, n));
+    // The un-spoken tail, revealed with the last word the voice will say. See the header.
+    if (want >= kara.spoken) want = spans.length;
+    if (want <= kara.said && want - 1 === kara.now) return false;
+    for (; kara.said < want; kara.said++) spans[kara.said].classList.add('said');
+    const at = Math.min(want, kara.spoken) - 1;
+    /* kara.now is WHICH WORD THE CLOCK IS ON and kara.accent is which word is wearing the
+       highlight, and they are two fields because the highlight expires (see karaTick) while
+       the clock does not go back. One field would re-add the class on the very next frame. */
+    if (at !== kara.now) {
+      if (kara.accent >= 0 && spans[kara.accent]) spans[kara.accent].classList.remove('now');
+      kara.accent = -1;
+      if (at >= 0 && spans[at]) {
+        spans[at].classList.add('now');
+        kara.accent = at;
+        karaScroll(spans[at]);
+      }
+      kara.now = at;
+      kara.nowAt = performance.now();
+    }
+    karaReflow();
+    return true;
+  }
+
+  /* LONG ANSWERS AUTO-SCROLL, and only the ones that are scrollers: #a-text has a
+     max-height of --answermax and anything shorter has nothing to scroll. scrollTop
+     directly rather than scrollIntoView(), which scrolls every ancestor including the
+     document and would move the whole deck to chase a word. */
+  function karaScroll(span) {
+    const box = kara.box;
+    if (!span || !box) return false;
+    if (box.scrollHeight <= box.clientHeight + 1) return false;
+    const r = span.getBoundingClientRect(), b = box.getBoundingClientRect();
+    const top = (r.top - b.top) + box.scrollTop, bottom = top + r.height;
+    const pad = 10;
+    if (bottom > box.scrollTop + box.clientHeight - pad) {
+      box.scrollTop = bottom - box.clientHeight + pad;
+    } else if (top < box.scrollTop + pad) {
+      box.scrollTop = Math.max(0, top - pad);
+    } else return false;
+    kara.scrolls++;
+    return true;
+  }
+
+  /* ZERO REFLOW, measured by the page about itself rather than asserted in a comment. A
+     hidden word keeps its box, so the surface's height at the last word must be the height it
+     had before the first one; anything else means the reveal is growing the card under the
+     reader, which is the defect this whole technique exists to avoid. */
+  function karaReflow() {
+    const card = kara.owner;
+    if (!card || !kara.h0) return 0;
+    const now = card.offsetHeight;
+    if (now !== kara.h0) kara.moves++;
+    return now;
+  }
+
+  /* The starts for one chunk, in seconds from its own first sample. The server's, if it sent
+     them and they count the same words this page counted; an even spread over the chunk's
+     real duration if not. A mismatch is counted and named - it means timings.py and this page
+     disagreed about a string, which is a defect rather than a condition. */
+  function karaStarts(item) {
+    if (!item) return [];
+    if (item.starts && item.starts.length) {
+      if (item.starts.length === item.wn) return item.starts;
+      kara.mismatches++;
+      speakNote('chunk ' + item.i + ' timed ' + item.starts.length + ' words where the page ' +
+                'counted ' + item.wn + '; spreading them evenly instead');
+      item.starts = null;
+    }
+    const n = Math.max(0, item.wn || 0), secs = Number(item.secs) || 0;
+    if (!n || secs <= 0) return [];
+    const flat = new Array(n);
+    for (let i = 0; i < n; i++) flat[i] = secs * i / n;
+    item.flat = true;
+    kara.flats++;
+    item.starts = flat;
+    return flat;
+  }
+
+  /* Called at src.start(), the one instant the audio clock and the chunk agree about. */
+  function karaChunk(item) {
+    if (!kara.on || !item) return false;
+    kara.cur = item;
+    karaStarts(item);
+    karaUp();
+    return true;
+  }
+
+  function karaUp() {
+    if (!kara.on || kara.raf) return false;
+    kara.raf = requestAnimationFrame(karaTick);
+    return true;
+  }
+
+  function karaTick() {
+    kara.raf = 0;
+    if (!kara.on) return;
+    /* THE HEIGHT THE REFLOW LAW IS WRITTEN AGAINST, taken on the first frame of the reveal and
+       only while NOTHING IS LIT YET - see karaArm() for why it is offsetHeight. The guard is
+       what makes this honest: if a word had already appeared, the box this records could be a
+       box a word had already moved, and the assertion would be grading the reveal against its
+       own damage. This frame is src.start()'s own frame, so h0 is recorded before karaLight()
+       below lights the first word of it; if a reveal ever did light a word before its first
+       frame, h0 stays 0 and karaReflow() declines to count rather than counting wrongly. */
+    if (!kara.h0 && !kara.said && kara.owner) kara.h0 = kara.owner.offsetHeight;
+    const item = kara.cur;
+    if (item && item.clock != null && typeof actx !== 'undefined' && actx) {
+      const at = actx.currentTime - item.clock;
+      const starts = item.starts || [];
+      let want = item.w0 || 0;
+      for (let j = 0; j < starts.length; j++) if (at >= starts[j]) want = (item.w0 || 0) + j + 1;
+      karaLight(want);
+    }
+    /* THE ACCENT IS A STATE, NOT AN ANIMATION. It lives on whichever word the clock is inside,
+       so a word the voice lingers on keeps it longer, and it is CEILINGED rather than floored:
+       KARA_ACCENT_MS takes it off again even when nothing has moved on. Without that it would
+       sit on the last word of a chunk for the whole gap before the next chunk arrives, and on
+       the last word of the sentence until the card vanished - a highlight that stopped being
+       brief and started being a selection. */
+    if (kara.accent >= 0 && (performance.now() - (kara.nowAt || 0)) > KARA_ACCENT_MS) {
+      const was = kara.spans[kara.accent];
+      if (was) was.classList.remove('now');
+      kara.accent = -1;
+    }
+    karaUp();
+  }
+
+  /* THE WHOLE SENTENCE, NOW. Every silence edge ends here, and it is deliberately not a
+     cancel: the words that were already lit stay lit, the rest arrive, and the accent goes
+     out because nothing is being said. */
+  function karaAll(why) {
+    const spans = kara.spans;
+    const had = kara.on || kara.said < spans.length;
+    for (let i = 0; i < spans.length; i++) spans[i].classList.add('said');
+    if (kara.accent >= 0 && spans[kara.accent]) spans[kara.accent].classList.remove('now');
+    kara.said = spans.length;
+    kara.now = kara.accent = -1;
+    if (had) { kara.instants++; kara.why = String(why || ''); }
+    karaReflow();
+    karaDown();
+    return had;
+  }
+
+  /* ==================================================================
+     §39 - THE VANISH
+     ==================================================================
+     THE SKY IS THE DEFAULT STATE OF THIS DECK, and an answer card is a visitor. Before this
+     section the visitor never left: a sentence spoken at nine in the morning sat on the glass
+     until something else was asked, so the galaxy a person spends their day in front of was
+     permanently two-thirds covered by the last thing they said to it.
+
+     THE GRACE IS A DECISION ABOUT ATTENTION, not a dissolve, which is why it is a script
+     constant with a name and not a CSS variable: four seconds after the voice stops is long
+     enough to re-read the sentence you just heard and short enough that you do not have to
+     dismiss anything. The DISSOLVE is --vanish-ms in the cascade, read back out of the
+     cascade by vanishFadeMs() rather than carried as a copy here, so the stylesheet remains
+     the only place the number lives.
+
+     IT IS A REMOVAL AND NOT A FADE. An element left sitting at opacity 0 still has a
+     rectangle, still answers a hit test, still counts in the governor's clearance arithmetic
+     and is still in the accessibility tree - the sky would LOOK returned and the card would
+     still be in the room. So the fade is the 420ms of courtesy and then the card is put back
+     to the state the markup had: no classes, no question, no paragraph, no chips, no
+     thumbnail, no Yes/No pair.
+
+     AND IT IS DISPLAY-ONLY. Nothing in this section touches the session transcript, the
+     ledger, noteSaid()'s record, speakChunkLog or anything on the server. The card is a
+     window onto what was said; closing a window does not unsay it.
+
+     THE EXEMPTIONS, because a card that vanished at the wrong moment would be worse than one
+     that never vanished at all:
+       A GATE OR A CHAIN NEVER VANISHES. #a-ask.show is up whenever the butler is waiting for
+         a word, and a Yes/No pair that dissolved on a timer would mean the employer looked up
+         to find the question gone and no way to know whether it had been taken as a no. It
+         goes when it is resolved or timed out, and the proposal's own clock owns that.
+       A PENDING PROPOSAL, the same thing read from the other side: `proposal` is non-null
+         while the server is holding one, and the two are checked separately because the UI
+         and the server's state can be one tick apart.
+       THE HOVER HOLD, named here because the mandate asked for it to be named: while the
+         pointer is on the card, or the keyboard focus is inside it, the card stays. That is
+         somebody reading or scrolling a long answer, and a page that took the paragraph away
+         mid-scroll would be unusable. A hover hold RE-ARMS when the pointer leaves - the
+         reader has finished and the card may go - whereas a gate hold does not, because a
+         gate is not waiting on a pointer.
+       A RENDER IN FLIGHT, AND THIS ONE WAS NAMED BY A STANDING HARNESS RATHER THAN BY ME.
+         bus_proof went 80/81 on the first §39 sweep with its step list measured at 0..0 inside
+         a card at 0..0 - and the cause is that #job-line is a child of #a-text, so the
+         Director's live progress is written INTO the answer card that commissioned it (see
+         jobCardPaint). The sentence that orders a render - "I'll start on that now, sir" - is
+         spoken and ends in two seconds; the render takes one to three minutes. So the grace
+         armed by the end of that sentence was taking the only progress indicator in the house
+         off the glass four seconds into a ninety-second job, and the plate the harness takes
+         for the boss was a photograph of an empty sky during a render. A card carrying a
+         running job is an INSTRUMENT, not a finished answer, and this is the same exemption a
+         gate has for the same reason: the employer is still waiting on it.
+         IT RE-ARMS, unlike a gate, because a render ends by itself - on VANISH_JOB_MS, the
+         bus's own poll interval, so the re-check lands at most one poll after the row stops
+         reading `running`. And the ending announces itself through speak() (jobAnnounce),
+         which arms a fresh grace of its own - so the finished result line gets the four
+         seconds every other spoken answer gets, and not a timer of its own invention. */
+  const VANISH_GRACE_MS = 4000;              // after the voice ends, before the card leaves
+  const VANISH_HOVER_MS = 1200;              // after the pointer leaves a held card
+  const VANISH_READ_SECS_PER_WORD = 0.38;    // the muted path's read-time, per word
+  const VANISH_READ_MIN_MS = 2400;           // ...and its floor, for a four-word answer
+  /* A held card re-checks a running render this often. It is JOB_POLL_MS and is written as a
+     literal rather than as a reference because JOB_POLL_MS is declared a thousand lines further
+     down this same scope - a const read before its declaration is a TDZ throw at load, which on
+     this page means a white screen. karaoke_proof asserts the two are equal, so the day one of
+     them moves the harness says so rather than the cadence quietly drifting. */
+  const VANISH_JOB_MS = 2500;
+  /* AND A NAMED DOOR, in the house's own idiom - ?mute=1, ?focusprobe=1, galaxy_spin - because
+     a card that removes itself is the first thing on this deck that makes a measurement go
+     stale while an instrument is looking at it. ?vanish=0 pins every card where it is. It is
+     a door for a harness that needs a standing card for twenty seconds, not a preference: the
+     employer's deck has no way to reach it and the default is on. */
+  const VANISH_OFF = /[?&]vanish=0(?:&|$)/.test(location.search);
+  const vanish = {
+    armed: 0, fired: 0, done: 0, held: 0, clears: 0, wipes: 0, refused: 0,
+    pending: false, at: 0, grace: 0, why: '', holds: []
+  };
+  let vanishTimer = null, vanishFade = null;
+
+  function vanishUp() {
+    const card = $('answer');
+    return !!(card && card.classList.contains('show'));
+  }
+
+  /* The dissolve's own length, read out of the cascade. Under html.nomove and under
+     prefers-reduced-motion the transition is none and this reads 0, so the removal happens
+     in the next tick - which is what a page asked to hold still should do. */
+  function vanishFadeMs() {
+    const card = $('answer');
+    if (!card) return 0;
+    try {
+      const d = getComputedStyle(card).transitionDuration || '0s';
+      return Math.max(0, Math.round(parseFloat(d) * 1000)) || 0;
+    } catch (e) { return 0; }
+  }
+
+  /* What is keeping this card on the glass, in the employer's own terms, or '' for nothing. */
+  function vanishHeld() {
+    const card = $('answer');
+    if (!card) return 'there is no card';
+    if (!card.classList.contains('show')) return 'the card is not up';
+    const ask = $('a-ask');
+    if (ask && ask.classList.contains('show')) return 'a gate is open';
+    if (typeof proposal !== 'undefined' && proposal) return 'a proposal is pending';
+    /* THE RENDER HOLD. Both halves are required and neither implies the other: the row has to
+       still be running, and the line has to still be IN this card - jobCardPaint() removes the
+       node the moment typeRun moves on, so a card the boss has since replaced must not inherit
+       the hold of a render it does not display. Guarded because the job machinery is wired
+       after this function in the file and a page without it is not a page holding a card. */
+    try {
+      const jr = jobFollowed();
+      if (jr && jr.outcome === 'running' && $('job-line')) return 'a render is running';
+    } catch (e) { /* no bus on this page: nothing is rendering */ }
+    try { if (card.matches(':hover')) return 'the pointer is on the card'; } catch (e) { /* no :hover */ }
+    if (document.activeElement && card.contains(document.activeElement) &&
+        document.activeElement !== document.body) return 'the keyboard is inside the card';
+    return '';
+  }
+
+  function vanishDown() {
+    clearTimeout(vanishTimer); vanishTimer = null;
+    vanish.at = 0;
+    return true;
+  }
+
+  function vanishArm(ms, why) {
+    vanishDown();
+    if (VANISH_OFF) { vanish.refused++; vanish.why = 'pinned by ?vanish=0'; return false; }
+    if (!vanishUp()) return false;
+    vanish.grace = Math.max(0, ms == null ? VANISH_GRACE_MS : ms);
+    vanish.why = String(why || '');
+    vanish.at = Date.now() + vanish.grace;
+    vanish.armed++;
+    vanish.pending = true;
+    vanishTimer = setTimeout(vanishFire, vanish.grace);
+    return true;
+  }
+
+  function vanishFire() {
+    vanishTimer = null;
+    vanish.fired++;
+    const held = vanishHeld();
+    if (held) {
+      vanish.held++;
+      vanish.holds.push(held);
+      if (vanish.holds.length > 8) vanish.holds.shift();
+      /* The pointer and the keyboard will leave and a render will finish; a gate will not.
+         See THE EXEMPTIONS - and note that the render's interval is the bus's poll and not the
+         pointer's 1200ms, because re-asking a question whose answer only changes every 2.5s
+         would be a hundred timer wake-ups per render for no new information. */
+      if (held === 'the pointer is on the card' || held === 'the keyboard is inside the card') {
+        vanish.at = Date.now() + VANISH_HOVER_MS;
+        vanishTimer = setTimeout(vanishFire, VANISH_HOVER_MS);
+      } else if (held === 'a render is running') {
+        vanish.at = Date.now() + VANISH_JOB_MS;
+        vanishTimer = setTimeout(vanishFire, VANISH_JOB_MS);
+      }
+      return false;
+    }
+    return vanishNow(false);
+  }
+
+  /* instant=true skips the dissolve: that is the new-utterance wipe, where the card belongs
+     to the sentence before this one and has no business fading over the top of the new one. */
+  function vanishNow(instant) {
+    const card = $('answer');
+    if (VANISH_OFF) { vanish.refused++; return false; }
+    if (!card || !card.classList.contains('show')) return false;
+    vanishDown();
+    vanish.pending = false;
+    clearTimeout(vanishFade); vanishFade = null;
+    const ms = instant ? 0 : (card.classList.add('vanishing'), vanishFadeMs());
+    const strip = function () {
+      vanishFade = null;
+      /* BACK TO THE MARKUP. className rather than six removes, because the question "is the
+         sky exactly as it was" is a question about EVERY class this card can carry - err,
+         web, tool, capped, yield, bare, vanishing - and a list would be one behind the next
+         person who adds one. #answer starts life with no classes at all. */
+      card.className = '';
+      $('a-q').textContent = '';
+      $('a-text').textContent = '';
+      karaReset();
+      hideProof();
+      clearAskUI();
+      $('a-src').style.display = 'none';
+      $('a-chips').innerHTML = '';
+      answerReach();                 // it is not a scroller any more; the role comes off
+      /* AND THE SIDEBAR THAT THE CARD CITED GOES WITH IT - §39 PART 3 (a). */
+      if (panelAuto.cited) panelClose('the card that cited it vanished');
+      vanish.done++;
+      if (instant) vanish.wipes++;
+      /* AND THE COLUMN IS RE-MEASURED. The toast has just lost its tallest neighbour and the
+         no-overlap law is a statement about two heights; renderAnswer() ends this way for
+         exactly the same reason, in the other direction. */
+      layout();
+      try {
+        dispatchEvent(new CustomEvent('answerVanish', { detail: {
+          at: Date.now(), done: vanish.done, instant: !!instant, why: vanish.why
+        } }));
+      } catch (e) { /* an event nobody can dispatch is still a card that left */ }
+    };
+    if (ms > 0) vanishFade = setTimeout(strip, ms);
+    else strip();
+    return true;
+  }
+
+  /* A new card is being painted, or a gate has arrived: whatever was armed is void, and the
+     'vanishing' class comes off so a card is never born already dissolving. */
+  function vanishClear() {
+    vanishDown();
+    clearTimeout(vanishFade); vanishFade = null;
+    const card = $('answer');
+    if (card) card.classList.remove('vanishing');
+    vanish.pending = false;
+    vanish.clears++;
+    return true;
+  }
+
+  /* THE MUTED PATH'S READ-TIME: words times a named number of seconds, plus the same grace
+     the voice gets. A tab that cannot make a sound has no "the voice ended" to wait for, and
+     the thing it is waiting for instead is a person finishing a sentence with their eyes.
+     2.6 words a second is slow for silent reading on purpose - this is a glance at a card,
+     not a page of prose, and erring long costs a few seconds of sky. */
+  function vanishReadMs(line) {
+    const words = karaWords(line);
+    return Math.max(VANISH_READ_MIN_MS,
+                    Math.round(words * VANISH_READ_SECS_PER_WORD * 1000)) + VANISH_GRACE_MS;
+  }
+
+  /* ==================================================================
+     §39 - THE SIDEBAR'S OWN CLOCK
+     ==================================================================
+     THREE WAYS AN OPEN SIDEBAR CLOSES ITSELF, whichever comes first, and all three are the
+     same sentence from three directions: a panel is a footnote to something, and when that
+     something is over the footnote is litter.
+       (a) THE CARD THAT CITED IT VANISHED. Fired from vanishNow() above. "Cited" is measured
+           rather than guessed: the panel was opened while the answer card was up, which is
+           true of the document panel, the web sources panel and a citation chip in the card's
+           own footer, and false of a planet clicked in the galaxy with nothing on the glass.
+       (b) TWENTY SECONDS WITH NOBODY IN IT. Re-armed by any pointer move, wheel, scroll or
+           key inside #panel; a pointer RESTING inside is a hold rather than a touch, because
+           "no hover" in the mandate means no hover, and a reader whose hand is still on the
+           panel they are reading has not left.
+       (c) A NEW SPOKEN UTTERANCE BEGAN. Fired from speakLine(). The butler has moved on and
+           the panel is about the thing before. Worth naming because it includes the unasked
+           sentences - a posture nudge spoken into a quiet room closes an open note.
+     ONE DOOR OUT. All three go through clearSelection(), which is the page's only close, so
+     the graph's highlight, the Escape key and the ✕ cannot disagree about what closed. */
+  const PANEL_IDLE_MS = 20000;
+  const panelAuto = {
+    opens: 0, closes: 0, touches: 0, holds: 0, armed: 0,
+    cited: false, hover: false, at: 0, why: '', by: []
+  };
+  let panelIdleTimer = null;
+
+  function panelIsOpen() {
+    const p = $('panel');
+    return !!(p && p.classList.contains('open'));
+  }
+
+  function panelIdleArm(why) {
+    clearTimeout(panelIdleTimer); panelIdleTimer = null;
+    if (!panelIsOpen()) { panelAuto.at = 0; return false; }
+    panelAuto.armed++;
+    panelAuto.at = Date.now() + PANEL_IDLE_MS;
+    panelIdleTimer = setTimeout(function () {
+      panelIdleTimer = null;
+      if (panelAuto.hover) { panelAuto.holds++; return panelIdleArm('a hand is still on it'); }
+      panelClose('nothing touched it for ' + Math.round(PANEL_IDLE_MS / 1000) + 's');
+    }, PANEL_IDLE_MS);
+    return true;
+  }
+
+  function panelIdleDown() {
+    clearTimeout(panelIdleTimer); panelIdleTimer = null;
+    panelAuto.at = 0;
+    return true;
+  }
+
+  function panelTouch() {
+    if (!panelIsOpen()) return false;
+    panelAuto.touches++;
+    return panelIdleArm('touched');
+  }
+
+  function panelUp() {
+    panelAuto.opens++;
+    panelAuto.cited = vanishUp();
+    panelAuto.hover = false;
+    try { panelAuto.hover = !!$('panel').matches(':hover'); } catch (e) { /* no :hover */ }
+    panelIdleArm('opened');
+    return true;
+  }
+
+  function panelClose(why) {
+    if (!panelIsOpen()) return false;
+    panelAuto.closes++;
+    panelAuto.why = String(why || '');
+    panelAuto.by.push(panelAuto.why);
+    if (panelAuto.by.length > 8) panelAuto.by.shift();
+    clearSelection();
+    return true;
   }
 
   /* ---------- THE SILENT NUDGE ----------
@@ -12179,6 +12999,54 @@ async function loadLib() {
   const SCRIBE_SEAL_MS = 4400;
   const scribeSeal = { word: '', timer: null, said: '', times: 0 };
 
+  /* ---------- §35 PART 3: THE WORD A RENDER WEARS ----------
+     JOB · DO NOT DISTURB, and it is the boss's own sentence rather than a description: a
+     sixty-seven-second render with a silent seal reading READY is the exact failure PART 3
+     forbids, because a machine that looks idle gets a second order typed into it.
+     Declared HERE, immediately above sealPaint and beside the other two words it shares the
+     ladder with, for the reason written over scribeSeal: sealPaint() runs during boot and a
+     const declared down in the bus's own section - twenty screens below - would be in its
+     temporal dead zone for every paint the boot sequence makes, so the seal would throw
+     instead of reading READY. That applies to the STATE as much as to the string, and more
+     dangerously: jobWord() is now a rung of the main word ladder, so a `job` object declared
+     down in the bus's own section would make the whole seal throw rather than merely leave one
+     cell blank. So the state lives up here beside earFault and scribeSeal under exactly their
+     rule, and everything that WRITES it - the poller, the card, the announcement - lives
+     below. The chip string itself is never composed here: see jobWord(). */
+  /* §35 asks for "JOB · DO NOT DISTURB" and this says DO NOT DISTURB, which is a deviation from
+     a literal clause and so is here with the tape measure that forced it. #seal is 380px at
+     1366 and frozen; the chip beside it is 236px of §35's own string; #seal-text is the one cell
+     that gives, so it is left with 119px - and 59px once a spoken order has sealed BOSS into
+     #seal-who, which is the normal case for a render he asked for out loud. "job · do not
+     disturb" needs 159px in this cell's font and was reaching the glass as "JOB · DO NOT DI…",
+     spending six of its visible characters on a prefix the chip to its left already says louder.
+     Dropped, so the typed case reads the whole phrase (112px of 119) and the spoken case
+     truncates to "DO NOT D…", which is still the beginning of a sentence he knows. The strip as
+     a whole reads BOSS · DIRECTING · 3/5 SCENES · 42s · DO NOT DISTURB. */
+  const SEAL_JOB_WORD = 'do not disturb';   // #seal is text-transform:uppercase
+  const job = {
+    state: null,      // the whole /jobs payload, or null before the first read
+    live: null,       // the running row, or null - the server picks it, not this page
+    follow: '',       // the job id THIS tab commissioned, or '' - see jobSeen()
+    run: -1,          // the typeRun the followed job belongs to - see jobCardPaint()
+    spoken: '',       // the job id whose ending has been read out - once, not once a poll
+    line: '',         // what was last written into the card, so a harness can read it back
+    cadence: 0, reads: 0, errors: 0, paints: 0
+  };
+
+  /* THE CHIP, AND IT IS COPIED RATHER THAN COMPOSED. jobs.chip_text() builds
+     "DIRECTING · 3/5 SCENES · 42s" on the server, for the reason every seal word in this house
+     is built there: the string a harness asserts is then the string the boss reads, instead of
+     a parallel implementation of it that can drift a step. This page does not know the plan,
+     does not count the steps and must not be able to - a page that could compose "3 of 5"
+     would be a page that could claim progress the renderer has not made.
+     Empty unless a job is RUNNING, which is the one invariant the seal ladder above leans on:
+     chip_text() returns '' for a finished job, so DO NOT DISTURB cannot outlive the render. */
+  function jobWord() {
+    const live = job.live;
+    return (live && live.chip) ? String(live.chip) : '';
+  }
+
   /* ---------- THE DOORMAN'S SEAL ----------
      SPEAKER: BOSS · SPEAKER: RYAN · SPEAKER: GUEST.
 
@@ -12241,8 +13109,17 @@ async function loadLib() {
     /* THE FAULT OUTRANKS EVERY OTHER WORD, including MUTED and including the open-ear
        colour. A muted tab whose recogniser has died three times is still a tab whose
        recogniser has died three times, and that is the more useful of the two facts. */
+    /* §35 PART 3: AND THE JOB OUTRANKS MUTED AND THE STATE WORD, and sits below the two
+       above it, on the ladder's own rule. "JOB · DO NOT DISTURB" is the boss's instruction to
+       himself - he asked for it so that he would know not to touch the machine mid-render - and
+       READY is the one word that would be actively false while five ffmpeg encodes are running.
+       It is below the ear fault and the Scribe's refusals because both of those are answers
+       about something that has just gone wrong in the room, and a render is going RIGHT.
+       Read off jobWord(), so the word and the chip can never disagree: if there is no chip
+       there is no live job, and if there is no live job this line does not fire. */
     const word = earFault.on ? SEAL_FAULT_WORD
                : scribeSeal.word ? scribeSeal.word
+               : jobWord() ? SEAL_JOB_WORD
                : MUTED && !cls ? 'muted' : (SEAL_WORDS[cls] || 'ready');
     /* ASKED OF THE EAR BUTTON AND NOT OF THE EAR'S OWN FLAG, for the same reason the organ
        rail is a reader: the class on #mic is what the session actually set, so a seal that
@@ -12277,9 +13154,20 @@ async function loadLib() {
        a tick the daemon started at four in the morning with no microphone in the room is
        exactly the case a transparency law is for. studyWord() is empty unless the Scholar
        says it is running, so this cell is dark on a page that has never polled. */
+    /* §35 PART 3 - AND THE SAME CELL CARRIES THE JOB CHIP, with the job winning.
+       ONE CELL AND NOT A FOURTH PILL, which is the whole of the geometry decision: §35's
+       DO-NOT-ALTER allows "text-in-existing-strips" and the stylesheet above #seal-study
+       records that this strip has exactly THREE spare pixels - a fourth flex item would be a
+       layout change and would move layout_proof's count. So the two background reporters share
+       the cell and the priority is WRITTEN rather than decided by whichever poll painted last:
+       the job wins, because the Scholar's tick is a thing the boss may interrupt whenever he
+       likes and a render is the thing he asked to be told not to disturb. The study goes back
+       to saying STUDYING the instant the chip clears, on the next poll of either.
+       Failure mode: two pollers, one cell, no stated order - the cell would flicker between
+       STUDYING and DIRECTING at 2.5-second intervals and neither would be trustworthy. */
     const studyCell = $('seal-study');
     if (studyCell) {
-      const studying = studyWord();
+      const studying = jobWord() || studyWord();
       if (studyCell.textContent !== studying) studyCell.textContent = studying;
       studyCell.classList.toggle('on', !!studying);
     }
@@ -12290,6 +13178,38 @@ async function loadLib() {
        is being read across it. A refusal borrows the word and never the light. */
     const state = earFault.on ? 'fault' : open ? 'open' : (cls || 'ready');
     if (el.getAttribute('data-state') !== state) el.setAttribute('data-state', state);
+  }
+
+  /* §35 PART 1: THE HANDSHAKE, COPIED OFF WHATEVER DOOR ANSWERED.
+     A one-word "haan" carries too little audio for a voiceprint, so the server seals it GUEST
+     and then, if the sentence that opened the gate was the boss's, hands the seal back inside
+     doorman_refusal(). This is the whole of the page's part in that: TWO NAMED FIELDS, copied.
+
+     IT IS COPIED AND NEVER COMPUTED, on identically the rule written over speaker.seal in
+     identify() - this page does not know what confirm_window_s is, cannot tell whether a window
+     was open, and must not be able to: a page that could derive this string would be a page that
+     could award it. `data.handshake` is the server's evidence that a window was honoured and
+     `data.speakerSeal` is the word; both must be present, so a reply carrying one without the
+     other changes nothing at all.
+
+     NO NEW CHIP AND NO NEW PIXEL. The seal strip's #seal-who already says who is talking and
+     already goes green on `hands`; it reads `speaker: BOSS · HANDSHAKE` for this turn and the
+     geometry is untouched, which is what §35's DO-NOT-ALTER on the frozen glass requires. */
+  function handshakeSeen(data) {
+    if (!data || typeof data !== 'object') return false;
+    const row = data.handshake;
+    if (!row || typeof row !== 'object') return false;
+    const word = String(data.speakerSeal || '');
+    if (!word) return false;
+    speaker.seal = word;
+    /* GREEN, because the gate DID take an order from this word - which is what .boss means on
+       that cell. The flag is set rather than left alone on purpose: the identify() a moment
+       earlier wrote hands:false from the thin audio, and leaving it there would paint the
+       honoured handshake in the stranger's colour. */
+    speaker.hands = true;
+    speaker.at = Date.now();
+    sealPaint();
+    return true;
   }
 
   /* ============================================ THE SCHOLAR, ON THE GLASS ==
@@ -12625,6 +13545,253 @@ async function loadLib() {
   if ($('digest-yes')) $('digest-yes').onclick = function () { studyGateYes('button'); };
   if ($('digest-no')) $('digest-no').onclick = function () { studyGateRefuse('button'); };
 
+  /* ======================================== §35 PART 3: THE PROGRESS BUS, ON THE GLASS ==
+     THE BOSS'S LAW, in his words: "while Galaxy works, the glass shows what he is doing, step
+     by step, so the boss knows not to disturb. A backend-only job is not accepted." A render
+     takes sixty-seven seconds cold, it happens on a daemon thread, and before this block the
+     only sign of it was a sentence that had already scrolled past.
+
+     THREE SURFACES, ALL OF THEM ALREADY ON THIS DECK. Zero new panels and zero layout change,
+     which is PART 3's own DO-NOT-ALTER - "the bus writes text into existing strips only":
+       THE CHIP, in #seal-study, beside and above the Scholar - see sealPaint().
+       THE WORD, in #seal-text: JOB · DO NOT DISTURB - see the ladder in sealPaint().
+       THE LIST, one span appended to #a-text: script ✓ · voice ✓ · scenes … · captions ·
+         stitch, replaced by the result line when the render ends - see jobCardPaint().
+
+     IT IS A READER AND NOTHING ELSE. There is no POST in this block, no privilege, no id this
+     page invented: /jobs is a GET, every string on the glass was composed by jobs.py, and the
+     one id this tab knows is the one the server put in the reply to the boss's own question.
+     So a guest's tab watching a render it was refused shows the same chip and can stop,
+     start or alter nothing - which is why the page is allowed to display it at all.
+
+     WHY IT POLLS AND WHY AT TWO SPEEDS. The Scholar's note above says it: a stream exists on
+     this deck for callouts that must land in a background tab within three seconds, and a
+     progress bar is not a callout. One interval, like /study - but ARMED SLOWER WHEN NOTHING
+     IS RUNNING, because unlike a study there is nothing to see on an idle machine, and two
+     always-on 2.5-second background requests is twice the idle traffic for the half of it
+     that is reporting nothing. The fast cadence is reached the instant a job appears, and for
+     the job the boss himself asked for there is no wait at all: jobSeen() fetches on the spot.
+     Failure mode the two speeds guard: a 6-second idle poll everywhere would put the chip up
+     as much as six seconds after the render started, and the one second he is most likely to
+     type into the machine is the second after he asked it for something. */
+  const JOB_POLL_MS = STUDY_POLL_MS;   // while something is running: the Scholar's own cadence
+  const JOB_IDLE_MS = 6000;            // while nothing is: see above
+  /* THE MARKS, and the empty string for `waiting` is deliberate rather than missing. §35 fixes
+     this list verbatim - "script ✓ · voice ✓ · scenes … · captions · stitch" - and the steps
+     that have not happened wear no mark at all: a glyph for "not started" would put five
+     symbols on a line whose whole job is to be read at a glance from across a desk. The five
+     keys are jobs._steps_public()'s five states; a sixth would render as the bare word, which
+     is the right failure - a step list missing one tick is readable and a crash is not. */
+  const JOB_MARKS = { done: '✓', running: '…', failed: '✗', stopped: '—', waiting: '' };
+  let jobPoll = null;
+
+  /* THE ROW THIS TAB IS FOLLOWING, looked up BY ID every time and never held as an object.
+     The payload is rebuilt on every poll, so a kept reference would be a snapshot of a render
+     that has since moved three steps - which is the commonest way a progress bar goes stale
+     while continuing to look alive. */
+  function jobFollowed() {
+    if (!job.follow || !job.state) return null;
+    const rows = job.state.jobs || [];
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i] && rows[i].job === job.follow) return rows[i];
+    }
+    return null;
+  }
+
+  /* THE LIVE LIST. Laid out here, decided on the server: every state in it comes from
+     jobs._steps_public(), which is the function that knows which step is actually running. */
+  function jobStepList(row) {
+    const steps = (row && row.steps) || [];
+    const out = [];
+    for (let i = 0; i < steps.length; i++) {
+      const s = steps[i] || {};
+      const mark = JOB_MARKS[s.state] || '';
+      out.push(mark ? (s.step + ' ' + mark) : String(s.step || ''));
+    }
+    return out.join(' · ');
+  }
+
+  /* THE RESULT LINE: ready · 65s · output/videos/micro-saas-pricing/final.mp4 · 5 notes.
+     Every field comes off row.result, which jobs.finish() built out of the LEDGER ROW it had
+     just written - so the card and the ledger cannot disagree about what was made, and a
+     render that wrote no row shows no result rather than a hopeful one. A failure says so and
+     carries the server's own reason: "the notes hold nothing on this" is the answer to the
+     question the boss asked, and hiding it behind the word FAILED would waste the only
+     sentence in the exchange that tells him what to do next. */
+  function jobResultLine(row) {
+    const res = (row && row.result) || {};
+    const out = [row.outcome === 'done' ? 'ready' : 'failed'];
+    if (res.durationS) out.push(Math.round(res.durationS) + 's');
+    if (res.path) out.push(String(res.path));
+    if (Array.isArray(res.cited) && res.cited.length) out.push(res.cited.length + ' notes');
+    if (row.outcome !== 'done') {
+      const ev = (row.events || [])[(row.events || []).length - 1];
+      const why = (ev && ev.step === row.outcome && ev.detail) ? String(ev.detail) : '';
+      if (why) out.push(why.slice(0, 120));
+    }
+    return out.join(' · ');
+  }
+
+  /* THE LINE IN THE ANSWER CARD, and the one interesting decision is when it goes AWAY.
+     IT BELONGS TO THE ANSWER THAT COMMISSIONED IT. typeRun is bumped by typeOut() for every
+     answer this card shows, jobSeen() records the value standing when the render was ordered,
+     and this function paints only while the two match. That single comparison buys three
+     behaviours that would otherwise each need their own cleanup: the next answer wipes the
+     line (typeOut rebuilds #a-text's children, so the node is deleted by the paragraph it
+     lived in), a poll arriving afterwards does not put it back, and a result left on the card
+     is cleared by the next thing the boss asks rather than by a timer.
+     AND THE CHIP IS NOT GATED THAT WAY - it keeps reading DIRECTING while he reads something
+     else, because "do not disturb" is a fact about the machine and not about the card. That is
+     the one asymmetry here and it is deliberate.
+     ONLY THE JOB THIS TAB ASKED FOR. A render commissioned in another tab, or by
+     tools/make_video.py at a terminal, shows its chip and does NOT write into this card: the
+     card holds an answer to a question somebody typed here, and appending another tab's
+     progress to it would be this page narrating work it was not asked about. Named as a limit
+     rather than fixed, because the alternative - adopting an orphan job - means guessing which
+     answer on screen it belongs under, and the honest answer is none of them. */
+  function jobCardPaint() {
+    const body = $('a-text');
+    if (!body) return '';
+    const row = jobFollowed();
+    let el = $('job-line');
+    if (!row || job.run !== typeRun) {
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+      job.line = '';
+      return '';
+    }
+    const text = row.outcome === 'running' ? jobStepList(row) : jobResultLine(row);
+    if (!el) {
+      el = document.createElement('span');
+      el.id = 'job-line';
+      /* NOT ARIA-LIVE. The line changes every 2.5 seconds for three minutes, and a live
+         region would read five step lists aloud to a screen reader over one render. The
+         beginning and the end are both SPOKEN sentences - see jobAnnounce() and the server's
+         own announcement - which is the accessible channel for this, and it says the two
+         things worth hearing instead of the forty worth glancing at. */
+      body.appendChild(el);
+    }
+    if (el.textContent !== text) el.textContent = text;
+    job.line = text;
+    job.paints++;
+    return text;
+  }
+
+  /* THE END, SAID ONCE. §35: "at job start Galaxy announces once in text and speech ... at
+     completion, once more." The START is already spoken and already written - it is the reply
+     to the boss's own question, which goes through respond() like every other answer, and a
+     second sentence here would make the page say it twice.
+     THE WORDS ARE THE SERVER'S. The finishing event's `detail` is what director.py handed to
+     report.done(): "Your video on micro-saas pricing is ready, sir - 65 seconds, from 5 of
+     your own notes." This page does not compose it for the same reason it does not compose the
+     chip - a page that wrote this sentence would be a page inventing a duration.
+     ONCE PER JOB AND NOT ONCE PER POLL, which is what job.spoken holds: the row goes on
+     reading `done` for as long as the bus remembers it, so a guard that was a boolean on the
+     tab would re-announce a second render and a guard that was absent would announce the same
+     one every 2.5 seconds until the boss closed the tab. */
+  function jobAnnounce() {
+    const row = jobFollowed();
+    if (!row || row.outcome === 'running') return '';
+    if (job.spoken === row.job) return '';
+    job.spoken = row.job;
+    const ev = (row.events || [])[(row.events || []).length - 1];
+    const said = (ev && ev.step === row.outcome && ev.detail) ? String(ev.detail) : '';
+    if (!said) return '';
+    speak(said);           // the one funnel: caption, record, and a muted tab still reads it
+    return said;
+  }
+
+  /* HOW FAST TO ASK, re-decided on every payload and re-armed only when the answer CHANGES.
+     Re-arming unconditionally would reset the interval on every poll, which on a background
+     tab Chrome has throttled to once a minute is a timer that never fires at its own cadence
+     again. */
+  function jobCadence() {
+    const row = jobFollowed();
+    const busyNow = !!(job.live || (row && row.outcome === 'running'));
+    const want = busyNow ? JOB_POLL_MS : JOB_IDLE_MS;
+    if (job.cadence === want) return want;
+    job.cadence = want;
+    if (jobPoll) {
+      clearInterval(jobPoll);
+      jobPoll = setInterval(jobFetch, want);
+    }
+    return want;
+  }
+
+  /* THE ONE FUNNEL EVERY READ COMES THROUGH, so the chip, the word, the card, the voice and
+     the cadence are decided in one place and in one order - and so a harness can hand this
+     function a payload and read the whole glass back without a server. */
+  function jobApply(data) {
+    if (!data || typeof data !== 'object' || !Array.isArray(data.jobs)) return null;
+    job.state = data;
+    job.live = data.live || null;
+    sealPaint();
+    jobCardPaint();
+    jobAnnounce();
+    jobCadence();
+    return data;
+  }
+
+  async function jobFetch() {
+    try {
+      const res = await fetch('/jobs');
+      const data = await res.json();
+      job.reads++;
+      return jobApply(data);
+    } catch (e) {
+      /* A poll that failed changes nothing on the glass, which is studyFetch()'s discipline
+         and fxFetch()'s before it: the chip keeps saying what was last true. A page that
+         blanked the strip on a dropped request would report a running render as finished,
+         and the man would type into a machine with five encodes in flight. */
+      job.errors++;
+      return null;
+    }
+  }
+
+  function jobUp() {
+    if (jobPoll) return;
+    job.cadence = JOB_IDLE_MS;
+    jobFetch();
+    jobPoll = setInterval(jobFetch, job.cadence);
+  }
+
+  function jobDown() {
+    if (jobPoll) { clearInterval(jobPoll); jobPoll = null; }
+  }
+
+  /* THE ONE FIELD THE SERVER SENDS AND THE ONLY THING THIS TAB EVER FOLLOWS.
+     `directJob` is the id jobs.open_job() minted on the thread that answered the question, so
+     the page follows the render it actually commissioned instead of guessing which of eight
+     remembered jobs is its own. Copied, never computed - identically handshakeSeen()'s rule.
+     CALLED AFTER respond() AND NOT BEFORE IT, which is the opposite of handshakeSeen() two
+     lines above it in the handler, and the reason is the typeRun watermark: respond() renders
+     the announcement and typeOut() bumps the counter, so a follow pinned before that would be
+     pinned to the PREVIOUS answer and jobCardPaint() would refuse to paint for the whole
+     render. Failure mode if this is ever moved back up: no step list, no error, nothing in a
+     log - the chip would be right and the card would simply stay bare. */
+  function jobSeen(data) {
+    if (!data || typeof data !== 'object') return '';
+    const id = String(data.directJob || '');
+    if (!id) return '';
+    job.follow = id;
+    job.run = typeRun;
+    job.spoken = '';
+    jobFetch();            // not at the next tick: the steps belong beside the sentence
+    return id;
+  }
+
+  /* THE ↻ BUTTON'S HALF OF THE FORGET. The server drops its finished jobs inside /reset - see
+     the comment there - and this is the UI catching up rather than the decision, exactly as
+     hideProposal() is on the line above the call. The follow goes too: a result line put back
+     on the card two and a half seconds after he asked for it to go would be a forget button
+     with an exception. A render still in flight keeps its chip on both sides - ↻ forgets a
+     conversation and does not stop a machine mid-encode. */
+  function jobForget(why) {
+    job.follow = '';
+    job.spoken = '';
+    jobCardPaint();
+    return String(why || '');
+  }
+
   $('reset').onclick = async function () {
     try {
       await fetch('/reset', {
@@ -12637,6 +13804,7 @@ async function loadLib() {
     /* The ↻ button clears a pending proposal with everything else - the server drops it
        too, inside /reset, so this is the UI catching up rather than the decision. */
     hideProposal();
+    jobForget('the reset button');      // §35 PART 3 - see jobForget()
     /* THE WHOLE CONVERSATION, not merely the turn. ↻ means "forget this", and an open ear
        that survived it would be a session still running against a thread that no longer
        exists on either side. */
@@ -13147,6 +14315,36 @@ async function loadLib() {
        the tab in which the subtitle is the whole of the answer - and in that tab the fade is
        armed on the spot, since no voice will ever end to arm it. */
     captionShow(line);
+    /* ---- §39 RIDES THE FUNNEL TOO, and for the identical reason the caption does ----
+       WHAT COUNTS AS AN UTTERANCE BEGINNING, and it is the one judgement the two rules below
+       both rest on: a line that is about to be CUT AND QUEUED. A muted tab, a tab with no
+       voice and a tab before its first click do not begin an utterance - they put a subtitle
+       up - and the last of those matters most, because the autoplay law JOINS every held line
+       into one breath: at boot the salutation and the readiness line are one utterance owed on
+       the first gesture, the caption says so by showing both, and a rule that treated the
+       second as new would wipe the greeting's card half a second after it appeared.
+
+       A NEW UTTERANCE CLEARS ANY PREVIOUS CARD IMMEDIATELY (PART 2). The test for "previous"
+       is the one karaFits() already makes: a card holding the sentence about to be spoken IS
+       this utterance's card, and only its timer is called off; a card holding something else
+       belongs to the answer before and goes at once, with no dissolve - 420ms of fade over
+       the top of a new answer is the old answer arguing with the new one. renderAnswer() has
+       usually run a line earlier, in which case the card fits and nothing is wiped.
+
+       AND AN OPEN SIDEBAR CLOSES (PART 3 (c)): the butler has moved on, and the panel is a
+       footnote to the thing before. */
+    const utterance = !MUTED && speakPossible() && audioUnlocked;
+    if (utterance) {
+      if (vanishUp() && !karaFits(line)) vanishNow(true);
+      else vanishClear();
+      panelClose('a new utterance began');
+    } else {
+      /* THE SILENT PATH'S VANISH (PART 2), armed here rather than at an ending, because in a
+         tab that cannot make a sound there is no ending to wait for. The clock is a
+         read-time - words times a named number of seconds, plus the same grace the voice
+         gets - and the three returns below are the three silent tabs. */
+      vanishArm(vanishReadMs(line), 'a silent tab, after an estimated read');
+    }
     if (MUTED) { captionFade(CAPTION_HOLD_MS); noteSaid(line, false); return false; }
     if (!speakPossible()) { captionFade(CAPTION_HOLD_MS); noteSaid(line, false); return false; }
     if (!audioUnlocked) {
@@ -13172,15 +14370,36 @@ async function loadLib() {
        because the chunk log IS the record of what the queue was asked to read. */
     if (!speakDraining) { speakChunkLog = []; speakBufRelease(); }
     const chunks = speakSplit(line);
+    /* §39 - WHERE EACH CHUNK'S WORDS SIT IN THE WHOLE LINE, computed at queue time and
+       carried on the item. w0 is the chunk's first word counting from the start of this
+       utterance and wn is how many words it holds, so chunk four's third word is word
+       w0+2 of the paragraph on the glass. It is sound arithmetic for one reason stated in
+       speakSplit(): a word is NEVER cut, so the words of the chunks are the words of the
+       line in order, and the cumulative count below is therefore exact rather than close.
+       Computed here rather than in the pump because the pump sees chunk four several
+       seconds after the reveal needs to know how long chunks one to three were. */
+    let w0 = 0;
     for (let i = 0; i < chunks.length; i++) {
+      const wn = karaWords(chunks[i]);
       const item = {
         id: ++speakIds, i: speakChunkLog.length, text: chunks[i],
-        chars: chunks[i].length, start: 0, end: 0, error: '', skipped: false, source: ''
+        chars: chunks[i].length, start: 0, end: 0, error: '', skipped: false, source: '',
+        w0: w0, wn: wn, starts: null, clock: null, flat: false
       };
+      w0 += wn;
       speakChunkLog.push(item);
       speakQueue.push(item);
       speakFifo.queued++;
     }
+    /* AND THE WORD-BY-WORD REVEAL IS ARMED, on the one path that is going to put a decoded
+       buffer on the bus. The browser's own engine is excluded deliberately: it has no audio
+       clock to read - onboundary is a different mechanism with a different reliability - and
+       a reveal with no clock behind it is the typewriter, which this page already has. So a
+       web-voice tab shows the paragraph whole, exactly as it did before §39.
+       `w0` is now the total word count of everything about to be spoken, which is what tells
+       the reveal where the voice stops and the unspoken tail begins - see karaLight(). */
+    if (speakEngine === 'piper' && !speakPiperDown) karaArm(line, w0);
+    else kara.why = 'the browser\'s own voice has no audio clock';
     noteSaid(line, true);      // ONE record per line, whatever it was cut into
     /* THE FUNNEL SAYS WHAT IT TOOK - speakDone's twin, one event per line accepted. It is
        here so that a harness can record every sentence this page spoke by watching the
@@ -13284,6 +14503,17 @@ async function loadLib() {
       gapMax: speakGapMax(), text: speakChunkLog.map(function (c) { return c.text; }).join(' ')
     };
     idleStatus();
+    /* ---- §39, AND THIS IS THE ONLY PLACE EITHER HALF OF IT CAN BE TOLD ----
+       THE REST OF THE SENTENCE, because "the voice has stopped" is a fact only the completion
+       contract knows: the queue is empty AND the last chunk's end has fired. Whatever the run
+       did - a chunk played as silence, a fall back to the browser, a WAV that would not decode
+       - every word is on the glass by the time this returns. It is the backstop that makes
+       "no word can stay hidden" a property of the funnel rather than a hope about the engine.
+       AND THE GRACE BEGINS, for the same reason the caption's four seconds begin here and not
+       when the line was handed over. VANISH_GRACE_MS after his voice ends means after the LAST
+       chunk. If no card is up, or ?vanish=0 pinned it, vanishArm() declines and says so. */
+    karaAll('the voice finished');
+    vanishArm(VANISH_GRACE_MS, 'the voice ended');
     try {
       dispatchEvent(new CustomEvent('speakDone', { detail: speakDoneLast }));
     } catch (e) { /* an event nobody can dispatch is still a queue that finished */ }
@@ -13325,6 +14555,12 @@ async function loadLib() {
       speakNote('queue emptied by ' + reason + ' (one of the three)');
     }
     bargeAnswerShut();
+    /* §39 - AND THE HALF-REVEALED SENTENCE IS COMPLETED. An interrupted answer is still on the
+       glass to be read: the three callers of this function are a person saying stop, and
+       stopping the VOICE is not a request to take the words away. Nothing is armed here - the
+       vanish belongs to an answer that finished, and a cancelled one is either about to be
+       replaced by the next question's card or is being left alone deliberately. */
+    karaAll('the voice was stopped by ' + reason);
     return true;
   }
 
@@ -13610,8 +14846,32 @@ async function loadLib() {
     const p = fetch('/say', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: tongueSpoken(item) })
+      /* TWO FORMS OF THE SAME CHUNK, and the second one is §39's. `text` is what piper is to
+         SAY - the Quiet Tongue's normalisation, markdown stripped and long identifiers turned
+         into "the reference is in the card" - and `timing_text` is what the employer is to
+         READ, which is the raw chunk, the string the card's word spans were built from. The
+         server synthesises the first and divides THAT WAV's real duration across the words of
+         the second, so the timings it returns are indexed by the words on the glass.
+         IT IS AN APPROXIMATION AND THE SHAPE OF THE ERROR IS WORTH NAMING: an answer carrying
+         a calendar id has a 24-character token on the card where the voice said seven
+         syllables, so that one word's share of the duration is too generous. The alternative -
+         timing the spoken form - would be wrong about every word AFTER the id instead of about
+         the id alone, because the two word counts would no longer line up at all. */
+      body: JSON.stringify({ text: tongueSpoken(item), timing_text: item.text })
     }).then(function (r) {
+      /* §39's per-word starts, off the response headers. Numbers only, by the server's own
+         privacy law - see timings.header() - so this is a comma-separated list of seconds and
+         nothing that could carry a sentence of the employer's into a proxy log. A response
+         without them is not an error: karaStarts() spreads the chunk's words over its real
+         duration instead, which is a worse reveal and never a hidden one. */
+      if (r.ok) {
+        const raw = r.headers.get('X-Word-Timings') || '';
+        const starts = raw ? raw.split(',').map(Number).filter(function (n) {
+          return isFinite(n) && n >= 0;
+        }) : [];
+        item.starts = starts.length ? starts : null;
+        item.sayMs = Math.round((Number(r.headers.get('X-Say-Secs')) || 0) * 1000);
+      }
       if (r.ok) return r.arrayBuffer();
       return r.json().then(
         function (j) { throw new Error((j && j.error) || ('/say answered ' + r.status)); },
@@ -13703,6 +14963,17 @@ async function loadLib() {
     if (silent) speakFifo.silent++;
     item.start = Date.now();
     speakProgressAt = Date.now();
+    /* §39 - THE ONE INSTANT THE CLOCK AND THE CHUNK AGREE ABOUT. src.start() with no argument
+       means "at actx.currentTime", so this reading IS the sample position of this chunk's first
+       sample, and every word time the server sent is an offset from it. Taken AFTER start()
+       rather than before, and the difference is one audio quantum at worst against a word
+       that lasts a quarter of a second - whereas a reading taken before a start() that threw
+       would be a clock for audio that never played.
+       NOT Date.now(). The whole of §39's accuracy is that this is the audio thread's own
+       clock: a wall clock drifts from the speakers by tens of milliseconds a second on a busy
+       main thread, which over a long answer is a word and a half. */
+    item.clock = actx.currentTime;
+    if (!silent) karaChunk(item);
     if (!silent) setStatus('speaking', 'speaking');
   }
 
@@ -13715,6 +14986,7 @@ async function loadLib() {
       speakPiperDown = 'this browser has no AudioContext to play the local voice through';
       speakNote('falling back to the browser\'s own voice: ' + speakPiperDown);
       refreshVoice();
+      karaAll('there is no audio clock to read');     // §39: no bus, no reveal
       return speakWeb(item);
     }
     /* THIS chunk first, the lookahead immediately after: all of them are in flight within a
@@ -13762,6 +15034,12 @@ async function loadLib() {
           speakProbeUp();               // and start asking whether it has come back
           item.skipped = false;         // this chunk gets read after all, out loud
           item.error = '';
+          /* §39 - AND THE REVEAL STANDS DOWN MID-ANSWER. The rest of this line is going to the
+             browser's own engine, which has no audio clock, so there is nothing left that
+             could light the remaining words. The whole sentence, now, is the honest end: a
+             half-revealed paragraph with no clock behind it is text being hidden for no
+             reason. Counted in kara.instants with this as the reason. */
+          karaAll('the local voice fell over mid-answer');
           return speakWeb(item);
         }
         /* THE TEN MILLISECONDS. Logged as a loss, played as a placeholder, advanced by
@@ -14877,11 +16155,30 @@ async function loadLib() {
     return Math.max(barge.calSum / barge.calFrames, barge.calPeak * BARGE_CAL_PEAK);
   }
 
+  /* THE LARGER OF THE TWO MEASUREMENTS, AND NOT THE FIRST ONE THAT IS NON-ZERO.
+     MEASURED FAILURE, §36: mid-answer the live bus read 0.0053 - over BARGE_BUS_MIN by a
+     hair, because a WAV between two words, or its last fading syllable, is nearly silent at
+     the gain node while the ROOM is still full of the syllable before it. The old first-match
+     order took that 0.0053 as the output reference, and the microphone's 0.09 of honest leak
+     came back at 17x it: sustained, past the deaf window, taken. The butler interrupted
+     himself, which is the one failure this whole gate exists to prevent, and conversation_proof
+     caught it the first time a Piper answer happened to run dry inside the measured window.
+     WHY max() IS THE RIGHT RULE AND NOT A HIGHER BARGE_BUS_MIN. The two numbers measure the
+     same thing from two ends - what the speakers are putting into the room - and they
+     disagree only because the bus is instantaneous while the calibration is 800ms of the
+     microphone's own evidence. An instantaneous dip is not evidence that the room went quiet,
+     so the floor under the reference stays where the leak was actually heard, for as long as
+     this answer is live; bargeArm() clears the calibration with the answer, so this floor
+     cannot outlive the sound it was measured from. It is the same argument BARGE_CAL_PEAK
+     makes one function up: a reference that understates the leak is a gate that opens on it.
+     `from` still names the number that WON, so an episode remains reviewable. */
   function bargeReference() {
     const bus = bargeBusRms();
-    if (bus >= BARGE_BUS_MIN) return { rms: bus, from: 'bus' };
     const cal = bargeCalibrated();
+    const live = bus >= BARGE_BUS_MIN;
+    if (live && bus >= cal) return { rms: bus, from: 'bus' };
     if (cal > 0) return { rms: cal, from: 'calibrated' };
+    if (live) return { rms: bus, from: 'bus' };
     return { rms: 0, from: 'none' };
   }
 
@@ -24621,6 +25918,12 @@ async function loadLib() {
        a hermetic probe page must not carry a 2.5-second background request, which is exactly
        what case `hermetic` exists to catch. */
     studyUp();
+    /* §35 PART 3 - AND THE JOB BUS, in the else beside the Scholar and for its reason: a
+       hermetic probe page must carry no background request, which is what case `hermetic`
+       exists to catch. It arms at the IDLE cadence, so a page that boots onto a quiet machine
+       asks once every six seconds and a page that boots into a live render has the chip up on
+       its first read. See the block over JOB_POLL_MS. */
+    jobUp();
     if (DEBUG_ON) fxDebugStart();
     /* THE DECK, last and unawaited: it is the one thing on this page that nothing else
        waits for. It is also not started on the probe page at all - a battery that shares
@@ -25143,6 +26446,43 @@ async function loadLib() {
       offer: studyDigestOffer, show: studyDigestShow, close: studyDigestClose,
       yes: function () { return studyGateYes('button'); },
       no: function () { return studyGateRefuse('button'); }
+    },
+    /* §35 PART 3 - THE PROGRESS BUS, read back off the GLASS and out of the payload this page
+       polled. `chip` and `line` are the DOM's own text, so a harness asserts what a person
+       reads rather than what the page intended; `word` is the seal's state word, which is the
+       other half of DO NOT DISTURB. apply() is the funnel every real poll comes through, which
+       is what lets bus_proof hand the page a scripted job and read the whole glass back
+       without waiting three minutes for a render - and it is the SAME code path, not a test
+       double. Nothing here can start, stop or alter a job: /jobs is a GET and this block holds
+       no POST, which is why a page is allowed to show the boss's render at all. */
+    job: {
+      POLL_MS: JOB_POLL_MS, IDLE_MS: JOB_IDLE_MS, MARKS: JOB_MARKS,
+      SEAL_WORD: SEAL_JOB_WORD,
+      get state() { return job.state; },
+      get live() { return job.live; },
+      get busy() { return !!(job.state && job.state.busy); },
+      get follow() { return job.follow; },
+      get row() { return jobFollowed(); },
+      get word() { return jobWord(); },
+      /* THE CHIP AS THE GLASS HAS IT - the cell the Scholar shares. See sealPaint(): the job
+         wins while one is running, so a harness reading STUDYING here during a render is
+         reading a priority bug and not a cadence. */
+      get chip() { return ($('seal-study') || {}).textContent || ''; },
+      get chipOn() {
+        const cell = $('seal-study');
+        return !!(cell && cell.classList.contains('on'));
+      },
+      get seal() { return ($('seal-text') || {}).textContent || ''; },
+      get line() { return ($('job-line') || {}).textContent || ''; },
+      get inCard() { return !!$('job-line'); },
+      get spoken() { return job.spoken; },
+      get cadence() { return job.cadence; },
+      get reads() { return job.reads; },
+      get errors() { return job.errors; },
+      get paints() { return job.paints; },
+      get polling() { return !!jobPoll; },
+      steps: jobStepList, result: jobResultLine, apply: jobApply, poll: jobFetch,
+      up: jobUp, down: jobDown, seen: jobSeen, forget: jobForget
     },
     /* THE VISAGE. Which pose is worn, how open the mouth is, how fast it is moving, and
        the geometry it is made of - so a harness can read the face the way the eye reads
@@ -26010,6 +27350,198 @@ async function loadLib() {
                           ? capCollapse(el.textContent) : '' };
       },
       fade: captionFade, clear: captionClear
+    },
+    /* §39 - THE WORD-BY-WORD REVEAL, THE VANISH AND THE SIDEBAR'S CLOCK, as readings.
+       Everything measurable here is measured off the GLASS rather than off a counter: `said`
+       and `hidden` are counted by walking the spans' class lists, `h` is the card's live
+       rectangle, and the glass tokens are read out of getComputedStyle rather than out of the
+       stylesheet - a rule that is declared and then beaten by a more specific one would still
+       read correctly out of the CSS and wrongly off the page. */
+    kara: {
+      ACCENT_MS: KARA_ACCENT_MS, WORD_MAX: KARA_WORD_MAX, PATIENCE_MS: KARA_PATIENCE_MS,
+      get on() { return kara.on; },
+      get words() { return kara.words; },
+      get spoken() { return kara.spoken; },
+      get said() { return kara.said; },
+      get now() { return kara.now; },
+      get accent() { return kara.accent; },
+      get arms() { return kara.arms; },
+      get instants() { return kara.instants; },
+      get flats() { return kara.flats; },
+      get scrolls() { return kara.scrolls; },
+      get mismatches() { return kara.mismatches; },
+      get why() { return kara.why; },
+      /* WHICH SURFACE, because every reading below is a reading of one element and a harness
+         that did not know which one would be measuring the wrong box half the time. */
+      get where() { return kara.where; },
+      /* THE REFLOW ASSERTION, as three numbers and a count, all of them LAYOUT heights -
+         offsetHeight, never a client rect, because the entrance spring scales the painted box
+         and a reveal cannot move a layout box at all. h0 is the surface's height on the first
+         frame of the reveal with nothing lit; hArm the same number at arm time; moves is how
+         many lit frames found it anywhere else. Zero is the claim, and h0 === hArm === h is
+         what it looks like when the claim holds. */
+      get h0() { return kara.h0; },
+      get hArm() { return kara.hArm; },
+      get moves() { return kara.moves; },
+      get h() { return kara.owner ? kara.owner.offsetHeight : 0; },
+      /* The painted box beside it, transform and all - the number that MOVES during the
+         entrance, kept so a harness can tell a spring from a reflow instead of guessing. */
+      get hPaint() {
+        return kara.owner
+          ? Math.round(kara.owner.getBoundingClientRect().height * 100) / 100 : 0;
+      },
+      /* Counted off the DOM, so a reveal that updated its counters and not its classes - or
+         the other way about - reads as the contradiction it is. BOTH surfaces are queried
+         rather than the live one, so a reveal that left spans behind on the surface it is no
+         longer using shows up here as a span count that does not match kara.words. */
+      get seen() {
+        const all = document.querySelectorAll('#a-text .w, #caption .w');
+        let said = 0, accent = 0, shown = 0;
+        for (let i = 0; i < all.length; i++) {
+          if (all[i].classList.contains('said')) said++;
+          if (all[i].classList.contains('now')) accent++;
+          if (all[i].getClientRects().length) shown++;
+        }
+        return { spans: all.length, said: said, hidden: all.length - said, accent: accent,
+                 /* AND HOW MANY A PERSON CAN ACTUALLY SEE. A visibility:hidden span still has
+                    a rectangle; a span inside a display:none paragraph has none. So this
+                    separates "lit" from "on the glass", which is the difference the yield law
+                    makes and the one this feature was nearly lost to. */
+                 onGlass: shown };
+      },
+      /* The visible prefix, which is what a drift check actually compares against the clock:
+         the words a person can read at this instant, in order. */
+      get text() {
+        const out = [];
+        const all = document.querySelectorAll('#a-text .w, #caption .w');
+        for (let i = 0; i < all.length; i++) {
+          if (all[i].classList.contains('said')) out.push(all[i].textContent);
+        }
+        return out.join(' ');
+      },
+      /* The chunk the clock is in, and the clock. `at` is seconds into this chunk read off the
+         audio thread - the same subtraction karaTick() makes - so a harness can sample the
+         pair and check the reveal against the server's own numbers rather than against a
+         stopwatch of its own. */
+      get chunk() {
+        const it = kara.cur;
+        if (!it) return null;
+        let at = null;
+        try { if (actx && it.clock != null) at = +(actx.currentTime - it.clock).toFixed(3); }
+        catch (e) { /* no context */ }
+        return { i: it.i, w0: it.w0, wn: it.wn, secs: it.secs || 0, flat: !!it.flat,
+                 starts: (it.starts || []).slice(), at: at, words: karaWords(it.text) };
+      },
+      all: function (why) { return karaAll(why || 'asked by an instrument'); }
+    },
+    vanish: {
+      GRACE_MS: VANISH_GRACE_MS, HOVER_MS: VANISH_HOVER_MS, JOB_MS: VANISH_JOB_MS,
+      READ_SECS_PER_WORD: VANISH_READ_SECS_PER_WORD, READ_MIN_MS: VANISH_READ_MIN_MS,
+      get off() { return VANISH_OFF; },
+      get fadeMs() { return vanishFadeMs(); },
+      get armed() { return vanish.armed; },
+      get fired() { return vanish.fired; },
+      get done() { return vanish.done; },
+      get wipes() { return vanish.wipes; },
+      get held() { return vanish.held; },
+      get holds() { return vanish.holds.slice(); },
+      get clears() { return vanish.clears; },
+      get refused() { return vanish.refused; },
+      get pending() { return vanish.pending; },
+      get grace() { return vanish.grace; },
+      get why() { return vanish.why; },
+      /* How long is left, or null for nothing armed. A harness that waited on a wall clock of
+         its own would be racing this one. */
+      get inMs() { return vanish.at ? Math.max(0, vanish.at - Date.now()) : null; },
+      /* WHAT IS HOLDING IT, in the employer's own words, asked fresh. This is the gate
+         exemption and the hover hold where they can be read rather than inferred. */
+      get holdNow() { return vanishHeld(); },
+      /* AND THE CARD, AS THE SKY SEES IT. "Gone" is not a class: it is no classes, no
+         rectangle and no text. All four are reported so a half-undone card cannot pass. */
+      get card() {
+        const c = $('answer'), t = $('a-text');
+        if (!c) return null;
+        return { className: c.className, show: c.classList.contains('show'),
+                 vanishing: c.classList.contains('vanishing'),
+                 rects: c.getClientRects().length,
+                 opacity: getComputedStyle(c).opacity,
+                 text: t ? t.textContent.length : 0,
+                 q: $('a-q') ? $('a-q').textContent.length : 0,
+                 chips: $('a-chips') ? $('a-chips').children.length : 0,
+                 ask: !!($('a-ask') && $('a-ask').classList.contains('show')) };
+      },
+      /* THE PROOF THAT IT IS DISPLAY-ONLY. The transcript and the ledger are counted here so
+         a vanish assertion can read them either side of the fade and find them unchanged. */
+      /* WHAT THE VANISH MUST NOT TOUCH, as four counters that only ever go up - because the
+         mandate's assertion is that the removal is display-only, and an assertion of that
+         shape needs records that cannot move on their own.
+         `echo` is NOT one of them and is reported separately for exactly that reason:
+         saidLines is a SIX-SECOND window (SAID_TTL_MS), pruned on a timer, so it falls to
+         zero across any grace that outlasts the sentence. A harness that put it beside the
+         ledger would red the display-only claim on the muted path, where the grace is a read
+         estimate and the echo window is long expired by the time the card goes. Measured: it
+         read 2 before and 0 after, and nothing had been taken away. */
+      get record() {
+        return { chunks: speakChunkLog.length, spoke: speakDoneCount, ids: speakIds,
+                 ledger: document.querySelectorAll('#ledger .row, #ledger-rows .row').length };
+      },
+      get echo() { return saidLines.length; },
+      arm: function (ms, why) { return vanishArm(ms, why || 'asked by an instrument'); },
+      now: function (instant) { return vanishNow(!!instant); },
+      clear: vanishClear
+    },
+    /* THE SIDEBAR'S GLASS AND ITS CLOCK. The token table is the whole of PART 4's assertion:
+       the panel's background and blur are the CARD's, read off both live elements, so "the
+       same translucent background token" is a comparison of two measurements rather than a
+       claim about a variable. `token` is what the cascade says --glass and --blur are, which
+       is where the alpha was READ FROM rather than invented. */
+    sidebar: {
+      IDLE_MS: PANEL_IDLE_MS,
+      get open() { return panelIsOpen(); },
+      get opens() { return panelAuto.opens; },
+      get closes() { return panelAuto.closes; },
+      get touches() { return panelAuto.touches; },
+      get holds() { return panelAuto.holds; },
+      get armed() { return panelAuto.armed; },
+      get cited() { return panelAuto.cited; },
+      get hover() { return panelAuto.hover; },
+      get why() { return panelAuto.why; },
+      get by() { return panelAuto.by.slice(); },
+      get inMs() { return panelAuto.at ? Math.max(0, panelAuto.at - Date.now()) : null; },
+      get glass() {
+        const p = $('panel'), c = $('answer');
+        if (!p || !c) return null;
+        const read = function (el) {
+          const cs = getComputedStyle(el);
+          return { background: cs.backgroundColor,
+                   backdrop: cs.backdropFilter || cs.webkitBackdropFilter || 'none',
+                   radius: cs.borderTopLeftRadius,
+                   shadow: cs.boxShadow,
+                   borderLeft: cs.borderLeftWidth + ' ' + cs.borderLeftStyle + ' ' +
+                               cs.borderLeftColor };
+          };
+        const root = getComputedStyle(document.documentElement);
+        return { panel: read(p), card: read(c),
+                 token: { glass: root.getPropertyValue('--glass').trim(),
+                          blur: root.getPropertyValue('--blur').trim(),
+                          line: root.getPropertyValue('--line').trim() } };
+      },
+      /* THE CONTRAST ASSERTION'S INPUTS, straight off the two paragraphs: the ink the panel
+         draws its body in and the ink the card draws its answer in, as computed colours.
+         The ratio is the harness's arithmetic - this page's job is to report the colours it
+         is actually painting, not to grade itself. */
+      get ink() {
+        const body = document.querySelector('#panel .body'), ans = $('a-text');
+        const meta = document.querySelector('#panel .meta');
+        const grab = function (el) {
+          if (!el) return null;
+          const cs = getComputedStyle(el);
+          return { color: cs.color, size: cs.fontSize, weight: cs.fontWeight };
+        };
+        return { panelBody: grab(body), panelMeta: grab(meta), cardAnswer: grab(ans) };
+      },
+      touch: panelTouch,
+      close: function (why) { return panelClose(why || 'asked by an instrument'); }
     },
     typeLine: {
       get up() { return typeLineIsUp(); },

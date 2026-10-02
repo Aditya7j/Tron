@@ -58,6 +58,12 @@ tools-ledger.json
 study-ledger.json
 scholar-state.json
 calendar.json
+# §35's TWO. jobs-ledger.json is the progress bus's one-row-per-job record - the same kind of
+# local state as the three ledgers above it - and output/ is where the Director writes, which
+# is a folder of mp4s and WAVs: large, binary, rewritten per run, and rebuildable from the
+# notes with one command. The script.md inside it is derived from the notes too.
+jobs-ledger.json
+output/
 
 # PROOF ARTEFACTS (screenshots the harnesses write)
 deck-*.png

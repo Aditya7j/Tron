@@ -366,7 +366,17 @@ async function main() {
     /* SEE THE HEADER: without these two every frame-time reading in section 8 is the number
        60 and the budget is four copies of it. */
     '--disable-gpu-vsync', '--disable-frame-rate-limit',
-    '--window-size=1600,1000', '--new-window', GALAXY + '/?mute=1',
+    /* AND THE CARD IS PINNED, through §39's own named door - not one assertion in this file
+       changed. §39 gave the answer card a four-second grace and then removes it, and on a
+       ?mute=1 tab like this one the grace is an ESTIMATED READ TIME, so it arms on every card
+       this harness renders whether a voice ever spoke or not. Section 7 flies its six particles
+       from #a-chips (see presence.stream(n), which falls back to #answer and then gives up), so
+       a card that had left took the origin with it: six sends came back 'no-origin', the queue
+       read 0 where 5 were expected, and the next assertion threw on the flying dot's transform
+       being null - a page working exactly as §39's mandate asks, reading as a broken particle
+       stream. ?vanish=0 is the door that mandate names for "a harness that needs a standing
+       card for twenty seconds", and it is the whole of the repair. */
+    '--window-size=1600,1000', '--new-window', GALAXY + '/?mute=1&vanish=0',
   ], { detached: true, stdio: 'ignore' });
   chrome.unref();
 

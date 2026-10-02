@@ -123,15 +123,29 @@ TOOL_TAG_RE = re.compile(r"\[\[\s*tool\s*:\s*([^\]\n|]{1,60}?)\s*"
 # doubled or with the English word after it - "haan yes", "haan haan do it". It is here and
 # not in a separate list because a yes is a yes in whatever language it arrives in, and a
 # second list would be a second thing for the gate to forget to read.
+#
+# SECTION 35 ADDED `nahi` AND ONE SPELLING, AND THE ASYMMETRY IS THE REASON. `haan` was here
+# from the start and its opposite was not, which meant this house heard the boss's Hindi yes
+# and not his Hindi no - and of the two, the unheard NO is the worse one to be missing: an
+# unheard yes is a hand that does not run and he says it again, while an unheard no leaves the
+# proposal standing in the slot AND sends the refusal to the notes as a new subject. `nahi`,
+# `nahin` and `nahi ji` go in; `na` and `naa` deliberately do NOT, because "na" is also an
+# English filler and a Hindi tag question ("you'll do it, na?"), and a two-letter alternative
+# inside an anchored whole-message pattern is the cheapest way to turn this grammar into a
+# sieve - which is the one failure preflight's pool check exists to catch.
+# `thik hai` is the same word as `theek hai` romanised the other way, and a romanisation this
+# file does not list is a word the boss says and the gate does not hear.
 _YES_WORDS = r"""
       yes | yes\s+please | yep | yeah | yup | aye | ok | okay | okey\s*dokey
-    | haan | haan\s*ji | han | theek\s+hai | kar\s+do | bilkul
+    | haan | haan\s*ji | han | theek\s+hai | thik\s+hai | thek\s+hai
+    | kar\s+do | bilkul
     | sure | go\s+ahead | go\s+on | do\s+it | send\s+it | please\s+do | do\s+so
     | proceed | confirm(?:ed)? | affirmative | very\s+well | if\s+you\s+would
     | that'?s\s+right | correct | please
 """
 _NO_WORDS = r"""
       no | no\s+thanks | no\s+thank\s+you | nope | nah | negative | cancel
+    | nahi | nahin | nahi\s*ji | nahin\s*ji
     | cancel\s+(?:it|that) | stop | don'?t | do\s+not | never\s*mind | forget\s+it
     | leave\s+it | hold\s+off | not\s+now | not\s+yet | scrap\s+(?:it|that)
     | on\s+second\s+thought(?:s)? | thank\s+you

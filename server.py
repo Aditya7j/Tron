@@ -111,6 +111,15 @@ import search as websearch
 # no tool outside tools/registry.json exists, and nothing runs without a human word.
 import hands
 
+# THE PROGRESS BUS - §35 PART 3. The boss's law is that while Galaxy works, the glass shows
+# what he is doing, step by step, so the boss knows not to disturb; a backend-only job is not
+# accepted. This module is the one place those events are kept. It knows nothing about any
+# particular job - the Director is merely its first producer - and it is imported here for
+# exactly two reasons: the GET /jobs poll, and so that a producer running on a thread can
+# reach it without the server passing a handle down four call frames. Stdlib only, its own
+# lock, and nothing in it touches the conversational path.
+import jobs
+
 # DOES THIS TEXT CARRY A CREDENTIAL? One opinion, shared with tools/save_note.py and with
 # preflight, because three copies of that regex would be three chances to fix two of them.
 # Consulted at proposal time so a password is refused before a card goes up - see
@@ -228,6 +237,13 @@ focus.ASK_HAND = _focus_ask_hand
 # falls back to the browser's own engine.
 import say
 
+# §39 - WHERE EACH WORD OF THAT WAV BEGINS. Beside say.py rather than inside it because the
+# arithmetic is about a string and a duration and knows nothing about piper: Orpheus's bytes
+# go through the same function, and the module can be exercised with no voice installed at
+# all. Standard library only, never raises, and empty on anything it cannot read - which the
+# page reads as "show the whole sentence at once".
+import timings
+
 # THE SCRIBE'S EAR, the other direction: a few seconds of meeting in, a line of text
 # out, through faster-whisper in this process. Its own file for the same reasons as
 # say.py - it owns a model, a lock and a warm-up thread - and it never raises either,
@@ -271,6 +287,24 @@ try:
 except Exception as _worldclock_exc:                           # noqa: BLE001
     worldclock = None
     sys.stderr.write("worldclock: unavailable - %s\n" % _worldclock_exc)
+
+# THE DIRECTOR, §35 PART 2. Its own file because it owns a pipeline - five stages, six ffmpeg
+# filtergraphs and a budget - and because the whole of it must stay off the conversational
+# thread: what this module reaches from here is MANAGER.request(), which queues and returns.
+#
+# IMPORTED IN A TRY LIKE THE FOUR ABOVE, and here the reason is concrete rather than defensive.
+# This is the only module in the house whose work depends on a BINARY THAT MAY NOT BE INSTALLED:
+# a machine without the Gyan ffmpeg build, or without the piper voice, must leave a working
+# server working and refuse the one route plainly. `director is not None` is the test the branch
+# in protected_answer() uses, exactly as the clock's branch tests worldclock.
+#
+# AND IT IMPORTS server BACK, inside a function rather than at module scope - see the note at the
+# head of director.py. A module-level import there would make this line a cycle.
+try:
+    import director
+except Exception as _director_exc:                             # noqa: BLE001
+    director = None
+    sys.stderr.write("director: unavailable - %s\n" % _director_exc)
 
 # =============================================================================
 #  THE PERSONA - everything the character is, lives in this one block.
@@ -1352,6 +1386,14 @@ DEFAULT_CONFIG = {
     "embed_model": "nomic-embed-text",
     "ollama_url": "http://127.0.0.1:11434",
     "notes_threshold": 0.60,
+    # §35 PART 1 - HOW LONG A BOSS'S HANDSHAKE IS WORTH, in seconds. See the handshake
+    # window above doorman_refusal(): a BOSS-sealed sentence that opens a gate lets the ONE
+    # confirmation word that answers it inherit the seal, because "yes" and "haan" carry too
+    # little phonetic content for a voiceprint to match and the Doorman was refusing its own
+    # employer. 120 is deliberately the SAME number as hands.CONFIRM_TTL_S - the window may
+    # not outlive the proposal it was opened for, and if these two ever disagree the longer
+    # one is a window that stays open over a slot that is already empty. Clamped on read.
+    "confirm_window_s": 120,
 }
 PLACEHOLDER_KEYS = {"", "put-your-key-here", "your-key-here", "sk-xxx", "changeme"}
 
@@ -2288,7 +2330,16 @@ PROTECTED_CLASSES = ("confirmation", "meta", "identity", "directive")
 # mandate's fixed list, above the clock because a place table is not a reason for the Scholar to
 # stop obeying. It is the only member of this tuple that STARTS something rather than answering
 # something, which is why it is also the only one behind a Doorman gate: see study_allowed().
-UNPAID_CLASSES = PROTECTED_CLASSES + ("clock", "fullscreen", "study")
+#
+# AND AN EIGHTH, §35's, ON THE SAME TERMS AS THE SEVENTH. "make a video about micro-saas pricing"
+# is an INSTRUCTION the Director takes from state - it queues a render on a daemon thread and
+# returns a sentence - so protected_answer() reaches the notes, the archive and the web exactly
+# never to answer it, and `lookups` stays 0. The RENDER itself does retrieve, five chunks of it,
+# but that happens on the Director's own thread and against the Director's own budget; it is not
+# a lookup this turn paid for, and conflating the two would make every long job look like an
+# expensive question. It stands below the Scholar and above the clock, and it is the second
+# member of this tuple behind a Doorman gate: see director_allowed().
+UNPAID_CLASSES = PROTECTED_CLASSES + ("clock", "fullscreen", "study", "direct")
 
 
 def _addressless(question):
@@ -2780,6 +2831,85 @@ def study_allowed(spoken, seal):
     return False, STUDY_REFUSAL
 
 
+# ---- §35 PART 2: THE DIRECTOR'S COMMAND SURFACE ---------------------------------------------
+#
+# ANCHORED ON THE WHOLE ADDRESSLESS UTTERANCE, like STUDY_NOW_RE and FULLSCREEN_ON_RE and for
+# the same reason: "what video did you make", "can you make videos", "how long do your videos
+# take" must all reach the brain as ordinary questions, and the ^...$ anchors are what make that
+# true rather than a hope.
+#
+# THE BARE ALTERNATIVE COMES FIRST, which is STUDY_NOW_RE's lesson paid forward: an alternation
+# is tried left to right, and a capturing branch written above a bare one will swallow it. Here
+# the bare branch cannot be swallowed - "make a video" has nothing after the noun for
+# "about X" to capture - but it is placed first anyway so the ordering is a rule in this file
+# rather than an accident of this particular grammar.
+#
+# BILINGUAL, AS THE MANDATE SAYS, AND HINDI TAKES BOTH ORDERS. "video banao pricing par" and
+# "pricing par video banao" are both ordinary Hinglish, the postposition `par` is what marks the
+# topic in each, and a grammar that took only the English order would refuse half of what is
+# actually said in this house. `banao`/`bana do`/`banaiye` are the imperative forms the boss
+# uses; `banaya` is PAST TENSE and is deliberately absent, because "tum ne video banaya" is a
+# question about a video that exists, not an order to make one.
+DIRECT_RE = re.compile(r"""^(?:
+      (?:make|create|film|shoot|record|produce)\s+(?:me\s+)?(?:a|an|one)?\s*video
+    | (?:ek\s+)?video\s+bana\s*(?:o|do|iye)
+    | (?:make|create|film|shoot|record|produce)\s+(?:me\s+)?(?:a|an|one)?\s*video
+        \s+(?:about|on|of|for|regarding|covering)\s+(?P<topic>.{2,70}?)
+    | (?:ek\s+)?video\s+bana\s*(?:o|do|iye)\s+(?P<topic2>.{2,70}?)\s+par
+    | (?P<topic3>.{2,70}?)\s+par\s+(?:ek\s+)?video\s+bana\s*(?:o|do|iye)
+  )(?:\s+(?:now|today|please|for\s+me|abhi|zara))?$""", re.IGNORECASE | re.VERBOSE)
+
+# WHAT MUST NOT MATCH, and director_proof carries these as controls. Every one of them has a
+# question stem or a different verb in front, so the ^ anchor refuses them before any capture
+# group is considered. The failure mode if these anchors are ever loosened is the expensive one:
+# the butler spending sixty-seven seconds of CPU, five piper calls and a model call every time
+# the boss says the word "video" in a sentence - and answering a question he did not ask.
+_DIRECT_NOT = ("what video did you make", "can you make videos", "how do i make a video",
+               "show me the video", "play the video", "why did you make that video",
+               "is the video ready", "delete the video", "what is a video")
+
+
+def director_asked(question):
+    """The topic to film, "*" for "he asked but named nothing", or "" for anything else."""
+    for form in _addressless_forms(question):
+        got = DIRECT_RE.match(form)
+        if not got:
+            continue
+        said = got.groupdict()
+        topic = ((said.get("topic") or said.get("topic2") or said.get("topic3") or "")
+                 .strip(" .,!?;:"))
+        # A BARE DEICTIC IS NOT A TOPIC, AND IT IS NOT THIS BRANCH'S SENTENCE TO ANSWER - the
+        # same law as the Scholar's, reusing the same list rather than a second copy of it.
+        # "make a video about it" names something by pointing, and what it points at lives in the
+        # antecedent memory, which is DO-NOT-ALTER and which this branch sits above. Matched here
+        # it would have filmed a topic literally called "it": a retrieval for a pronoun, and on
+        # this corpus a graceful-empty refusal that looked like a broken Director.
+        if topic and topic.lower() in _STUDY_DEICTIC:
+            return ""
+        return topic or "*"
+    return ""
+
+
+def director_allowed(spoken, seal):
+    """(True, "") if this voice may commission a video, else (False, the refusal).
+
+    THE SAME GATE AS THE SCHOLAR'S, CALLED AND NOT COPIED. §35 says "guests refused" and nothing
+    more, and the Scholar's door already answers exactly the question this one asks: BOSS seal
+    only, the keyboard is always the boss's, stands down silently with nobody enrolled, fails
+    closed on a store that will not read. A render writes into the boss's own output folder and
+    costs CPU and tokens while sending nothing and reaching nobody - the same cost profile the
+    study gate was built for, one rung below the Hands.
+
+    IT IS A FUNCTION RATHER THAN AN ALIAS so that this door has a name of its own in the log and
+    in director_proof, and so that if one day the two gates must differ, they differ HERE instead
+    of in a shared body that two mandates both depend on. And it returns the Doorman's own
+    sentence verbatim, not a new one: a guest asking this house to film something is at the same
+    door as a guest asking it to send mail, and a second differently-worded refusal would be two
+    laws to keep in step.
+    """
+    return study_allowed(spoken, seal)
+
+
 def _google_row():
     """(label, line, state) for the Command Panel's Google row, computed server-side.
 
@@ -2945,6 +3075,11 @@ def protected_answer(question, cfg=None, ear_open=False, offer_standing=False,
     # started one are both "asked", and the page and the proof tell them apart by the fields
     # inside rather than by the presence of the key.
     gstudy = None
+    # Same sentinel discipline as gstudy's, one line up: None means the Director was not asked at
+    # all, and a dict means it was - whether the render started, was refused, or was asked for
+    # without a topic. All three are "asked", and the page and the proof tell them apart by the
+    # fields inside rather than by the presence of the key.
+    gdirect = None
     if said_it(META_RE):
         name = "meta"
         # FROM LIVE STATE, not from a hopeful fixed string. He is asking whether the ear
@@ -3062,6 +3197,51 @@ def protected_answer(question, cfg=None, ear_open=False, offer_standing=False,
                     line = line.replace(", .", ".").replace(" , ", " ")
                 gstudy = {"asked": topic, "started": bool(started), "refused": ""}
 
+    # ---- §35: THE DIRECTOR, BELOW THE SCHOLAR AND ABOVE THE CLOCK ------------------------
+    # PLACED FOR THE SAME THREE REASONS §30's STUDY BRANCH WAS, and the placement is the whole of
+    # its safety:
+    #   below the four, because PROTECTED_CLASSES is fixed by the mandate at four and nothing new
+    #     may shadow a sentence one of them already catches. Checked, not assumed: none of the
+    #     four's patterns can match "make a video about micro-saas pricing".
+    #   below the Scholar, because the two cannot collide - no alternative of DIRECT_RE contains
+    #     the word study and none of STUDY_NOW_RE's contains the word video - and putting the
+    #     older branch first keeps §30's reading exactly as it was measured.
+    #   above the clock, because worldclock.asked() reads a sentence looking for a PLACE off a
+    #     long table, and a table that one day lists a town called Video is not a reason for the
+    #     Director to stop obeying.
+    #
+    # AND IT RETURNS IMMEDIATELY, which is the Async Law at its second load-bearing point.
+    # MANAGER.request() queues the render on a daemon thread and comes straight back with a
+    # sentence - it does NOT render here. This function is on the thread holding the boss's HTTP
+    # request open, and a sixty-seven-second render inside it would freeze the glass for over a
+    # minute. The progress bus is what reports afterwards; this reply is only the announcement.
+    if not name and director is not None:
+        topic = director_asked(question)
+        if topic:
+            name = "direct"
+            allowed, refusal = director_allowed(spoken, seal)
+            if not allowed:
+                gdirect = {"asked": topic, "started": False, "refused": "not-the-boss", "job": ""}
+                line = refusal
+                sys.stderr.write("  route: direct - a video of %r asked by a voice sealed %r, "
+                                 "refused at the doorman; nothing was rendered\n"
+                                 % (topic, seal or "?"))
+            elif topic == "*":
+                # HE ASKED FOR A VIDEO AND NAMED NOTHING. Not a refusal and not a render: the one
+                # question back. Answered here rather than by the brain because the brain would
+                # answer it with prose about videos in general, and the Director is what was
+                # asked for.
+                gdirect = {"asked": "*", "started": False, "refused": "", "job": ""}
+                line = "What should the video be about, sir?"
+            else:
+                # THE JOB ID COMES BACK FROM THE CALL, not from a second read of MANAGER.live().
+                # live() is only populated while the render is in flight, so reading it here was
+                # a race the page lost in both directions: a placeholder id before the thread
+                # started, and an empty one after a fast render had already finished. This id is
+                # the one the bus opened, and it is what the glass polls /jobs with.
+                started, line, job = director.MANAGER.request(topic, why="boss")
+                gdirect = {"asked": topic, "started": bool(started), "refused": "", "job": job}
+
     # ---- THE CLOCK, AND IT IS LAST ON PURPOSE -------------------------------------------
     # THE FOUR FUNNEL CLASSES ABOVE ARE UNTOUCHED. This branch is reached only when all four
     # have declined, it cannot shadow any of them, and PROTECTED_CLASSES still names the four
@@ -3124,6 +3304,20 @@ def protected_answer(question, cfg=None, ear_open=False, offer_standing=False,
         said["studyStarted"] = gstudy["started"]
         if gstudy["refused"]:
             said["refused"] = gstudy["refused"]
+    if gdirect is not None:
+        # WHAT A HARNESS READS INSTEAD OF PARSING THE SENTENCE BACK, exactly as `studyAsked` is.
+        # A refused video is the pair (directAsked non-empty, directStarted false) plus the reason
+        # code, so director_proof's guest assertion is a fact rather than a string match on
+        # English that _strip_address() may since have rewritten. `directJob` is the bus id, which
+        # is what lets the page follow the render it just commissioned rather than guessing which
+        # job on /jobs is its own.
+        said["direct"] = True
+        said["directAsked"] = gdirect["asked"]
+        said["directStarted"] = gdirect["started"]
+        if gdirect["job"]:
+            said["directJob"] = gdirect["job"]
+        if gdirect["refused"]:
+            said["refused"] = gdirect["refused"]
     if gclock is not None:
         # WHAT A HARNESS READS INSTEAD OF PARSING THE SENTENCE BACK. `clockPlace` is empty for
         # his own clock, the canonical LABEL for a city that resolved, and empty for one that
@@ -5263,13 +5457,90 @@ def speaker_state():
     }
 
 
+def boss_call_slug(cfg=None):
+    """The slug of the name the persona block calls the boss, or "" if there is none.
+
+    Slugged through voiceprint.slug() and not lowercased here, because the string this is
+    compared against is a voiceprint row's `name`, and that row's file on disk is named by
+    exactly this function - "Aditya", "aditya" and "Aditya " are one person to the store and
+    have to be one person to the promotion below.
+    """
+    if voiceprint is None:
+        return ""
+    try:
+        cfg = cfg if isinstance(cfg, dict) else load_config()[0]
+        want = str(persona(cfg).get("boss_call") or "")
+        return voiceprint.slug(want) if want.strip() else ""
+    except Exception:                                              # noqa: BLE001
+        return ""
+
+
+# COUNTS ONLY, like every other ledger in this section: how many verdicts the house promoted
+# and which name it is promoting on - the name is already on /health in `enrolled` and in
+# `bossCall`, so this adds no fact the page did not have.
+_BOSS_BY_NAME = {"promoted": 0}
+
+
+def boss_by_name(verdict):
+    """Promote the voice the HOUSE calls the boss to the hands privilege. Mutates and returns.
+
+    §36 PART 1's ROOT CAUSE, and it is a roster fault wearing a seal fault's clothes. The gate
+    lends BOSS from seal_for(), which reads BOSS only when the matched row carries `hands`.
+    This machine's store holds two rows for one man - `Addi` with hands, enrolled first, and
+    `Aditya` without, enrolled later - while the persona block's boss_call is `Aditya`. So his
+    live voice matched the row the house addresses him by, sealed his NAME rather than BOSS,
+    handshake_open()'s literal "BOSS" guard refused to open a window for the very person it
+    exists for, and the spoken "yes" that followed an open gate was sealed GUEST. 104 seconds
+    of window remained on the boss's screenshot and not one of them could ever have helped.
+
+    SO THE INHERITANCE IS APPLIED HERE, WHICH IS BEFORE THE SEAL IS FINALISED AND PUBLISHED.
+    This runs inside _speaker_remember(), the one funnel every verdict passes through, and it
+    mutates the dict rather than copying it - deliberately, and this is the whole point of the
+    placement. /speaker cmd=identify computes `seal = seal_for(verdict)` on the NEXT line and
+    sends it to the page, the same object is what goes into the session slot that the gate and
+    doorman_refusal() later read, and the chip is painted from that reply. One promotion, one
+    object, so the chip, the ledger row and the gate decision cannot disagree. Promoting at
+    the gate instead - which is where it is discovered - would seal the chip ADITYA and admit
+    the order anyway, which is exactly the pair of screenshots this fixes.
+
+    WHAT IT WILL NOT DO: it never promotes a GUEST or an unknown voice, because there is no
+    name to compare; it never DEMOTES a row that has hands; and it reads the name from the
+    persona block, not from the body, so a tab cannot nominate itself. The privilege is still
+    a measured voiceprint match above threshold - this only stops the house from refusing the
+    one name it greets him by. The failure mode it accepts, named: enrol somebody else under
+    the boss_call name and they get the hands. That is the same trust the roster already has.
+    """
+    if not isinstance(verdict, dict) or verdict.get("hands"):
+        return verdict
+    who = verdict.get("who")
+    if who in (None, "", "GUEST"):
+        return verdict
+    want = boss_call_slug()
+    if not want:
+        return verdict
+    try:
+        mine = voiceprint.slug(str(who))
+    except Exception:                                              # noqa: BLE001
+        return verdict
+    if mine != want:
+        return verdict
+    verdict["hands"] = True
+    verdict["bossByName"] = True
+    sys.stderr.write("  speaker: hands by name - the house calls its boss %s and this row "
+                     "carried none\n" % want)
+    return verdict
+
+
 def _speaker_remember(session, verdict):
     """Write a verdict into the session's one slot and return its turn number."""
+    verdict = boss_by_name(verdict)
     with _SPEAKER_LOCK:
         _SPEAKER_SEQ[0] += 1
         turn = _SPEAKER_SEQ[0]
         _SPEAKER_SLOTS[str(session)] = {"turn": turn, "at": time.time(), "verdict": verdict}
         _SPEAKER_SEEN["turns"] += 1
+        if verdict.get("bossByName"):
+            _BOSS_BY_NAME["promoted"] += 1
         if verdict.get("who") in (None, "", "GUEST"):
             _SPEAKER_SEEN["guests"] += 1
         elif verdict.get("hands"):
@@ -5288,6 +5559,317 @@ def _speaker_spend(session):
     """
     with _SPEAKER_LOCK:
         _SPEAKER_SLOTS.pop(str(session), None)
+
+
+# =============================================================================
+#  THE HANDSHAKE WINDOW  -  section 35 PART 1
+#
+#  THE ROOT CAUSE, NAMED. A confirmation is one or two syllables - "yes", "haan", "nahi" -
+#  and a speaker embedding needs speech to work with. voiceprint.ENROL_MIN_SECONDS is three
+#  seconds for a reason, and §35's own baseline measured the cliff: the same voice reads
+#  cosine 0.9069 on a full sentence and the degradation ladder steps 0.5443 -> 0.3338 across
+#  the threshold the moment the signal thins. So the Doorman seals the one word the gate
+#  exists to collect as GUEST, and the house refuses its own employer the instant he answers
+#  the question it just asked him. That is not a threshold that needs moving: a threshold low
+#  enough to admit "yes" is a threshold that admits anybody saying "yes".
+#
+#  THE FIX IS CONTEXT, NOT CONFIDENCE. A sentence the Doorman DID verify - "save a note about
+#  the pricing" at 0.9 cosine - is already proof the boss is in the room and is already
+#  spending a turn number. If that sentence opens a gate, the answer to that gate, arriving
+#  within two minutes and consisting of nothing but a confirmation word, inherits the seal the
+#  question earned. The privilege is borrowed from a measurement that was actually made.
+#
+#  WHAT THIS DOES NOT DO, and each clause is an assertion in handshake_proof:
+#    - no window opens from a GUEST utterance. Only a BOSS seal opens one.
+#    - a confirmation word with no open window is sealed GUEST and refused exactly as before.
+#    - a NON-grammar utterance inside an open window inherits nothing and takes the normal
+#      Doorman path, so the window widens the vocabulary by nine words and not by a sentence.
+#    - after the window times out, "yes" is GUEST again.
+#    - the typed path never reaches here at all, because the keyboard is already the boss.
+#
+#  AND THE WINDOW IS JUDGED ON READ, NEVER REAPED BY A TIMER. §35 asks it to close on three
+#  events - first confirmation, timeout, gate closed - and only the first is something this
+#  module does. The other two are conditions, so they are evaluated by whoever asks, exactly
+#  as hands.lapse_if_due() does: a window whose proposal id is no longer the pending one is
+#  already shut, which makes "the window closes when the gate closes" a property of one
+#  function rather than a callback that eight propose sites could forget to fire.
+HANDSHAKE_MIN_S = 5.0            # a window worth less than this is a window nobody can use
+HANDSHAKE_MAX_S = 600.0          # and one worth more is a privilege left lying about
+HANDSHAKE_LOG_MAX = 40           # a ring, not an archive: see turn_engine()'s ledger
+# THE DOORS A HUMAN HAND ACTUALLY TOUCHES, and the only ones a typed opener may arm a window
+# from - see handshake_offer(). "" is /chat, which sends no door at all because a typed sentence
+# is not a door; "button" is the page's own card. Every other door - "harness", "voice", and
+# whatever a later producer invents - must earn its seal from a measurement instead.
+HANDSHAKE_HUMAN_DOORS = ("", "button")
+_HANDSHAKE = {}                  # session -> {pid, topic, gate, at, seal}
+_HANDSHAKE_LOCK = threading.Lock()
+_HANDSHAKE_LOG = []
+# COUNTS ONLY, like _SPEAKER_SEEN, and for the Scribe's reason: this house may know how many
+# handshakes it honoured and may never know which sentence was answered by which word.
+_HANDSHAKE_SEEN = {"opened": 0, "honoured": 0, "expired": 0, "refusedNoWindow": 0}
+
+
+def confirm_window_s(cfg=None):
+    """How long a handshake is worth, in seconds, clamped.
+
+    Clamped rather than trusted: a config.json with "confirm_window_s": 86400 is a day-long
+    standing permission for anybody who can say yes in this room, and a 0 is a feature that
+    is silently off while the file says it is on. Both are typos, and both are refused here
+    rather than halfway down the gate.
+    """
+    cfg = cfg if isinstance(cfg, dict) else load_config()[0]
+    try:
+        want = float(cfg.get("confirm_window_s", DEFAULT_CONFIG["confirm_window_s"]))
+    except (TypeError, ValueError):
+        want = float(DEFAULT_CONFIG["confirm_window_s"])
+    return max(HANDSHAKE_MIN_S, min(HANDSHAKE_MAX_S, want))
+
+
+def handshake_grammar(text):
+    """True when `text` is nothing but a confirmation - the whole message, either polarity.
+
+    IT IS hands.py's GRAMMAR AND NOT A COPY OF IT, which is the single most important line in
+    this section. The set of words that may inherit a seal and the set of words the gate can
+    act on have to be the same set: a word that opened the window and inherited BOSS but that
+    is_confirmation() then did not recognise would arrive at the gate as a NEW SUBJECT and
+    silently withdraw the very proposal it was meant to approve. One grammar, read twice.
+    §35's list - yes/no/yeah/nope/haan/nahi/cancel/stop/confirm/thik hai - is checked against
+    this function by handshake_proof, and `nahi` and `thik hai` were added to hands.py for it.
+    Case and surrounding whitespace are hands.py's job already (re.I, and _WHOLE eats the
+    padding), so nothing is lowercased or stripped twice here.
+    """
+    said = str(text or "")
+    return bool(hands.is_confirmation(said) or hands.is_refusal(said))
+
+
+def handshake_open(session, seal, topic="", gate="", pid="", now=None):
+    """Open a window, but only for a BOSS. Returns True if one is now open.
+
+    THE SEAL IS THE WHOLE OF THE GUARD and it is checked here rather than at the call sites,
+    because there are two call sites and will be more: the law has to be impossible to open
+    from a guest, not merely unopened by the two callers that exist today. "BOSS" exactly -
+    not UNVERIFIED, not a named enrolled voice without hands, not an empty string - because
+    the privilege being lent is the Hands gate's, and seal_for() reads BOSS for exactly the
+    voices that gate will take an order from.
+    """
+    if str(seal or "") != "BOSS":
+        return False
+    at = float(now if now is not None else time.monotonic())
+    with _HANDSHAKE_LOCK:
+        _HANDSHAKE[str(session)] = {"pid": str(pid or ""), "topic": str(topic or "")[:120],
+                                    "gate": str(gate or "")[:60], "at": at, "seal": "BOSS"}
+        _HANDSHAKE_SEEN["opened"] += 1
+    return True
+
+
+def handshake_close(session):
+    """Shut a window by hand. Idempotent, and the return says whether one was there."""
+    with _HANDSHAKE_LOCK:
+        return _HANDSHAKE.pop(str(session), None) is not None
+
+
+def handshake_live(session, pending_id=None, now=None, cfg=None):
+    """The open window for this session, or None - the three closing conditions in one read.
+
+    `pending_id` IS THE GATE, and passing it is how "the window closes when the gate closes"
+    is enforced without a callback. None means "do not check the gate", which is what the
+    standalone state-machine proof uses and what a reader with no Hands slot to consult uses;
+    every caller inside this server passes the live one.
+
+    A window that has aged out is REMOVED here rather than merely ignored, so that a stale
+    entry cannot be revived by a later call that happens to pass a longer window, and so the
+    dict cannot grow one dead row per session for the life of the process.
+    """
+    at = float(now if now is not None else time.monotonic())
+    ttl = confirm_window_s(cfg)
+    with _HANDSHAKE_LOCK:
+        win = _HANDSHAKE.get(str(session))
+        if not win:
+            return None
+        if at - float(win["at"]) > ttl:
+            _HANDSHAKE.pop(str(session), None)
+            _HANDSHAKE_SEEN["expired"] += 1
+            return None
+        # THE GATE CLOSED. A different proposal in the slot, or an empty slot, means the
+        # question this window was opened to collect an answer to is no longer being asked -
+        # so the answer is no longer privileged. Only checked when the caller knows the slot:
+        # a window opened for no particular proposal (pid "") is not invalidated by one.
+        if pending_id is not None and win["pid"] and str(pending_id or "") != win["pid"]:
+            _HANDSHAKE.pop(str(session), None)
+            return None
+        out = dict(win)
+        out["ageS"] = round(at - float(win["at"]), 3)
+        out["ttlS"] = ttl
+        return out
+
+
+def handshake_honour(session, word, pending_id=None, now=None, cfg=None):
+    """(row, None) if this word inherits BOSS from an open window, else (None, why).
+
+    ON SUCCESS THE WINDOW IS SPENT. §35's "closes on first confirmation", and it is the same
+    one-turn-one-order rule _speaker_spend() applies to a verdict: a window that authorised
+    twice is a window worth waiting for. The row is the ledger's - topic, gate, latency - and
+    it carries no sentence, only the one grammar word that was heard, which is already one of
+    nine known strings and therefore not a record of what was said.
+    """
+    if not handshake_grammar(word):
+        return None, "not a confirmation"
+    win = handshake_live(session, pending_id=pending_id, now=now, cfg=cfg)
+    if win is None:
+        with _HANDSHAKE_LOCK:
+            _HANDSHAKE_SEEN["refusedNoWindow"] += 1
+        return None, "no open window"
+    handshake_close(session)
+    row = {"at": time.strftime("%H:%M:%S"), "topic": win["topic"], "gate": win["gate"],
+           "latencyMs": int(round(win["ageS"] * 1000)), "windowS": int(win["ttlS"]),
+           "word": confirmation_in(word) or "", "seal": HANDSHAKE_SEAL}
+    with _HANDSHAKE_LOCK:
+        _HANDSHAKE_LOG.append(row)
+        while len(_HANDSHAKE_LOG) > HANDSHAKE_LOG_MAX:
+            _HANDSHAKE_LOG.pop(0)
+        _HANDSHAKE_SEEN["honoured"] += 1
+    sys.stderr.write("  handshake: %s inherited BOSS at %dms of %ds (gate %s)\n"
+                     % (row["word"] or "a confirmation", row["latencyMs"], row["windowS"],
+                        row["gate"] or "?"))
+    return row, ""
+
+
+def handshake_offer(session, data, payload=None):
+    """An answer LEFT A GATE STANDING: open a window if it was a BOSS who asked for it.
+
+    WHY THIS IS ONE FUNCTION AND NOT TWO LINES AT EACH DOOR. There are two doors that leave a
+    proposal pending - /chat, when the model asks for a tool, and /tools cmd=propose, when the
+    page asks directly - and a third will arrive with the Director. The BOSS test has to be
+    the same test at all of them, and it has to read the verdict from THIS process's slot via
+    _speaker_turn() rather than from anything the body claims, or the window becomes a field a
+    tab can set.
+
+    THE TYPED PATH OPENS ONE TOO, and §36 widened it deliberately - §35 returned False here on
+    the reasoning that a typed yes never reaches doorman_refusal(), which is true and was also
+    beside the point. THE TWO HALVES OF A HANDSHAKE NEED NOT ARRIVE BY THE SAME DOOR. The boss
+    types "put that on my calendar" and then ANSWERS OUT LOUD, which is the natural thing to do
+    with a card on the screen and a microphone already open - and that spoken "yes" does reach
+    doorman_refusal(), is one syllable, and is sealed GUEST. A window that only a spoken opener
+    could arm left that crossing unprotected, and the keyboard law says the typed sentence was
+    the boss's: that is the same fact the seal "BOSS" states, so it is stated here.
+
+    THE FAILURE MODE IT ACCEPTS, NAMED RATHER THAN HIDDEN: the boss types an order and leaves
+    the room, and within confirm_window_s a stranger's "yes" inherits BOSS. Three things bound
+    it and all three are asserted - the window is 120 s by default and clamped to 600, it is
+    spent by the FIRST confirmation, and it dies the moment the pending proposal is not the one
+    it was opened for. What it cannot be is a standing privilege.
+    """
+    pending = None
+    if isinstance(payload, dict) and isinstance(payload.get("pending"), dict):
+        pending = payload["pending"]
+    if pending is None:
+        try:
+            pending = hands.pending_public()
+        except Exception:                                          # noqa: BLE001
+            pending = None
+    if not isinstance(pending, dict) or not pending.get("id"):
+        return False
+    verdict, spoken, _why = _speaker_turn(data if isinstance(data, dict) else {}, session)
+    if not spoken:
+        # THE KEYBOARD IS THE BOSS, said once, here. Everywhere else in this server that
+        # sentence is spelled "a typed message is never challenged"; a window is what it
+        # looks like when the answer to a typed question arrives by voice.
+        #
+        # BUT ONLY AT A DOOR A HUMAN HAND TOUCHES - §36 PART 3, and this is a hole §36 opened
+        # and speaker_proof found. "No speaker block" is the shape of a typed message AND the
+        # shape of every automated caller: /tools cmd=propose with door "harness" carries no
+        # speaker block either, so a test rig - or anything else posting that door - armed a
+        # 120-second BOSS window that the next voice in the room, any voice, then inherited.
+        # Measured: speaker_proof section D executed five times where it asserts five refusals.
+        # THE TWO REAL KEYBOARD DOORS ARE NAMED INSTEAD: /chat sends no `door` at all (a typed
+        # sentence), and the page's own card sends door "button" (he pressed it). Everything
+        # else opens nothing, which leaves PART 1's path - he types an order, the model raises
+        # the gate, he answers out loud - exactly as it was.
+        if str((data or {}).get("door") or "") not in HANDSHAKE_HUMAN_DOORS:
+            return False
+        seal = "BOSS"
+    elif voiceprint is None:
+        return False
+    else:
+        try:
+            # A SPOKEN OPENER IS STILL MEASURED. seal_for() reads BOSS only for a row above
+            # threshold that carries the hands, which after boss_by_name() includes the row
+            # the house greets him by - and still excludes every guest.
+            seal = voiceprint.seal_for(verdict)
+        except Exception:                                          # noqa: BLE001
+            return False
+    # THE TOPIC IS THE REGISTRY'S LABEL FOR THE TOOL and never the employer's sentence, because
+    # this string reaches a ledger row and a report plate. "Send an email" is enough for a boss
+    # reading the ledger to know which handshake he is looking at; the recipient is not.
+    return handshake_open(session, seal, topic=str(pending.get("name") or ""),
+                          gate=str(pending.get("tool") or ""),
+                          pid=str(pending.get("id") or ""))
+
+
+# THE ONE-SHOT CARRIER. An honoured handshake is discovered deep inside doorman_refusal(), and
+# the chip that has to read BOSS · HANDSHAKE is painted from the payload of whichever door was
+# being held. Rather than widen four return signatures, the row is left here and TAKEN once by
+# the door on its way out - the same shape as _SPEAKER_SLOTS, and popped on read for the same
+# reason: a seal that could be collected twice is a seal that outlives the word that earned it.
+_HANDSHAKE_LAST = {}
+
+
+def handshake_mark(session, row):
+    with _HANDSHAKE_LOCK:
+        _HANDSHAKE_LAST[str(session)] = row
+
+
+def handshake_stamp(session, payload):
+    """Put the inherited seal on an outgoing payload, if this turn earned one. Returns payload.
+
+    Two named fields and no prose: `speakerSeal` is the string the chip renders and `handshake`
+    is the evidence behind it (gate and latency, no topic), so the page can copy one and a
+    harness can assert the other. The page is forbidden from DERIVING either - see the note on
+    speaker.seal in index.html - because a page that could compute this string could award it.
+    """
+    with _HANDSHAKE_LOCK:
+        row = _HANDSHAKE_LAST.pop(str(session), None)
+    if row and isinstance(payload, dict):
+        payload["speakerSeal"] = HANDSHAKE_SEAL
+        payload["handshake"] = {"gate": row.get("gate", ""), "word": row.get("word", ""),
+                                "latencyMs": row.get("latencyMs", 0),
+                                "windowS": row.get("windowS", 0)}
+    return payload
+
+
+def handshake_state():
+    """What /health may publish: counts, the ring, and the live windows WITHOUT their topics.
+
+    The topic is a few words of the employer's business and the ring already carries it for
+    the ledger; the at-rest list is read by a page and by a harness, so it carries the gate
+    and the age and no subject at all.
+    """
+    # §36 PART 1. The promotion is published because a harness with no microphone has no other
+    # way to read it, and because a privilege granted invisibly is the one kind this house does
+    # not grant. `wouldPromote` says the roster on disk holds a row by the boss_call name that
+    # carries no hands of its own - which is the exact condition that refused the boss his own
+    # window - and `promoted` counts the verdicts it has mended since this process started.
+    call = boss_call_slug()
+    would = False
+    if call and voiceprint is not None:
+        try:
+            would = any(voiceprint.slug(r["name"]) == call and not r["hands"]
+                        for r in voiceprint.enrolled())
+        except Exception:                                      # noqa: BLE001
+            would = False
+    with _HANDSHAKE_LOCK:
+        live = [{"gate": w["gate"], "ageS": round(max(0.0, time.monotonic() - w["at"]), 1)}
+                for w in _HANDSHAKE.values()]
+        return {"windowS": int(confirm_window_s()), "live": live,
+                "seen": dict(_HANDSHAKE_SEEN), "rows": list(_HANDSHAKE_LOG),
+                "bossByName": {"call": call, "wouldPromote": would,
+                               "promoted": _BOSS_BY_NAME["promoted"]}}
+
+
+# THE WORD THE CHIP READS, in one place so the page, the ledger and the proof cannot disagree
+# about it. Not computed in the browser - see the comment on speaker.seal in index.html: a
+# page that derived this string would be a page that could award it.
+HANDSHAKE_SEAL = "BOSS · HANDSHAKE"
 
 
 def _speaker_turn(data, session):
@@ -5384,6 +5966,59 @@ def doorman_refusal(data, session, word):
         if spoken and isinstance(verdict, dict):
             _speaker_spend(session)
         return None, seal
+    # ---- THE HANDSHAKE WINDOW - §35 PART 1, and its POSITION is the security property.
+    #
+    # It sits BELOW the whole Doorman - the store read, the guard check, the hands test - and
+    # ABOVE both refusals. Below, because a house with nothing enrolled has already returned and
+    # a voice that genuinely has hands has already been admitted on its own merit, so the window
+    # is only ever consulted for an utterance the Doorman has just decided is NOT the boss.
+    # Above, because that decision is the one being overturned, and it can only be overturned by
+    # a measurement the Doorman himself made moments ago on a longer sentence.
+    #
+    # EVERY GUARD IS IN handshake_honour(), not here: the word must be in the one shared grammar,
+    # a window must be open, it must have been opened by a BOSS seal, it must be inside
+    # confirm_window_s, and the proposal it was opened for must still be the one standing. A
+    # failure of any of those falls through to the refusals below UNCHANGED - which is edges 2,
+    # 3 and 4 of the mandate, and they are one line of code because they are one absence.
+    #
+    # THE TURN IS SPENT ON SUCCESS, exactly as the accept branch above spends it. The verdict
+    # being spent is a GUEST verdict and worthless at this gate, but the turn NUMBER is what a
+    # barked interrupt re-uses, and a window honoured twice off one number would be the hole
+    # this whole section is otherwise careful not to open.
+    #
+    # AND TWO THINGS THE WINDOW MAY NOT OVERTURN - §36 PART 3, found by speaker_proof against a
+    # live server and fixed here rather than in the harness, because both are holes:
+    #
+    #   NO VERDICT, NO INHERITANCE. `verdict is None` at this point does not mean "a guest"; it
+    #   means THE SPEAKER WAS NEVER ESTABLISHED - a turn number this process never issued, one
+    #   already spent, one that has aged past SPEAKER_TURN_TTL_S, or a page that skipped the
+    #   identification step altogether. The docstring above promises those fail closed, and for
+    #   one window of §36 they did not: a tab posting door:"voice" with turn 0 inside an open
+    #   window inherited BOSS · HANDSHAKE, and the same turn number consented twice because the
+    #   spend below only ran when a verdict existed. Measured: speaker_proof's section D went
+    #   61/70 with five executions where it had asserted five refusals. A window is a key for
+    #   one word SPOKEN BY SOMEBODY THIS PROCESS HEARD, not for any body that can post the word.
+    #
+    #   A NAMED STRANGER IS NOT AN UNRECOGNISED ONE. An enrolled voice without the hands comes
+    #   back with who="Ryan" - the house KNOWS who that is and knows it is not the boss - and
+    #   §35's refusal of that person's yes is a judgement, not a failure of measurement. The
+    #   boss's own case, the one PART 1 exists for, is the opposite: one syllable is too short
+    #   to match anybody, so it reads GUEST or UNVERIFIED with no name in it at all. So the
+    #   window is inherited by the UNNAMED only, which keeps every §35 negative case that was
+    #   ever about a person the doorman could name.
+    named_other = (isinstance(verdict, dict)
+                   and str(verdict.get("who") or "") not in ("", "GUEST"))
+    if handshake_grammar(word) and isinstance(verdict, dict) and not named_other:
+        try:
+            pend = hands.pending_public()
+        except Exception:                                          # noqa: BLE001
+            pend = None
+        row, _hwhy = handshake_honour(session, word, pending_id=(pend or {}).get("id") or "")
+        if row is not None:
+            if isinstance(verdict, dict):
+                _speaker_spend(session)
+            handshake_mark(session, row)
+            return None, HANDSHAKE_SEAL
     # ---- NEVER A SILENT GUEST FOR THE BOSS. Two refusals, and they refuse identically: nothing
     # is executed, no hand is unlocked, the card stands untouched and the law above is the same
     # law. What differs is what is SAID, and the difference is the mandate's.
@@ -8254,17 +8889,39 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _send_wav(self, data, source):
+    def _send_wav(self, data, source, word_times=None):
         """WAV bytes, with the cache verdict in a header so a harness can read it.
 
         no-store because the page caches nothing: say-cache/ on disk is the cache, and
         a browser holding a second copy would make a recast voice take a reload to hear.
+
+        §39 - AND WHERE EACH WORD BEGINS, IN HEADERS, because the body is a WAV and a WAV
+        has nowhere to put a list of numbers. Four of them, all numeric:
+
+            X-Word-Timings   the start second of every word, three decimals, comma-separated
+            X-Word-Count     how many, so the page can refuse a list that does not match
+                             its own tokens instead of lighting the wrong words
+            X-Say-Secs       the real length of this wav
+            X-Speech-Span    where the speech starts and ends inside it, silence trimmed
+
+        NUMBERS ONLY, DELIBERATELY. The page already holds the text it asked to be spoken,
+        so putting the words in a header would add nothing and would put a sentence of the
+        employer's into a place where proxies and devtools logs keep things. The privacy
+        law in this house is that a log line counts characters and never prints them; a
+        response header is a log line somebody else keeps.
         """
         self.send_response(200)
         self.send_header("Content-Type", "audio/wav")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Say-Source", source or "miss")
+        if isinstance(word_times, dict) and word_times.get("starts"):
+            self.send_header("X-Word-Timings", timings.header(word_times["starts"]))
+            self.send_header("X-Word-Count", str(word_times.get("words") or 0))
+            self.send_header("X-Say-Secs", "%.3f" % float(word_times.get("secs") or 0.0))
+            self.send_header("X-Speech-Span", "%.3f,%.3f"
+                             % (float(word_times.get("speechStart") or 0.0),
+                                float(word_times.get("speechEnd") or 0.0)))
         self.end_headers()
         self.wfile.write(data)
 
@@ -8477,6 +9134,28 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 "digest": {"due": digest["due"], "line": digest["line"],
                            "notes": digest["notes"], "offeredToday": digest["offeredToday"]},
                 "syllabus": [t["name"] for t in scholar.read_syllabus()["topics"]]})
+
+        if route == "/jobs":
+            # §35 PART 3 - THE PROGRESS BUS, read. Deliberately the same shape as /study above
+            # it, because it is the same kind of object and the page polls it on the same timer:
+            # whitelisted on the way out by jobs.PUBLIC_KEYS, and taking no lock of this
+            # server's. jobs.public() takes the bus's own lock for the microseconds it needs to
+            # copy a few dicts - see the Async Law in that module's docstring.
+            #
+            # IT RETURNS THE WHOLE BOUNDED LIST AND NEVER A DELTA, which is the one schema
+            # decision worth naming at the route: Chrome throttles a background tab's timers to
+            # about once a minute, so a five-step job that finished inside one throttled
+            # interval would deliver its middle events to a reader that had stopped asking, and
+            # a step list missing its middle rows is the kind of wrong that nothing reports.
+            #
+            # AND A STALE JOB IS JUDGED HERE, by whoever asks. A producer that died mid-run
+            # would otherwise leave the glass reading DO NOT DISTURB until the server restarted.
+            want = ""
+            if "?" in self.path:
+                from urllib.parse import parse_qs
+                want = (parse_qs(self.path.split("?", 1)[1]).get("job") or [""])[0][:40]
+            return self._send_json(200, dict(jobs.public(want or None),
+                                             ok=True, kind="jobs", nodes=[]))
 
         if route == "/clock":
             # THE BOARD'S TRUTH ANCHOR, and it is not an animation frame. The page ticks its
@@ -8773,6 +9452,13 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 # offers Learn a voice, and `count` is what decides whether the row's word is
                 # "learn" or "learn again". No embedding is in here - see speaker_state().
                 "speaker": speaker_state(),
+                # AND WHETHER A HANDSHAKE IS OPEN - §35 PART 1. On the same trip and for the
+                # same reason as the two above: a harness has to be able to read the window's
+                # state without a microphone, and the boss's own Command Panel should be able to
+                # say what `confirm_window_s` is actually set to rather than what the file says.
+                # It carries counts, the gate names and the ages, and no utterance and no topic -
+                # see handshake_state(), which deliberately strips the topic from the live list.
+                "handshake": handshake_state(),
                 # AND WHETHER THE SKY TURNS. A preference about the camera, published
                 # for the same reason the voice pin is: the browser owns the camera and
                 # cannot be told by any other route. Absent or false means the galaxy
@@ -8971,6 +9657,22 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 return self._send_json(400, {
                     "ok": False, "error": "Send a JSON body like {\"text\": \"...\"}."})
             text = str(data.get("text") or "")
+            # §39 - THE WORD-BY-WORD LAW, SERVER SIDE, AND THE ONE SUBTLETY IN IT.
+            # The text that is SYNTHESISED has been through the Quiet Tongue in the page:
+            # markdown stripped, an unspeakable id replaced with a sentence, an em-dash
+            # turned into a comma. The text the READER sees is the raw one, and those two
+            # do not have the same number of words. The reveal has to light the words on
+            # the glass, so the timings are computed over `timing_text` - what is written -
+            # and divided across the duration of the wav of `text` - what was said. The
+            # page sends both; anything that sends only `text` gets timings for it, which
+            # is correct for every caller whose reader and whose voice get the same string.
+            # NAMED AS AN APPROXIMATION, because it is one: an answer carrying a calendar
+            # id has a 24-character token on the glass where the voice said seven syllables,
+            # and that one word's share of the span is therefore too generous. It costs the
+            # reveal a fraction of a second on the rarest sentence in the room, and the
+            # alternative - timing the spoken form and guessing the mapping back - would
+            # be wrong on every word after the id instead of on the id.
+            timing_text = str(data.get("timing_text") or text)
             cfg = load_config()[0]
             state = voice_state(cfg)
             # THE AUDITION PARAMETER, and it is the only reason this route takes a model
@@ -9011,7 +9713,8 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                     wav, why, source = say.synthesise(
                         text, cfg.get("voice_model") or DEFAULT_CONFIG["voice_model"])
                     if wav is not None:
-                        return self._send_wav(wav, source)
+                        return self._send_wav(wav, source,
+                                              timings.timings_for(timing_text, wav))
                 if wav is None:
                     turn_engine("tts", "orpheus", "failed", why)
                     sys.stderr.write("say: orpheus refused - %s\n" % why)
@@ -9022,7 +9725,8 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 # "miss" because no cache was consulted: say-cache/ is Piper's, keyed by the
                 # Piper model name, and putting cloud audio in it under a Piper key is how a
                 # flip back to Piper starts playing Orpheus.
-                return self._send_wav(wav, "miss")
+                return self._send_wav(wav, "miss",
+                                      timings.timings_for(timing_text, wav))
             asked = os.path.basename(str(data.get("model") or "").strip())
             if asked.endswith(".onnx"):
                 asked = asked[:-5]
@@ -9047,7 +9751,8 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 return self._send_json(503, {
                     "ok": False, "engine": "piper", "say": state,
                     "error": "The local voice could not speak that: %s" % why})
-            return self._send_wav(wav, source)
+            return self._send_wav(wav, source,
+                                  timings.timings_for(timing_text, wav))
 
         # THE SCRIBE, and it is second for the same reason /say is first: during a
         # meeting this is the route that arrives every three seconds, and it must not
@@ -9515,11 +10220,28 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 It is a no-op for the boss, for a named enrolled voice, and for every typed
                 message ever sent - which is nearly all of them.
                 """
-                if guest and isinstance(payload, dict):
+                # THE HANDSHAKE IS READ FIRST, BEFORE THE DE-ADDRESS - §35 PART 1, and the order
+                # is the point. `guest` was computed from this utterance's own verdict, BEFORE
+                # the gate ran, and a one-word "haan" IS a guest by that measurement: that is the
+                # bug this section exists to fix. So a turn whose word inherited BOSS inside the
+                # gate must not then have the boss's address form stripped off the answer his own
+                # order produced - "Sent, sir" would arrive as "Sent." for the one person in the
+                # house entitled to the word. The stamp returns truthy only when the Doorman
+                # actually honoured a window moments ago, so for every other guest this is one
+                # dict lookup and the law above is untouched.
+                handshake_stamp(session, payload)
+                shook = bool(isinstance(payload, dict) and payload.get("handshake"))
+                if guest and not shook and isinstance(payload, dict):
                     for key in ("answer", "error"):
                         if payload.get(key):
                             payload[key] = deaddress(payload[key], load_config()[0])
                     payload["speakerSeal"] = "GUEST"
+                # AND THE OFFER, at the same funnel and for the same reason: an answer that
+                # leaves a proposal STANDING opens the window for the one word that will answer
+                # it. Read from the payload's own `pending` when it has one, so the window is
+                # opened for the proposal this very answer created and not for whatever happens
+                # to be in the slot a moment later.
+                handshake_offer(session, data, payload)
                 # AND THE INSTRUMENT CLOSES HERE, on the LAST line of the one funnel every
                 # answer this door sends already goes through. Not at the bottom of the
                 # route, because there are eight returns above it and an instrument that
@@ -10090,6 +10812,9 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                     "error": "The chain hit an unexpected error: %s" % exc,
                     "answer": hands.LINES["failed"].format(reason=str(exc)[:160])}
             _hand_resolved(payload)
+            # §35 PART 1: if that "yes" was a word the handshake window honoured, the card's own
+            # reply carries the seal, because this door never passes through /chat's funnel.
+            handshake_stamp(str(data.get("session") or "default")[:120], payload)
             sys.stderr.write("  chain: %s -> %s, stopped at %s\n"
                              % (payload.get("chainId") or "(not a chain)",
                                 payload.get("chainStatus") or payload.get("refused")
@@ -10127,6 +10852,8 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                     "error": "The tool hit an unexpected error: %s" % exc,
                     "answer": hands.LINES["failed"].format(reason=str(exc)[:160])}
             _hand_resolved(payload)
+            # §35 PART 1, at the door the page actually uses when it hears "yes" itself.
+            handshake_stamp(str(data.get("session") or "default")[:120], payload)
             return self._send_json(status, payload)
 
         if route == "/tools":
@@ -10186,6 +10913,11 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                     # told to. This is where "the card says plainly that tab-lock is off
                     # and why" actually happens.
                     _hand_resolved(payload)
+                    # §35 PART 1: a "nahi" that inherited BOSS gets the seal on its refusal too.
+                    # The window is already spent by then - handshake_honour() closes on the
+                    # first confirmation of EITHER polarity, because a no answers the question
+                    # just as finally as a yes does and leaves nothing further to authorise.
+                    handshake_stamp(str(data.get("session") or "default")[:120], payload)
                 elif cmd == "withdraw":
                     # A CHANGED SUBJECT, from a door that is not /chat: the page took a
                     # sentence to an organ of its own - the screen, the eyes, a capture -
@@ -10220,6 +10952,14 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                     "ok": False, "kind": "tool", "nodes": [], "pending": None,
                     "error": "The hands hit an unexpected error: %s" % exc,
                     "answer": hands.LINES["failed"].format(reason=str(exc)[:160])}
+            # §35 PART 1, THE OTHER HALF OF THE WINDOW. /chat opens one when the model's answer
+            # leaves a gate standing; this is the door the PAGE uses to raise a card directly,
+            # and a law written at only one of the two doors is a boss who gets his handshake on
+            # some proposals and not others. It is placed after the whole try/except and gated on
+            # the payload carrying a `pending`, so it covers propose and chain without naming
+            # either, and cancel/withdraw/lapse - which end a proposal rather than raise one -
+            # reach it with pending None and open nothing.
+            handshake_offer(str(data.get("session") or "default")[:120], data, payload)
             return self._send_json(status, payload)
 
         if route == "/reset":
@@ -10248,8 +10988,17 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             # conversation a reset would otherwise leave standing - and a pinned first
             # question surviving a forget button would be the loudest bug in the file.
             forget_older(session)
+            # §35 PART 3 - AND THE FINISHED JOBS, on exactly the rule above. The result line the
+            # Director leaves in the answer card is a thing the page polls off /jobs, so a forget
+            # button that cleared the card and left the row standing would put the result back on
+            # the glass at the next poll - two and a half seconds after he asked for it to go.
+            # forget_all() drops FINISHED jobs only, so a render still in flight keeps its chip:
+            # the ↻ button forgets a conversation and does not stop a machine mid-encode.
+            jobs_seen = len((jobs.public() or {}).get("jobs") or [])
+            jobs.forget_all("the reset button")
             return self._send_json(200, {"ok": True, "forgotten": session,
-                                         "proposalDropped": dropped})
+                                         "proposalDropped": dropped,
+                                         "jobsSeen": jobs_seen})
 
         return self._send_json(404, {"error": "No such endpoint: %s" % route})
 

@@ -6158,14 +6158,19 @@ def check_world_clock():
     # later route is appended after them rather than added among them - which is the cheap edit
     # this exists to catch. Extending the pin by one per round is the point of it; a clause that
     # said "starts with the four" would pass the edit it was written to fail.
-    GROWN = ("clock", "fullscreen", "study")
+    # §35's `direct` IS THE FOURTH TO JOIN THE TAIL, for the same reason as the third: "make a
+    # video about micro-saas pricing" hands a topic to a daemon thread and answers with one
+    # sentence, so the turn itself retrieves nothing. The render's own retrieval happens on that
+    # thread, under its own job, and is not this turn's cost.
+    GROWN = ("clock", "fullscreen", "study", "direct")
     if tuple(server.UNPAID_CLASSES) != tuple(server.PROTECTED_CLASSES) + GROWN:
-        return FAIL, notes + ["UNPAID_CLASSES is %r; the clock, the fullscreen route and the "
-                              "Scholar are meant to be tried after all four have declined, and "
-                              "appended after them rather than mixed in among them"
-                              % (tuple(server.UNPAID_CLASSES),)]
+        return FAIL, notes + ["UNPAID_CLASSES is %r; the clock, the fullscreen route, the "
+                              "Scholar and the Director are meant to be tried after all four "
+                              "have declined, and appended after them rather than mixed in "
+                              "among them" % (tuple(server.UNPAID_CLASSES),)]
     notes.append("the four protected classes are as the mandate wrote them, and the clock, §29's "
-                 "fullscreen route and §30's study route are tried after them, not among them")
+                 "fullscreen route, §30's study route and §35's direct route are tried after "
+                 "them, not among them")
 
     session = "preflight-30-%d" % int(time.time())
     post_json("/reset", {"session": session}, timeout=30, label="a clean room for 30")
