@@ -42,6 +42,7 @@ would be a second thing for the boss to download for no gain.
 """
 
 import base64
+import datetime
 import hashlib
 import io
 import json
@@ -147,6 +148,13 @@ RETRY_STATUSES = (429, 500, 502, 503, 504)
 
 PRIVACY_FIRST = "unlisted"     # see the module docstring's second law. insert() has no choice.
 PRIVACY_PUBLIC = "public"
+# §43 - HOW LONG TO WAIT FOR YOUTUBE TO AGREE WITH ITSELF, in seconds between reads. The first
+# read is taken immediately and is not in this tuple, so the schedule is read-now, then 1, 2, 4,
+# 8 and 15: six reads over a 30-second ceiling. Doubling, because propagation lag is not
+# uniformly distributed - most of it is under a second and the tail is long - so the cheap reads
+# come first and the patient ones only happen on the bad day. See publish().
+PUBLISH_CONFIRM_BACKOFF = (1.0, 2.0, 4.0, 8.0, 15.0)
+PUBLISH_CONFIRM_CEILING_S = sum(PUBLISH_CONFIRM_BACKOFF)       # 30.0, stated rather than typed
 PRIVACIES = ("private", "unlisted", "public")
 CATEGORY_EDUCATION = "27"      # YouTube's own id for Education. The Director makes explainers.
 
@@ -856,15 +864,32 @@ def note_keywords(cited, spellings=None):
     return out
 
 
-def fit_tags(tags, total_max=TAGS_TOTAL_MAX):
-    """As many of those tags as fit YouTube's 500-character total, in order.
+def fit_tags(tags, total_max=TAGS_TOTAL_MAX, count_max=TAGS_MAX):
+    """As many of those tags as fit YouTube's 500-character total AND this house's dozen.
 
     THE TOTAL IS COUNTED THE WAY YOUTUBE COUNTS IT - a tag containing a space is quoted on
     the wire, so it costs two characters more than its length. Getting this wrong means a
     perfectly good upload refused for `invalidTags` after the bytes have already gone.
+
+    AND THE COUNT IS CAPPED HERE, which it was not until §42 and should have been from the
+    start. TAGS_MAX has said "beyond a dozen is keyword stuffing" since §40, and keywords()
+    honoured it - but the final list is a UNION of two sources, the narration's keywords and
+    the cited notes' slugs, and nothing clamped the union. §40 shipped reading "12 of 12" and
+    believed the law held; it held by arithmetic accident, because that one film's two sources
+    happened to overlap down to exactly twelve.
+    MEASURED ON THE FILMS NOW ON THIS DISK, every one of them made since: useeffect-react
+    returns 19, what-is-react 19, b2b-ai-agents 15, useeffect-lifecycle 13. So the house has
+    been stuffing keywords on six of seven films while a constant in this file said it did
+    not, and broadcaster_proof's "THE TAGS FIT YouTube's OWN ARITHMETIC" is the assertion that
+    found it the moment it was pointed at any film but the premiere's.
+    IT TRUNCATES RATHER THAN REFUSING, because the tags are ordered by weight already - the
+    strongest keyword is first - so the dozen that survive are the dozen worth having, and a
+    film is not worth failing over its thirteenth tag.
     """
     out, used, seen = [], 0, set()
     for tag in tags or []:
+        if len(out) >= int(count_max):
+            break
         clean = re.sub(r"\s+", " ", str(tag or "")).strip()[:TAG_MAX]
         if not clean or clean.lower() in seen:
             # CASE-INSENSITIVELY, because the two sources overlap by design: the notes' subject
@@ -1621,7 +1646,18 @@ def upload(folder, cfg=None, report=True, on_card=None):
     out["processing"] = seen.get("processing") or ""
     out["elapsedS"] = round(time.monotonic() - began, 1)
     if rep:
-        rep.done("unlisted at %s" % out["url"],
+        # §42 - THE FIRST GOODBYE, AND THE URL IS NOT IN IT. This string is `detail`, and
+        # `detail` is the one field the page SPEAKS: jobAnnounce() in viewer/index.html takes
+        # the last event's detail and hands it straight to speak(). It used to read "unlisted
+        # at https://www.youtube.com/watch?v=..." - so the butler read a URL aloud, character
+        # by character, as the last thing he said about a finished film. Nobody can act on a
+        # spoken URL; they can only wait for it to stop.
+        #
+        # THE LINK STILL TRAVELS, one argument along: `url=out["url"]` is in jobs.ROW_KEYS and
+        # in jobs.RESULT_KEYS, so it reaches the glass as result.url on the very same /jobs
+        # payload - beside the sentence rather than inside it. The eye gets the link, the ear
+        # gets the sentence. That separation is the whole of §42 PART 1.
+        rep.done("It is up and unlisted, sir - nobody can see it until you say the word.",
                  videoId=out["videoId"], url=out["url"],
                  privacy=out["privacy"] or PRIVACY_FIRST,
                  path=film, durationS=probe["durationS"],
@@ -1662,19 +1698,170 @@ def publish(video_id, folder="", report=True):
                        privacy=out["from"], privacyFrom=out["from"], privacyTo="")
         return out
     # READ IT BACK, because a 200 from videos.update is a claim and videos.list is the evidence.
-    seen = verify(out["videoId"])
-    out["privacy"] = seen.get("privacy") or out["to"]
+    #
+    # §43 - AND READ IT BACK AGAIN, ON A BACKOFF, BECAUSE THE EVIDENCE ARRIVES LATE.
+    # THE DEFECT THIS REPLACES, which shipped and was caught by a live premiere and by nothing
+    # else: this was ONE read, taken immediately. YouTube's read-after-write is eventually
+    # consistent - videos.update returns 200 and videos.list can go on reporting the OLD
+    # privacyStatus for seconds afterwards - so the single read came back "unlisted", `ok` went
+    # False, and the hand said "Publishing failed: YouTube accepted the change and still reports
+    # the film as unlisted" about a change that had taken effect. A FALSE FAILURE: the act
+    # succeeded and the report denied it, three times, and each denial wrote `failed` into a
+    # ledger that is append-only and therefore still says so.
+    #
+    # WHY A POLL AND NOT A SLEEP. A fixed wait is wrong in both directions - too short on a bad
+    # day and a wasted wait on every good one - and the good day is the common one: when the
+    # first read already agrees, confirmSeconds is 0.0 and nothing is spent. The schedule is
+    # 1, 2, 4, 8, 15 seconds, which is five reads inside a 30-second ceiling.
+    #
+    # AND THE THIRD OUTCOME IS NAMED RATHER THAN ROUNDED. If the full backoff passes and the
+    # read still disagrees, this does NOT claim success and does NOT claim failure: it reports
+    # `unverified`, writes no transition, and leaves the sentence to say go and look. Rounding
+    # that to either neighbour is how a house ends up lying in one direction or the other.
+    waited, reads = 0.0, 0
+    seen = {}
+    for pause in (0.0,) + PUBLISH_CONFIRM_BACKOFF:
+        if pause:
+            time.sleep(pause)
+            waited += pause
+        seen = verify(out["videoId"])
+        reads += 1
+        if seen.get("ok") and str(seen.get("privacy") or "") == PRIVACY_PUBLIC:
+            break
+    out["privacy"] = seen.get("privacy") or ""
     out["title"] = seen.get("title") or ""
-    out["ok"] = (out["privacy"] == PRIVACY_PUBLIC)
-    if not out["ok"]:
-        out["why"] = ("YouTube accepted the change and still reports the film as %s"
-                      % (out["privacy"] or "nothing at all"))
+    out["confirmSeconds"] = round(waited, 2)   # 2dp, so a fixture at 0.02s still reads nonzero
+    out["reads"] = reads
+    out["confirmed"] = (seen.get("ok") is True and out["privacy"] == PRIVACY_PUBLIC)
+    out["ok"] = out["confirmed"]
+    if out["confirmed"]:
+        if rep:
+            rep.done("%s is %s" % (out["videoId"], out["privacy"]),
+                     videoId=out["videoId"], url=out["url"], privacy=out["privacy"],
+                     privacyFrom=out["from"], privacyTo=out["to"],
+                     confirmSeconds=out["confirmSeconds"], reads=reads)
+        return out
+    # ACCEPTED AND UNCONFIRMED. `privacyTo` is deliberately NOT written: the row may not claim
+    # a transition this house never read. `privacyFrom` stays, because that one WAS read, before
+    # the update went.
+    out["unverified"] = True
+    out["why"] = ("YouTube accepted the change and my own read still says %s after %.0f "
+                  "seconds" % (out["privacy"] or "nothing at all", waited))
     if rep:
-        (rep.done if out["ok"] else rep.failed)(
-            "%s is %s" % (out["videoId"], out["privacy"]),
-            videoId=out["videoId"], url=out["url"], privacy=out["privacy"],
-            privacyFrom=out["from"], privacyTo=out["to"])
+        import jobs as _jobs
+        _jobs.finish(rep.job, "unverified",
+                     "%s read %s after %.0fs over %d reads"
+                     % (out["videoId"], out["privacy"] or "nothing", waited, reads),
+                     videoId=out["videoId"], url=out["url"], privacy=out["privacy"],
+                     privacyFrom=out["from"], confirmSeconds=out["confirmSeconds"],
+                     reads=reads, why=out["why"])
     return out
+
+
+def reconcile(report=True):
+    """§43 PART 2 - HEAL THE DRIFT, BY APPENDING AND NEVER BY EDITING.
+
+    Every publish row whose outcome is `failed` or `unverified` is a row that may be wrong
+    about the world: the defect in publish() wrote `failed` over three changes YouTube had
+    accepted. So each one's film is re-read from YouTube now, and where the film IS public a
+    CORRECTION ROW is appended saying so.
+
+    APPEND-ONLY, AND THAT IS NOT A TECHNICALITY. The ledger is the only record of what this
+    house did, and a record that can be edited after the fact is a record that cannot be used
+    as evidence - including against this house. So no old row is touched. A correction row
+    carries `corrects` with the original's timestamp, `confirmSeconds` with the real distance
+    between the attempt and the confirmation (which for the live defect is tens of minutes,
+    not seconds), and the outcome `done` with a detail that says `confirmed-late`.
+
+    IT SENDS NO UPDATE AND MAKES NOTHING PUBLIC. Four reads of videos.list and some writes to
+    this house's own ledger; there is no path from here to videos.update, so a reconcile can
+    never change what the world shows. It only changes what this house ADMITS the world shows.
+
+    THE THIRD VERDICT, which the live run needed and the mandate did not anticipate: a film
+    the channel does not have at all. videos.list answers 200 with an empty item list, which
+    is not "unlisted" and not "public" - it is gone, or it was never where this token can see
+    it. That is recorded as `missing` and NOT corrected, because a correction row claiming
+    anything about a film nobody can read would be the same species of lie as the one being
+    repaired.
+    """
+    out = {"ok": True, "why": "", "checked": 0, "corrected": 0, "missing": 0,
+           "stillUnlisted": 0, "rows": []}
+    try:
+        import jobs
+        ledger = jobs.ledger() or []
+    except Exception as exc:                                       # noqa: BLE001
+        return {**out, "ok": False, "why": "the ledger could not be read (%s)" % exc}
+
+    for row in ledger:
+        if str(row.get("name") or "") != "publish":
+            continue
+        if str(row.get("outcome") or "") not in ("failed", "unverified"):
+            continue
+        vid = str(row.get("videoId") or "")
+        if not vid:
+            continue
+        # A CORRECTION THAT ALREADY EXISTS IS NOT APPENDED TWICE. Re-running this must be
+        # safe: it is the sort of thing somebody runs three times while reading the output.
+        if any(str(r.get("corrects") or "") == str(row.get("at") or "")
+               for r in ledger if str(r.get("name") or "") == "publish"):
+            continue
+        out["checked"] += 1
+        seen = verify(vid)
+        state = str(seen.get("privacy") or "")
+        entry = {"at": row.get("at"), "videoId": vid, "was": str(row.get("outcome")),
+                 "nowReads": state or ("missing" if seen.get("ok") is not True else ""),
+                 "corrected": False}
+        if seen.get("ok") is not True:
+            out["missing"] += 1
+            entry["why"] = str(seen.get("why") or "")[:160]
+            out["rows"].append(entry)
+            continue
+        if state != PRIVACY_PUBLIC:
+            out["stillUnlisted"] += 1
+            out["rows"].append(entry)
+            continue
+        # IT IS PUBLIC. The attempt was right and the row was wrong; say so in a new row.
+        late = _seconds_between(row.get("at"))
+        entry["corrected"] = True
+        entry["afterS"] = late
+        out["corrected"] += 1
+        if report:
+            try:
+                import jobs as _jobs
+                rep = _jobs.Reporter("publish", list(PUBLISH_STEPS), verb="RECONCILING",
+                                     topic=vid)
+                rep.step("publish", "re-reading a row that said it failed")
+                rep.done("confirmed-late: %s is public, %s after the attempt said otherwise"
+                         % (vid, _plain_gap(late)),
+                         videoId=vid, url=watch_url(vid), privacy=PRIVACY_PUBLIC,
+                         privacyFrom=str(row.get("privacyFrom") or PRIVACY_FIRST),
+                         privacyTo=PRIVACY_PUBLIC, confirmSeconds=late, reads=1,
+                         corrects=str(row.get("at") or ""))
+            except Exception as exc:                               # noqa: BLE001
+                entry["corrected"] = False
+                entry["why"] = "the correction row could not be written (%s)" % exc
+        out["rows"].append(entry)
+    return out
+
+
+def _seconds_between(stamp, now=None):
+    """Seconds from a ledger timestamp to now, or 0.0 if it cannot be read."""
+    try:
+        when = datetime.datetime.strptime(str(stamp), "%Y-%m-%dT%H:%M:%S")
+    except (ValueError, TypeError):
+        return 0.0
+    end = now or datetime.datetime.now()
+    return round(max(0.0, (end - when).total_seconds()), 1)
+
+
+def _plain_gap(seconds):
+    """"41 minutes" rather than "2460.0s" - this string reaches a ledger a human reads."""
+    secs = float(seconds or 0)
+    if secs < 90:
+        return "%.0f seconds" % secs
+    if secs < 5400:
+        return "%.0f minutes" % (secs / 60.0)
+    return "%.1f hours" % (secs / 3600.0)
 
 
 def uploaded(video_id=""):

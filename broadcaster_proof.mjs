@@ -37,7 +37,8 @@
  * Usage:  node broadcaster_proof.mjs        (server.py must be running on 4700)
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, existsSync, mkdirSync, writeFileSync, statSync } from 'node:fs';
+import { mkdtempSync, existsSync, mkdirSync, writeFileSync, statSync, readdirSync,
+         readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 
@@ -59,9 +60,44 @@ const CHROMES = [
 /* THE PREMIERE'S FILM, named here once. §40 PART 3 says "one live premiere upload of the
    useEffect film", and this is the folder the Director left it in - 4,250,031 bytes of h264+aac
    at 50.65s, with a poster and the script.md the package is composed from. */
-const FILM = 'output/videos/explain-useeffect-in-react';
-/* THE TOPIC KEYWORD the title must carry, from that film's own script.md. */
-const TOPIC = 'explain useEffect in react';
+/* THE FILM THIS HARNESS MEASURES, RESOLVED AND NOT NAMED - §42's one fixture repair.
+   IT USED TO BE THE LITERAL 'output/videos/explain-useeffect-in-react', which was the §40
+   premiere's folder, and that folder is no longer on this disk: the Director has made seven
+   more films since and that one was cleaned up. The symptom was six reds in sections 3 and 4
+   and then a thrown KeyError in section 4 - every one of them reading as a defect in
+   package(), none of them anything but a missing directory.
+   A HARNESS THAT NAMES ONE FOLDER MEASURES WHETHER THAT FOLDER EXISTS. What §40 actually
+   wanted asserted is that package() composes a legal kit from THE DIRECTOR'S OWN OUTPUT, so
+   the newest folder package() accepts is the honest subject - chosen by the same test the
+   thing under test applies, and named out loud in the run so the evidence says which film it
+   read. If one day no film packages, that is a red worth having rather than a path to edit. */
+const FILMS = (() => {
+  const dir = 'output/videos';
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .map((n) => join(dir, n))
+    .filter((p) => {
+      try {
+        return statSync(p).isDirectory() && existsSync(join(p, 'final.mp4'))
+          && existsSync(join(p, 'script.md'));
+      } catch { return false; }
+    })
+    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+})();
+const FILM = (FILMS[0] || 'output/videos/none').split('\\').join('/');
+/* THE TOPIC KEYWORD the title must carry, read from that film's own script.md rather than
+   typed here - the same reason the folder is resolved: a constant that names one film's topic
+   is a constant that expires with the film. */
+const TOPIC = (() => {
+  try {
+    const head = readFileSync(join(FILM, 'script.md'), 'utf8').slice(0, 4000);
+    const m = head.match(/^\s*(?:#+\s*)?(?:topic|title)\s*[:=]\s*(.+)$/im);
+    if (m) return m[1].trim().replace(/^["']|["']$/g, '');
+    const h1 = head.match(/^\s*#\s+(.+)$/m);
+    if (h1) return h1[1].trim();
+  } catch { /* fall through to the folder's own name */ }
+  return FILM.split('/').pop().split('-').join(' ');
+})();
 /* A DISCLOSURE LINE FOR THE PROOF, AND IT IS NOT THE BOSS'S. §40 reserves the approved
    affiliate-disclosure line to him and this harness may not invent one into config.json, so
    this string is passed to package() as an in-memory cfg and dies with the process. Every plate
@@ -355,10 +391,23 @@ note('description : ' + (K.description || '').length + '/' + K.limits.desc + ' c
 ok((K.title || '').length > 0 && (K.title || '').length <= K.limits.title,
    'THE TITLE FITS: ' + (K.title || '').length + ' of ' + K.limits.title + ' characters',
    JSON.stringify(K.title));
-ok(/useeffect/i.test(K.title || '') && /react/i.test(K.title || ''),
-   'and it CARRIES THE TOPIC KEYWORD - "useEffect" and "React", off the film\'s own script.md '
-   + 'rather than off a template',
-   JSON.stringify({ title: K.title, topic: K.topic }));
+/* THE TOPIC'S OWN WORDS, AND THIS CLAUSE USED TO BE THE THING IT ACCUSES. It read
+   `/useeffect/i && /react/i` - two literals from the §40 premiere's script - while its own
+   sentence claimed the keywords came "off the film's own script.md rather than off a
+   template". It WAS the template, and it went unnoticed for as long as the subject folder
+   never changed. Pointed at any other film it fails while package() is working perfectly.
+   Now it is what it always said it was: every significant word of the resolved topic must
+   appear in the composed title. Four or more characters, because the composer legitimately
+   drops the short ones - "in", "is", "ai" - and a rule that demanded them would fail on
+   grammar rather than on SEO. */
+const TOPIC_WORDS = TOPIC.toLowerCase().match(/[a-z0-9]{4,}/g) || [];
+const TITLE_LOW = String(K.title || '').toLowerCase();
+const MISSING_WORDS = TOPIC_WORDS.filter((w) => !TITLE_LOW.includes(w));
+ok(TOPIC_WORDS.length > 0 && !MISSING_WORDS.length,
+   'and it CARRIES THE TOPIC KEYWORDS - ' + TOPIC_WORDS.map((w) => '"' + w + '"').join(' and ')
+   + ', off the film\'s own script.md rather than off a template',
+   JSON.stringify({ title: K.title, topic: TOPIC, words: TOPIC_WORDS,
+                    missing: MISSING_WORDS }));
 ok(!/\b(\d+)\s*(second|minute)/i.test(K.title || ''),
    'and it asserts NO NUMBER NOTHING MEASURED. The first draft read "Explained in 60 Seconds" '
    + 'over a 50.65-second film: a title is the most-read line this house publishes',
@@ -407,9 +456,18 @@ const DISC = python([
   'sys.dont_write_bytecode = True',
   'import broadcast',
   'out = {}',
-  // (a) THE STATE THIS MACHINE IS ACTUALLY IN: no approved line in config.json.
-  'out["live"] = broadcast.package(' + JSON.stringify(FILM) + ')',
-  'out["liveCard"] = broadcast.card(' + JSON.stringify(FILM) + ')',
+  // (a) NO APPROVED LINE, asserted against an EMPTY cfg and no longer against the state of
+  // config.json. §40 wrote this clause as "the state this machine is actually in", which was
+  // true then and is a fact about a file the boss owns: he has since written a disclosure
+  // into it, prerequisite (c) is met, and a clause premised on its absence started failing
+  // while the refusal it tests works perfectly. The law is "package() refuses without a
+  // line"; cfg={} is that condition stated rather than borrowed from the disk.
+  'out["live"] = broadcast.package(' + JSON.stringify(FILM) + ', cfg={})',
+  'out["liveCard"] = broadcast.card(' + JSON.stringify(FILM) + ', cfg={})',
+  // AND WHAT THE FILE NOW HOLDS, as a length and nothing else - so the report can say that
+  // (c) is met without this harness ever printing the boss's own sentence.
+  'import server',
+  'out["fileLine"] = len(str(server.load_config()[0].get("youtube_disclosure") or ""))',
   // (b) and with one approved, in memory only - this harness never writes config.json.
   'CFG = {"youtube_disclosure": ' + JSON.stringify(TEST_DISCLOSURE) + '}',
   'kit = broadcast.package(' + JSON.stringify(FILM) + ', cfg=CFG)',
@@ -1122,9 +1180,301 @@ const leak = JSON.stringify(st);
 ok(!/access_token|refresh_token|client_secret/.test(leak) && !/@gmail|@googlemail/.test(leak),
    'and the status line carries no token, no secret and no account email - only a digest',
    leak.slice(0, 300));
-ok(!st.tokenDigest || /^[0-9a-f]{16,64}$/.test(st.tokenDigest),
-   'and the one credential-shaped string in it is a sha256 digest or empty',
+ok(!st.tokenDigest || /^[0-9a-f]{12,64}$/.test(st.tokenDigest),
+   'and the one credential-shaped string in it is a sha256 digest or empty ('
+   + (st.tokenDigest ? st.tokenDigest.length + ' hex characters' : 'empty') + ')',
+   /* THE RANGE WAS WRONG AND COULD NOT HAVE BEEN CAUGHT UNTIL TODAY. §40 wrote {16,64} with
+      no channel connected, so `tokenDigest` was always "" and the pattern was never once
+      applied to a real value. The boss has since completed the OAuth consent, a digest
+      appeared, and it is TWELVE characters - because broadcast.py's own _digest() helper is
+      `hashlib.sha256(...).hexdigest()[:12]`. The floor now matches the house's own helper
+      rather than a number this harness guessed. */
    JSON.stringify(st.tokenDigest));
+
+/* =====================================================================================
+   11 · §42 - THE TWO GOODBYES, AND THE LINK THAT RIDES BESIDE THEM
+   The two sentences this house says when a film goes up and when it goes public. Asserted
+   from the SOURCE and from the running code rather than from a live upload, because the
+   premiere is blocked above and a spoken string is not worth less for being unspoken: the
+   literal in broadcast.py is the literal the glass will speak the day the channel connects.
+   ===================================================================================== */
+step('11 · §42: two goodbyes with no URL in them, and the url beside them');
+
+const BYE = python([
+  'import json, re, sys, inspect, pathlib',
+  'sys.dont_write_bytecode = True',
+  'import broadcast, jobs',
+  'out = {}',
+  // -- THE UPLOAD'S GOODBYE, taken out of upload()'s own source. The call cannot be made on
+  // this machine - no channel - so the argument is read where it is written. inspect, not a
+  // file grep: a `rep.done(` inside a comment or a second function would fool the grep.
+  'src = inspect.getsource(broadcast.upload)',
+  'm = re.search(r"rep\\.done\\(\\s*(\\"[^\\"]*\\")", src)',
+  'out["uploadSaid"] = json.loads(m.group(1)) if m else ""',
+  'out["uploadDoneCalls"] = len(re.findall(r"rep\\.done\\(", src))',
+  // -- AND THE PUBLISH HAND'S, every say() literal in the file at once. Not just the success
+  // line: the law is about what this hand can SAY, and a URL left in any branch is a URL the
+  // room can hear.
+  'hand = pathlib.Path("tools/publish_video.py").read_text(encoding="utf-8")',
+  'out["saidLines"] = re.findall(r"say\\(\\s*\\"([^\\"]*)\\"", hand)',
+  'out["handHasWatchUrlInSay"] = bool(re.search(r"say\\([^)]*watch_url", hand))',
+  // -- THE TITLE RESOLVER, exercised: it must never read the proposal's own `title`.
+  'sys.path.insert(0, "tools")',
+  'import importlib.util as iu',
+  'spec = iu.spec_from_file_location("pv", "tools/publish_video.py")',
+  'pv = iu.module_from_spec(spec); spec.loader.exec_module(pv)',
+  'out["titleFromReadback"] = pv._title_of("abcdefghijk", {"title": "A Real Title"})',
+  'out["titleWhenSilent"] = pv._title_of("zzzzzzzzzzz", {})',
+  'out["resolverReadsParams"] = "params" in inspect.getsource(pv._title_of)',
+  // -- AND THE LINK'S OWN ROAD: jobs.RESULT_KEYS is what puts url on the /jobs payload.
+  'out["resultKeys"] = list(jobs.RESULT_KEYS)',
+  // -- §43's schedule, read off the module rather than typed into the assertion below.
+  'out["backoff"] = list(broadcast.PUBLISH_CONFIRM_BACKOFF)',
+  'out["ceiling"] = broadcast.PUBLISH_CONFIRM_CEILING_S',
+  'out["outcomes"] = list(jobs.OUTCOMES)',
+  'print(json.dumps(out))',
+]);
+
+const UPLOAD_SAID = 'It is up and unlisted, sir - nobody can see it until you say the word.';
+ok(BYE.uploadSaid === UPLOAD_SAID,
+   'THE UPLOAD\'S GOODBYE IS THE MANDATE\'S SENTENCE, character for character: "'
+   + BYE.uploadSaid + '"',
+   JSON.stringify({ want: UPLOAD_SAID, got: BYE.uploadSaid }));
+ok(BYE.uploadDoneCalls === 1,
+   'and upload() has exactly ONE done() call, so there is no second sentence on a second '
+   + 'success path for the first one to be a claim about',
+   JSON.stringify(BYE.uploadDoneCalls));
+
+/* A URL, AND NOT THE WORD "YOUTUBE". §42 wrote this as /https?:|www\.|\.com|\.be\b|youtu/i
+   and it was wrong in a way that could only show when a sentence finally needed to NAME the
+   service: §43's unconfirmed line opens "YouTube accepted the change, sir", the `youtu`
+   branch matched the word, and a sentence with no address in it read as a sentence with one.
+   The pattern now tests for an ADDRESS - a scheme, a bare www host, or a known domain with a
+   path after it - which is the thing the law is actually about. */
+const URLISH = /https?:\/\/|www\.[a-z0-9-]|youtu\.be\/|youtube\.com\/|\.com\/|\.be\//i;
+ok(!URLISH.test(BYE.uploadSaid),
+   'AND NOT ONE CHARACTER OF A URL IS IN IT - no http, no www, no bare domain. The link used '
+   + 'to be the end of this sentence, read aloud at a man who cannot write down thirty '
+   + 'syllables of base64',
+   JSON.stringify(BYE.uploadSaid));
+
+const PUBLISH_SAID = 'It is public now, sir - %s.';
+ok(BYE.saidLines.includes(PUBLISH_SAID),
+   'THE PUBLISH HAND\'S SUCCESS STDOUT IS THE MANDATE\'S SENTENCE: "' + PUBLISH_SAID
+   + '" - and that stdout IS the spoken answer, which is why it is the one that mattered',
+   JSON.stringify(BYE.saidLines));
+const guilty = (BYE.saidLines || []).filter((l) => URLISH.test(l));
+ok(!guilty.length && !BYE.handHasWatchUrlInSay,
+   'and NO say() IN THE WHOLE HAND carries a URL - all ' + (BYE.saidLines || []).length
+   + ' of its spoken literals are clean, and watch_url() is no longer passed to one of them. '
+   + 'The already-public branch is in that count: it is not one of the two sentences §42 '
+   + 'names, and a URL left in the one branch nobody tests is how a law lasts a fortnight',
+   JSON.stringify({ guilty, watchUrlInSay: BYE.handHasWatchUrlInSay }));
+
+ok(BYE.titleFromReadback === 'A Real Title' && !BYE.resolverReadsParams,
+   'the title in that sentence comes from YouTube\'s own read-back, and the resolver never '
+   + 'reads the proposal\'s `title` - a registry tool can be proposed by a model, and model '
+   + 'text does not reach a spoken line in this house',
+   JSON.stringify({ title: BYE.titleFromReadback, readsParams: BYE.resolverReadsParams }));
+ok(!!BYE.titleWhenSilent && !URLISH.test(BYE.titleWhenSilent),
+   'and when both authorities are silent it says "' + BYE.titleWhenSilent + '" rather than '
+   + 'leaving a blank where a film\'s name should be',
+   JSON.stringify(BYE.titleWhenSilent));
+
+ok((BYE.resultKeys || []).includes('url'),
+   'THE LINK\'S ROAD TO THE GLASS: `url` is in jobs.RESULT_KEYS, so the same /jobs payload '
+   + 'that carries the spoken detail carries the watch url beside it - §40 built that road '
+   + 'and §42 is what made it load-bearing',
+   JSON.stringify(BYE.resultKeys));
+
+/* AND THE SAME THING FOR THE HAND, measured through _hand_link() itself rather than asserted
+   about it. Four states, because three of them are ways a url could be attached when it must
+   not be: a refusal, a different tool, and a proposal whose url is not a web address at all. */
+const LINK = python([
+  'import json, sys',
+  'sys.dont_write_bytecode = True',
+  'import server',
+  'URL = "https://www.youtube.com/watch?v=abcdefghijk"',
+  'def run(payload, pending):',
+  '    p = dict(payload)',
+  '    server._hand_link(p, pending)',
+  '    return p.get("url", None)',
+  'slot = {"params": {"video": "abcdefghijk", "url": URL}}',
+  'out = {',
+  '  "onSuccess": run({"ok": True, "ran": "publish_video"}, slot),',
+  '  "onRefusal": run({"ok": False, "refused": "busy"}, slot),',
+  '  "onOtherHand": run({"ok": True, "ran": "send_email"}, slot),',
+  '  "onFailedScript": run({"ok": False, "ran": "publish_video"}, slot),',
+  '  "onNoSlot": run({"ok": True, "ran": "publish_video"}, None),',
+  '  "onJunkUrl": run({"ok": True, "ran": "publish_video"},',
+  '                   {"params": {"url": "javascript:alert(1)"}}),',
+  '  "want": URL,',
+  '}',
+  'print(json.dumps(out))',
+]);
+
+ok(LINK.onSuccess === LINK.want,
+   'AND THE PUBLISH REPLY CARRIES A NON-EMPTY `url` ON SUCCESS: ' + JSON.stringify(LINK.onSuccess)
+   + ' - which is what lets the page draw a link beside a sentence that no longer contains one',
+   JSON.stringify(L));
+ok(LINK.onRefusal === null && LINK.onFailedScript === null && LINK.onOtherHand === null
+   && LINK.onNoSlot === null,
+   'and on nothing else: a refusal, a crashed script, another hand and a missing slot all get '
+   + 'no url at all - a live link beside an error message is the page inviting a click on '
+   + 'something that did not happen',
+   JSON.stringify(L));
+ok(LINK.onJunkUrl === null,
+   'AND A PROPOSAL\'S url IS NOT TRUSTED TO BE A LINK: "javascript:alert(1)" in the slot '
+   + 'attaches nothing. `params` is the one field in this payload a language model\'s '
+   + 'proposal can reach, and the page is about to render it as an anchor',
+   JSON.stringify(LINK.onJunkUrl));
+
+/* =====================================================================================
+   12 · §43 - THE READ-AFTER-WRITE LAG, AND THE THREE OUTCOMES IT FORCED
+   WHY THIS SECTION EXISTS AT ALL, said plainly: §42 shipped a hand that read videos.list
+   once, immediately, and called a successful publish a failure when the read came back
+   stale. broadcaster_proof was 96/96 over it. Every fixture in this file returned the NEW
+   state on the FIRST read, so none of them could tell a hand that waits from a hand that
+   does not - a green proof over an instant fixture is blind to propagation lag. These cases
+   are the ones that would have caught it: the fixture's clock is the thing under test.
+   ===================================================================================== */
+step('12 · §43: the stale read, the wait, and the three sentences');
+
+ok(JSON.stringify(BYE.backoff) === JSON.stringify([1, 2, 4, 8, 15]) && BYE.ceiling === 30,
+   'THE REAL SCHEDULE IS THE MANDATE\'S: reads at once, then 1, 2, 4, 8 and 15 seconds - six '
+   + 'reads inside a 30-second ceiling. The three cases below run it at 0.02s a step so a '
+   + 'proof does not cost half a minute of waiting; the SHAPE is what they exercise and the '
+   + 'real numbers are asserted here, where they cost nothing',
+   JSON.stringify({ backoff: BYE.backoff, ceiling: BYE.ceiling }));
+
+/* ONE CASE, ONE SUBPROCESS, and the hand's own main() inside it. The only things replaced
+   are the four functions that touch the network; _title_of(), the three sentences, the exit
+   codes, the ledger writes and publish()'s whole poll are the house's own code. */
+function publishCase(reads, label) {
+  const boot = [
+    'import json, sys, pathlib',
+    'sys.dont_write_bytecode = True',
+    'sys.path.insert(0, "."); sys.path.insert(0, "tools")',
+    'import broadcast, jobs',
+    'pathlib.Path("_runs/sweep43").mkdir(parents=True, exist_ok=True)',
+    'jobs.LEDGER_PATH = pathlib.Path("_runs/sweep43/_ledger_' + label + '.json")',
+    'jobs.LEDGER_PATH.unlink(missing_ok=True)',
+    'jobs.forget_all("fixture")',
+    // THE CLOCK, SCALED. The shape of the schedule - six reads, growing pauses - is what the
+    // behaviour depends on; the wall-clock length is not, and a proof that waits 30 seconds
+    // per case is a proof nobody runs.
+    'broadcast.PUBLISH_CONFIRM_BACKOFF = (0.02, 0.02, 0.02, 0.02, 0.02)',
+    'VID = "Kq9wIx3sTqE"',
+    'TITLE = "useReducer in React - Explained"',
+    'READS = ' + JSON.stringify(reads),
+    'seen = {"updates": 0, "reads": 0}',
+    'broadcast.uploaded = lambda vid="": ({"name": "broadcast", "videoId": VID,',
+    '                                      "topic": "usereducer in react"} if vid == VID else {})',
+    'broadcast.access = lambda: ("tok", "connected", "")',
+    'broadcast.scope_report = lambda: {"canPublish": True, "whyNotPublish": ""}',
+    'def fake_update(vid, to):',
+    '    seen["updates"] += 1',
+    '    return {"ok": True, "why": "", "from": "unlisted", "to": to,',
+    '            "url": broadcast.watch_url(vid)}',
+    'def fake_verify(vid):',
+    '    i = min(len(READS) - 1, seen["reads"])',
+    '    seen["reads"] += 1',
+    '    return {"ok": True, "why": "", "privacy": READS[i], "title": TITLE,',
+    '            "videoId": vid, "url": broadcast.watch_url(vid)}',
+    'broadcast.set_privacy = fake_update',
+    'broadcast.verify = fake_verify',
+    'import importlib.util as iu',
+    'spec = iu.spec_from_file_location("pv", "tools/publish_video.py")',
+    'pv = iu.module_from_spec(spec); spec.loader.exec_module(pv)',
+    'pv.broadcast = broadcast',
+    'code = pv.main()',
+    'rows = [r for r in (jobs.ledger() or []) if r.get("name") == "publish"]',
+    'sys.stderr.write("§43 " + json.dumps({"exit": code, "updates": seen["updates"],',
+    '                 "reads": seen["reads"], "rows": rows}) + "\\n")',
+  ].join('\n');
+  const r = spawnSync(PYTHON, ['-c', boot], {
+    encoding: 'utf8', timeout: 120000, cwd: process.cwd(),
+    input: JSON.stringify({ video: 'Kq9wIx3sTqE', title: 'A MODEL COMPOSED THIS TITLE',
+                            url: 'https://www.youtube.com/watch?v=Kq9wIx3sTqE' }),
+    env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
+  const line = (String(r.stderr || '').split('\n')
+    .find((l) => l.indexOf('§43 ') === 0) || '').slice(4);
+  let meta = {};
+  try { meta = JSON.parse(line); } catch (e) { meta = { parseError: line.slice(0, 200) }; }
+  return { said: String(r.stdout || '').trim(), ...meta };
+}
+
+/* ---- (a) the first read is stale and the second is not: the hand must WAIT. ---- */
+const A = publishCase(['unlisted', 'unlisted', 'public'], 'a');
+note('(a) said      : ' + JSON.stringify(A.said));
+note('(a) row       : ' + JSON.stringify((A.rows || [])[0] || null).slice(0, 220));
+ok(A.said === 'It is public now, sir - useReducer in React - Explained.',
+   '(a) A STALE FIRST READ IS WAITED OUT, NOT BELIEVED: the second read says public and the '
+   + 'hand says "' + A.said + '" - which is the exact sentence the defect refused to print',
+   JSON.stringify(A));
+ok(A.exit === 0 && A.updates === 1,
+   '(a) exit 0, and EXACTLY ONE videos.update was sent - a hand that re-sent the update on '
+   + 'every poll would be a hand that publishes a film five times',
+   JSON.stringify({ exit: A.exit, updates: A.updates, reads: A.reads }));
+ok((A.rows || []).length === 1 && A.rows[0].outcome === 'done'
+   && A.rows[0].confirmSeconds > 0,
+   '(a) ONE ledger row, outcome done, with confirmSeconds ' + ((A.rows || [])[0] || {}).confirmSeconds
+   + ' > 0 - the number that proves a wait happened at all, and the number every §42 fixture '
+   + 'would have left at zero',
+   JSON.stringify((A.rows || [])[0]));
+ok((A.rows || [])[0] && A.rows[0].privacyFrom === 'unlisted'
+   && A.rows[0].privacyTo === 'public',
+   '(a) and the row claims the transition it actually confirmed: unlisted -> public',
+   JSON.stringify((A.rows || [])[0]));
+
+/* ---- (b) the read never flips: neither success nor failure may be claimed. ---- */
+const B = publishCase(['unlisted'], 'b');
+note('(b) said      : ' + JSON.stringify(B.said));
+note('(b) row       : ' + JSON.stringify((B.rows || [])[0] || null).slice(0, 240));
+ok(B.said.startsWith('YouTube accepted the change, sir, but my own read still says unlisted')
+   && /after \d+ seconds, so I will not call it done/.test(B.said)
+   && B.said.endsWith('and say make it public again and I shall re-read before I re-send.'),
+   '(b) THE THIRD SENTENCE, WHICH CLAIMS NEITHER THING: "' + B.said + '"',
+   JSON.stringify(B.said));
+ok(!/failed/i.test(B.said) && !/It is public now/.test(B.said),
+   '(b) and it is NEITHER the failure sentence nor the success one - the two absolutes, which '
+   + 'one line of §42 broke in both directions at once',
+   JSON.stringify(B.said));
+ok(B.exit !== 0 && B.updates === 1,
+   '(b) exit ' + B.exit + ' so the hands report it as failed, and still exactly ONE update: '
+   + 'the exit code is a verdict about whether to trust it, and the sentence is the detail '
+   + 'the exit code has no room for',
+   JSON.stringify({ exit: B.exit, updates: B.updates, reads: B.reads }));
+ok((B.rows || []).length === 1 && B.rows[0].outcome === 'unverified',
+   '(b) ONE ledger row and its outcome is `unverified` - not done, which nobody verified, and '
+   + 'not failed, which is the lie §43 exists to undo',
+   JSON.stringify((B.rows || [])[0]));
+ok((B.rows || [])[0] && !B.rows[0].privacyTo,
+   '(b) AND IT CLAIMS NO TRANSITION: privacyTo is absent from the row, because this house '
+   + 'never read one. privacyFrom stays, because that one was read before the update went',
+   JSON.stringify((B.rows || [])[0]));
+ok(B.reads === 7,
+   '(b) and it read SEVEN times, which is the schedule counted honestly: once at entry before '
+   + 'anything was sent, then six in the poll - one immediately after the update and five more '
+   + 'at 1, 2, 4, 8 and 15 seconds. The first draft of this clause asserted six and was wrong '
+   + 'about its own arithmetic, not about the code',
+   JSON.stringify(B.reads));
+
+/* ---- (c) already public at entry: the retry path heals itself and sends nothing. ---- */
+const C = publishCase(['public'], 'c');
+note('(c) said      : ' + JSON.stringify(C.said));
+ok(C.said === 'That film is already public, sir - useReducer in React - Explained.',
+   '(c) ALREADY PUBLIC AT ENTRY: "' + C.said + '"',
+   JSON.stringify(C));
+ok(C.updates === 0 && C.exit === 0,
+   '(c) AND ZERO UPDATES WERE SENT. This is what makes the retry safe: the boss who was '
+   + 'wrongly told his publish failed is told to say it again, and saying it again must look '
+   + 'before it sends - otherwise the repair for a false failure is a second write',
+   JSON.stringify({ updates: C.updates, exit: C.exit, reads: C.reads }));
+ok((C.rows || []).length === 0,
+   '(c) and no ledger row at all, because nothing happened - a row recording a publish that '
+   + 'was not performed would be the append-only ledger\'s first fiction',
+   JSON.stringify(C.rows));
 
 /* =====================================================================================
    the verdict

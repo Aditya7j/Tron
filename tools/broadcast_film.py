@@ -55,6 +55,9 @@ def main():
     ap.add_argument("--scopes", action="store_true")
     ap.add_argument("--discovery", action="store_true")
     ap.add_argument("--recent", action="store_true")
+    ap.add_argument("--reconcile", action="store_true",
+                    help="re-read every publish row that said failed or unverified, and "
+                         "APPEND a correction row wherever the film is in fact public")
     ap.add_argument("--card", default="")
     ap.add_argument("--upload", default="")
     ap.add_argument("--publish", default="")
@@ -96,6 +99,32 @@ def main():
     if args.recent:
         got = broadcast.recent_uploads()
         jdump(got, args.as_json)
+        return 0 if got["ok"] else 1
+
+    if args.reconcile:
+        # §43 PART 2. It sends no update and makes nothing public - see broadcast.reconcile().
+        got = broadcast.reconcile(report=bus)
+        if args.as_json:
+            jdump(got, True)
+        elif not got["ok"]:
+            print("\n  refused   : %s\n" % got["why"])
+        else:
+            print("")
+            print("  checked   : %d publish row(s) that said failed or unverified"
+                  % got["checked"])
+            print("  corrected : %d  (a correction row appended; no old row edited)"
+                  % got["corrected"])
+            print("  unlisted  : %d  (the row was right - the film really is not public)"
+                  % got["stillUnlisted"])
+            print("  missing   : %d  (YouTube has no film under that id for this token)"
+                  % got["missing"])
+            for row in got["rows"]:
+                print("    %-20s %-13s was %-10s now %-9s %s"
+                      % (row.get("at"), row.get("videoId"), row.get("was"),
+                         row.get("nowReads") or "?",
+                         ("CORRECTED after %s" % broadcast._plain_gap(row.get("afterS")))
+                         if row.get("corrected") else (row.get("why") or "")[:60]))
+            print("")
         return 0 if got["ok"] else 1
 
     if args.card:

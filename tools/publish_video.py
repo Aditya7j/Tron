@@ -1,10 +1,26 @@
 #!/usr/bin/env python3
 """publish_video.py - the hand that makes an unlisted film public, and the only one that can.
 
-It prints exactly one of two things: "The film is public. <url>", or "Publishing failed:
-<reason>". send_email.py's contract, for send_email.py's reason - the assistant speaks what the
-hand observed rather than deciding for itself that the thing worked, and this is the second hand
-in the house whose work cannot be taken back.
+It prints exactly one of FOUR things, and §43 added the fourth because three were not enough to
+tell the truth with: "That film is already public, sir - <title>." (nothing was sent), "It is
+public now, sir - <title>." (sent and CONFIRMED by a read-back), "YouTube accepted the change,
+sir, but my own read still says ... so I will not call it done ..." (sent, accepted, and this
+house could not confirm it), or "Publishing failed: <reason>" (refused). send_email.py's
+contract, for send_email.py's reason - the assistant speaks what the hand observed rather than
+deciding for itself that the thing worked, and this is the second hand in the house whose work
+cannot be taken back.
+
+TWO ABSOLUTES, AND ONE LINE USED TO BREAK BOTH. Never print a failure sentence when the update
+returned success; never print a success sentence without a confirmed read. The old code read
+videos.list exactly once, immediately, took a stale privacyStatus for the truth, and said
+"Publishing failed" about three films YouTube had already accepted - see publish() in
+broadcast.py for the propagation lag and the backoff that answers it.
+
+§42 TOOK THE URL OUT OF THAT FIRST LINE and it is worth saying why here, where the contract is:
+this stdout is SPOKEN ALOUD, and a watch URL read aloud is thirty syllables nobody can write
+down. The link travels on the /execute payload's `url` field instead, beside the sentence, where
+the glass can make it a link - see _hand_link() in server.py. Nothing in this file prints an
+http, an https or a www any more, and broadcaster_proof asserts it.
 
 WHY THIS IS A HAND AND THE UPLOAD IS NOT. The upload takes a minute and lands UNLISTED - a URL
 nobody has - so it runs on the server's own thread with a progress bus, behind the Doorman's
@@ -66,6 +82,30 @@ def fail(reason):
     return 1
 
 
+def _title_of(video, seen):
+    """The film's title for the spoken line, from the two authorities and never from a model.
+
+    §42 puts a title where a URL used to be, which means a string this house did not write
+    could end up spoken aloud - and the habit in this file is already explicit about that:
+    "model text does not reach a log or a spoken line". The `title` on stdin came in with a
+    proposal a language model is allowed to compose, so it is NOT read here, even though it
+    is the obvious place to look.
+
+    TWO AUTHORITIES, IN ORDER. YouTube's own read-back first: broadcast.verify() asks what
+    the channel actually holds, and what the channel holds is what this house uploaded. Then
+    the ledger's `topic`, which upload() wrote from the Director's own folder. If both are
+    silent the sentence says "the film" rather than guessing - a goodbye with a blank in it
+    reads as a bug, and a goodbye naming the wrong film is worse than either.
+    """
+    title = str((seen or {}).get("title") or "").strip()
+    if not title:
+        row = broadcast.uploaded(video) or {}
+        title = str(row.get("topic") or "").strip()
+    # One line, flattened: this goes to a neural voice and through an ASCII encoder.
+    title = re.sub(r"\s+", " ", title)[:120].strip()
+    return title or "the film"
+
+
 def main():
     raw = sys.stdin.buffer.read().decode("utf-8", "replace")
     try:
@@ -106,20 +146,52 @@ def main():
         # confirmation succeed and nothing change.
         return fail(scope["whyNotPublish"])
 
+    # ---- §43's FIRST READ, AND IT IS WHAT MAKES THE RETRY PATH HEAL ITSELF. -----------------
+    # The film's privacy is read BEFORE anything is sent. If it is already public this hand
+    # sends no update at all - which is idempotence, and it is the whole repair for the case
+    # §43 was written about: a publish that really worked, was reported as failed, and is now
+    # being retried by a boss who was told to say it again. The retry must not re-send an
+    # update to a film that is already where he wants it; it must look, agree, and say so.
     was = broadcast.verify(video)
     if was["ok"] and was["privacy"] == broadcast.PRIVACY_PUBLIC:
         # Not an error worth the word "failed", so it exits 0: the world the boss asked for is
         # the world that exists. It is still said out loud, because he asked for a change.
-        say("That film is already public. %s" % broadcast.watch_url(video))
+        # §42: AND WITHOUT THE URL IT USED TO END ON. This line is not one of the two the
+        # mandate names, and it is fixed anyway - it is a success path of this same hand, it
+        # is spoken in a room by the same voice, and leaving one URL behind in the one branch
+        # nobody tests is how a law lasts a fortnight.
+        say("That film is already public, sir - %s." % _title_of(video, was))
         return 0
 
     got = broadcast.publish(video)
+    # ---- §43's THREE OUTCOMES, AND THE ORDER OF THESE TESTS IS THE LAW ----------------------
+    # TWO ABSOLUTES, both of which the old code broke in one line: never print a failure
+    # sentence when the update returned success, and never print a success sentence without a
+    # confirmed read. So `unverified` is tested BEFORE `ok`, because it is neither of those
+    # things and must not be allowed to fall into either.
+    if got.get("unverified"):
+        # ACCEPTED, UNCONFIRMED. The sentence is the truth and the exit code is not the
+        # sentence: the hands report this as failed - which is right, because nothing should
+        # treat it as done - while the spoken line says exactly what happened and what to do.
+        # It names the retry phrase on purpose: the first read above is what makes saying it
+        # again safe, so the instruction and the mechanism were built in the same breath.
+        say("YouTube accepted the change, sir, but my own read still says %s after %.0f "
+            "seconds, so I will not call it done - look at the Studio, and say make it "
+            "public again and I shall re-read before I re-send."
+            % (got.get("privacy") or "unlisted", got.get("confirmSeconds") or 0))
+        return 1
     if not got["ok"]:
         return fail(got["why"])
-    # THE TRANSITION, SPOKEN. "from unlisted to public" is the whole audit fact in six words,
-    # and the ledger row that broadcast.publish() just wrote carries the same two states.
-    say("The film is public - %s to %s. %s"
-        % (got["from"] or "unlisted", got["privacy"], got["url"]))
+    # §42 - THE SECOND GOODBYE. This stdout IS the spoken answer: hands.execute() returns the
+    # script's stdout as the payload's `answer`, and the page speaks that. It used to end on
+    # the watch URL, so the last thing the boss heard about a film going public was a web
+    # address being read out.
+    #
+    # THE TRANSITION IS NOT LOST, it has moved to where an audit fact belongs: the ledger row
+    # broadcast.publish() just wrote carries privacyFrom and privacyTo, which is the same six
+    # words in the one place that keeps them. And the URL rides on the /execute payload's own
+    # `url` field - see _hand_link() in server.py - so the glass can make it clickable.
+    say("It is public now, sir - %s." % _title_of(video, got))
     return 0
 
 

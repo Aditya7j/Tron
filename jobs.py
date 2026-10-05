@@ -27,7 +27,7 @@ THE THREE FIELDS ON TOP OF §35's SIX, each for a named failure:
             see it, because array position is produced by the same append that made the bug.
   job       an identifier DISTINCT from the job's name.  Two Directors started a second apart
             are two rows; without this they would be one row whose i/n jumps backwards.
-  outcome   a closed vocabulary - running, done, failed - because a chip that reads DO NOT
+  outcome   a closed vocabulary - running, done, failed, unverified - because a chip that reads DO NOT
             DISTURB has to have exactly one way to stop reading it.
 
 AND elapsed_s IS MONOTONIC.  time.monotonic(), never the wall clock, whose failure mode is a
@@ -76,7 +76,15 @@ JOB_STALE_S = 300.0     # five minutes without an event and the reader calls it 
 LEDGER_MAX = 50         # the same ring hands.py keeps its chains in, and for the same reason.
 
 # ---- THE WHITELISTS, both directions -------------------------------------------------------
-OUTCOMES = ("running", "done", "failed")
+# §43 ADDED THE FOURTH, AND IT IS THE ONLY HONEST WORD FOR WHAT IT NAMES: the act was
+# accepted and this house could not confirm it. "done" would be a claim nobody verified and
+# "failed" would be a lie about an action that very likely took effect - which is exactly the
+# lie §43 exists to undo, because `failed` was written over three publishes that YouTube had
+# accepted. A row reading `unverified` is a row a human can act on: it says go and look.
+# THE HAND STILL REPORTS IT AS FAILED, and that is not a contradiction - an exit code is a
+# verdict about whether to trust the result, and the sentence and the ledger carry the detail
+# the exit code has no room for. See tools/publish_video.py.
+OUTCOMES = ("running", "done", "failed", "unverified")
 # What an EVENT may carry. §35 fixes the first six; seq is this module's.
 EVENT_KEYS = ("job", "step", "i", "n", "detail", "elapsed_s", "seq", "at")
 # What a JOB may carry on the way out. No producer object, no callable, no path that was not
@@ -105,7 +113,14 @@ RESULT_KEYS = ("cited", "durationS", "path", "sceneTypes", "poster",
 # was taken in exchange for writing them down, so they are written down.
 ROW_KEYS = ("at", "job", "name", "topic", "outcome", "elapsedS", "steps", "detail",
             "cited", "durationS", "path", "sceneTypes", "poster", "why",
-            "videoId", "url", "privacy", "privacyFrom", "privacyTo")
+            "videoId", "url", "privacy", "privacyFrom", "privacyTo",
+            # §43's three, and all three are about the gap between an act and its evidence.
+            # `confirmSeconds` is how long the read-back took to agree - 0.0 when the first
+            # read already agreed, which is what every fixture produced and what made the
+            # defect invisible. `reads` is how many times it was asked. `corrects` names the
+            # earlier row a correction row is about; the ledger is append-only, so a row is
+            # never edited and a later row says what the earlier one got wrong.
+            "confirmSeconds", "reads", "corrects")
 
 _LOCK = threading.Lock()
 _JOBS = {}              # job id -> the record below, insertion-ordered (dicts are, since 3.7)

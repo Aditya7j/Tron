@@ -497,33 +497,39 @@ def check_credentials():
         return PASS, ["one real call to GET /v1/models was accepted",
                       "%d models visible to this key" % len(ids)]
 
-    creds, error = server.resolve_aws(cfg)
-    if error:
-        return FAIL, [first_line(error, 200)]
-    state["creds"] = creds
-    host = "bedrock.%s.amazonaws.com" % creds["region"]
+    # §41 - AND THE DEFAULT ROAD IS GROQ, VALIDATED THE SAME WAY: one real minimal call.
+    # THIS CLAUSE REPLACED A SIGNED CALL TO A CLOUD CATALOGUE and it had to, rather than
+    # being left to fail politely: it called server.resolve_aws(), which §41 deleted, so
+    # the check raised AttributeError and reported "the check itself raised" - a check that
+    # cannot run is worse than a check that fails, because it says nothing about the key.
+    # GET /models is Groq's own cheapest authenticated route and the key is never printed.
+    digest = server.groq_digest(cfg)
+    req = urllib.request.Request(
+        "https://api.groq.com/openai/v1/models",
+        headers={"Authorization": "Bearer %s" % server.groq_key(cfg),
+                 "User-Agent": server.USER_AGENT})
     try:
-        data = server.aws_request(creds, "bedrock", host, "/foundation-models",
-                                  method="GET", query="byOutputModality=TEXT")
+        with urllib.request.urlopen(req, timeout=30) as res:
+            payload = json.loads(res.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as exc:
-        message = server.aws_error_message(exc, server.model_label(cfg), creds)
-        low = message.lower()
-        if exc.code == 403 and "not authorized" in low and "signature" not in low:
-            # A valid key that simply may not list models. Check 5 settles it.
-            return WARN, ["the credentials signed correctly but may not call "
-                          "bedrock:ListFoundationModels",
-                          first_line(message, 160)]
-        return FAIL, [first_line(message, 200)]
+        if exc.code == 401:
+            return FAIL, ["Groq rejected the key in config.json (401) - that is "
+                          "\"groq_api_key\", %d characters, sha256 %s"
+                          % (digest["length"], digest["sha256"])]
+        if exc.code == 429:
+            # A RATE LIMIT IS NOT A BAD KEY. It is the exact condition §41's local net
+            # exists for, and the key that was just throttled is a key the account knows.
+            return WARN, ["the key is accepted and the account is rate limited (429) - "
+                          "which is the state the local fallback is for; see check 5"]
+        return FAIL, ["GET /v1/models returned HTTP %s" % exc.code]
     except Exception as exc:                                   # noqa: BLE001
-        return FAIL, ["could not reach %s (%s)" % (host, exc)]
-
-    rows = data.get("modelSummaries") or []
-    state["bedrock_models"] = rows
-    kind = "temporary (session token)" if creds.get("token") else "long-lived"
-    return PASS, ["one real signed call to %s was accepted" % host,
-                  "credentials from %s, %s, region %s"
-                  % (creds["source"], kind, creds["region"]),
-                  "%d text models visible to this identity" % len(rows)]
+        return FAIL, ["could not reach the Groq API (%s)" % exc]
+    ids = [m.get("id") for m in payload.get("data") or []]
+    state["groq_models"] = ids
+    return PASS, ["one real call to Groq's GET /v1/models was accepted",
+                  "the key is %d characters, sha256 %s - never printed, never logged"
+                  % (digest["length"], digest["sha256"]),
+                  "%d models visible to this key" % len(ids)]
 
 
 def check_model():
@@ -539,12 +545,11 @@ def check_model():
         cfg, [{"role": "user", "content": "Reply with the single word: ready"}])
     if error:
         detail = [first_line(error, 200)]
-        if server.provider_of(cfg) == "bedrock":
-            listed = [m.get("modelId") for m in state.get("bedrock_models") or []]
-            if listed and label not in listed:
-                detail.append("\"%s\" is not in this account's on-demand list either "
-                              "- run \"%s server.py --models\""
-                              % (label, os.path.basename(sys.executable)))
+        listed = state.get("groq_models") or []
+        if listed and label not in listed:
+            detail.append("\"%s\" is not in the list this key can see either - check "
+                          "\"groq_model\" in config.json against those %d ids"
+                          % (label, len(listed)))
         return FAIL, ["the configured model is %s" % label] + detail
     return PASS, ["%s answered a one-token prompt: “%s”"
                   % (label, first_line(answer, 60))]
@@ -883,7 +888,7 @@ def check_config_unreachable():
         # Its own shape, not its values - the credential fields may legitimately be
         # empty here (with the real keys in ~/.aws), and a scan for empty strings
         # would pass while happily serving the file.
-        signatures = [raw.strip(), b"aws_secret_access_key", b"bedrock_model_id",
+        signatures = [raw.strip(), b"groq_api_key", b"openai_api_key",
                       b"email_app_password"]
         for label, body in bodies:
             for sig in signatures:
@@ -7409,8 +7414,16 @@ def check_borrowed_engines():
 
     Five things, each with the failure it exists to catch:
 
-        (a) the four flags in config.json still read bedrock, browser, bedrock, piper. A cloud
-            engine promoted to default is a house that stops answering when the wifi does.
+        (a) the four flags in config.json read groq, browser, groq, piper - which is §41's
+            law and no longer §28's. THE PREMISE OF THIS CLAUSE CHANGED AND IS RESTATED
+            RATHER THAN RELAXED. §28 wanted the borrowed engines opt-in because "a cloud
+            engine promoted to default is a house that stops answering when the wifi does",
+            and that sentence was true for as long as the second engine was another cloud.
+            §41 put this machine's own Ollama underneath Groq, so the house now answers when
+            the wifi does not - which is what earned the cloud the default. What is still
+            checked, and is the whole of what was worth checking, is that the four flags are
+            EXACTLY the four words the current mandate names: a fifth spelling, or a
+            half-migrated file, is still a house nobody can predict.
         (b) nothing is being held away from the file. The engine overrides live in memory, so
             a harness that flipped one and died has reconfigured this house until a restart
             that nobody knows is needed.
@@ -7440,13 +7453,13 @@ def check_borrowed_engines():
         return FAIL, ["/health answered %s with no engines block, so which supplier is behind "
                       "each sense cannot be read from outside the process at all" % status]
     served, configured = eng.get("served") or {}, eng.get("configured") or {}
-    wanted = {"chat": "bedrock", "ear": "browser", "vision": "bedrock", "voice": "piper"}
+    wanted = {"chat": "groq", "ear": "browser", "vision": "groq", "voice": "piper"}
     wrong = {k: configured.get(k) for k in wanted if configured.get(k) != wanted[k]}
     if wrong:
-        return FAIL, ["config.json no longer serves today's defaults: %s (wanted %s). Section 28 "
-                      "says the borrowed engines are opt-in; a cloud default is a laptop that "
-                      "stops answering when the network does" % (json.dumps(wrong),
-                                                                json.dumps(wanted))]
+        return FAIL, ["config.json no longer serves today's defaults: %s (wanted %s). §41 "
+                      "names these four exactly; a half-migrated file is a house whose "
+                      "engines nobody can predict" % (json.dumps(wrong),
+                                                      json.dumps(wanted))]
     held = {k: v for k, v in (eng.get("overrides") or {}).items() if v}
     if held:
         return FAIL, ["an engine is being held away from config.json: %s. Overrides live in "

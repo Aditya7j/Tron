@@ -24,25 +24,30 @@ server.py - Knowledge Galaxy server + brain.
 The assistant's character lives in one clearly marked PERSONA block at the top of
 this file - edit that and nothing else to rewrite it.
 
-Two model providers, chosen by "provider" in config.json:
+THE ROUTING LAW, §41, in three lines: the runtime brain is GROQ; when Groq tires -
+a 429, a timeout, an unreachable host - the question goes ONCE, synchronously, to
+this machine's own Ollama; and the retry queue exists for one case only, which is
+an Ollama socket that never opened at all. Two providers deep and never three.
 
-  "bedrock"  (default)  AWS Bedrock Converse, signed with SigV4 by hand below.
-                        Credentials come from config.json, then the environment,
-                        then ~/.aws/credentials - the first complete pair wins.
-  "openai"              api.openai.com, keyed by "openai_api_key".
+  "groq"      (default)  api.groq.com, keyed by "groq_api_key". The free road.
+  "openrouter"           one key that reaches every model in SPOKEN_MODELS.
+  "openai"               api.openai.com, keyed by "openai_api_key".
+
+Anything else in that field - including a word left over from an older
+configuration - resolves to "groq", because a typo must not be able to silence the
+assistant. There is no cloud-vendor credential resolver, signer or region in this
+file; see call_groq_then_local() for the whole of the routing surface.
 
 config.json lives in the PROJECT ROOT, which is outside the served directory. No
 credential of either kind is ever sent to the browser, and config.json is re-read
 on every request so you can paste keys in without restarting.
 
   python server.py            run it
-  python server.py --models   list the Bedrock model ids this account may use
 
-Python 3, standard library only - no boto3.
+Python 3, standard library only.
 """
 
 import base64
-import configparser
 import datetime
 import hashlib
 import hmac
@@ -226,6 +231,43 @@ def _hand_resolved(payload):
             payload["indexError"] = landed.get("error")
             payload["answer"] = ("%s %s" % (str(payload.get("answer") or "").strip(),
                                             landed.get("answer") or "")).strip()
+
+
+def _hand_link(payload, pending):
+    """§42 - THE LINK RIDES BESIDE THE SENTENCE. Attaches `url` to a hand's reply.
+
+    `pending` is the slot as it was read BEFORE hands.execute() claimed it, because execute()
+    empties the slot and the reply comes back with `pending: None` - so by the time there is
+    an answer to decorate, the parameters the boss approved are gone from everywhere except a
+    variable the caller kept. Every door that runs a hand passes it.
+
+    WHY NOT READ THE LEDGER INSTEAD, which was the first attempt and is wrong in one specific
+    way worth leaving written down: the publish hand has a success path that does NOT write a
+    ledger row - "It is already public, sir" never calls broadcast.publish() - so the newest
+    publish row on disk could belong to a different film from last week, and this function
+    would have handed the page a link to it. The approved slot cannot be wrong about which
+    film was approved.
+
+    IT IS THE SLOT'S OWN FIELD AND NOT A COMPOSED ONE. The Chain Card showed six rows and one
+    of them was the url; this is that row, travelling on. Nothing is derived from the video
+    id here, so a card that showed one link cannot produce another.
+
+    ONLY ON SUCCESS, and only for the one hand that has a link: a refusal, a lapse or a
+    crashed script has nothing to point at, and a stale url beside an error message would be
+    the page inviting a click on something that did not happen.
+    """
+    if not isinstance(payload, dict) or not isinstance(pending, dict):
+        return
+    if not payload.get("ran") or payload.get("ok") is not True:
+        return
+    if str(payload.get("ran")) != "publish_video":
+        return
+    url = str((pending.get("params") or {}).get("url") or "").strip()
+    # A LINK THE PAGE CAN OPEN, OR NOTHING. The page is about to render this as an anchor, so
+    # a value that is not a web address is worse than an absent one - and `params` is the one
+    # place in this payload a language model's proposal can reach.
+    if url.startswith(("http://", "https://")):
+        payload["url"] = url[:500]
 
 
 focus.ASK_HAND = _focus_ask_hand
@@ -1183,21 +1225,56 @@ VIEWER_DIR = os.path.join(ROOT, "viewer")
 CONFIG_PATH = os.path.join(ROOT, "config.json")
 INDEX_PATH = os.path.join(ROOT, "notes-index.json")
 
-DEFAULT_CONFIG = {
-    # "bedrock" or "openai". Bedrock is the default because it can run on AWS
-    # credentials you already have, with no second account and no second key.
-    "provider": "bedrock",
+# §41 - THE LOCAL THINKER'S NAME, in one place, because DEFAULT_CONFIG below takes it from
+# here rather than repeating it: two spellings of one model id are two spellings that will
+# disagree, and the one that loses is whichever the boot banner does not print.
+#
+# WHY THIS MODEL AND NOT THE OTHER TWO ON THIS DISK. Measured in three stages, and the
+# first two stages chose the WRONG model - which is the part worth writing down, because
+# each stage looked conclusive on its own. _runs/sweep41/fallback_model_probe.py.
+#
+#   STAGE 1, two snippets, three warm runs at temperature 0:
+#     qwen3:4b          ttft 0.09s, total 2.78s - FAILS, and this verdict never changed. It
+#                       opens "Hmm, the user is asking about Dehradun -" on a grounded
+#                       question with the closed <think> pair already in the prompt. A
+#                       thinking model narrates its way to the answer and the boss hears
+#                       the narration.
+#     qwen3:1.7b        ttft 0.06s, total 0.77s - passes.
+#     qwen2.5-coder:7b  ttft 0.13s, total 2.53s - passes, and is four times the parameters,
+#                       so "the strongest that passes" picked it.
+#
+#   STAGE 2, a user turn the size this server really assembles. A real notes turn is 21,438
+#   characters, 12,720 of them the system blocks this fallback drops, leaving 8,718 - and a
+#   two-snippet prompt is not a measurement of that. Warm and resident, the 7B still passes
+#   here: 0.155s to first token, 1.8s to the end, three runs running.
+#
+#   STAGE 3, three of those prompts AT ONCE - not a stress test but the ordinary shape of
+#   the failure this engine exists for, since a rate-limited Groq refuses every question in
+#   flight and they all arrive here together. Ollama serialises per model and this is a CPU.
+#   ON A QUIET MACHINE both survivors clear the 30s ceiling: the 7B reads 1.94/3.79/5.60s
+#   and the 1.7b 0.89/1.80/2.85s. So stage 3 did NOT settle it either, and the first version
+#   of this comment claimed it did on numbers (17.9/20.1/22.5s) that were measured while the
+#   server was itself holding the 7B resident - load, not the model.
+#
+#   WHAT SETTLED IT IS AN END-TO-END RESULT, because the condition that matters is a machine
+#   doing everything else at the moment Groq starts refusing - a preflight run, the Scholar,
+#   the vector store, the page polling - and no probe here reproduces that:
+#     with qwen2.5-coder:7b configured, preflight check 30 returned HTTP 502 TWICE, and the
+#       ledger row behind it reads served=ollama outcome=failed "Local engine timed out",
+#       model warm and resident.
+#     with qwen3:1.7b configured, check 30 passes.
+#
+# So the strongest model that passes is the smaller one, because the gate it has to pass is
+# a deadline on a loaded machine and not a benchmark on an idle one. qwen2.5-coder:7b is one
+# word away in config.json for anyone whose fallback is never asked two questions at once -
+# it is the better writer, and it is the one this house cannot afford to wait for.
+OLLAMA_CHAT_MODEL = "qwen3:1.7b"
 
-    # ---- bedrock. Leave the three aws_* credentials blank to use the environment
-    # or ~/.aws/credentials, which is the usual case. See resolve_aws() below.
-    "aws_region": "us-east-1",
-    "aws_profile": "",
-    "aws_access_key_id": "",
-    "aws_secret_access_key": "",
-    "aws_session_token": "",
-    # An inference profile, not a bare model id: modern Claude models on Bedrock are
-    # only reachable through one. "python server.py --models" lists the alternatives.
-    "bedrock_model_id": "us.anthropic.claude-sonnet-5",
+DEFAULT_CONFIG = {
+    # §41: "groq", "openrouter" or "openai", and anything else means "groq" - see
+    # provider_of(). Groq is the default because it needs no second account, costs
+    # nothing, and has this machine's own Ollama underneath it when it tires.
+    "provider": "groq",
 
     # ---- openai, used only when "provider" is "openai"
     "openai_api_key": "PUT-YOUR-KEY-HERE",
@@ -1265,10 +1342,11 @@ DEFAULT_CONFIG = {
     # Flipping one changes ONE engine's source and nothing else - not the gate, not the
     # Doorman, not the ledger, not the other three engines.
     #   ear_stt        "browser" (Web Speech, as today) or "groq" (whisper-large-v3-turbo)
-    #   vision_engine  "bedrock" (as today) or "groq"
+    #   vision_engine  §41 left the eyes one answer, so this field is read by nothing
+    #                  and kept only so an old config.json carrying it is not a surprise
     #   voice_engine   "piper" (as today), "web", or "orpheus"
     "ear_stt": "browser",
-    "vision_engine": "bedrock",
+    "vision_engine": "groq",
 
     # ---- PINNED NAMES. What you may SAY, nailed to one exact id, in the one file
     # you own. Every form of a name you actually use out loud belongs here, because a
@@ -1401,6 +1479,12 @@ DEFAULT_CONFIG = {
     "vector_recall": True,
     "embed_model": "nomic-embed-text",
     "ollama_url": "http://127.0.0.1:11434",
+    # §41 - AND THE SAME DAEMON ANSWERS QUESTIONS WHEN GROQ TIRES. One field, taken from
+    # the constant above so the two cannot drift, and the ONLY way to change which local
+    # model catches a fallback. Set "ollama_fallback": false to switch the net off and
+    # have a tired Groq refuse out loud instead; see ollama_fallback_enabled().
+    "ollama_chat_model": OLLAMA_CHAT_MODEL,
+    "ollama_fallback": True,
     "notes_threshold": 0.60,
     # §35 PART 1 - HOW LONG A BOSS'S HANDSHAKE IS WORTH, in seconds. See the handshake
     # window above doorman_refusal(): a BOSS-sealed sentence that opens a gate lets the ONE
@@ -1412,17 +1496,6 @@ DEFAULT_CONFIG = {
     "confirm_window_s": 120,
 }
 PLACEHOLDER_KEYS = {"", "put-your-key-here", "your-key-here", "sk-xxx", "changeme"}
-
-# Bedrock model ids are long and easy to get subtly wrong, so a handful of short
-# names resolve to a real inference profile. Anything not listed here is passed
-# through untouched, and "python server.py --models" is the source of truth.
-# The "us." prefix routes within the US; other regions use their own ("eu.", "apac.").
-MODEL_ALIASES = {
-    "haiku": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
-    "sonnet": "us.anthropic.claude-sonnet-5",
-    "opus": "us.anthropic.claude-opus-5",
-    "nova": "us.amazon.nova-pro-v1:0",
-}
 
 # =============================================================================
 #  THE BRAIN SWAP  -  "switch to Astra", "try on Claude Fable 5.1"
@@ -1579,9 +1652,9 @@ HISTORY_TURNS = 4         # user+assistant pairs kept per session
 PRIOR_WEIGHT = 0.4        # how much the previous question steers retrieval
 REQUEST_TIMEOUT = 60
 
-# Sent to every provider, AWS included. Bedrock is signed without it - see the note
-# where it is attached - and OpenRouter shows it in the activity log, which is the
-# only reason it names a version: a swap that misbehaves is easier to place in time.
+# Sent to every provider, cloud and local alike - Groq, OpenRouter, OpenAI and this
+# machine's own Ollama. OpenRouter shows it in the activity log, which is the only
+# reason it names a version: a swap that misbehaves is easier to place in time.
 USER_AGENT = "knowledge-galaxy/1.0 (python-urllib; no sdk)"
 
 # Keyword scoring always has a long weak tail: ask about payroll and the payroll
@@ -1661,7 +1734,7 @@ QUICK_PROSE_RE = re.compile(r"""^(?: okay | ok | sure | here | we | i | so | fir
 # mismatch. Better to fail here, loudly, naming the string.
 FRAME_MEDIA_TYPE = "image/jpeg"
 FRAME_MAGIC = b"\xff\xd8\xff"        # JPEG start-of-image; PNG would be \x89PNG
-FRAME_MAX_BYTES = 4 * 1024 * 1024    # comfortably inside Bedrock's per-image limit
+FRAME_MAX_BYTES = 4 * 1024 * 1024    # inside every vision endpoint's per-image limit
 FRAME_MIN_BYTES = 900                # below this there is no picture, only a header
 FRAME_MIN_EDGE = 140                 # a 60px sliver is not something to judge
 # §40 - AND WHAT GET /poster WILL READ OFF THE DISK, which is a different number for a
@@ -4498,8 +4571,20 @@ _ENGINE_LOG = []
 ENGINE_LOG_MAX = 40
 
 
-def turn_engine(capability, served, outcome, reason=""):
+def turn_engine(capability, served, outcome, reason="", provider="", trigger_ms=None,
+                spoken="", model="", queued=None):
     """One row in the engine ledger: who served this capability, and how it went.
+
+    §41 ADDED FOUR COLUMNS AND ALL FOUR ARE THE SAME ADMISSION: a fallback is invisible by
+    design, so every fact about it that is not written here is a fact nobody has.
+        provider    which road served - "groq", "ollama", or "retry" when nothing did.
+                    Separate from `served` on purpose: `served` is the ENGINE word a
+                    harness asserts, `provider` is the road, and §41 wanted both named.
+        triggerMs   how long the HANDOVER took, not the answer - see
+                    FALLBACK_TRIGGER_BUDGET_MS - with withinBudget computed here so that
+                    no reader has to know the number to judge the row.
+        spoken      the fixed line the boss actually heard, if any. Never the answer.
+        queued      the depth after queueing, on the one row that ever queues.
 
     `outcome` is one of three words and the vocabulary is closed on purpose:
         "ok"        the engine that was asked answered.
@@ -4525,6 +4610,17 @@ def turn_engine(capability, served, outcome, reason=""):
     """
     row = {"capability": str(capability), "served": str(served),
            "outcome": str(outcome), "reason": str(reason or "")[:200]}
+    if provider:
+        row["provider"] = str(provider)
+    if trigger_ms is not None:
+        row["triggerMs"] = round(float(trigger_ms), 1)
+        row["withinBudget"] = row["triggerMs"] <= FALLBACK_TRIGGER_BUDGET_MS
+    if spoken:
+        row["spoken"] = str(spoken)[:120]
+    if model:
+        row["model"] = str(model)[:80]
+    if queued is not None:
+        row["queued"] = int(queued)
     if row["outcome"] == "fallback":
         groq_seen("fallback")
     _ENGINE_LOG.append(dict(row, at=time.strftime("%H:%M:%S")))
@@ -5286,190 +5382,12 @@ def web_sources(results):
     return out
 
 
-# ------------------------------------------------------------- aws  credentials
-#
-# Looked for in this order, and the FIRST source holding both an id and a secret
-# wins outright. Sources are never mixed: half a key pair from config.json and
-# half from the environment is how you get a signature error you cannot read.
-#
-#   1. config.json         aws_access_key_id / aws_secret_access_key / aws_session_token
-#   2. the environment     AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN
-#   3. ~/.aws/credentials  under aws_profile, else $AWS_PROFILE, else "default"
-#
-# The region is allowed to come from anywhere, including ~/.aws/config, because a
-# region is not a secret and a mismatched one fails loudly rather than silently.
-
-CRED_FIELDS = ("aws_access_key_id", "aws_secret_access_key", "aws_session_token")
-
-
-def _read_aws_ini(path, profile):
-    """One profile out of an ~/.aws ini file. Missing or malformed reads as {}."""
-    if not path or not os.path.exists(path):
-        return {}
-    parser = configparser.RawConfigParser()
-    try:
-        parser.read(path, encoding="utf-8")
-    except Exception:                                          # noqa: BLE001
-        return {}
-    # ~/.aws/credentials uses [name]; ~/.aws/config uses [profile name].
-    for section in (profile, "profile " + profile):
-        if parser.has_section(section):
-            return {k.lower(): str(v).strip() for k, v in parser.items(section)}
-    return {}
-
-
+# THE PLACEHOLDER TEST, which outlives the credential resolver that introduced it: three
+# other callers below ask "is this field really filled in" and a config.json shipped with
+# PUT-YOUR-KEY-HERE in it is not configuration. Kept here, where they already look for it.
 def _blank(value):
     text = str(value or "").strip()
     return not text or text.upper().startswith("PUT-")
-
-
-def resolve_aws(cfg):
-    """Returns (creds, error). creds = {key, secret, token, region, source}."""
-    profile = (str(cfg.get("aws_profile") or "").strip()
-               or os.environ.get("AWS_PROFILE", "").strip() or "default")
-    home = os.path.expanduser("~")
-    cred_file = (os.environ.get("AWS_SHARED_CREDENTIALS_FILE")
-                 or os.path.join(home, ".aws", "credentials"))
-    conf_file = os.environ.get("AWS_CONFIG_FILE") or os.path.join(home, ".aws", "config")
-    shared = _read_aws_ini(cred_file, profile)
-    conf = _read_aws_ini(conf_file, profile)
-
-    candidates = (
-        ("config.json", {f: cfg.get(f) for f in CRED_FIELDS}),
-        ("the environment", {f: os.environ.get(f.upper()) for f in CRED_FIELDS}),
-        ("~/.aws/credentials [%s]" % profile, shared),
-    )
-    region = next((str(v).strip() for v in (
-        cfg.get("aws_region"), os.environ.get("AWS_REGION"),
-        os.environ.get("AWS_DEFAULT_REGION"), conf.get("region"),
-    ) if not _blank(v)), DEFAULT_CONFIG["aws_region"])
-
-    for source, bag in candidates:
-        if _blank(bag.get("aws_access_key_id")) or _blank(bag.get("aws_secret_access_key")):
-            continue
-        return {
-            "key": str(bag["aws_access_key_id"]).strip(),
-            "secret": str(bag["aws_secret_access_key"]).strip(),
-            "token": "" if _blank(bag.get("aws_session_token"))
-                     else str(bag["aws_session_token"]).strip(),
-            "region": region,
-            "source": source,
-        }, None
-
-    return None, ("No AWS credentials found, so I found the relevant notes but "
-                  "cannot write an answer. Put aws_access_key_id and "
-                  "aws_secret_access_key in config.json in the project root, or set "
-                  "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, or run \"aws "
-                  "configure\" to write ~/.aws/credentials. No restart needed.")
-
-
-# ------------------------------------------------------------------------ sigv4
-#
-# Signature Version 4 by hand, because boto3 is not in the standard library and
-# this project promised no dependencies. Four steps: build a canonical request,
-# hash it into a string to sign, derive a date/region/service key, sign.
-#
-# The one trap: outside S3, SigV4 wants each path segment percent-encoded TWICE in
-# the canonical request, while the path on the wire is encoded once. Bedrock model
-# ids contain a colon ("...-v1:0"), so the request path carries %3A and the string
-# we sign carries %253A. Get this wrong and AWS returns SignatureDoesNotMatch,
-# helpfully quoting the canonical string it expected. Paths without reserved
-# characters are unaffected, which is why the control-plane calls worked first try.
-
-def _derive_key(secret, stamp, region, service):
-    key = ("AWS4" + secret).encode("utf-8")
-    for part in (stamp, region, service, "aws4_request"):
-        key = hmac.new(key, part.encode("utf-8"), hashlib.sha256).digest()
-    return key
-
-
-def aws_request(creds, service, host, path, body=b"", method="POST", query=""):
-    """A SigV4-signed call. Raises urllib errors; callers translate them."""
-    amz_date = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
-    stamp = amz_date[:8]
-    payload_hash = hashlib.sha256(body).hexdigest()
-
-    headers = {"host": host, "x-amz-date": amz_date}
-    if body:
-        headers["content-type"] = "application/json"
-    if creds.get("token"):
-        # Temporary credentials only. Omit it and STS-issued keys fail as invalid.
-        headers["x-amz-security-token"] = creds["token"]
-
-    names = sorted(headers)
-    signed_headers = ";".join(names)
-    canonical = "\n".join([
-        method,
-        urllib.parse.quote(path, safe="/-._~"),    # the second encoding pass
-        query,
-        "".join("%s:%s\n" % (n, headers[n].strip()) for n in names),
-        signed_headers,
-        payload_hash,
-    ])
-    scope = "%s/%s/%s/aws4_request" % (stamp, creds["region"], service)
-    to_sign = "\n".join([
-        "AWS4-HMAC-SHA256", amz_date, scope,
-        hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
-    ])
-    signature = hmac.new(_derive_key(creds["secret"], stamp, creds["region"], service),
-                         to_sign.encode("utf-8"), hashlib.sha256).hexdigest()
-    headers["authorization"] = (
-        "AWS4-HMAC-SHA256 Credential=%s/%s, SignedHeaders=%s, Signature=%s"
-        % (creds["key"], scope, signed_headers, signature))
-    headers["user-agent"] = USER_AGENT          # after signing: not a signed header
-
-    url = "https://%s%s%s" % (host, path, ("?" + query) if query else "")
-    req = urllib.request.Request(url, data=(body or None), headers=headers, method=method)
-    with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as res:
-        return json.loads(res.read().decode("utf-8", "replace") or "{}")
-
-
-def aws_error_message(exc, model, creds):
-    """Turn an HTTPError from Bedrock into one sentence a human can act on."""
-    detail = ""
-    try:
-        payload = json.loads(exc.read().decode("utf-8", "replace"))
-        detail = str(payload.get("message") or payload.get("Message") or "").strip()
-    except Exception:                                          # noqa: BLE001
-        pass
-    kind = ""
-    try:
-        kind = str(exc.headers.get("x-amzn-ErrorType", "")).split(":")[0]
-    except Exception:                                          # noqa: BLE001
-        pass
-    region = creds.get("region", "?")
-    low = detail.lower()
-
-    if exc.code in (401, 403) and ("security token" in low or "expired" in low):
-        return ("AWS rejected the credentials (403): %s Temporary keys from a "
-                "session token expire - refresh them and ask again." % detail)
-    if exc.code in (401, 403) and "signature" in low:
-        return ("AWS could not verify the request signature (403): %s Usually the "
-                "secret access key is truncated or has a stray space." % detail)
-    if exc.code == 403:
-        return ("AWS denied the call (403): %s Either the IAM identity lacks "
-                "bedrock:InvokeModel, or access to \"%s\" has not been granted in "
-                "%s yet." % (detail, model, region))
-    # Two very different image failures arrive as the same ValidationException, and
-    # the generic "check the model id" advice below would misdirect both. Order
-    # matters: a frame Bedrock could not decode says nothing about the model, and
-    # telling someone to change a model id that is perfectly fine wastes an evening.
-    if exc.code == 400 and "image" in low and (
-            "could not process" in low or "malformed" in low or "invalid" in low):
-        return ("Bedrock could not read that frame as an image: %s The bytes reached "
-                "it intact, so this is the encoding, not the connection." % detail)
-    if exc.code == 400 and ("image" in low or "modality" in low or "vision" in low):
-        return ("\"%s\" will not accept an image in %s: %s Set "
-                "\"bedrock_model_id\" in config.json to a model that reads images "
-                "(the Claude 4.5+ ids all do)." % (model, region, detail))
-    if exc.code in (400, 404) or kind in ("ValidationException", "ResourceNotFoundException"):
-        return ("Bedrock will not accept the model id \"%s\" in %s (HTTP %s). %s "
-                "Run \"python server.py --models\" to see the ids this account may "
-                "use." % (model, region, exc.code, detail))
-    if exc.code in (429, 503):
-        return ("Bedrock is throttling or at capacity (HTTP %s). %s"
-                % (exc.code, detail)).strip()
-    return ("Bedrock returned HTTP %s %s. %s" % (exc.code, kind, detail)).strip()
 
 
 # --------------------------------------------------------------------- the model
@@ -5478,14 +5396,11 @@ def provider_of(cfg):
     name = str(cfg.get("provider") or DEFAULT_CONFIG["provider"]).strip().lower()
     if name in ("openrouter", "open router", "router", "or"):
         return "openrouter"
-    # Groq is tested BEFORE the openai clause and that ordering is deliberate: Groq speaks
-    # OpenAI's dialect and somebody reading this list could reasonably shorten it to "oai",
-    # so the exact words are kept apart. Anything unrecognised still means bedrock, which is
-    # the law this function has always obeyed - a typo in config.json must not be able to
-    # silence the assistant, and the default is the engine that needs no second account.
     if name in ("groq", "groqcloud", "groq cloud"):
         return "groq"
-    return "openai" if name in ("openai", "oai", "gpt") else "bedrock"
+    # §41 - AND ANYTHING UNRECOGNISED, INCLUDING A LEFTOVER "bedrock" IN
+    # config.json, NOW MEANS GROQ: the free road with the local net under it.
+    return "openai" if name in ("openai", "oai", "gpt") else "groq"
 
 
 def ear_stt_of(cfg):
@@ -5501,9 +5416,8 @@ def ear_stt_of(cfg):
 
 
 def vision_engine_of(cfg):
-    """"bedrock" or "groq" for the eyes. Same charity, same default, same reason."""
-    name = str(cfg.get("vision_engine") or DEFAULT_CONFIG["vision_engine"]).strip().lower()
-    return "groq" if name in ("groq", "groqcloud") else "bedrock"
+    """§41 left the eyes one answer; every spelling resolves to Groq."""
+    return "groq"
 
 
 def groq_key(cfg):
@@ -5551,11 +5465,11 @@ def display_label(model_id):
     6.ASTRA, and not FABLE 5 1.
     """
     name = str(model_id or "").split("/")[-1]
-    name = re.sub(r"^(?:us|eu|apac)\.", "", name, flags=re.I)      # bedrock routing
+    name = re.sub(r"^(?:us|eu|apac)\.", "", name, flags=re.I)      # a regional prefix
     name = re.sub(r"^(?:anthropic|amazon|meta|mistral|openai|google)\.", "", name,
                   flags=re.I)
     name = re.sub(r"^claude-", "", name, flags=re.I)
-    # Bedrock's tail: a date stamp and a "-v1:0", stripped before the digit rule so
+    # A vendor tail: a date stamp and a "-v1:0", stripped before the digit rule so
     # that "haiku-4-5-20251001-v1:0" cannot come out as HAIKU 4.5.20251001.
     name = re.sub(r"-v\d+:\d+$", "", name)
     name = re.sub(r"-\d{8}$", "", name)
@@ -5571,13 +5485,7 @@ def model_label(cfg):
         return str(cfg.get("openrouter_model") or DEFAULT_CONFIG["openrouter_model"])
     if provider_of(cfg) == "openai":
         return str(cfg.get("model") or DEFAULT_CONFIG["model"])
-    if provider_of(cfg) == "groq":
-        return str(cfg.get("groq_model") or DEFAULT_CONFIG["groq_model"])
-    wanted = str(cfg.get("bedrock_model_id")
-                 or DEFAULT_CONFIG["bedrock_model_id"]).strip()
-    # "haiku", "claude-haiku" and "anthropic.claude-haiku" all mean the same thing.
-    return MODEL_ALIASES.get(re.sub(r"^(anthropic\.|amazon\.|claude-)", "",
-                                    wanted.lower()), wanted)
+    return str(cfg.get("groq_model") or DEFAULT_CONFIG["groq_model"])
 
 
 def voice_engine_of(cfg):
@@ -6514,7 +6422,7 @@ def write_voice_model(name):
         are read here as opaque values, written back unexamined, never logged, never
         counted by anything but len(), and never returned.
       THE REPLACE IS ATOMIC. A crash halfway through a rewrite of the file that holds
-        the AWS keys is not a state this project is going to have.
+        every key this house owns is not a state this project is going to have.
 
     Returns (payload, error). The payload names the model and nothing else about the file.
     """
@@ -6603,78 +6511,6 @@ def tool_facts(tool_id, params_text):
     return raw
 
 
-def bedrock_path(model, action="converse"):
-    # safe="-._~" is exactly what the AWS SDKs treat as unreserved, so the colon
-    # in a model id becomes %3A here and in the string we sign. See aws_request().
-    return "/model/%s/%s" % (urllib.parse.quote(model, safe="-._~"), action)
-
-
-def converse_body(messages, image=None):
-    """The OpenAI message shape this code already speaks -> Bedrock Converse.
-
-    Converse keeps the system prompt in its own field, wraps every turn's text in
-    a content block, and insists the turns start with the user and then alternate.
-
-    `image` is raw JPEG bytes and rides on the final user turn, ahead of its text,
-    which is the order Anthropic's own guidance asks for with a single image.
-    """
-    system = [{"text": m["content"]} for m in messages if m["role"] == "system"]
-    turns = [m for m in messages if m["role"] in ("user", "assistant")]
-    while turns and turns[0]["role"] != "user":
-        turns.pop(0)                       # a stray leading assistant turn is fatal
-    merged = []
-    for turn in turns:
-        if merged and merged[-1]["role"] == turn["role"]:
-            merged[-1]["content"][0]["text"] += "\n\n" + turn["content"]
-        else:
-            merged.append({"role": turn["role"],
-                           "content": [{"text": turn["content"]}]})
-    if image and merged and merged[-1]["role"] == "user":
-        # Converse takes the format as a bare word ("jpeg"), so it is derived from
-        # the one media-type constant rather than written out a second time.
-        merged[-1]["content"].insert(0, {"image": {
-            "format": FRAME_MEDIA_TYPE.split("/")[-1],
-            "source": {"bytes": base64.b64encode(image).decode("ascii")},
-        }})
-    body = {"messages": merged, "inferenceConfig": {"maxTokens": MAX_ANSWER_TOKENS}}
-    if TEMPERATURE is not None:
-        body["inferenceConfig"]["temperature"] = TEMPERATURE
-    if system:
-        body["system"] = system
-    return body
-
-
-def call_bedrock(cfg, messages, image=None):
-    """Returns (answer, error). Never raises."""
-    creds, error = resolve_aws(cfg)
-    if error:
-        return None, error
-    model = model_label(cfg)
-    body = json.dumps(converse_body(messages, image)).encode("utf-8")
-    try:
-        # bedrock-runtime signs under the service name "bedrock", not its hostname.
-        data = aws_request(creds, "bedrock",
-                           "bedrock-runtime.%s.amazonaws.com" % creds["region"],
-                           bedrock_path(model), body)
-    except urllib.error.HTTPError as exc:
-        return None, aws_error_message(exc, model, creds)
-    except urllib.error.URLError as exc:
-        return None, ("Could not reach Bedrock in %s (%s)."
-                      % (creds["region"], exc.reason))
-    except Exception as exc:                                   # noqa: BLE001
-        return None, "Unexpected error talking to Bedrock: %s" % exc
-
-    try:
-        blocks = data["output"]["message"]["content"]
-        answer = "".join(b.get("text", "") for b in blocks).strip()
-    except Exception:                                          # noqa: BLE001
-        return None, ("Bedrock replied in an unexpected shape: %s"
-                      % json.dumps(data)[:300])
-    if not answer:
-        return None, "Bedrock returned an empty answer."
-    return answer, None
-
-
 def call_chat_completions(url, key, model, who, messages, image=None, extra=None,
                           status=None):
     """OpenAI's /chat/completions shape, which OpenRouter and Groq speak too.
@@ -6733,9 +6569,9 @@ def call_chat_completions(url, key, model, who, messages, image=None, extra=None
         if status is not None:
             # ONLY 429 IS TRANSIENT AMONG THE HTTP CODES, and the three that are not are the
             # reason this is a whitelist rather than "anything over 400". A 401 is a wrong key
-            # and a 404 is a retired model id: falling those back to bedrock would give the
-            # boss a perfectly good answer from the wrong engine and leave the broken flag in
-            # config.json for the next person to find. Those must be heard as refusals.
+            # and a 404 is a retired model id: falling those back to the local engine would
+            # give the boss a perfectly good answer from the wrong engine and leave the broken
+            # flag in config.json for the next person to find. Heard as refusals instead.
             status.update({"code": exc.code, "transient": exc.code == 429})
         if exc.code == 401:
             return None, ("%s rejected the key in config.json (401). "
@@ -7067,6 +6903,415 @@ def wear_persona(cfg, messages):
     return [{"role": "system", "content": preamble.rstrip()}] + out
 
 
+# =============================================================================
+#  §41  -  THE LOCAL THINKER, AND THE ONE QUEUE
+#
+#  Groq is the brain. This is the net under it, and it is a net and not a second
+#  brain: it catches ONE request, synchronously, when Groq tires - a 429, a
+#  timeout, a host that will not answer - and it is never consulted for anything
+#  else. A 401 and a 404 fall through it on purpose. See call_groq_then_local().
+#
+#  WHY THE NUMBERS BELOW ARE WHAT THEY ARE, and every one of them was a symptom
+#  before it was a constant:
+#
+#  num_ctx 4096 rather than the model's default. Ollama will happily allocate a
+#  32k context on a CPU machine and then spend minutes on the prefill before the
+#  first token - which is a multi-minute hang at the exact moment the boss has
+#  already waited for a Groq timeout. 4096 is more than a grounded question with
+#  three snippets needs, and it is the difference between a quarter of a second
+#  and a coffee.
+#
+#  num_predict 48, because this engine answers in one or two sentences and a cap
+#  is the only thing that bounds a small model that has decided to keep going.
+#
+#  keep_alive -1 holds the weights in RAM for good. A cold load of a 7B model is
+#  several seconds, and paying it on a fallback means paying it at the worst
+#  moment there is; `ollama ps` showing "Forever" is this constant, visible.
+#
+#  temperature 0 for the same reason it is 0 in quick_rewrite(): a fallback that
+#  cannot be reproduced cannot be measured, and a grounded answer has no business
+#  being creative.
+OLLAMA_CHAT_URL_PATH = "/api/generate"
+OLLAMA_CHAT_TIMEOUT_S = 30.0
+OLLAMA_FALLBACK_NUM_CTX = 4096
+OLLAMA_FALLBACK_PREDICT = 48
+OLLAMA_KEEP_ALIVE = -1
+OLLAMA_TIMEOUT_LINE = "Local engine timed out"
+# AND LONGER FOR THE BOOT WARM-UP THAN FOR A QUESTION, which is the point of having two
+# numbers: the cold load is allowed to take its time on a thread nobody is waiting on, so
+# that no question ever has to. See ollama_warm().
+OLLAMA_WARM_TIMEOUT_S = 180.0
+
+# HOW FAST THE HANDOVER ITSELF MAY BE, which is NOT how fast the answer may be: the budget
+# measures the gap between Groq's failure and the local request leaving, so it is a test of
+# this file's own arithmetic and not of anybody's hardware. A handover that takes a quarter
+# of a second is a handover doing work it should not be doing.
+FALLBACK_TRIGGER_BUDGET_MS = 250
+
+# THE TWO SENTENCES THE BOSS MAY HEAR ABOUT ANY OF THIS, and they are fixed strings rather
+# than prompts for the reason every canned line in this file is: a model asked to apologise
+# improvises a fact. The first means "answered, by this machine". The second means "nobody
+# answered, and it is written down" - and it is the ONLY one that admits a queue exists.
+LOCAL_FALLBACK_LINE = "Thinking locally, sir."
+QUEUED_LINE = "Thinking locally, sir... queued"
+
+# §26'S RULE, IN ONE SENTENCE, FOR A MODEL THAT CANNOT READ FIVE PARAGRAPHS. The cloud
+# prompts upstream are untouched and stay as they are; this is a separate, shorter rope for
+# a 7B engine, and it says the one thing that must not be lost in translation. A long prompt
+# to a small model is a long prompt the small model answers INSTEAD of the question.
+GROUNDING_RULE = ("Answer using ONLY the facts in the snippets below. If they do not "
+                  "contain the answer, say so plainly. Never state a fact they do not "
+                  "contain.")
+OLLAMA_FALLBACK_SYSTEM = (
+    GROUNDING_RULE + "\n"
+    + "Reply with the answer only, in one or two short sentences, using the facts from the "
+      "snippets. Do not describe the snippets, do not explain your reasoning, and do not "
+      "begin with 'I need to' or 'Let me'.")
+
+# ONE SENTENCE MORE, ON WEB TURNS ONLY, AND IT IS THE ONE DEVIATION §41 TOOK FROM ITS OWN
+# VERBATIM PROMPT - taken because the mandate's first sentence ranks §26 Grounding above the
+# text of this constant, and §26 says a web answer must declare which world it speaks from.
+#
+# MEASURED, not anticipated: with the stripped prompt alone, preflight 15 read "answered
+# from the web without saying so: 'The current population of Tokyo is 14,264,798 people.'"
+# The cloud prompt carries that law in its own fourth bullet; dropping every system block -
+# which is what makes a 7B model usable here - dropped the law with it, and the result is an
+# answer the reader cannot place. That is not a cosmetic failure: the whole point of the cue
+# is that nobody has to ask whether a number came from the notes or from a stranger.
+#
+# AND IT IS APPENDED RATHER THAN FOLDED IN, so the base prompt stays exactly as written and
+# an ordinary notes fallback never pays a word for a rule that does not apply to it.
+OLLAMA_WEB_CUE = ("These snippets came from a live web search, so begin your answer with "
+                  "\"According to current web sources\". The reader must be able to tell "
+                  "which world the answer came from without asking.")
+
+# The marker is the cloud prompt's own first line about the web, so the two cannot fall out
+# of step: if WEB_PROMPT is ever reworded, this stops matching and preflight 15 says so.
+OLLAMA_WEB_MARKER = "live web search results"
+
+
+def ollama_chat_model(cfg):
+    """The local model's id, from config.json, falling back to the constant."""
+    return str(cfg.get("ollama_chat_model") or OLLAMA_CHAT_MODEL).strip()
+
+
+def ollama_fallback_enabled(cfg):
+    """Whether the net is strung at all. False means a tired Groq refuses out loud.
+
+    A BOOLEAN AND NOT A GUESS ABOUT THE DAEMON: this does not ping Ollama, because the
+    whole point of the net is that it is tried at the moment it is needed and judged by
+    what happens. Anything other than an explicit false means yes.
+    """
+    want = cfg.get("ollama_fallback", DEFAULT_CONFIG["ollama_fallback"])
+    return not (want is False or str(want).strip().lower() in ("0", "false", "no", "off"))
+
+
+def _ollama_chatml(messages):
+    """The prompt as raw ChatML, with the assistant turn opened on a CLOSED think pair.
+
+    THE SAME TWO TRICKS AS _quick_prompt(), for the same measured reason and against the
+    same family of models: qwen3 is a thinking model, `think:false` does not stop it on
+    Ollama 0.34, and opening the assistant turn with `<think></think>` already closed does
+    - the model finds its own reasoning over and answers. That needs the server-side
+    template out of the way, which is what `raw` buys, and raw means writing the ChatML
+    here by hand.
+
+    MEASURED, because it is the difference between this engine and no engine:
+    qwen3:4b with the closed pair still opened "Hmm, the user is asking about Dehradun -"
+    on a grounded question, which is why it is not the model this falls back to. The pair
+    is kept anyway: it is what makes qwen3:1.7b usable for anyone who switches to it.
+    """
+    out = []
+    for msg in messages:
+        role = str(msg.get("role") or "user")
+        content = str(msg.get("content") or "")
+        if not content:
+            continue
+        out.append("<|im_start|>%s\n%s<|im_end|>\n" % (role, content))
+    return "".join(out) + "<|im_start|>assistant\n<think>\n\n</think>\n\n"
+
+
+def _ollama_fallback_messages(messages):
+    """The cloud's message list, re-dressed for a small local model.
+
+    ONE SYSTEM TURN, NOT EIGHT. What arrives here is the full assembled prompt - persona,
+    capabilities, history, snippets, the lot - and handing all of it to a 7B model is how
+    you get an answer about the persona instead of an answer to the question. So every
+    system block is DROPPED and replaced by OLLAMA_FALLBACK_SYSTEM, and the user and
+    assistant turns ride through untouched: the question and the evidence are the two
+    things that must survive, and they are the two things the cloud prompt was wrapped
+    around rather than part of.
+    """
+    kept = [m for m in messages
+            if isinstance(m, dict) and str(m.get("role")) in ("user", "assistant")]
+    # THE ONE THING READ OUT OF THE BLOCKS BEFORE THEY GO: whether this is a web turn. See
+    # OLLAMA_WEB_CUE - §26's "say which world you are speaking from" lives in the cloud
+    # prompt that is being dropped, so on a web turn it is carried across in one sentence.
+    dropped = "\n".join(str(m.get("content") or "") for m in messages
+                        if isinstance(m, dict) and str(m.get("role")) == "system")
+    system = OLLAMA_FALLBACK_SYSTEM
+    if OLLAMA_WEB_MARKER in dropped:
+        system += "\n" + OLLAMA_WEB_CUE
+    return [{"role": "system", "content": system}] + kept
+
+
+def call_ollama(cfg, messages, image=None, status=None):
+    """This machine's own answer. (answer, error), and it never raises.
+
+    `status`, when a caller passes a dict, is filled in with the machine-readable outcome:
+        reached   the daemon answered the socket AT ALL - which is the fact the routing law
+                  turns on, because a daemon that answered badly has had its turn and must
+                  not be queued on top of it.
+        slow      it took the whole OLLAMA_CHAT_TIMEOUT_S and gave nothing. Counted as
+                  reached, deliberately: a socket that accepted the request and then thought
+                  for thirty seconds is a daemon that is up and busy, not a daemon that is
+                  missing, and queuing it would mean asking a hung model twice.
+        ttftMs    milliseconds to the FIRST TOKEN, which is the only latency number worth
+                  having here - a streamed answer is already on its way to the boss while
+                  the rest arrives, and total time is mostly a function of how long the
+                  answer is.
+        model     what actually served, for the ledger row.
+
+    STREAMED, so ttftMs is a measurement and not a division. The whole body is still
+    collected before returning - nothing downstream of this can take a generator - but the
+    first chunk's arrival is timed where it actually happens.
+    """
+    if status is None:
+        status = {}
+    status.update({"reached": False, "slow": False, "ttftMs": None,
+                   "model": ollama_chat_model(cfg)})
+    if image is not None:
+        # THE EYES HAVE NO LOCAL ENGINE and this is where that is enforced rather than
+        # hoped for. The caller checks it too; this is the second lock on the same door.
+        return None, "There is no local engine on this machine that can read an image."
+    model = ollama_chat_model(cfg)
+    url = (str(cfg.get("ollama_url") or DEFAULT_CONFIG["ollama_url"]).rstrip("/")
+           + OLLAMA_CHAT_URL_PATH)
+    body = json.dumps({
+        "model": model,
+        "prompt": _ollama_chatml(_ollama_fallback_messages(messages)),
+        "raw": True,
+        "stream": True,
+        "keep_alive": OLLAMA_KEEP_ALIVE,
+        "options": {"temperature": 0, "num_ctx": OLLAMA_FALLBACK_NUM_CTX,
+                    "num_predict": OLLAMA_FALLBACK_PREDICT,
+                    "stop": ["<|im_end|>"]},
+    }).encode("utf-8")
+    req = urllib.request.Request(url, data=body, method="POST", headers={
+        "Content-Type": "application/json", "User-Agent": USER_AGENT})
+    started = time.monotonic()
+    pieces = []
+    try:
+        with urllib.request.urlopen(req, timeout=OLLAMA_CHAT_TIMEOUT_S) as res:
+            status["reached"] = True
+            for line in res:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    chunk = json.loads(line.decode("utf-8", "replace"))
+                except ValueError:
+                    continue
+                piece = chunk.get("response") or ""
+                if piece and status.get("ttftMs") is None:
+                    status["ttftMs"] = round((time.monotonic() - started) * 1000.0, 1)
+                pieces.append(piece)
+                if chunk.get("done"):
+                    break
+    except urllib.error.HTTPError as exc:
+        status["reached"] = True
+        detail = ""
+        try:
+            detail = str(json.loads(exc.read().decode("utf-8", "replace"))
+                         .get("error") or "")[:200]
+        except Exception:                                      # noqa: BLE001
+            pass
+        if exc.code == 404:
+            # THE ONE ERROR WITH A CURE IN IT. 404 from Ollama means the daemon is up and
+            # the model is not pulled, which is one command away - so the sentence carries
+            # the command rather than the status code.
+            return None, ("This machine's Ollama does not have \"%s\" (404). Run "
+                          "\"ollama pull %s\" and ask again." % (model, model))
+        return None, ("The local engine returned HTTP %s. %s" % (exc.code, detail)).strip()
+    except TimeoutError:
+        # A BARE TimeoutError, which is what Python 3.10+ raises out of a socket read that
+        # has already connected - NOT a URLError. It is the hung-model case: the daemon is
+        # there, it took the request, and it is still thinking. reached AND slow, so the
+        # law above reports it and does NOT queue it.
+        status.update({"reached": True, "slow": True})
+        return None, OLLAMA_TIMEOUT_LINE
+    except urllib.error.URLError as exc:
+        # THE ONLY SHAPE THAT EARNS THE QUEUE: the socket never opened. A refused
+        # connection, a dead port, no daemon at all. `reached` stays false.
+        reason = getattr(exc, "reason", exc)
+        if isinstance(reason, TimeoutError):
+            status.update({"reached": True, "slow": True})
+            return None, OLLAMA_TIMEOUT_LINE
+        return None, "Could not reach the local engine (%s)." % reason
+    except Exception as exc:                                   # noqa: BLE001
+        return None, "Unexpected error talking to the local engine: %s" % exc
+    answer = "".join(pieces).strip()
+    # A closed think pair can still come back as the model's own echo; strip one if it does,
+    # then judge emptiness. An empty answer is a failure of a daemon that ANSWERED, so it
+    # keeps `reached` true and is reported rather than queued.
+    answer = re.sub(r"^<think>\s*</think>\s*", "", answer).strip()
+    if not answer:
+        return None, "The local engine returned an empty answer."
+    return answer, None
+
+
+# ---- THE ONE QUEUE. Not a retry mechanism and not a job system: a short, bounded,
+# in-memory list of questions that reached NO engine at all, so that "both roads were shut
+# at 4pm" is a readable fact rather than a silence. Nothing drains it automatically - a
+# question answered an hour late is worse than a question answered never, and the boss
+# asking again is both cheaper and more honest than a background thread guessing when.
+_RETRY_QUEUE = []
+_RETRY_LOCK = threading.Lock()
+RETRY_QUEUE_MAX = 20
+
+
+def queue_for_retry(messages, why):
+    """Record one unanswerable question. Returns the depth after adding.
+
+    THE QUESTION AND NOT THE PROMPT: the last user turn, truncated. The assembled prompt
+    carries the persona, the history and whatever the notes produced, and a queue that kept
+    all of it would be a transcript store with a different name.
+    """
+    question = ""
+    for msg in reversed([m for m in (messages or []) if isinstance(m, dict)]):
+        if str(msg.get("role")) == "user":
+            question = str(msg.get("content") or "")[:400]
+            break
+    with _RETRY_LOCK:
+        _RETRY_QUEUE.append({"at": time.strftime("%H:%M:%S"), "question": question,
+                             "why": str(why or "")[:240]})
+        while len(_RETRY_QUEUE) > RETRY_QUEUE_MAX:
+            _RETRY_QUEUE.pop(0)
+        depth = len(_RETRY_QUEUE)
+    sys.stderr.write("  §41 queue: both roads shut, depth %d (%s)\n"
+                     % (depth, str(why or "")[:140]))
+    return depth
+
+
+def retry_queue_state():
+    """What /health publishes: a depth and the reasons. Never the questions."""
+    with _RETRY_LOCK:
+        return {"depth": len(_RETRY_QUEUE),
+                "reasons": [row["why"][:120] for row in _RETRY_QUEUE[-3:]]}
+
+
+def retry_queue_drain():
+    """Empty it and return what was in it. For a harness and for a human, nothing else."""
+    with _RETRY_LOCK:
+        out = list(_RETRY_QUEUE)
+        del _RETRY_QUEUE[:]
+    return out
+
+
+def ollama_warm(log=None):
+    """Load the fallback model NOW, on a thread, so no question ever pays the cold prefill.
+
+    THE SAME DISCIPLINE AS THE VECTOR STORE AND THE TRANSCRIBER, and here it is not a nicety
+    but the fix for a measured failure. keep_alive -1 keeps the weights resident ONCE THEY
+    ARE LOADED; it does nothing about the first load, and the first load is a cold prefill of
+    a 7B model on a CPU. Measured: a real notes-sized prompt against a cold
+    qwen2.5-coder:7b took 30.07 s and hit OLLAMA_CHAT_TIMEOUT_S, which preflight 30 reported
+    as an intermittent 502 - and warm, the same prompt reads 0.16 s to first token and 1.8 s
+    to the end, three runs running. So the cost is spent HERE, after the socket is already
+    listening, rather than on whichever question is unlucky enough to be the first one Groq
+    refuses.
+
+    ONE TINY GENERATION AND NOT A PING, because /api/tags would answer without loading
+    anything at all and prove nothing. num_predict 1 is the smallest thing that forces the
+    weights into RAM and the graph to be built.
+
+    Nothing here raises and nothing here is required: a machine with no Ollama gets one line
+    on stderr and a fallback that will refuse politely when it is first needed, which is
+    exactly what it would have done anyway.
+    """
+    cfg = load_config()[0]
+    if not ollama_fallback_enabled(cfg):
+        return False
+    model = ollama_chat_model(cfg)
+    url = (str(cfg.get("ollama_url") or DEFAULT_CONFIG["ollama_url"]).rstrip("/")
+           + OLLAMA_CHAT_URL_PATH)
+    body = json.dumps({"model": model, "prompt": "<|im_start|>user\nhi<|im_end|>\n"
+                                                 "<|im_start|>assistant\n",
+                       "raw": True, "stream": False, "keep_alive": OLLAMA_KEEP_ALIVE,
+                       "options": {"temperature": 0, "num_ctx": OLLAMA_FALLBACK_NUM_CTX,
+                                   "num_predict": 1}}).encode("utf-8")
+    started = time.monotonic()
+    try:
+        req = urllib.request.Request(url, data=body, method="POST", headers={
+            "Content-Type": "application/json", "User-Agent": USER_AGENT})
+        with urllib.request.urlopen(req, timeout=OLLAMA_WARM_TIMEOUT_S) as res:
+            res.read()
+    except Exception as exc:                                   # noqa: BLE001
+        if log:
+            log("  §41 fallback: %s did not warm (%s) - it will be tried anyway when "
+                "Groq first tires" % (model, str(exc)[:90]))
+        return False
+    if log:
+        log("  §41 fallback: %s resident in %.1fs, keep_alive forever"
+            % (model, time.monotonic() - started))
+    return True
+
+
+def call_groq_then_local(cfg, worn, image, capability):
+    """§41'S ROUTING LAW, IN ONE FUNCTION: Groq, then this machine, then the queue.
+
+    TWO PROVIDERS DEEP AND NEVER THREE. A 401 and a 404 are NOT transient: they are
+    a wrong key and a retired slug, heard as refusals that name the field. The
+    transient test is the status FLAG, never a string match on the spoken sentence.
+    THE EYES HAVE NO SECOND ENGINE: a tired Groq on an image is a refusal, not a hop.
+    """
+    status = {}
+    model = (str(cfg.get("groq_vision_model") or DEFAULT_CONFIG["groq_vision_model"])
+             if capability == "vision" else None)
+    answer, error = call_groq(cfg, worn, image, model=model, status=status)
+    if not error:
+        turn_engine(capability, "groq", "ok", provider="groq")
+        return answer, None
+    if not status.get("transient"):
+        turn_engine(capability, "groq", "failed", error, provider="groq")
+        return None, error
+    handover = time.monotonic()
+    if image is not None:
+        trigger_ms = (time.monotonic() - handover) * 1000.0
+        turn_engine(capability, "none", "failed", error, provider="retry",
+                    trigger_ms=trigger_ms)
+        sys.stderr.write("  §41: groq vision tired and the eyes have no local engine (%s)\n"
+                         % error[:120])
+        return None, ("%s The eyes have no engine on this machine, sir, so I cannot look "
+                      "at that locally." % error)
+    if not ollama_fallback_enabled(cfg):
+        turn_engine(capability, "none", "failed", error, provider="groq",
+                    trigger_ms=(time.monotonic() - handover) * 1000.0)
+        return None, error
+    local_status = {}
+    trigger_ms = (time.monotonic() - handover) * 1000.0
+    sys.stderr.write("FALLBACK: DIRECT CALL TO OLLAMA\n")
+    sys.stderr.write("  §41 fallback: groq %s -> local %s in %.1fms (%s)\n"
+                     % (capability, ollama_chat_model(cfg), trigger_ms, error[:100]))
+    answer, local_error = call_ollama(cfg, worn, image, status=local_status)
+    if answer:
+        turn_engine(capability, "ollama", "fallback", error, provider="ollama",
+                    trigger_ms=trigger_ms, spoken=LOCAL_FALLBACK_LINE,
+                    model=local_status.get("model") or ollama_chat_model(cfg))
+        return answer, None
+    # Ollama answered the socket: its failure (timeout, HTTP error, empty body)
+    # is the reply. It is NEVER queued.
+    if local_status.get("reached") or local_status.get("slow"):
+        turn_engine(capability, "ollama", "failed", local_error, provider="ollama",
+                    trigger_ms=trigger_ms)
+        return None, local_error or OLLAMA_TIMEOUT_LINE
+    # The daemon could not be reached at all: both roads are shut. The only queue.
+    depth = queue_for_retry(worn, "%s | %s" % (error, local_error))
+    turn_engine(capability, "queue", "failed", local_error, provider="retry",
+                trigger_ms=trigger_ms, spoken=QUEUED_LINE, queued=depth)
+    return QUEUED_LINE, None
+
+
 def call_model(cfg, messages, image=None):
     """The one place that decides which provider gets the prompt.
 
@@ -7102,43 +7347,23 @@ def call_model(cfg, messages, image=None):
         plan["wireChars"] = sum(len(str(m.get("content") or "")) for m in worn)
         plan["accounted"] = plan["chars"] == plan["wireChars"]
     provider = provider_of(cfg)
-    # THE EYES MAY BE ON A DIFFERENT ENGINE FROM THE TONGUE, which is what vision_engine is
-    # for, and this is the one line that makes that true: a call carrying an image consults
-    # its own flag. When the flag is "groq" and the chat provider is not, the image goes to
-    # Groq's vision slug and the prose of the same session keeps going to bedrock. Flipping it
-    # changes ONE engine's source, which is the §28 requirement stated exactly.
-    if image is not None and vision_engine_of(cfg) == "groq":
+    # THE EYES HAVE THEIR OWN CAPABILITY AND ONE ENGINE. vision_engine_of() has answered
+    # "groq" for every spelling since §41, so an image goes to Groq's vision slug whatever
+    # the chat provider is - and when THAT tires, the law above refuses rather than hops,
+    # because there is no local engine on this machine that reads an image.
+    if image is not None:
         provider, capability = "groq", "vision"
     else:
-        capability = "vision" if image is not None else "chat"
+        capability = "chat"
     if provider == "openrouter":
         answer, error = call_openrouter(cfg, worn, image)
     elif provider == "openai":
         answer, error = call_openai(cfg, worn, image)
-    elif provider == "groq":
-        # THE FALLBACK LAW, AND IT IS FOUR LINES BECAUSE IT HAS TO BE EXACTLY ONCE.
-        # A 429 or an unreachable host routes THIS ONE REQUEST to today's default for this
-        # capability - bedrock, for both chat and vision - and then stops. There is no loop,
-        # no backoff, no second provider after the second: the boss hears one answer, never
-        # two and never none, and the ledger carries the reason.
-        # WHAT IS NOT FALLEN BACK: a 401 and a 404. Those are a wrong key and a retired slug,
-        # and answering them from bedrock would hide a broken config.json behind a correct
-        # answer - see the whitelist in call_chat_completions().
-        status = {}
-        model = (str(cfg.get("groq_vision_model") or DEFAULT_CONFIG["groq_vision_model"])
-                 if capability == "vision" else None)
-        answer, error = call_groq(cfg, worn, image, model=model, status=status)
-        if error and status.get("transient"):
-            turn_engine(capability, "bedrock", "fallback", error)
-            sys.stderr.write("  fallback: groq %s -> bedrock (%s)\n"
-                             % (capability, error[:120]))
-            answer, error = call_bedrock(cfg, worn, image)
-        elif error:
-            turn_engine(capability, "groq", "failed", error)
-        else:
-            turn_engine(capability, "groq", "ok")
     else:
-        answer, error = call_bedrock(cfg, worn, image)
+        # §41: THE ONE ROUTING PATH. Groq, then this machine, then the queue - and the
+        # whole of it, including which failures are allowed to hop, lives in that one
+        # function rather than in a branch here. See call_groq_then_local().
+        answer, error = call_groq_then_local(cfg, worn, image, capability)
     turn_call((plan or {}).get("label") or "model", worn, answer, error)
     return answer, error
 
@@ -7165,10 +7390,14 @@ def credentials_error(cfg):
             return ("No OpenAI key yet, so I found the relevant notes but cannot "
                     "write an answer. Open config.json in the project root and "
                     "replace \"PUT-YOUR-KEY-HERE\" with your key, or set "
-                    "\"provider\" to \"bedrock\" to use your AWS credentials "
-                    "instead. No restart needed.")
+                    "\"provider\" to \"groq\" to use the free road instead. No "
+                    "restart needed.")
         return None
-    return resolve_aws(cfg)[1]
+    # §41: THE FLOOR IS groq_ready, because the floor of provider_of() is "groq". Those two
+    # defaults have to be the same word or this function answers about an engine that will
+    # not be the one called - and the failure mode is the worst kind: a green /health and a
+    # refusal at the first question.
+    return groq_ready(cfg)[1]
 
 
 # ------------------------------------------------------------------ brain swapping
@@ -7410,8 +7639,8 @@ def brain_state():
     return {
         "model": active,
         # THE PROVIDER IS ON THE CHIP FOR GROQ AND FOR NOTHING ELSE, and the asymmetry is the
-        # requirement rather than an oversight. Bedrock, OpenAI and OpenRouter all serve the
-        # same small set of pinned names, so the model id alone says which is answering; Groq
+        # requirement rather than an oversight. OpenAI and OpenRouter serve the same small
+        # set of pinned names, so the model id alone says which is answering; Groq
         # serves ids nobody here has seen before, at a latency the boss will notice, and the
         # one question a chip has to answer during an incident is "am I on the fast borrowed
         # brain or my own?". Prefixing only groq also keeps every existing label byte-identical,
@@ -7619,7 +7848,7 @@ def swap_to_groq(door="voice"):
 # is one an *_of() resolver already understands, so there is no second spelling table.
 ENGINE_WORDS = {
     "ear": ("browser", "groq"),
-    "vision": ("bedrock", "groq"),
+    "vision": ("groq",),
     "voice": ("piper", "web", "orpheus"),
 }
 
@@ -7679,7 +7908,7 @@ def set_engines(data):
     # EVERY WORD IS CHECKED BEFORE ANY IS APPLIED, so a request naming two engines cannot flip
     # the first and refuse the second and leave the house half-changed.
     for which, word in asked.items():
-        legal = ("bedrock", "groq") if which == "chat" else ENGINE_WORDS[which]
+        legal = ("groq",) if which == "chat" else ENGINE_WORDS[which]
         if word not in legal:
             return 400, {"ok": False, "kind": "engines", "engines": engines_state(),
                          "error": "The %s engine answers to %s, not \"%s\"."
@@ -9730,8 +9959,6 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
         if self.path.split("?")[0] == "/health":
             ensure_index()
             cfg = load_config()[0]
-            # Report what is configured, never the credential itself.
-            creds = resolve_aws(cfg)[0] if provider_of(cfg) == "bedrock" else None
             doors = [name for name, _ in websearch.backends(cfg)]
             return self._send_json(200, {
                 "ok": True,
@@ -9739,7 +9966,27 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 "links": _index["meta"].get("linkCount"),
                 "provider": provider_of(cfg),
                 "model": model_label(cfg),
-                "region": creds["region"] if creds else None,
+                # §41 LEFT THIS FIELD STANDING AND EMPTY ON PURPOSE. There is no region
+                # because there is no cloud vendor to have one; the key stays in the
+                # payload because the page and three harnesses read this shape, and a
+                # removed field and a null field are different kinds of news to a reader.
+                "region": None,
+                # AND THE ROUTING LAW, PUBLISHED, because a fallback nobody can see is a
+                # fallback nobody can audit: which road is primary, what catches it, how
+                # fast the handover is allowed to be, and whether anything is queued.
+                # Model ids and a depth - no key, no question, no answer.
+                "routing": {
+                    "primary": "groq",
+                    "fallback": (ollama_chat_model(cfg)
+                                 if ollama_fallback_enabled(cfg) else None),
+                    "fallbackUrl": str(cfg.get("ollama_url")
+                                       or DEFAULT_CONFIG["ollama_url"]),
+                    "triggerBudgetMs": FALLBACK_TRIGGER_BUDGET_MS,
+                    "numCtx": OLLAMA_FALLBACK_NUM_CTX,
+                    "numPredict": OLLAMA_FALLBACK_PREDICT,
+                    "keepAlive": OLLAMA_KEEP_ALIVE,
+                    "queue": retry_queue_state(),
+                },
                 "keyConfigured": credentials_error(cfg) is None,
                 "serving": "viewer/",
                 # Which brain is answering, what it should be called on the chip, and
@@ -9832,8 +10079,8 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 # serving ear and the serving voice and it will not make four trips to
                 # find out. Each of these is the ANSWER of the resolver, not the raw
                 # config string, so "groqcloud" and "Groq" read the same here as they do
-                # in the router - the failure mode being a seal that says BEDROCK while
-                # Groq is answering because the page did its own spelling.
+                # in the router - the failure mode being a seal that names one engine while
+                # another is answering because the page did its own spelling.
                 #
                 # `groqKey` is a digest and a length. It is published at all because the
                 # page's own refusal line has to be able to say "the field is empty"
@@ -9925,6 +10172,10 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             # THE SPOKEN DOOR RESOLVES IT TOO. A yes said out loud has to finish the job
             # a yes clicked would have finished - see _hand_resolved().
             _hand_resolved(payload)
+            # §42: and the spoken door is the one that most needs the link on the glass,
+            # because it is the door where nobody was looking at a screen. `pending` here
+            # is the slot read before execute() claimed it - see _hand_link().
+            _hand_link(payload, pending)
             return status, payload
         if pending and no:
             status, payload = hands.cancel(door="voice", proposal_id=pending["id"])
@@ -11149,6 +11400,9 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             if refusal is not None:
                 refusal["pending"] = hands.pending_public()
                 return self._send_json(403, refusal)
+            # §42: THE SLOT IS READ BEFORE IT IS CLAIMED. execute() empties it, so this is
+            # the last moment the approved parameters exist to be read - see _hand_link().
+            approved = hands.pending_public()
             try:
                 status, payload = hands.execute(
                     door=door, proposal_id=str(data.get("id") or "")[:40] or None)
@@ -11158,6 +11412,7 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                     "error": "The chain hit an unexpected error: %s" % exc,
                     "answer": hands.LINES["failed"].format(reason=str(exc)[:160])}
             _hand_resolved(payload)
+            _hand_link(payload, approved)
             # §35 PART 1: if that "yes" was a word the handshake window honoured, the card's own
             # reply carries the seal, because this door never passes through /chat's funnel.
             handshake_stamp(str(data.get("session") or "default")[:120], payload)
@@ -11189,6 +11444,8 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             if refusal is not None:
                 refusal["pending"] = hands.pending_public()
                 return self._send_json(403, refusal)
+            # §42: read the slot before execute() claims it - see _hand_link().
+            approved = hands.pending_public()
             try:
                 status, payload = hands.execute(
                     door=door, proposal_id=str(data.get("id") or "")[:40] or None)
@@ -11198,6 +11455,7 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                     "error": "The tool hit an unexpected error: %s" % exc,
                     "answer": hands.LINES["failed"].format(reason=str(exc)[:160])}
             _hand_resolved(payload)
+            _hand_link(payload, approved)
             # §35 PART 1, at the door the page actually uses when it hears "yes" itself.
             handshake_stamp(str(data.get("session") or "default")[:120], payload)
             return self._send_json(status, payload)
@@ -11352,47 +11610,6 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
         sys.stderr.write("  %s\n" % (fmt % args))
 
 
-def print_models():
-    """python server.py --models - which Bedrock ids this account may actually use.
-
-    Two lists, because they are invoked differently: foundation models you call by
-    their own id, and inference profiles (the "us." prefixed ones) that route
-    across regions. Modern Claude models are usually only reachable as a profile.
-    """
-    cfg = load_config()[0]
-    creds, error = resolve_aws(cfg)
-    if error:
-        sys.exit("\n  " + error + "\n")
-    host = "bedrock.%s.amazonaws.com" % creds["region"]
-    print("\n  region      : %s" % creds["region"])
-    print("  credentials : %s" % creds["source"])
-    print("  configured  : %s\n" % model_label(cfg))
-
-    def fetch(path, query=""):
-        try:
-            return aws_request(creds, "bedrock", host, path, method="GET", query=query)
-        except urllib.error.HTTPError as exc:
-            print("  (%s: %s)" % (path, aws_error_message(exc, "-", creds)))
-        except Exception as exc:                               # noqa: BLE001
-            print("  (%s: %s)" % (path, exc))
-        return {}
-
-    models = fetch("/foundation-models", "byOutputModality=TEXT")
-    rows = [m for m in models.get("modelSummaries", [])
-            if "ON_DEMAND" in (m.get("inferenceTypesSupported") or [])]
-    print("  on-demand foundation models (%d)" % len(rows))
-    for m in sorted(rows, key=lambda m: m.get("modelId", "")):
-        print("    %-58s %s" % (m.get("modelId", "?"), m.get("modelName", "")))
-
-    profiles = fetch("/inference-profiles").get("inferenceProfileSummaries", [])
-    print("\n  inference profiles (%d)" % len(profiles))
-    for p in sorted(profiles, key=lambda p: p.get("inferenceProfileId", "")):
-        print("    %-58s %s" % (p.get("inferenceProfileId", "?"),
-                                p.get("status", "")))
-    print("\n  Paste one into \"bedrock_model_id\" in config.json. No restart "
-          "needed.\n")
-
-
 def _warm_log(line):
     """One line from the warm thread, to stderr where every other diagnostic goes."""
     sys.stderr.write("%s\n" % line)
@@ -11401,8 +11618,6 @@ def _warm_log(line):
 def main():
     if not os.path.isdir(VIEWER_DIR):
         sys.exit("server.py: no viewer/ directory next to this file.")
-    if "--models" in sys.argv[1:]:
-        return print_models()
     load_config()
     ensure_index()
 
@@ -11411,7 +11626,6 @@ def main():
     httpd.daemon_threads = True
 
     cfg = load_config()[0]
-    creds = resolve_aws(cfg)[0] if provider_of(cfg) == "bedrock" else None
     ready = credentials_error(cfg) is None
     print("")
     # WHAT HE CAN DO, COUNTED ONCE, HERE. After ensure_index() so the note count is real
@@ -11429,11 +11643,16 @@ def main():
     print("  assistant         :  %s, for %s (%s)"
           % (who["assistant"], who["boss_formal"], who["boss_call"]))
     print("  notes indexed     :  %d" % len(_index["notes"]))
-    print("  provider          :  %s%s" % (provider_of(cfg),
-                                           "  (%s)" % creds["region"] if creds else ""))
+    print("  provider          :  %s" % provider_of(cfg))
     print("  model             :  %s" % model_label(cfg))
+    # §41 - AND WHAT CATCHES IT, ON ITS OWN LINE, because a net nobody is told about is a
+    # net nobody checks. The model id and the loopback url, never a key and never a region.
+    print("  fallback          :  %s" % (
+        "local %s on %s" % (ollama_chat_model(cfg),
+                            str(cfg.get("ollama_url") or DEFAULT_CONFIG["ollama_url"]))
+        if ollama_fallback_enabled(cfg) else
+        "off - a tired Groq will refuse out loud (\"ollama_fallback\": false)"))
     print("  credentials       :  %s" % (
-        creds["source"] if creds else
         "loaded from config.json" if ready else
         "not configured yet - /chat will say so politely"))
     print("  ctrl-c to stop")
@@ -11452,6 +11671,14 @@ def main():
     if ingest is not None:
         threading.Thread(target=ingest.warm, kwargs={"log": _warm_log},
                          name="vector-warm", daemon=True).start()
+
+    # ---- AND §41's LOCAL THINKER, ON ITS OWN THREAD, FOR THE SAME REASON AND A MEASURED
+    # one: see ollama_warm(). A cold 7B prefill on this CPU took 30.07s and tripped the
+    # engine's own 30s ceiling, which the boss would have met as a refusal on the first
+    # question Groq declined. Warm, the same prompt answers in 1.8s. Daemon, silent on a
+    # machine with no Ollama, and it holds no lock any question can wait on.
+    threading.Thread(target=ollama_warm, kwargs={"log": _warm_log},
+                     name="ollama-warm", daemon=True).start()
 
     # ---- AND THE TRANSCRIBER, FOR THE SAME REASON AND ON ITS OWN THREAD. A warm load
     # of base.en costs 0.98s on this machine and a cold one pays for a 145 MB download

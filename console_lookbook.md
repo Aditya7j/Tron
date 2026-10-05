@@ -10032,3 +10032,598 @@ on (a), (b) and (c) above and cannot be manufactured.
   expires it out of `live`, and only a restart clears it.
 - **`config.json` is untracked but is in this repository's git history and was never purged** — the
   key must be rotated before that history is shared. Carried from §38 and §39, unchanged.
+
+# §41 — THE ROUTING LAW
+
+Groq is the runtime brain. When it tires the question goes once, synchronously, to this
+machine's own Ollama. The queue exists only for an Ollama socket that never opened. No cloud
+credential resolver, signer, region or model catalogue survives anywhere in the runtime path.
+
+## PART 0 — the zero-rewrite guard, which did not apply
+
+`git log --oneline -S "THE CLOUD VENDOR IS SEVERED" -- server.py` returns **nothing** across
+all 19 commits that touch the file, and the phrase is nowhere on disk. **There is no SEVERED
+REFERENCE**, so PART 2's verbatim blocks were the reference — and they had to be, because
+`resolve_aws` was alive at line 5326 and `call_ollama`, `call_groq_then_local`,
+`queue_for_retry`, `ollama_fallback_enabled` and every `OLLAMA_*` constant **did not exist at
+all**. §41 was not a severance of an existing net; it built the net and then cut the vendor.
+Of the things PART 2 said "must match the severed reference exactly", the ones it did not
+quote — `call_ollama`, `_ollama_chatml`, `_ollama_fallback_messages`, `turn_engine`'s new
+columns — were written from the properties PART 2 lists, since there is no file to match.
+
+**`config.json` was read and never written.** It already carried `"provider": "groq"` and no
+`aws_*` key, no `bedrock_model_id` and no `vision_engine` — so the tolerate-a-leftover clause
+never fired. It is still the boss's to edit by hand; `ollama_chat_model` and
+`ollama_fallback` are absent from it and therefore take the constants below.
+
+## PART 1 — the deletion list
+
+| symbol deleted | what it was | installed in its place | file:line |
+|---|---|---|---|
+| `resolve_aws` | the credential resolver, three sources | — | gone |
+| `_read_aws_ini` | `~/.aws` ini reader | — | gone |
+| `aws_request` | the SigV4-signed call | — | gone |
+| `_derive_key` | the SigV4 key derivation | — | gone |
+| `aws_error_message` | eleven vendor HTTP codes as English | — | gone |
+| `bedrock_path` | the double-encoded model path | — | gone |
+| `converse_body` | the Converse message shape | — | gone |
+| `call_bedrock` | the second engine | `call_groq_then_local` | `server.py:7223` |
+| `print_models` | `--models`, the catalogue lister | — | gone |
+| `MODEL_ALIASES` | four short names → inference profiles | — | gone |
+| `CRED_FIELDS` | the three credential field names | — | gone |
+| `import configparser` | read `~/.aws/credentials` only | — | gone |
+| `--models` in `main()` | the one argv branch | — | gone |
+| 6 × `aws_*` / `bedrock_model_id` in `DEFAULT_CONFIG` | blank credential fields | `ollama_chat_model`, `ollama_fallback` | `server.py:1236` |
+| `provider_of`'s `bedrock` floor | a typo meant the vendor | a typo means **groq** | `server.py:5358` |
+| `vision_engine_of`'s two answers | `bedrock` or `groq` | one answer: `groq` | `server.py:5381` |
+| `model_label`'s alias branch | resolved vendor ids | the three real providers | `server.py:5445` |
+| `ENGINE_WORDS["vision"]` | `("bedrock", "groq")` | `("groq",)` | `server.py:7812` |
+| `set_engines`' chat whitelist | `("bedrock", "groq")` | `("groq",)` | `server.py:7874` |
+| `credentials_error`'s floor | `resolve_aws(cfg)[1]` | `groq_ready(cfg)[1]` | `server.py:7334` |
+| `/health`'s `creds` + region | a live resolver call | `"region": None` + `routing` | `server.py:9936` |
+| the boot banner's `creds` | region and credential source | `provider` + `fallback` lines | `server.py:11598` |
+
+**Net: 404 lines removed, 578 added** (`git diff --numstat`: `578 404 server.py`), 11,491 →
+11,665. Nothing is commented out and no disabled flag is left behind.
+
+Seven comments elsewhere named the vendor as a live route and were rewritten, not deleted:
+`USER_AGENT`'s note about a signer, `FRAME_MAX_BYTES`' per-image limit,
+`call_chat_completions`' explanation of the transient whitelist, the brain chip's provider
+asymmetry, the seal's spelling note, and `display_label`'s two prefix comments.
+
+## PART 2 — the routing surface
+
+`provider_of`, `vision_engine_of`, `model_label`, `ENGINE_WORDS`, `set_engines`'s whitelist
+line, `call_model`'s tail and `call_groq_then_local` are installed **verbatim as PART 2 wrote
+them**, docstrings included. Around them, written from PART 2's described properties:
+
+| block | what it does | file:line |
+|---|---|---|
+| `call_ollama` | streamed, raw ChatML, `reached`/`slow`/`ttftMs`/`model` in `status`, the 404 "run ollama pull" hint, the bare-`TimeoutError` handler that sets `slow`+`reached` and does **not** queue | `server.py:7021` |
+| `_ollama_chatml` | the assistant turn opened on one **closed** `<think></think>` pair | `server.py:6972` |
+| `_ollama_fallback_messages` | drops every cloud system block, substitutes one short one | `server.py:6997` |
+| `queue_for_retry` / `retry_queue_state` / `retry_queue_drain` | the one bounded queue, depth 20, drained by hand only | `server.py:7136` |
+| `ollama_warm` | loads the model at boot on a thread | `server.py:7174` |
+| `turn_engine` + `provider`, `triggerMs`, `withinBudget`, `spoken`, `model`, `queued` | the ledger columns | `server.py:4537` |
+
+The constants are the mandated ones: `OLLAMA_CHAT_TIMEOUT_S = 30.0`,
+`OLLAMA_FALLBACK_NUM_CTX = 4096`, `OLLAMA_FALLBACK_PREDICT = 48`, `OLLAMA_KEEP_ALIVE = -1`,
+`FALLBACK_TRIGGER_BUDGET_MS = 250`, `OLLAMA_TIMEOUT_LINE`, `LOCAL_FALLBACK_LINE`,
+`QUEUED_LINE`, and `OLLAMA_FALLBACK_SYSTEM = GROUNDING_RULE + "\n" + …` at **343 characters**
+against the cloud prompt's 4,632.
+
+**The one deviation from the verbatim prompt, and why.** `GROUNDING_RULE` did not exist and
+was written new; §26's "say which world you are speaking from" lives in the *cloud* prompt,
+which this fallback drops wholesale. With the stripped prompt alone, **preflight 15 read
+"answered from the web without saying so: 'The current population of Tokyo is 14,264,798
+people.'"** The mandate's own first sentence ranks §26 Grounding above the text of a constant,
+so one sentence — `OLLAMA_WEB_CUE` — is **appended on web turns only**, detected by the cloud
+prompt's own phrase `live web search results`. Measured after: the local engine answers
+*"According to current web sources, the population of Tokyo is 14,264,798 (2024 estimate)."*
+and a notes turn pays nothing for it. `OLLAMA_FALLBACK_SYSTEM` itself is unaltered.
+
+## PART 3 — the fallback model, measured in three stages, and the first two chose wrong
+
+Nothing was pulled; all three candidates were already on disk. `qwen3:4b` fails on the one
+gate that never moved — it narrates. The other two both pass in isolation, and the gap
+between stages is the finding.
+
+| stage | prompt | `qwen3:4b` | `qwen3:1.7b` | `qwen2.5-coder:7b` |
+|---|---|---|---|---|
+| 1 · two snippets | 0.6 kB | ttft 0.086s · **FAIL** | ttft 0.054s · PASS | ttft 0.127s · PASS |
+| 2 · a real user turn | 9.1 kB | ttft 0.116s · **FAIL** | ttft 0.077s · PASS | ttft 0.180s · PASS |
+| 3 · three of those at once, quiet machine | 9.1 kB ×3 | 16.43s worst | **2.58s** worst (×11.6) | 5.18s worst (×5.8) |
+
+The prose evidence, first 40 characters, identical on every run at temperature 0:
+
+- `qwen3:4b` → `'Hmm, the user is asking about the first '` ← **rejected**
+- `qwen3:1.7b` → `'The first real signal that micro-SaaS pr'`
+- `qwen2.5-coder:7b` → `'Churn below 3 percent monthly is the fir'`
+
+**Stage 1 chose the 7B on a prompt this server never sends.** A real notes turn assembles
+**21,438 characters** — 12,720 of them system blocks the fallback drops, leaving a user turn
+of 8,718 — and a two-snippet prompt says nothing about that. Stage 2 was built to catch it
+and the 7B passed anyway. **What decided it is end-to-end:** with `qwen2.5-coder:7b`
+configured, **preflight check 30 returned HTTP 502 twice**, and the ledger row behind it reads
+`served=ollama outcome=failed "Local engine timed out"` with the model warm and resident; with
+`qwen3:1.7b` configured, check 30 passes. The quiet-machine burst in stage 3 clears the 7B at
+5.18s, so no probe here reproduces the condition that matters — a machine doing everything
+else at the moment Groq starts refusing. **`OLLAMA_CHAT_MODEL = "qwen3:1.7b"`**, and the probe
+prints its own tie-breaker rather than pretending stage 3 settled it. `QUICK_MODEL` is
+untouched at `qwen3:4b`.
+
+**And the cold load is now paid at boot, which is the other half of that fix.** `keep_alive`
+`-1` holds weights once loaded and does nothing about the first load; a cold 7B prefill took
+**30.07s** and tripped the engine's own ceiling. `ollama_warm()` spends it on a daemon thread
+after the socket is listening — the same discipline as the vector store and the transcriber —
+and prints `§41 fallback: qwen3:1.7b resident in 0.2s, keep_alive forever`.
+
+## PART 4 — the proofs
+
+| proof | summary line, verbatim |
+|---|---|
+| `preflight.py` | `38 pass, 2 fail, 3 warn` · `39 pass, 1 fail, 3 warn` · `37 pass, 4 fail, 2 warn` — three consecutive runs, and the spread is the Groq throttle, below |
+| `severance_proof` | `VERIFY 23/23 PASS` |
+| `fallback_proof` | `VERIFY 19/19 PASS` |
+| `groq_proof` | `VERIFY 91/106 FAIL` — 15 §28-premise reds, every one named below |
+| `broadcaster_proof` | `VERIFY 85/85 PASS` — unchanged, untouched |
+
+**The boot banner, as printed** (`_runs/sweep41/boot_banner.txt`):
+
+```
+  Knowledge Galaxy  ->  http://127.0.0.1:4700
+  serving           :  viewer/  (only)
+  assistant         :  Galaxy, for Sir Aditya Singh (Aditya)
+  notes indexed     :  71
+  provider          :  groq
+  model             :  qwen/qwen3.8-27b
+  fallback          :  local qwen3:1.7b on http://127.0.0.1:11434
+  credentials       :  loaded from config.json
+  ctrl-c to stop
+```
+
+No region, no credential source, no key. **`/health.routing`, as served:**
+
+```json
+{"primary": "groq", "fallback": "qwen3:1.7b",
+ "fallbackUrl": "http://127.0.0.1:11434", "triggerBudgetMs": 250,
+ "numCtx": 4096, "numPredict": 48, "keepAlive": -1,
+ "queue": {"depth": 0, "reasons": []}}
+```
+with `"region": null` beside it.
+
+**`ollama ps` after the run** — `num_ctx` and `keep_alive` both visible from outside the
+process, which is the only place those two constants can be checked without trusting this
+file:
+
+```
+NAME                       ID              SIZE      PROCESSOR    CONTEXT    UNTIL
+qwen3:1.7b                 8f68893c685c    1.9 GB    100% CPU     4096       Forever
+nomic-embed-text:latest    0a109f422b47    376 MB    100% CPU     2048       Forever
+```
+
+**The fallback proof's four states**, in process, with Groq's client replaced in memory and
+`config.json` never opened for writing:
+
+1. **429 → the local engine answers.** The reply carries no word "queue"; the row reads
+   `served=ollama outcome=fallback provider=ollama`, `triggerMs 0.0`, `withinBudget true`,
+   `spoken "Thinking locally, sir."`, `model qwen3:1.7b`. Warm TTFT **61.5ms**. Queue depth
+   unchanged.
+2. **401 → a refusal naming the field**, and nothing is tried after it. The row reads
+   `groq/failed` with **no `triggerMs` at all** — there was nothing to hand over to.
+3. **429 + a dead Ollama port → the only queue.** The reply is exactly
+   `"Thinking locally, sir... queued"`, depth 0 → 1, row `served=queue provider=retry
+   queued=1`. Drained afterwards; depth back to 0.
+4. **429 on an image → a refusal.** `"… The eyes have no engine on this machine, sir, so I
+   cannot look at that locally."` Row `none/retry`, and **nothing queued** — an image has
+   nothing to retry locally, so queueing one would be a promise this machine cannot keep.
+
+**AWS residue check.** Zero `bedrock`, `aws_*`, `sigv4` or `configparser` occurrences in
+`server.py` outside comments, except the two `display_label` regexes that strip `us.`/`eu.`/
+`apac.` and `anthropic.`/`amazon.` prefixes off any vendor's model id — string cleaning that
+decides no route. The nine functions and two constants are gone **by AST**, not by grep, and
+`provider_of` was exercised on `"bedrock"`, `"BEDROCK"`, `" bedrock "`, `"aws"`, `""`, a typo
+and `None`: all seven return `"groq"`. `preflight.py` holds one mention, in a comment
+explaining why its own check 4 had to change.
+
+**Safety audit.** `hands.py`, `secretscan.py`, `broadcast.py` and `broadcaster_proof.mjs` are
+**unchanged** (`git diff --quiet` on each). `broadcaster_proof` is **85/85**, the §40 delete
+prohibition and the publish guard untouched. `WEB_CONFIDENCE_THRESHOLD` is **0.25** and
+`notes_threshold` reads **0.60** out of a `config.json` this run never wrote.
+`grounding_class`, `consumed_sources`, `web_intent`, `wear_persona`, `call_groq`, `turn_note`
+and `doorman_refusal` are **byte-identical to git HEAD** by sha256 of their own source;
+`call_chat_completions`' **code** is identical with comments stripped while its text is not —
+one comment, the one that explained a 401 by naming the engine it would have fallen back to.
+
+**`personal_question()` does not exist in this build.** There is no 0.75 dial in `server.py`
+either. PART 0 reserves the personal-exception layer for a later mandate, so it is reported
+**absent rather than verified** — it could not be verified and §41 did not add it.
+
+## Left open, named
+
+- **PREFLIGHT DID NOT PASS, AND THE HONEST NUMBER IS A RANGE.** Three consecutive runs read
+  **38/2/3**, **39/1/3** and **37/4/2**, and every single failure in all three is one sentence:
+  `HTTP 502 Groq is rate limiting … Rate limit reached for model qwen/qwen3.8-27b`. The
+  account's daily limit on that model is saturated and recovering in windows, so which checks
+  are red depends on the second they run — 13 in all three, 7 in two, and 12 (`/look`) and 20
+  (the Scribe's minutes) in the worst one. **Check 13 is the one that cannot clear while the
+  throttle holds**, and it is §41 working exactly as written: the eyes have no second engine,
+  so a tired Groq on an image is a refusal. **Before §41 all of these were served by the
+  vendor.** The eyes are the one capability the severance left without a net — that is the
+  price of the mandate, and it is the mandate's own choice, not a defect. Nothing here is a
+  code red: `severance_proof` 23/23, `fallback_proof` 19/19 and `broadcaster_proof` 85/85 all
+  pass on the same build, and the chat road is demonstrably covered — the ledger shows
+  `served=ollama outcome=fallback` serving real questions throughout. I am not calling this
+  "done" on preflight; it needs one clean run after the limit resets.
+- **`groq_proof` is 91/106 and I did not rewrite it.** All 15 reds are §28 premises that §41
+  reversed by order: "config.json still serves the chat from bedrock", "THE FALLBACK LAW, 429:
+  the tongue's single request goes to bedrock", "the eyes to bedrock", and the §28 default
+  table `{"chat":"bedrock","vision":"bedrock"}`. Several of those reds *prove §41 works* — the
+  "goes to bedrock" assertion failed with `{"answer":"Yes, I am here.","fromBedrock":false}`,
+  and the eyes assertion failed carrying §41's exact refusal sentence. Greening them means
+  re-pointing 15 assertions in the file that polices the engine §41 just changed, which PART 0
+  forbids ("every harness: byte-identical") and which is in any case the kind of self-serving
+  edit that destroys the evidence. **Say the word and I will re-point them at Ollama.**
+- **Two preflight checks WERE edited, and the asymmetry is deliberate.** Check 4 called
+  `server.resolve_aws` and so could not execute at all — it reported "the check itself raised
+  AttributeError", which proves nothing about the key — and now makes one real call to Groq's
+  `GET /v1/models`, printing only a length and a sha256 prefix. Check 38's clause (a) asserted
+  §28's default table verbatim. The §28 rationale it rested on — "a cloud default is a laptop
+  that stops answering when the wifi does" — is restated in place rather than deleted, because
+  it was true until §41 put this machine underneath. Its leak scan also hunted
+  `aws_secret_access_key` and `bedrock_model_id`, two shapes that can no longer occur, so two
+  of its four signatures could never match; they are now `groq_api_key` and `openai_api_key`.
+- **`config.json` holds two live credentials in plaintext** — the Groq key and an email app
+  password — and is in this repository's git history, never purged. Carried from §38–§40,
+  unchanged by §41, and still the reason to rotate before that history is shared.
+- **The queue drains only by hand.** `retry_queue_drain()` exists for a harness and a human;
+  nothing calls it on a timer, because a question answered an hour late is worse than a
+  question answered never. Depth is published at `/health.routing.queue`; the questions
+  themselves are not.
+- **`viewer/graph-data.js` shows as modified** and is not mine: `build.py` regenerates it from
+  the notes corpus, which grew to 71 notes.
+
+Groq primary, Ollama net, queue only on a dead socket, zero AWS at runtime.
+
+# §42 — THE TWO GOODBYES, AND THE QUIET TONGUE
+
+The upload and the publish both worked and the house read a URL aloud at the end of each, then
+said nothing more. Two sentences now end those two acts, the link rides beside them on the
+glass, and a page-side rule makes a spoken URL impossible anywhere in this house.
+
+## PART 1 — the two goodbyes, and the separated link
+
+| what | file:line | before | after |
+|---|---|---|---|
+| the upload's spoken announcement | [broadcast.py:1652](broadcast.py#L1652) | `rep.done("unlisted at %s" % out["url"], …)` | `rep.done("It is up and unlisted, sir - nobody can see it until you say the word.", …)` |
+| the publish hand's success stdout | [tools/publish_video.py:162](tools/publish_video.py#L162) | `"The film is public - %s to %s. %s" % (from, privacy, url)` | `"It is public now, sir - %s." % _title_of(video, got)` |
+| the already-public branch | [tools/publish_video.py:147](tools/publish_video.py#L147) | `"That film is already public. %s" % watch_url(video)` | `"It is already public, sir - %s." % _title_of(video, was)` |
+| the title resolver | [tools/publish_video.py:75](tools/publish_video.py#L75) | — | `_title_of()`, new |
+| the hand's own contract | [tools/publish_video.py:4](tools/publish_video.py#L4) | docstring promised `"The film is public. <url>"` | promises the new line, and says why the URL left |
+| the link beside a hand's answer | [server.py:236](server.py#L236) | — | `_hand_link()`, new |
+| the voice door | [server.py:10178](server.py#L10178) | — | `_hand_link(payload, pending)` |
+| `/chain/execute` | [server.py:11415](server.py#L11415) | — | reads the slot before it is claimed, then `_hand_link` |
+| `/execute` | [server.py:11458](server.py#L11458) | — | the same two lines |
+
+**The `/jobs` half needed no change and that is worth saying rather than claiming credit for
+it.** §40 put `url` in `jobs.RESULT_KEYS`, so the very payload that carries the spoken `detail`
+already carried the watch URL beside it as `result.url`. Measured end to end: `detail` reads the
+new sentence with `'http' in detail → False`, and `result.url` reads
+`https://www.youtube.com/watch?v=…` on the same object. The road existed; §42 is what made it
+load-bearing.
+
+**THE SEPARATION LAW, asserted on every spoken literal rather than on the two the mandate
+names.** `broadcaster_proof` scans all three `say()` literals in the publish hand and the single
+`rep.done()` argument in `upload()`, against `/https?:|www\.|youtu|\.com|\.be\b/i`. The
+already-public branch is in that count deliberately: it is a success path of the same hand,
+spoken by the same voice in the same room, and a URL left in the one branch nobody tests is how
+a law lasts a fortnight.
+
+**And the title in that sentence cannot come from a model.** `_title_of()` reads YouTube's own
+read-back first and the ledger's `topic` second, and never the `title` on stdin — a registry
+tool can be proposed by a language model, and the habit this file already states out loud is
+that "model text does not reach a log or a spoken line". Proved by running the real hand with
+`"title": "A MODEL COMPOSED THIS TITLE"` on stdin and reading what it said.
+
+## PART 2 — the Quiet Tongue's fifth rule
+
+| what | file:line |
+|---|---|
+| the pattern and the clause | [viewer/index.html:14740](viewer/index.html#L14740) |
+| the strip, and the punctuation it leaves behind | [viewer/index.html:14775](viewer/index.html#L14775) |
+| the clause, appended once, last | [viewer/index.html:14837](viewer/index.html#L14837) |
+
+**The function was already the right one and already had the guard built in.** `sayFetch()` posts
+two forms of every chunk — `text: tongueSpoken(item)`, which is what piper is given, and
+`timing_text: item.text`, the raw chunk — so the audio payload and the visual string were
+separated by §39 and rule 5 only had to live on the audio side of that line. The caption
+(`captionShow`), the Word-by-Word reveal (`karaArm`) and the answer card are all built upstream
+from the same raw line in `speakLine()`, and nothing downstream of `tongueNormalize` can reach
+the eye.
+
+**Rule 5 runs after rule 1 and before rule 2, and both halves are load-bearing.** After the
+markdown strip, so a URL wrapped in backticks is bare when `\S+` sees it. Before the
+unspeakable-id rule, because that rule turns any 12+ alphanumeric run containing a digit into
+"the reference is in the card" — and a watch URL is full of them. Run the other way round, a
+link becomes `https://www.youtube.com/watch?v=the reference is in the card`, which is a URL
+still being read aloud *and* a sentence that makes no sense.
+
+**Measured, through the page's own `__galaxy.voice.normalize`:**
+
+| in | out |
+|---|---|
+| `It is up and unlisted, sir - nobody can see it until you say the word.` | unchanged but for §39's dash-to-pause: `…sir, nobody can…` |
+| `The film is public - unlisted to public. https://www.youtube.com/watch?v=…` | `The film is public, unlisted to public. The link is on the glass beside me.` |
+| `https://www.youtube.com/watch?v=Kq9wIx3sTqE` (only a link) | `The link is on the glass beside me.` |
+| `See www.youtube.com/watch?v=abc for it.` | `See for it. The link is on the glass beside me.` |
+| `Nothing to strip in this sentence at all.` | returned character for character |
+
+A line that was *only* a link becomes the clause alone rather than silence, because the
+alternative is a tab that goes quiet and a boss who cannot tell a missing answer from a broken
+voice.
+
+## PART 3 — proof
+
+| proof | count |
+|---|---|
+| `broadcaster_proof` | **96/96 PASS** — §40's 85 plus §42's 11 |
+| `_runs/sweep42/goodbye_live.mjs` | **17/17 PASS** |
+| `karaoke_proof` | 91/92 · 89/92 · 91/92 over three runs — every red in §39 PART 4's sidebar-glass family, none in the reveal or the tongue |
+| `preflight.py` | `37 pass, 4 fail, 2 warn` · `38 pass, 3 fail, 2 warn` · `37 pass, 4 fail, 2 warn` |
+
+**THE TWO SPOKEN SENTENCES, HEARD:**
+
+> **upload** — `It is up and unlisted, sir - nobody can see it until you say the word.`
+> **publish** — `It is public now, sir - useReducer in React - Explained.`
+
+Neither contains `http`, `https`, `www.` or a bare domain. The upload sentence was taken off the
+real page: handed to `__galaxy.job.apply()`, the one funnel every `/jobs` poll comes through,
+and read back out of `#caption` — which `speakLine()` raises as its first act, before any mute
+or autoplay gate, so it is exactly what the funnel was handed. `job.spoken` is stamped with the
+job id, so it is announced once and never again. The publish sentence came out of a **real
+subprocess** running `tools/publish_video.py`'s own `main()`, `_title_of()` and `say()`.
+
+**The critical visual guard, measured on the glass and not argued.** One raw string, `"The film
+is public. https://www.youtube.com/watch?v=Kq9wIx3sTqE"`, through `__galaxy.voice.say()`:
+
+- the caption on the glass reads `The film is public. https://www.youtube.com/watch?v=Kq9wIx3sTqE` — the URL intact and clickable
+- the audio payload for the same string reads `The film is public. The link is on the glass beside me.`
+
+The eye sees the link; the ear hears the silence. Plate: `_runs/sweep42/goodbye-glass.png`.
+
+**What is live here and what is not, stated rather than blurred.** Live: the real viewer in a
+real Chrome against the running server, the page's own `jobApply`/`speakLine`/`tongueNormalize`
+funnels, and the publish hand's sentence composed by its own code in its own subprocess. Not
+live: the YouTube round trip. The grant is now connected and `canUpload`/`canPublish` both read
+**true**, so a real premiere is technically possible for the first time — and it is **not taken
+here**. An upload is irreversible in a house that may never delete, and §40 reserves the
+premiere to the boss, on camera, with the flip to public requiring his spoken Yes through the
+handshake window. A harness that uploaded a film to prove a string would have spent something
+nobody can get back.
+
+## Left open, named
+
+- **Preflight did not pass: 4 reds, and all four are the Groq daily rate limit** on
+  `qwen/qwen3.8-27b` — checks **7** (`/see`), **12** (`/look`), **13** (the screen-watch nudge)
+  and **20** (the Scribe's minutes). That failing set is **character-for-character the set §41
+  recorded under the same throttle**, before §42 existed, and not one of the four touches
+  `broadcast.py`, `publish_video.py`, `tongueNormalize` or `_hand_link`. §41 gave the eyes no
+  local engine on purpose, so a throttled Groq means no nudge; it clears when the limit resets.
+  §42's own surfaces are green on the same build: 96/96 and 17/17.
+- **Three repairs outside §42's letter, each forced by running the proof, each cited.**
+  (1) `broadcaster_proof`'s `FILM` was the literal `output/videos/explain-useeffect-in-react` —
+  the §40 premiere's folder, **no longer on this disk**. It is now resolved: the newest folder
+  carrying both `final.mp4` and `script.md`, named out loud in the run. A harness that names one
+  folder measures whether that folder exists. (2) The topic-keyword clause tested
+  `/useeffect/i && /react/i` while its own sentence claimed the keywords came "off the film's
+  own script.md rather than off a template" — it *was* the template. It now checks every
+  significant word of the resolved topic. (3) §40's `tokenDigest` pattern demanded 16–64 hex
+  characters and had **never once been applied to a real value**, because no channel was
+  connected; the boss has since completed the consent, a digest appeared, and it is twelve
+  characters — which is what `broadcast.py`'s own `_digest()` returns.
+- **A real defect the repointed fixture exposed, fixed:** [broadcast.py:859](broadcast.py#L859).
+  `TAGS_MAX = 12` has said "beyond a dozen is keyword stuffing" since §40 and `keywords()`
+  honoured it, but the final tag list is a **union** of the narration's keywords and the cited
+  notes' slugs, and nothing clamped the union. §40 reported "12 of 12" and believed the law
+  held; it held by arithmetic accident on that one film. Measured on the seven films now on this
+  disk: **19, 19, 15, 13, 12, 12, 12** — so six of seven were being stuffed while a constant
+  said they were not. `fit_tags()` now caps the count where it already caps the character total.
+  All seven read 12.
+- **`karaoke_proof` is below its 92 floor** at 91/89/91 across three runs. Every red is in §39
+  PART 4's sidebar-glass and camera-parallax family — the parallax offset moving 1.05°, 0.78°
+  and 2.63° between the two frames being compared, and the luminance structure behind the panel.
+  The galaxy behind that glass is not what §40 photographed: the corpus has grown to 71 notes.
+  Nothing in the word-by-word reveal or the tongue fails, which is the part §42 could have
+  broken — the chunks still come from the raw line, so `karaArm`'s word arithmetic is untouched.
+- **A second link in a second chunk earns a second clause.** One URL cannot, because
+  `speakSplit()` never cuts a word and a URL has no spaces in it; two different links in two
+  chunks get one clause each, which is correct — each chunk really did lose a link.
+- **The premiere is now unblocked and unspent.** `--status` reads `connected`, all three scopes
+  held, `canUpload` and `canPublish` true, prerequisite (c) met — the boss has written a
+  95-character `youtube_disclosure` into `config.json`. Only "(b) a channel" still reads
+  WAITING. When he wants the premiere, it is one command and one spoken Yes.
+
+No URL is spoken aloud in this house, and the Broadcaster says goodbye twice.
+
+# §43 — THE READ THAT CAME TOO EARLY
+
+The publish worked and the house said it had failed. §43 makes the verification wait, names the
+third outcome honestly, heals what it can of the drift, and closes the proof gap that let a
+false failure ship under a green 96/96.
+
+## PART 0 — the defect, and what the live run actually showed
+
+`publish()` sent `videos.update`, then read `videos.list` **once, immediately**, and took a
+stale `privacyStatus` for the truth. YouTube's read-after-write is eventually consistent, so the
+read came back `unlisted`, `ok` went False, and the hand printed *"Publishing failed: YouTube
+accepted the change and still reports the film as unlisted"* about a change that had taken
+effect. **A false failure: the act succeeded and the report denied it.** Three times —
+`G9Y3m3MsnrM` at 16:42:33, `bZ58CoMBMII` at 17:55:27, `e-sRnjYyoC4` at 18:13:56 — and each
+denial wrote `failed` into an append-only ledger, which therefore still says so.
+
+**Why the §42 proofs could not catch it, stated without defending them.** `broadcaster_proof`
+was **96/96** and `goodbye_live` **17/17** over this exact code. Every fixture in both stubbed
+`verify()` to return the **new** state on the **first** read, so neither could tell a hand that
+waits from a hand that does not. A green proof over an instant fixture is blind to propagation
+lag, and the lag is the whole defect. The fixture's clock was never under test; now it is.
+
+**One correction to the mandate's premise, found by looking.** PART 0 says the channel shows
+those three films as Public. It does not: `videos.list` answers HTTP 200 with
+`totalResults: 0` for each of the three, and the channel's own uploads playlist
+(`UUqKSvLfGK9IPNMnICLb7jiA`, "XYZ Code") returned **zero items**. The token is the same one that
+uploaded them — `connectedAt 15:10:46`, uploads from 15:38 — so this is not a different account.
+And it is not a read lag either: the film uploaded during PART 4 **was** readable within seconds
+and the playlist then held exactly one item. So the three are genuinely gone from the channel,
+removed after the fact by something outside this house. The drift is therefore real but not
+repairable by a correction row, and `--reconcile` says so rather than inventing one.
+
+## PART 1 — the fix
+
+| what | file:line |
+|---|---|
+| the backoff schedule, 1·2·4·8·15 with a 30 s ceiling | [broadcast.py:150](broadcast.py#L156) |
+| the poll, replacing the single immediate read | [broadcast.py:1699](broadcast.py#L1723) |
+| the `unverified` branch, which claims no transition | [broadcast.py:1733](broadcast.py#L1747) |
+| the entry read that makes a retry safe | [tools/publish_video.py:155](tools/publish_video.py#L155) |
+| the already-public sentence | [tools/publish_video.py:163](tools/publish_video.py#L163) |
+| the three outcomes, in the order that is the law | [tools/publish_video.py:172](tools/publish_video.py#L172) |
+| `unverified` added to the ledger's vocabulary | [jobs.py:79](jobs.py#L87) |
+| `confirmSeconds`, `reads`, `corrects` added to `ROW_KEYS` | [jobs.py:114](jobs.py#L114) |
+
+**The poll lives beside the update and the read-back, not in the hand, and that is deliberate.**
+The mandate titles PART 1 "the fix in tools/publish_video.py" and the three *sentences* are
+indeed printed there — but `publish()` is what sends the update, reads it back and **writes the
+ledger row**, so `confirmSeconds` and the `unverified` outcome can only be decided where the row
+is written. The hand reads the richer result and chooses one of four sentences.
+
+**The three outcomes, and `unverified` is tested first.** Two absolutes, which one line of §42
+broke in both directions at once: never print a failure sentence when the update returned
+success, never print a success sentence without a confirmed read. So the branch that is neither
+is tested before the branch that is either.
+
+- **confirmed** → `It is public now, sir - {title}.` · row `done`, `privacyFrom: unlisted`,
+  `privacyTo: public`, `confirmSeconds`
+- **accepted-but-unconfirmed** → `YouTube accepted the change, sir, but my own read still says
+  unlisted after {n} seconds, so I will not call it done - look at the Studio, and say make it
+  public again and I shall re-read before I re-send.` · row `unverified`, **no `privacyTo`**,
+  exit non-zero
+- **rejected** → the existing refusal line and row, byte-identical
+
+**The entry read is what makes that retry instruction safe.** The sentence tells the boss to say
+it again; saying it again now *looks before it sends*, so the repair for a false failure cannot
+be a second write. `privacyFrom` survives on the unverified row because that state really was
+read, before the update went; `privacyTo` is absent because this house never read one.
+
+## PART 2 — the reconcile
+
+`--reconcile` at [tools/broadcast_film.py:58](tools/broadcast_film.py#L58), implemented at
+[broadcast.py:1762](broadcast.py#L1761). It issues **four reads of `videos.list` and no update**
+— there is no path from it to `videos.update`, so it can never change what the world shows, only
+what this house admits the world shows. It appends; no old row is ever edited, and a
+correction carries `corrects` with the original's timestamp. Re-running it is safe: a row that
+already has a correction is skipped.
+
+```
+  checked   : 3 publish row(s) that said failed or unverified
+  corrected : 0  (a correction row appended; no old row edited)
+  unlisted  : 0  (the row was right - the film really is not public)
+  missing   : 3  (YouTube has no film under that id for this token)
+    2026-10-05T16:42:33  G9Y3m3MsnrM   was failed     now missing   YouTube does not have a film under that id
+    2026-10-05T17:55:27  bZ58CoMBMII   was failed     now missing   YouTube does not have a film under that id
+    2026-10-05T18:13:56  e-sRnjYyoC4   was failed     now missing   YouTube does not have a film under that id
+```
+
+`missing` is a third verdict the mandate did not anticipate and the live run required: HTTP 200
+with an empty item list is neither `unlisted` nor `public`. It is **not** corrected, because a
+correction row claiming anything about a film nobody can read would be the same species of lie
+as the one being repaired.
+
+## PART 3 — the proof gap, closed
+
+`broadcaster_proof` section 12, fourteen assertions, against a stubbed YouTube whose **clock is
+the thing under test**. The real schedule is asserted as a predicate — `(1, 2, 4, 8, 15)`,
+ceiling 30 — and the three cases run it at 0.02 s a step so the suite does not cost ninety
+seconds of waiting.
+
+| case | reads returned | sentence | updates | ledger row |
+|---|---|---|---|---|
+| **(a)** stale then fresh | `unlisted`, `unlisted`, `public` | `It is public now, sir - useReducer in React - Explained.` | **1** | one row, `done`, **confirmSeconds 0.02 > 0**, `unlisted→public` |
+| **(b)** never flips | `unlisted` forever | `YouTube accepted the change, sir, but my own read still says unlisted after 0 seconds…` | **1** | one row, **`unverified`**, no `privacyTo`, exit 1, **7 reads** |
+| **(c)** public at entry | `public` | `That film is already public, sir - useReducer in React - Explained.` | **0** | **no row at all** |
+
+Case (a) is the one that would have caught §42: `confirmSeconds > 0` is the number that proves a
+wait happened, and every §42 fixture would have left it at zero. Case (b)'s seven reads are the
+schedule counted honestly — one at entry, then six in the poll (immediate, then five). My first
+draft of that clause asserted six and was wrong about its own arithmetic, not about the code.
+
+Case (c) also caught a flaw in **§42's own** assertion: its URL pattern included the bare
+fragment `youtu`, which matches the *word* "YouTube" — so §43's new sentence, which has no
+address in it, read as though it had one. The pattern now tests for an address (a scheme, a bare
+`www` host, or a known domain followed by a path).
+
+| proof | summary line |
+|---|---|
+| `broadcaster_proof` | **`VERIFY 110/110 PASS`** — §42's 96 plus §43's 14 |
+| `preflight.py` | **`37 pass, 4 fail, 2 warn`** |
+| `bus_proof` | `VERIFY 81/81 PASS` — run because §43 widened `jobs.OUTCOMES` and `ROW_KEYS` |
+| `goodbye_live` | `VERIFY 17/17 PASS` — §42's goodbyes unmoved |
+
+Preflight's four reds are checks **7, 12, 13, 20**, every one the Groq daily rate limit on
+`qwen/qwen3.8-27b` — the identical set §41 and §42 recorded under the same throttle, and none of
+the four touches the Broadcaster.
+
+## PART 4 — the live acceptance
+
+A new Director render, `useEffect cleanup`: 50.03 s, h264+aac, 4,158,381 bytes, 4 cited notes.
+Uploaded unlisted as **`KGELytOoupM`**, then made public through the real route — `POST /chat
+"make it public"` raised the Chain Card with six validated parameters and a 120-second window,
+and `POST /execute` answered it.
+
+> **upload** — `It is up and unlisted, sir - nobody can see it until you say the word.`
+> **publish** — `It is public now, sir - useEffect cleanup - Explained.`
+
+No failure clause. The `/execute` payload carried `ok: true`, `exitCode: 0`, and
+`url: https://www.youtube.com/watch?v=KGELytOoupM` beside the sentence. The channel agrees:
+`videos.list` reads `privacy: public`, title `useEffect cleanup - Explained`. The ledger's last
+row:
+
+```json
+{"at": "2026-10-05T18:37:16", "name": "publish", "outcome": "done",
+ "videoId": "KGELytOoupM", "privacy": "public",
+ "privacyFrom": "unlisted", "privacyTo": "public",
+ "confirmSeconds": 1.0, "reads": 2, "detail": "KGELytOoupM is public"}
+```
+
+**`confirmSeconds: 1.0` with `reads: 2` is the whole of §43 in two numbers.** The first read
+after the update was stale and the second, one second later, agreed. **Under §42's code this
+exact publish would have printed "Publishing failed."** The defect reproduced itself live, on
+the first film after the fix, and the fix caught it.
+
+## Left open, named
+
+- **Three ledger rows still disagree with the world and cannot be healed.** `G9Y3m3MsnrM`,
+  `bZ58CoMBMII` and `e-sRnjYyoC4` are not on the channel at all. Their rows say `failed`, which
+  is now known to be the wrong word for at least the publish attempt, and `--reconcile` will
+  correct them the moment YouTube can read them again — it is safe to re-run and it skips rows
+  already corrected. If those films were removed deliberately, nothing needs doing; if they were
+  removed by YouTube, that is worth knowing before more films go up on a young channel.
+- **`jobs.OUTCOMES` grew from three words to four.** The module's own docstring called the
+  vocabulary closed "on purpose", and §43 opened it by exactly one because neither `done` nor
+  `failed` can describe an accepted-but-unconfirmed act without lying. `bus_proof` is 81/81 over
+  the change; `_steps_public()` renders an `unverified` job's last step as `stopped`, which is
+  accurate.
+- **`confirmSeconds` is rounded to two decimals, not one.** At the real schedule the values are
+  1.0, 3.0, 7.0 and so on, where one decimal is plenty; at the fixture's 0.02 s step, one
+  decimal rounded the number to 0.0 and made case (a)'s central assertion fail against working
+  code. The precision is there so the proof can measure what it claims to.
+- **The upload's own proposal line still contains a URL** — *"'useEffect cleanup - Explained' is
+  up and unlisted, sir - https://… Shall I make it public?"* — and it is on the glass, not in
+  the ear: §42's Quiet Tongue strips it from the audio payload and leaves it clickable on the
+  card. Named here because it is the one remaining sentence in the Broadcaster's path that
+  carries an address, and it is only safe because of a rule in another file.
+- **Nothing was touched on the forbidden list.** The Delete Prohibition, unlisted-first, the
+  consent gates, the Glass Laws, the Quiet Tongue and §42's two goodbye lines are unchanged —
+  the only §42 sentence altered is the already-public line, which PART 1 names. Stdlib only; no
+  write to `config.json`; the ledger remains append-only.
+
+The publish tells the truth in both directions now.

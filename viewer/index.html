@@ -14732,6 +14732,13 @@ async function loadLib() {
      a sound - see __galaxy.voice.normalize(). */
   const TONGUE_ID_MIN = 12;
   const TONGUE_ID_LINE = 'the reference is in the card';
+  /* §42 RULE 5's TWO CONSTANTS. The pattern is the mandate's own: an http(s) scheme or a
+     bare www, then everything up to the next whitespace. \S+ is deliberately greedy about
+     punctuation - a trailing full stop or bracket belongs to the address as far as the ear is
+     concerned, and a voice that said "dot" after swallowing the URL would be the defect this
+     rule exists to remove, wearing a different hat. */
+  const TONGUE_URL_RE = /(?:https?:\/\/|www\.)\S+/gi;
+  const TONGUE_LINK_LINE = ' The link is on the glass beside me.';
 
   function tongueNormalize(text) {
     let s = String(text == null ? '' : text);
@@ -14740,6 +14747,44 @@ async function loadLib() {
        things a voice needs, and the dash is dealt with by rule 4 below, which turns it into a
        pause rather than deleting it. */
     s = s.replace(/[*_#`]/g, '');
+    /* ---- rule 5 (§42): A URL IS NEVER SPOKEN ALOUD IN THIS HOUSE ----
+       AFTER RULE 1 AND BEFORE RULE 2, and both halves of that are load-bearing. After rule 1,
+       so that a URL wrapped in backticks or asterisks is bare by the time this sees it and
+       \S+ is not matching markdown into the middle of an address. Before rule 2, because rule
+       2 turns any 12+ alphanumeric run containing a digit into "the reference is in the card"
+       - and a URL is full of them. Run in the other order, the id rule chews a watch link
+       into "https://www.youtube.com/watch?v=the reference is in the card", which is a URL
+       still being read aloud AND a sentence that makes no sense.
+
+       WHY THIS IS A BACKSTOP AND NOT THE FIX. §42 PART 1 took the URLs out of the two
+       sentences that had them - the upload's goodbye and the publish hand's stdout - at the
+       source, which is where a defect should be fixed. This rule is here because the SOURCE
+       of a spoken line is not always this house: a model writing prose can put a link in an
+       answer, a web summary can quote one, and a note can contain one. The law wanted is "no
+       URL is ever spoken", and a law that depends on every future author remembering it is
+       not a law. So it is enforced at the one function that composes audio.
+
+       AND THE EYE IS NOT TOUCHED, which is the mandate's critical guard and is a property of
+       WHERE this runs rather than of anything it does. sayFetch() posts two forms of every
+       chunk: `text`, which is this function's output and is what piper is given, and
+       `timing_text`, which is item.text - the raw chunk, untouched. The caption
+       (captionShow), the Word-by-Word reveal (karaArm) and the answer card are all built from
+       that same raw line upstream in speakLine(). So the URL stays on the glass, stays
+       clickable, and stays the string the word timings are indexed by. Nothing downstream of
+       this function can reach the eye. */
+    const beforeUrls = s;
+    s = s.replace(TONGUE_URL_RE, ' ');
+    const strippedUrl = (s !== beforeUrls);
+    if (strippedUrl) {
+      /* WHAT THE REMOVAL LEAVES BEHIND, tidied before the clause is added. "It is up at
+         <url>." becomes "It is up at ." with the stop orphaned, and a neural voice reads an
+         orphaned mark as a stammer. The dangling run of punctuation goes, and a sentence that
+         now ends on a word gets its full stop back - so the clause that follows begins a
+         sentence rather than continuing a broken one. */
+      s = s.replace(/[ \t]{2,}/g, ' ').replace(/\s+([,.;:!?])/g, '$1').trim();
+      s = s.replace(/[\s,;:\-–—]+$/g, '');
+      if (s && !/[.!?]$/.test(s)) s += '.';
+    }
     /* rule 2. \b would not do here: it treats the boundary between a letter and a hyphen as a
        word edge, so a hyphenated id would be judged in pieces and pass. The token is taken
        between whitespace-or-punctuation edges instead, and tested whole. */
@@ -14773,7 +14818,26 @@ async function loadLib() {
     const join = '[\\s,;:]+(?:and|or|then|plus)?[\\s,;:]*';
     s = s.replace(new RegExp('(?:' + once + ')(?:' + join + '(?:' + once + '))+', 'g'),
                   TONGUE_ID_LINE);
-    return s.replace(/[ \t]{2,}/g, ' ').trim();
+    s = s.replace(/[ \t]{2,}/g, ' ').trim();
+    /* rule 5's second half, and it is LAST so that rule 4 cannot reach into it: the clause
+       ends in a full stop, and rule 4's end-of-string pass turns a trailing dash into one -
+       appended earlier, the clause would have been the thing those rules were editing.
+
+       EXACTLY ONE CLAUSE. Appended once per chunk, which is once per spoken string, and
+       guarded against a double by the endsWith test - a line already ending in it is a line
+       that has been through here (the memo in tongueSpoken() means it should not be, and a
+       guard that costs one comparison is cheaper than finding out). A URL cannot be split
+       across two chunks, because speakSplit() never cuts a word and a URL has no spaces in
+       it, so one address can never earn two clauses. Two DIFFERENT links in two chunks earn
+       one each, which is correct: each of those chunks really did lose a link.
+
+       AND IT IS ADDED EVEN IF THE STRIP LEFT NOTHING AT ALL. A line that was only a URL
+       becomes only this clause - which is the right outcome, because the alternative is a
+       tab that goes silent and a boss who cannot tell a missing answer from a broken voice. */
+    if (strippedUrl && !s.endsWith(TONGUE_LINK_LINE.trim())) {
+      s = (s + TONGUE_LINK_LINE).trim();
+    }
+    return s;
   }
 
   /* THE ONE ACCESSOR, AND WHY IT IS AN ACCESSOR RATHER THAN A LINE IN THE PUMP.
