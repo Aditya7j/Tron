@@ -11220,3 +11220,234 @@ about which topic the card shows, and the send path was accepted live last round
 
 **Ready for the boss?** Yes. The one thing wanting your word is the outcome-word decision
 above, and `bus_proof`'s shutter if you want it chased.
+
+# ROUTING LAW HARDENING · PIPER · GMAIL
+
+Four items, diagnosed before touched. Three are fixed and proved. One — PART 2(c) — is
+diagnosed to the line and **not** changed, because the fix lands in frozen glass; it is put to
+you below rather than guessed at. One premise (PART 3) did not reproduce, and that is reported
+as a finding rather than papered over with a fix for a working path.
+
+`fallback_proof.mjs` — **15/15 PASS** (new).
+
+## PART 1a — the hands manifest and the persona, on the fallback path
+
+**Root cause, one function.** [server.py:7293](server.py#L7293), `_ollama_fallback_messages()`,
+dropped **every** system block and substituted a 343-character constant. Measured: the real
+system prompt is **8,620 characters** — 7,041 of persona, 1,579 of hands manifest — so the
+local engine was being handed **4%** of what the cloud gets. Two consequences, both of them
+the ones you saw:
+
+- **No hand could ever be proposed on fallback.** The manifest is the only place the model
+  learns a tool exists. With it gone, every hand in the house was unreachable the moment Groq
+  throttled — which is why `capabilities_proof`, `chain_proof`, `followup_proof` and
+  `persona_proof` all collapse together under the limit, as §44 recorded.
+- **The persona went with it.** *"Please use your preferred ride-hailing app"* is what a model
+  says when nobody told it who it is.
+
+**Fix: there is now one construction, not two.** The fallback sends the same list the cloud
+path sends, built by the same `assemble()`. Measured after: **8,621 characters reaching the
+local engine, naming 11 of 11 hands**, persona intact.
+
+## PART 1b — the model
+
+`OLLAMA_CHAT_MODEL = "qwen3:latest"` at [server.py:1302](server.py#L1302), a named constant
+`DEFAULT_CONFIG` takes its value from — one line to swap, no code-reading.
+
+**Re-measured, because the job changed.** Everything §41 concluded was measured against a
+model receiving 343 characters. Against the real prompt:
+
+| model | ttft | total | register |
+|---|---|---|---|
+| `qwen3:4b` | 0.2s | **7.5s** | *"Hmm, the user has sent a very long message repeating the sam…"* — still narrates |
+| **`qwen3:latest`** (8.2B, Q4_K_M, 40960 ctx) | 0.3s | **4.0s** | *"Pricing should start from the urgency of the problem…"* |
+
+**There is no trade-off to report, and I was ready to report one.** The bigger model won on
+latency *and* on register — the 4b is slower because it spends its tokens narrating, not
+because it is smaller. qwen3:latest stays.
+
+**Per-turn cost in service: 4.4s to first token, 5.8s total**, with the system block cached as
+a stable prefix. A *cold* prefix costs **138s** once per model load — so
+[server.py:7537](server.py#L7537) now primes `ollama_warm()` with the **real system block**
+instead of a two-word "hi", which cached nothing a real turn would reuse. Live: `§41 fallback:
+qwen3:latest resident in 1.2s, keep_alive forever`.
+
+## PART 1c — the degradation at turn 10–12
+
+**Diagnosed with evidence before fixing.** A secret word placed **once** at the top of the
+prompt, then asked for back:
+
+| prompt | num_ctx | `prompt_eval_count` | secret survived |
+|---|---|---|---|
+| 547 chars (~136 tok) | 4096 | 121 | **yes** — answers `PELICAN` |
+| 8,152 chars (~2,038 tok) | 1024 | **514** | **no** — answers `"fox"`, a word from the filler |
+| 24,172 chars (~6,043 tok) | 4096 | **2050** | **no** — answers `"dog"`, from the filler |
+
+**Ollama truncates from the FRONT, silently, and `_ollama_chatml()` puts the system block
+first — so the system block is precisely what goes.** `prompt_eval_count` coming back at a
+third of what was sent is the truncation, visible. That is the mechanism behind "after 10–12
+responses the answers go wrong": the conversation grows, the window does not, and the persona
+and manifest are pushed out of the top while the model keeps answering from whatever filler
+survived.
+
+**Fix, in three parts, and the order of trimming is the law:**
+
+| what | file:line |
+|---|---|
+| `num_ctx` 4096 → **8192** | [server.py:7188](server.py#L7188) |
+| a **24,000-char prompt budget** under it, so trimming is this file's decision and not the runtime's silent one | [server.py:7195](server.py#L7195) |
+| history trimmed oldest-first **in pairs**, system block never touched, newest question never dropped | [server.py:7293](server.py#L7293) |
+| timeout 30s → **180s**, because the real prompt and a cold prefix need it | [server.py:7180](server.py#L7180) |
+
+**Proved to 20 turns:** the system block is **8,621 characters at every single turn**, manifest
+and persona intact at all 20 including turn 12; every turn fits the budget (largest 23,487 of
+24,000); and it is history that gives way — 3 turns kept at turn 1, 19 at turn 12, 19 at turn
+20.
+
+## PART 2 — Piper: two root causes, not one, and a third I did not touch
+
+You asked whether the three symptoms share a cause. **They do not.** (a) and (b) are separate,
+and (c) is a third thing entirely.
+
+**(a) the cutoff — root cause found in the house's own trace.** Six occurrences of
+`piper exited 1: wave.Error: # channels not specified`. Reproduced on demand:
+`say.synthesise("...")` fails exactly that way. Piper emits no frames for a line with no
+speakable content and its own wave writer then dies with an error about *channels* that says
+nothing about the cause. **The page treats a failed chunk as one to skip and advance past** —
+so a sentence split into three chunks, one of which normalised down to punctuation, is heard
+with a hole in it. That is your "only half a sentence".
+
+Not a chunking bug: `speakSplit()` already splits on sentence boundaries first and only cuts
+mid-sentence when a single sentence exceeds the 180-char ceiling. Fixed at
+[say.py:221](say.py#L221) — an unspeakable line is now refused with a sentence
+(*"there is nothing speakable in that line."*) before Piper is ever started. The caller still
+skips it, but it skips something this house understood.
+
+**(b) the symbols — no normalization existed anywhere.** `tongueNormalize()` had rules for
+markdown, URLs, unspeakable ids and dashes, and nothing for symbols, so `@` went to Piper raw.
+Note `@` *does* synthesise (8,748 bytes) — it is mispronounced, not fatal, which is why this is
+a different root cause from (a). Rule 6 added at
+[viewer/index.html:14778](viewer/index.html#L14778), **after** the URL strip and **before** the
+id rule — the only correct slot, since an address is full of `@` and `.` and expanding those
+first would read the URL aloud, which is exactly what §42 removed. Measured:
+
+```
+"Email me at aditya@example.com please."  -> "Email me at aditya at example.com please."
+"Tom & Jerry"                             -> "Tom and Jerry"
+"50% of revenue"                          -> "50 per cent of revenue"
+"2+2=4"                                   -> "2 plus 2 equals 4"
+"$1,250.50 today"                         -> "1,250.50 dollars today"
+"It is 30° outside"                       -> "It is 30 degrees outside"
+"See https://x.io/a and mail me@x.io"     -> "See and mail me at x.io. The link is on the glass beside me."
+```
+
+Two of my own rules were wrong and were caught by running them: `/\$(\d)/` read `$40` as
+*"4 dollars0"*, and a slash rule turned `and/or` into *"and or or"*. The currency regex now
+takes the whole amount; the slash rule was **removed** — two common cases made worse and none
+made better is not a rule worth having.
+
+**(c) text-then-audio — diagnosed, NOT fixed, and this is the scope conflict PART 0 asked me
+to stop on.** The cause is two surfaces with two timings:
+`captionShow(line)` at [viewer/index.html:14395](viewer/index.html#L14395) is the **first act**
+of `speakLine()` and dumps the whole line onto the glass immediately, before any audio exists;
+the word-by-word reveal `karaArm(line, w0)` is armed ~80 lines later and lights words off the
+audio clock. So the caption pre-empts the reveal, and you read the sentence before you hear it.
+
+The existing mechanism you asked me to reuse is `karaArm`, and the fix is to stop the caption
+pre-empting it — hold the caption until the first audio chunk starts. **But `captionShow`'s
+timing inside `speakLine` is §39's Word-by-Word reveal law and the Glass Laws, frozen by
+§38/§39 and not among PART 0's four items.** PART 0 says to stop and report rather than
+proceed, so I have. The change is small and I can make it on your word; it needs
+`karaoke_proof` re-run against it, since that suite asserts caption behaviour directly.
+
+## PART 3 — the Gmail send: it works, and here is what I found instead
+
+**The regression does not reproduce.** Three real sends tonight, three real message ids:
+
+| path | result |
+|---|---|
+| `google_api.send_message()` directly | `1a112279d1719630` |
+| `tools/send_email.py` as a subprocess, as hands.py runs it | `1a11227d309d804b` |
+| **the real route: Chain Card → `/execute`** | **`1a1123283fb7d131`** |
+
+> *"Email sent to adityasingh0076@gmail.com. Google's id for it is 1a1123283fb7d131."*
+
+**Why it failed for you, and why it does not now.** The token file carries
+`connected_at: 2026-10-06T21:07:33` — tonight. The hands ledger shows `send_email` last ran
+**2026-10-01**, with 14 failures recorded against 17 successes. Your failures were real; the
+reconnect you performed is what fixed them, and these are the first sends after it.
+
+**There is no stale-token bug.** `access()` calls `token()`, which reads the file on **every**
+call — there is no module-level bearer cache anywhere, so a reconnect that rewrites the file is
+picked up by the very next call, in-process, with no restart needed. I checked this specifically
+because you asked.
+
+**But the instrumentation found a real defect, and it is fixed.** At
+[google_api.py:499](google_api.py#L499), a refresh failure that is *not* `invalid_grant`
+returned `state="connected"` **with an empty bearer** — a contradiction, and the state field
+exists precisely so a caller need not parse English. Every caller survives it by accident
+(each tests `if why:` after the two named states), but the one case where the state matters
+most was the one it lied about. It now returns `"offline"`, which the Command Panel's existing
+`else` branch already words correctly.
+
+And `state_report()` at [google_api.py:516](google_api.py#L516) is the instrumentation you
+asked for — five conditions in plain words, including the one `access()` structurally cannot
+see, because it only ever talks to the token endpoint:
+
+```json
+{"state": "connected", "clientFile": true, "tokenFile": true, "hasRefresh": true,
+ "scopes": ["gmail.compose", "gmail.send", "calendar.events"],
+ "emailSha": "ddb4af013579", "expiresInS": 2746.3, "bearerChars": 253,
+ "gmail": "accepted (47088 message(s) in the mailbox it can see)", "coherent": true}
+```
+
+No credential in it: the bearer is a length, the address a sha256 prefix, the refresh token a
+boolean. `coherent` is the assertion that `state="connected"` with no bearer is impossible.
+
+### Suites re-run
+
+| suite | before | after |
+|---|---|---|
+| `fallback_proof` | — | **15/15 PASS** (new) |
+| `karaoke_proof` | 91 / 89 / 91 of 92 across §42 | **91/92** — the same band |
+
+`karaoke_proof`'s single red is *"A HAND IN THE PANEL RE-ARMS IT: 16227ms left before the
+pointer moved inside, 19739ms after"* - a sidebar hover re-arm timing assertion, in the
+family that has been oscillating all session and nothing to do with rule 6. The tongue's own
+clauses pass.
+
+## The honest gap between the fallback and Groq
+
+Not papered over. The local engine is **8.2B at Q4 on a CPU** against Groq's hosted model:
+
+- **Latency**: ~6s a turn warm, against Groq's sub-second. A cold prefix is 138s, which the
+  boot warm-up now absorbs — but a model eviction mid-session puts it back.
+- **History**: the local budget is 24,000 chars against the cloud's `MAX_CONTEXT` of 48,000.
+  A long conversation keeps **half** as much history locally. That is the cost of the window
+  and it is paid in history, never in the system block.
+- **Quality**: it answers in character and can see its hands, which is the bar this mandate
+  set. It is not Groq. Expect shorter, blunter answers and worse synthesis across many
+  sources.
+- **What I have not proved**: that it reliably *formats* a tool call well enough to drive a
+  hand end-to-end. 1a makes the hands **visible**; whether qwen3:latest proposes them as
+  cleanly as Groq does is a question only a live throttled conversation answers, and Groq was
+  not throttled while I had the server up. See below.
+
+## Left open, for you to decide
+
+1. **PART 2(c)** — the caption/reveal coordination. Diagnosed to the line, not changed, because
+   it is frozen glass outside PART 0's four. Say the word and it is a small change plus a
+   `karaoke_proof` re-run.
+2. **The live 12-turn throttled conversation** was not run end-to-end through the server,
+   because Groq was **not** throttled while the server was up, and I will not fake a 429 into a
+   live server to claim a transcript. The equivalent is proved in-process in
+   `fallback_proof.mjs` §3: Groq forced to 429 via its own `transient` flag, the local engine
+   answering with the real prompt, and the ledger row reading
+   `served=ollama outcome=fallback model=qwen3:latest`. Its answer, verbatim: *"I am Galaxy,
+   the personal assistant of Sir Aditya Singh… I can write something into the calendar, send an
+   email, change the voice…"* — in character, naming its hands, which was impossible before.
+   Ask and I will hold the real 12-turn conversation the next time the limit bites.
+3. **The four throttle-blocked suites** (`capabilities_proof`, `chain_proof`,
+   `followup_proof`, `persona_proof`) should now be re-run under a real throttle — 1a is
+   exactly the fix they were failing for, and if it works they come back. I have not claimed
+   that; it needs the limit to bite to measure.

@@ -1275,10 +1275,31 @@ INDEX_PATH = os.path.join(ROOT, "notes-index.json")
 #     with qwen3:1.7b configured, check 30 passes.
 #
 # So the strongest model that passes is the smaller one, because the gate it has to pass is
-# a deadline on a loaded machine and not a benchmark on an idle one. qwen2.5-coder:7b is one
-# word away in config.json for anyone whose fallback is never asked two questions at once -
-# it is the better writer, and it is the one this house cannot afford to wait for.
-OLLAMA_CHAT_MODEL = "qwen3:1.7b"
+# a deadline on a loaded machine and not a benchmark on an idle one.
+#
+# ---- AND THEN THE JOB CHANGED, WHICH IS WHY THAT CONCLUSION NO LONGER HOLDS ----------------
+# Everything above was measured against a fallback that received a 343-character system
+# prompt. It now receives the REAL one - persona and hands manifest, 8,620 characters - because
+# a model that is not told the hands exist can never propose one, and the house spent four
+# sections watching every hands-routing proof collapse the moment Groq throttled. A 1.7B model
+# handed the real prompt is not the thing that was measured above.
+#
+# RE-MEASURED FOR THE NEW JOB, same prompt shape, same machine:
+#   qwen3:4b       ttft 0.2s, total 7.5s - and it STILL narrates: "Hmm, the user has sent a
+#                  very long message repeating the sam..." which is the prose failure that
+#                  disqualified it in §41 and has not improved.
+#   qwen3:latest   ttft 0.3s, total 4.0s - FASTER than the 4b on the same prompt, and in
+#                  register: "Pricing should start from the urgency of the problem...".
+#                  8.2B, Q4_K_M, 40960 context, already on this disk.
+# There is no trade-off to report: the bigger model won on latency AND on register. The 4b is
+# not slower because it is smaller, it is slower because it spends its tokens narrating.
+#
+# PER-TURN COST IN SERVICE, which is the number that matters: 4.4s to first token and 5.8s to
+# the end, with the system block cached as a stable prefix. A COLD prefix costs 138s once per
+# model load, which is why ollama_warm() primes the real system block at boot rather than a
+# two-word ping.
+# Named here and taken by DEFAULT_CONFIG below, so swapping it is one line and no code-reading.
+OLLAMA_CHAT_MODEL = "qwen3:latest"
 
 DEFAULT_CONFIG = {
     # §41: "groq", "openrouter" or "openai", and anything else means "groq" - see
@@ -7151,8 +7172,27 @@ def wear_persona(cfg, messages):
 #  cannot be reproduced cannot be measured, and a grounded answer has no business
 #  being creative.
 OLLAMA_CHAT_URL_PATH = "/api/generate"
-OLLAMA_CHAT_TIMEOUT_S = 30.0
-OLLAMA_FALLBACK_NUM_CTX = 4096
+# LONGER THAN §41's 30s, AND MEASURED. The window below is four times what it was and the
+# prompt is now the real one, so a turn whose prefix is NOT already cached pays a genuine
+# prefill: measured 138s cold against 4.4s to first token once the system block is cached.
+# 30s would have turned every cold turn into "Local engine timed out" - which is the failure
+# §43 spent a whole section learning to tell apart from a real one.
+OLLAMA_CHAT_TIMEOUT_S = 180.0
+# RAISED FROM 4096, AND THE OLD VALUE WAS SILENTLY EATING THE SYSTEM PROMPT. Measured with a
+# secret word placed once at the top of the prompt: at num_ctx 4096 a 24,172-character prompt
+# reported prompt_eval_count 2050 - a third of what was sent - and the model answered with a
+# word from the FILLER because the top of the prompt, where the persona and the hands manifest
+# live, had been truncated away. Ollama drops from the FRONT, and _ollama_chatml() puts the
+# system block first, so the system block is precisely what goes.
+# 8192 holds the real prompt whole: the same test reports prompt_eval 2630 of 2580 tokens sent.
+OLLAMA_FALLBACK_NUM_CTX = 8192
+# AND A CHAR BUDGET UNDER IT, so trimming is this file's decision and not the runtime's silent
+# one. 8192 tokens is roughly 32,000 characters; 24,000 leaves room for the reply and for the
+# tokenizer being less generous than four-chars-a-token on code and ids. The cloud's own cap
+# (MAX_CONTEXT) is 48,000, so a long conversation keeps twice as much history on the cloud as
+# it does here - which is the honest cost of a local window and is paid in HISTORY, never in
+# the system block. See _ollama_fallback_messages().
+OLLAMA_PROMPT_BUDGET_CHARS = 24000
 OLLAMA_FALLBACK_PREDICT = 48
 OLLAMA_KEEP_ALIVE = -1
 OLLAMA_TIMEOUT_LINE = "Local engine timed out"
@@ -7251,27 +7291,59 @@ def _ollama_chatml(messages):
 
 
 def _ollama_fallback_messages(messages):
-    """The cloud's message list, re-dressed for a small local model.
+    """The cloud's own message list, trimmed to fit - and NEVER stripped of its system blocks.
 
-    ONE SYSTEM TURN, NOT EIGHT. What arrives here is the full assembled prompt - persona,
-    capabilities, history, snippets, the lot - and handing all of it to a 7B model is how
-    you get an answer about the persona instead of an answer to the question. So every
-    system block is DROPPED and replaced by OLLAMA_FALLBACK_SYSTEM, and the user and
-    assistant turns ride through untouched: the question and the evidence are the two
-    things that must survive, and they are the two things the cloud prompt was wrapped
-    around rather than part of.
+    WHAT THIS USED TO DO, AND WHY IT WAS WRONG. It dropped every system block and replaced
+    the lot with a 343-character constant. Measured: the real system prompt is 8,620
+    characters - 7,041 of persona and 1,579 of hands manifest - so the local engine was being
+    handed 4% of what the cloud gets. Two consequences, both confirmed live:
+      NO HAND COULD EVER BE PROPOSED ON FALLBACK. The manifest is the only place the model
+        learns a tool exists, so with it gone every hand in the house was unreachable the
+        moment Groq hit its rate limit - capabilities_proof, chain_proof, followup_proof and
+        persona_proof all collapse together, and the boss cannot send an email.
+      AND THE PERSONA WENT WITH IT. "please use your preferred ride-hailing app" is not a
+        sentence this butler would say; it is what a model says when nobody told it who it is.
+
+    SO THE BLOCKS RIDE THROUGH. The same list the cloud path sends, in the same order, built
+    by the same assemble() - there is no second construction to drift.
+
+    WHAT IS TRIMMED INSTEAD, AND THE ORDER IS THE LAW. A local window is smaller than the
+    cloud's, so something has to give on a long conversation, and it is never the system
+    block: history goes first, OLDEST FIRST AND IN PAIRS, exactly as assemble() trims for the
+    cloud. A user turn dropped without its answer turns the window into a monologue.
+    THE SYSTEM PROMPT SURVIVING INTACT IS NON-NEGOTIABLE - if the system blocks alone were
+    ever over budget they are still sent whole, because a truncated persona is a different
+    butler and a truncated manifest is a house with no hands.
     """
-    kept = [m for m in messages
-            if isinstance(m, dict) and str(m.get("role")) in ("user", "assistant")]
-    # THE ONE THING READ OUT OF THE BLOCKS BEFORE THEY GO: whether this is a web turn. See
-    # OLLAMA_WEB_CUE - §26's "say which world you are speaking from" lives in the cloud
-    # prompt that is being dropped, so on a web turn it is carried across in one sentence.
-    dropped = "\n".join(str(m.get("content") or "") for m in messages
-                        if isinstance(m, dict) and str(m.get("role")) == "system")
-    system = OLLAMA_FALLBACK_SYSTEM
-    if OLLAMA_WEB_MARKER in dropped:
-        system += "\n" + OLLAMA_WEB_CUE
-    return [{"role": "system", "content": system}] + kept
+    system = [m for m in messages
+              if isinstance(m, dict) and str(m.get("role")) == "system"]
+    turns = [m for m in messages
+             if isinstance(m, dict) and str(m.get("role")) in ("user", "assistant")]
+
+    # §26's web cue still rides, because the cloud prompt's own wording for it is inside the
+    # blocks that now survive - this only adds the short restatement when the marker is there.
+    joined = "\n".join(str(m.get("content") or "") for m in system)
+    extra = ("\n" + OLLAMA_WEB_CUE) if OLLAMA_WEB_MARKER in joined else ""
+
+    fixed = sum(len(str(m.get("content") or "")) for m in system) + len(extra)
+    budget = OLLAMA_PROMPT_BUDGET_CHARS
+    size = lambda: sum(len(str(m.get("content") or "")) for m in turns)   # noqa: E731
+    cut = 0
+    # THE NEWEST TURN IS NEVER DROPPED: `len(turns) >= 3` leaves the question that was just
+    # asked standing even when the budget is hopeless. An answer to nothing is worse than a
+    # cramped answer to something.
+    while fixed + size() > budget and len(turns) >= 3:
+        del turns[:2]
+        cut += 2
+    if cut:
+        sys.stderr.write("  §41 local: trimmed %d old turn(s) to fit %d chars - the system "
+                         "block is never the thing that goes\n" % (cut, budget))
+    out = [dict(m) for m in system]
+    if extra and out:
+        out[-1] = dict(out[-1], content=str(out[-1].get("content") or "") + extra)
+    elif extra:
+        out = [{"role": "system", "content": OLLAMA_FALLBACK_SYSTEM + extra}]
+    return out + turns
 
 
 def call_ollama(cfg, messages, image=None, status=None):
@@ -7454,8 +7526,20 @@ def ollama_warm(log=None):
     model = ollama_chat_model(cfg)
     url = (str(cfg.get("ollama_url") or DEFAULT_CONFIG["ollama_url"]).rstrip("/")
            + OLLAMA_CHAT_URL_PATH)
-    body = json.dumps({"model": model, "prompt": "<|im_start|>user\nhi<|im_end|>\n"
-                                                 "<|im_start|>assistant\n",
+    # THE REAL SYSTEM BLOCK, NOT A TWO-WORD PING, and the difference is 138 seconds. Ollama
+    # caches the KV for a prompt PREFIX it has already seen, and from §44 the prefix every
+    # fallback turn shares is the persona plus the hands manifest. Priming with "hi" loaded
+    # the weights and cached nothing a real turn would reuse, so the first fallback of the day
+    # still paid a full cold prefill - measured at 138s to first token against 4.4s once the
+    # prefix is warm. Priming with the thing that is actually shared is what makes keep_alive
+    # -1 mean what it says.
+    try:
+        primer = wear_persona(cfg, [{"role": "system", "content": SYSTEM_PROMPT},
+                                    {"role": "user", "content": "ready?"}])
+        prompt = _ollama_chatml(_ollama_fallback_messages(primer))
+    except Exception:                                              # noqa: BLE001
+        prompt = "<|im_start|>user\nhi<|im_end|>\n<|im_start|>assistant\n"
+    body = json.dumps({"model": model, "prompt": prompt,
                        "raw": True, "stream": False, "keep_alive": OLLAMA_KEEP_ALIVE,
                        "options": {"temperature": 0, "num_ctx": OLLAMA_FALLBACK_NUM_CTX,
                                    "num_predict": 1}}).encode("utf-8")

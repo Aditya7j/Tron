@@ -14775,6 +14775,38 @@ async function loadLib() {
     const beforeUrls = s;
     s = s.replace(TONGUE_URL_RE, ' ');
     const strippedUrl = (s !== beforeUrls);
+    /* ---- rule 6: A SYMBOL IS A WORD OUT LOUD, AND PIPER DOES NOT AGREE ----
+       REPORTED AND REPRODUCED: "@" is read as "at the rate" rather than "at". The voice is a
+       neural model trained on prose, and a bare glyph is outside what it was taught to say -
+       so it either guesses a regional reading, spells it, or in the worst case emits nothing
+       at all and takes the whole chunk down with it (see say.py's "nothing speakable" refusal
+       and the hole it was leaving mid-sentence).
+       AFTER THE URL STRIP AND BEFORE THE ID RULE, which is the only correct slot: an address
+       is full of @ and / and ., and expanding those first would turn one unreadable token
+       into six readable words and read the URL out loud - which is exactly what §42 removed.
+       EXPANDED, NOT DELETED, because these carry meaning a reader would miss: "50% of revenue"
+       must not become "50 of revenue". And spaced on both sides so the voice does not run the
+       word into its neighbour - the whitespace collapse at the end tidies the rest. */
+    s = s.replace(/@/g, ' at ')
+         .replace(/&/g, ' and ')
+         .replace(/%/g, ' per cent ')
+         .replace(/\+/g, ' plus ')
+         .replace(/=/g, ' equals ')
+         /* THE SLASH IS DELIBERATELY LEFT ALONE, and this is a rule I wrote and then removed
+            on the evidence: expanding it to " or " turns "and/or" - far and away the commonest
+            slash in prose - into "and or or", which is literally correct and sounds like a
+            stutter. A date ("12/05") must not be touched either. Two common cases made worse
+            and none made better is not a rule worth having.
+            The whole currency amount, not its first digit: /\$(\d)/ read "$40" as
+            "4 dollars0", which is the kind of defect that only shows when somebody says a
+            number out loud. */
+         .replace(/\$(\d[\d,.]*)/g, '$1 dollars')
+         .replace(/£(\d[\d,.]*)/g, '$1 pounds')
+         .replace(/€(\d[\d,.]*)/g, '$1 euros')
+         .replace(/₹(\d[\d,.]*)/g, '$1 rupees')
+         /* The degree sign and the asterisk: one is a unit, the other is already stripped as
+            markdown by rule 1 and only survives when it stood alone. */
+         .replace(/°/g, ' degrees ');
     if (strippedUrl) {
       /* WHAT THE REMOVAL LEAVES BEHIND, tidied before the clause is added. "It is up at
          <url>." becomes "It is up at ." with the stop orphaned, and a neural voice reads an
