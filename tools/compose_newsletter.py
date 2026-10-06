@@ -15,10 +15,24 @@ the parallel mechanism the Publisher mandate forbids building. So the draft is c
 everything else, and the card's rows are what the boss is about to have composed FOR him
 rather than what is about to leave the house.
 
-THE DRAFT IS NOT STORED. It is composed, reported, and thrown away. tools/send_newsletter.py
-composes again from the same topic at send time, so there is no draft on disk for a later send
-to have drifted from - the topic and the notes are the durable things, and both are the
-boss's. A cached draft would also be a copy of his research sitting in a file nobody audits.
+THE DRAFT IS NOT STORED, AND ONE LINE ABOUT IT IS. It is composed, reported, and thrown away;
+tools/send_newsletter.py composes again from the same topic at send time, so there is no draft
+on disk for a later send to have drifted from - the topic and the notes are the durable things,
+and both are the boss's. A cached draft would also be a copy of his research sitting in a file
+nobody audits.
+
+WHAT IS WRITTEN DOWN IS THE TOPIC AND THE SUBJECT, AND THAT IS NOT A DRAFT. It is the fact
+that drafting happened and what it was about - two short strings, no body, no passages, no
+snippets. The "draft is not stored" law is unchanged: a reader of the ledger learns that the
+boss asked for a newsletter on something and what it would have been called, which is exactly
+what a later "send the newsletter" needs to know and no more than that.
+
+THE DEFECT THIS EXISTS FOR, and it was live: server.py's _newsletter_topic() answers a bare
+"send the newsletter" by reading the most recent `newsletter` row out of the ledger. With no
+row ever written here, the most recent one could only be a past SEND - so a boss who drafted
+"B2B Agents" and then said "send the newsletter" got the previous test send, "useEffect
+cleanup", proposed back at him. Drafting is the more recent signal of what he currently wants;
+it has to leave a trace or it cannot be that signal.
 
   in    {"topic": "..."} on stdin, UTF-8
   out   one plain-ASCII line
@@ -61,6 +75,29 @@ def main():
     draft = newsletter.compose(topic)
     if not draft["ok"]:
         return fail(draft["why"])
+
+    # ---- THE ONE LINE IN THE LEDGER. See the docstring's third paragraph. -------------------
+    # OUTCOME "done" AND NOT A FIFTH WORD, which the brief suggested and I did not take: the
+    # concrete harm is in jobs.finish(), where `_SEEN["done" if outcome == "done" else
+    # "failed"] += 1`. An outcome of "drafted" is not "done", so every draft would increment
+    # the house's FAILED counter - visible on /jobs and asserted by bus_proof. A draft that
+    # succeeded ended fine, so its outcome is `done`; what distinguishes it from a send is
+    # `sent: 0` with `failedCount: 0` and ONE step rather than two, which are fields that
+    # already exist and already mean exactly that. jobs.OUTCOMES stays a closed vocabulary
+    # about how a job ENDED rather than a label for what kind of job it was - the job's NAME
+    # is what says that.
+    try:
+        import jobs
+        rep = jobs.Reporter("newsletter", ["compose"], verb="DRAFTING", topic=topic)
+        rep.step("compose", draft["subject"])
+        rep.done("drafted, not sent - %d subscriber(s) on the list" % draft["subscribers"],
+                 subject=draft["subject"], subscribers=draft["subscribers"],
+                 sent=0, failedCount=0)
+    except Exception as exc:                                       # noqa: BLE001
+        # A LEDGER THAT WILL NOT WRITE DOES NOT UNMAKE THE DRAFT. The sentence below is still
+        # true about what was composed; what is lost is the trace a later bare "send the
+        # newsletter" would have read, so it is named on stderr rather than swallowed.
+        sys.stderr.write("  newsletter: the draft row could not be written (%s)\n" % exc)
 
     # THE REPORT IS COUNTS AND IDS, NOT THE NEWSLETTER. This line is spoken aloud in a room,
     # so it carries the shape of the draft - how long, how many snippets, which notes - and

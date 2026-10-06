@@ -345,7 +345,18 @@ ok(C.subjCased === 'useEffect cleanup - from my notes'
    ===================================================================================== */
 step('4 · both hands, run the way hands.py runs them: stdin in, one line out');
 
-const composed = hand('compose_newsletter.py', { topic: 'useEffect cleanup in React' });
+/* ITS OWN LEDGER, and this is not tidiness. compose_newsletter.py now WRITES a row - that is
+   the whole of this round's fix - so a fixture that let it write to the real jobs-ledger.json
+   would put a draft of its own test topic at the top of the file, and section 8 below reads
+   exactly that position to decide what a bare "send the newsletter" means. Measured: without
+   this redirect, section 8's five clauses all failed against a row this very file had written
+   a moment earlier. A harness must not be the most recent thing the house remembers. */
+const composed = hand('compose_newsletter.py', { topic: 'useEffect cleanup in React' },
+  [
+    'import pathlib, jobs',
+    'jobs.LEDGER_PATH = pathlib.Path("_runs/sweep44/_ledger_compose.json")',
+    'jobs.LEDGER_PATH.unlink(missing_ok=True)',
+  ]);
 note('compose   : ' + JSON.stringify(composed.said));
 ok(composed.code === 0 && /^Drafted '.*', sir - \d+ words, \d+ code snippet/.test(composed.said),
    'THE COMPOSER REPORTS THE SHAPE OF THE DRAFT AND NOT ITS PROSE: "'
@@ -735,6 +746,124 @@ if (health.status !== 200) {
      + 'payload',
      JSON.stringify(leftOver));
   await post('/tools', { cmd: 'withdraw', door: 'button' });
+
+  /* ===================================================================================
+     8 · A BARE "SEND THE NEWSLETTER" MEANS THE ONE JUST DRAFTED
+     THE DEFECT THIS REPRODUCES, VERBATIM, because a proof of this that did not reproduce it
+     could pass while the bug stood: compose_newsletter.py wrote no ledger row, so
+     _newsletter_topic()'s fallback - "the most recent `newsletter` row" - could only ever
+     find a past SEND. Live: the boss drafted "B2B Agents", said "send the newsletter", and
+     was offered a card for "useEffect cleanup" from an older test send. Six rows were in the
+     ledger at the time and every one of them was a send.
+     SO THE SEQUENCE HERE IS HIS SEQUENCE: draft one topic through the real hand, then ask for
+     a send WITHOUT NAMING ONE, and read the topic off the card.
+     =================================================================================== */
+  step('8 · draft one topic, then a bare send - the card must show the drafted one');
+
+  /* THE OLDER SENT TOPIC, read out of the real ledger before anything is drafted. This is the
+     answer the broken fallback gave, so it is the thing the assertion has to NOT see. */
+  const before = python([
+    'import json, sys',
+    'sys.dont_write_bytecode = True',
+    'sys.path.insert(0, ".")',
+    'import jobs',
+    'rows = [r for r in (jobs.ledger() or []) if r.get("name") == "newsletter" and r.get("topic")]',
+    'rows.sort(key=lambda r: str(r.get("at") or ""))',
+    'sent = [r for r in rows if int(r.get("sent") or 0) > 0]',
+    'print(json.dumps({"lastAny": (rows[-1]["topic"] if rows else ""),',
+    '                  "lastSent": (sent[-1]["topic"] if sent else ""),',
+    '                  "n": len(rows)}))',
+  ]);
+  note('ledger before : ' + JSON.stringify(before));
+
+  /* A TOPIC THAT IS NOT THE LAST SENT ONE, so the two answers are distinguishable. If the
+     house has never sent anything the comparison still holds - it is a different topic from
+     whatever `lastAny` is - and the clause below says which it compared against. */
+  const DRAFT_TOPIC = before.lastSent === 'useReducer in React'
+    ? 'micro-saas pricing' : 'useReducer in React';
+
+  /* THE DRAFT IS RUN AS THE HAND, NOT ASKED FOR IN WORDS, and that is deliberate. Drafting
+     has no protected route - it reaches the composer through the brain's own tool choice -
+     so asking for it in a sentence makes this case depend on the model, and the model cannot
+     propose a hand at all while Groq is throttled and the local fallback is answering (it
+     holds no hands manifest). Measured: the first run of this section got the prose "The
+     newsletter should highlight the benefits of using useReducer..." instead of a card.
+     The thing under test here is the SEND route's topic resolution, so the draft is performed
+     deterministically - a real subprocess, writing a real row to the real ledger, which is
+     precisely the trace the fallback has to find - and the sentence under test is the bare
+     one below, which does go through /chat. */
+  await post('/tools', { cmd: 'withdraw', door: 'button' });
+  const drafted = hand('compose_newsletter.py', { topic: DRAFT_TOPIC });
+  note('drafted       : ' + JSON.stringify(String(drafted.said || '').slice(0, 130)));
+  ok(drafted.code === 0 && /^Drafted '/.test(drafted.said),
+     'the composer drafts ' + JSON.stringify(DRAFT_TOPIC) + ' through the real hand - exit '
+     + drafted.code + ', which is the act that must now leave a trace in the ledger',
+     JSON.stringify(drafted));
+
+  /* THE ROW THE DRAFT LEFT, read off the disk. Without this row the fallback below cannot
+     work, so it is asserted here rather than assumed from the sentence above. */
+  const afterDraft = python([
+    'import json, sys',
+    'sys.dont_write_bytecode = True',
+    'sys.path.insert(0, ".")',
+    'import jobs',
+    'rows = [r for r in (jobs.ledger() or []) if r.get("name") == "newsletter" and r.get("topic")]',
+    'rows.sort(key=lambda r: str(r.get("at") or ""))',
+    'last = rows[-1] if rows else {}',
+    'print(json.dumps({"topic": last.get("topic"), "outcome": last.get("outcome"),',
+    '                  "sent": last.get("sent"), "steps": last.get("steps"),',
+    '                  "subject": last.get("subject"), "n": len(rows)}))',
+  ]);
+  note('ledger after  : ' + JSON.stringify(afterDraft));
+  ok(afterDraft.topic === DRAFT_TOPIC && afterDraft.n === before.n + 1,
+     'THE DRAFT LEFT A ROW, and it is the newest one: topic ' + JSON.stringify(afterDraft.topic)
+     + ', ' + before.n + ' rows before and ' + afterDraft.n + ' after',
+     JSON.stringify(afterDraft));
+  ok(afterDraft.outcome === 'done' && Number(afterDraft.sent) === 0
+     && Number(afterDraft.steps) === 1,
+     'and a DRAFTED row is distinguishable from a SENT one without a fifth outcome word: '
+     + 'outcome done, sent 0, one step - against a send’s sent>=1 and two steps. '
+     + '`outcome` stays a closed vocabulary about how a job ended, and a draft that worked '
+     + 'ended fine; an outcome of "drafted" would have been counted as a FAILURE by '
+     + 'jobs.finish(), which increments _SEEN["failed"] for every word that is not "done"',
+     JSON.stringify(afterDraft));
+  ok(!String(afterDraft.subject || '').includes('**')
+     && String(afterDraft.subject || '').length < 140,
+     'and what it wrote down is the SUBJECT and not the body - ' + JSON.stringify(afterDraft.subject)
+     + ' - so "the draft is not stored" is still true',
+     JSON.stringify(afterDraft.subject));
+
+  /* AND NOW THE SENTENCE THAT BROKE: no topic named. */
+  await post('/tools', { cmd: 'withdraw', door: 'button' });
+  const bareAsk = await post('/chat', { question: 'send the newsletter',
+                                     session: 'pub44-drafted' });
+  const bareBody = bareAsk.body || {};
+  const bareSlot = await http('/tools');
+  const bareCard = ((bareSlot.body || {}).state || bareSlot.body || {}).pending || {};
+  const cardTopic = (bareCard.params || {}).topic;
+  note('bare send card: ' + JSON.stringify({ topic: cardTopic,
+                                             subject: (bareCard.params || {}).subject }));
+  ok(bareCard.tool === 'send_newsletter' && cardTopic === DRAFT_TOPIC,
+     'A BARE "SEND THE NEWSLETTER" NOW OFFERS THE TOPIC JUST DRAFTED: the card reads '
+     + JSON.stringify(cardTopic) + ', which is what was drafted a moment ago',
+     JSON.stringify({ tool: bareCard.tool, cardTopic, drafted: DRAFT_TOPIC }));
+  ok(before.lastSent === '' || cardTopic !== before.lastSent,
+     'AND NOT THE LAST THING EVER MAILED, which is the answer the defect gave: the most '
+     + 'recent SEND was ' + JSON.stringify(before.lastSent) + ' and the card is not it',
+     JSON.stringify({ cardTopic, lastSent: before.lastSent }));
+  ok(String((bareBody.answer || '')).includes(DRAFT_TOPIC),
+     'and the spoken proposal names it too, so the sentence he hears and the card he reads '
+     + 'agree: "' + String(bareBody.answer || '').slice(0, 120) + '"',
+     JSON.stringify(bareBody.answer));
+
+  /* AND THE CARD IS TAKEN AWAY. This proof drafts - which is a true record and harmless -
+     and it does NOT send: mailing the boss's list to prove a topic lookup would be a harness
+     spending something it cannot take back. */
+  const cleared8 = await post('/tools', { cmd: 'withdraw', door: 'button' });
+  ok(cleared8.status === 200,
+     'and the harness withdraws the card rather than mailing the list to prove a lookup - it '
+     + 'drafted, which is a true record of a thing that happened, and sent nothing',
+     JSON.stringify(cleared8.status));
 }
 
 /* =====================================================================================

@@ -11042,3 +11042,181 @@ proof gap is closed. What wants your word is the `_newsletter_topic()` fallback 
 whether the four throttle-blocked suites should be put behind a mandate of their own, because
 four proofs that cannot pass until a rate limit resets is now the largest unmeasured surface in
 this house.
+
+# PUBLISHER MICRO-FIX — a bare "send the newsletter" now means the one you just drafted
+
+Branch `feature-mandate-1-publisher`. Root cause confirmed exactly as diagnosed, fixed in two
+places, reproduced in the proof before it was believed. `publisher_proof` 77/77 → **85/85**.
+
+## ROOT CAUSE — confirmed against the live ledger first
+
+Six rows named `newsletter` were in `jobs-ledger.json`, **every one of them a send**, and every
+one `"useEffect cleanup in React"`:
+
+```
+2026-10-06T13:38:35  done  topic='useEffect cleanup in React'  sent=1  steps=2
+2026-10-06T17:44:01  done  topic='useEffect cleanup in React'  sent=1  steps=2
+2026-10-06T18:06:06  done  topic='useEffect cleanup in React'  sent=1  steps=2
+2026-10-06T18:08:43  done  topic='useEffect cleanup in React'  sent=1  steps=2
+2026-10-06T18:17:52  done  topic='useEffect cleanup in React'  sent=1  steps=2
+2026-10-06T18:22:18  done  topic='useEffect cleanup in React'  sent=1  steps=2
+```
+
+`_newsletter_topic("send the newsletter")` returned `'useEffect cleanup in React'`, and
+`compose_newsletter.py` contained no reference to `jobs` at all. So the fallback was working
+exactly as written and could only ever find a past **send** — drafting left no trace to find.
+Your live case reproduces from that table alone.
+
+## THE FIX
+
+| what | file:line |
+|---|---|
+| the composer writes one line: topic, subject, subscriber count — **no body** | [tools/compose_newsletter.py:79](tools/compose_newsletter.py#L79) |
+| its docstring records the law and the defect | [tools/compose_newsletter.py:24](tools/compose_newsletter.py#L24) |
+| the fallback picks the newest `newsletter` row **by timestamp**, regardless of outcome | [server.py:3220](server.py#L3220) |
+
+**"The draft is not stored" is still true.** What is written down is *that drafting happened and
+what it was about* — two short strings and a count. No body, no passages, no snippets. A reader
+of the ledger learns the boss asked for a newsletter on something and what it would have been
+called, which is exactly what a later bare "send the newsletter" needs and no more.
+
+**Sorted rather than reversed.** The file is append-ordered today, so `reversed()` happened to
+work — but "most recent" is a claim about `at`, not about position, and this is the third subtle
+bug in newsletter topic-resolution. The code now says what it means.
+
+### The one place I did not follow the brief, and the evidence for it
+
+You suggested a distinct outcome, "e.g. `drafted`". I did not take it, because of a concrete
+harm in [jobs.py:277](jobs.py#L277):
+
+```python
+_SEEN["done" if outcome == "done" else "failed"] += 1
+```
+
+Any outcome word that is not `"done"` increments the house's **failed** counter — so every
+draft would have been counted as a failure on `/jobs` and in `bus_proof`'s seen assertions.
+A draft that worked ended fine, so its outcome is `done`; `jobs.OUTCOMES` stays a closed
+vocabulary about *how a job ended* rather than a label for *what kind of job it was*, which is
+what the job's `name` already says.
+
+The two row kinds are still distinguishable, by fields that already exist and already mean it:
+
+| | outcome | sent | steps |
+|---|---|---|---|
+| **drafted** | `done` | `0` | `1` (`compose`) |
+| **sent** | `done` / `failed` | `>= 1` | `2` (`compose`, `send`) |
+
+Asserted that way in the proof. If you want the fifth word anyway, say so — it needs
+`_SEEN`'s branch widened in the same change, not just the tuple.
+
+## PROOF
+
+`publisher_proof.mjs` — **85/85 PASS** (was 77/77; 8 new assertions).
+`_runs/sweep45/publisher_proof.txt`. Section 8 reproduces your sequence verbatim:
+
+```
+·· 8 · draft one topic, then a bare send - the card must show the drafted one
+note ledger before : {"lastAny":"useEffect cleanup in React","lastSent":"useEffect cleanup in React","n":7}
+note drafted       : "Drafted 'useReducer in React - from my notes', sir - 131 words, 0 code snippets, …"
+ok   the composer drafts "useReducer in React" through the real hand - exit 0
+note ledger after  : {"topic":"useReducer in React","outcome":"done","sent":0,"steps":1,"n":8}
+ok   THE DRAFT LEFT A ROW, and it is the newest one
+ok   and a DRAFTED row is distinguishable from a SENT one without a fifth outcome word
+ok   and what it wrote down is the SUBJECT and not the body
+note bare send card: {"topic":"useReducer in React","subject":"useReducer in React - from my notes"}
+ok   A BARE "SEND THE NEWSLETTER" NOW OFFERS THE TOPIC JUST DRAFTED
+ok   AND NOT THE LAST THING EVER MAILED, which is the answer the defect gave
+ok   and the spoken proposal names it too
+ok   and the harness withdraws the card rather than mailing the list to prove a lookup
+```
+
+**Two faults in my own first attempt at that section, both found by running it.**
+
+1. **Section 4's compose fixture was writing to the REAL ledger.** The moment the composer
+   started writing rows, an existing fixture became the most recent thing the house remembered
+   — and section 8 reads exactly that position. All five of its clauses failed against a row
+   this very file had written seconds earlier. The fixture now gets its own ledger path, with
+   the reason written beside it: *a harness must not be the most recent thing the house
+   remembers.*
+2. **Section 8 asked for the draft in words and depended on the model.** Drafting has no
+   protected route — it reaches the composer through the brain's own tool choice — so under the
+   throttle the local fallback answered with prose (*"The newsletter should highlight the
+   benefits of using useReducer…"*) instead of proposing a card. The draft step is now run as
+   the real hand, deterministically; the sentence under test is the bare send, which does go
+   through `/chat`. The thing being proved is the send route's topic resolution, not the brain's
+   tool choice.
+
+### Suites re-run
+
+| suite | claimed | now | verdict |
+|---|---|---|---|
+| `publisher_proof` | 77/77 | **85/85 PASS** | grew by design |
+| `broadcaster_proof` | 110/110 | **110/110 PASS** | unchanged |
+| `handshake_proof` | 59/59 | **59/59 PASS** | unchanged (after a restart — my live cards armed windows again) |
+| `clock_proof` | 94/94 | **95/95 PASS** | denominator moved, and not by me — below |
+| `bus_proof` | 81/81 | 80/81 | the documented render flake, third 80 this session |
+| `preflight.py` | 38 pass, 2 fail, 3 warn | 37 pass, 2 fail, 4 warn | throttle shuffle — below |
+
+## Left open, named
+
+- **`clock_proof` went 94/94 → 95/95 and it is the wall clock, not the code.** I diffed the two
+  runs' assertion lists: at 13:14 UTC no city had crossed midnight and the proof emitted one
+  assertion (*"no tile claims a day it has not earned"*); at 14:58 UTC Sydney has, so it takes
+  the other branch and emits two (*"every tile on a DIFFERENT DAY carries the word:
+  ["Sydney=tomorrow"]"* and *"and the word reached the glass"*). Its denominator is a function
+  of the time of day. Both runs PASS.
+- **Preflight's pass count slipped 38 → 37, fails 13 and 20, warns 7, 10, 11, 12.** Every one is
+  the documented Groq-throttle set — check 13 is the vision nudge, check 20 the Scribe's
+  minutes, and 7 is `/see`. §41 measured this band oscillating at 38/2/3, 39/1/3 and 37/4/2 on
+  unchanged code; 37/2/4 sits inside it. Nothing here touches the Publisher.
+- **`bus_proof` is 80/81 for the third time this session**, always on the same render-timing
+  assertion (*"the card was still growing when the shutter went"*). §44 saw one 81/81. I have
+  not touched `viewer/index.html` or the jobs public shape in either round, so I am still
+  reporting it as the documented flake — but three 80s against one 81 is no longer an even
+  split, and I think it now wants the shutter delayed rather than the assertion left to
+  oscillate. Worth its own small fix; I have not made it, because it is outside this brief.
+- **The proof drafts into the real ledger, on purpose.** Section 8 runs the real composer so
+  the row lands where `_newsletter_topic()` actually reads. That adds one truthful
+  `drafted` row per run — a record that drafting happened, which it did. It sends nothing:
+  mailing your list to prove a topic lookup would be a harness spending something it cannot
+  take back.
+- **Still no spoken Yes.** Both live cards were answered through the `button` door — the real
+  `/execute` under the Doorman. The voice half remains yours.
+
+## LIVE ACCEPTANCE — your sequence, your topic
+
+`POST /chat {"question": "draft the newsletter on B2B AI agents"}` → card for
+`compose_newsletter`:
+
+> *"I can draft the newsletter on B2B AI agents, sir, from your own notes. Nothing goes out - it
+> only writes. Shall I?"*
+
+`POST /execute` (exit 0):
+
+> *"Drafted 'B2B AI agents - from my notes', sir - 440 words, 0 code snippets, from 4 of your
+> notes (6a012ddb02c9537b, 83114af5a37e9f97, cc1795943af9f5e3, 719161d5e83be54d). Say send the
+> newsletter and I shall put the card up."*
+
+Then the sentence that broke — **no topic named**. `POST /chat {"question": "send the
+newsletter"}`, `kind=chat`, **0 lookups**, `newsletterAsked: true`:
+
+> *"The newsletter on **B2B AI agents** is ready, sir - 'B2B AI agents - from my notes', going to
+> 1 subscriber(s). The card carries the opening and the notes it cites. Shall I send it?"*
+
+And the card `GET /tools` held:
+
+| row | as rendered |
+|---|---|
+| `topic` | **`B2B AI agents`** |
+| `subject` | `B2B AI agents - from my notes` |
+| `subscribers` | `1` |
+| `opening` | `## B2B AI agents - from my notes` … |
+| `cited` | `6a012ddb02c9537b#0000, 83114af5a37e9f97#0000, cc1795943af9f5e3#0000, 719161d5e83be54d#0000` |
+| `snippets` | `0` |
+
+Not `useEffect cleanup`. The card was withdrawn rather than sent — the acceptance this round is
+about which topic the card shows, and the send path was accepted live last round with Gmail id
+`1a111229691d7bae`.
+
+**Ready for the boss?** Yes. The one thing wanting your word is the outcome-word decision
+above, and `bus_proof`'s shutter if you want it chased.

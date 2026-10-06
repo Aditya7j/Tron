@@ -3192,12 +3192,33 @@ def _newsletter_topic(question):
                        r"(?:\s+(?:now|today|please|for\s+me))?[.!]?$", form, re.IGNORECASE)
         if hit:
             return re.sub(r"\s+", " ", hit.group(1)).strip()
-    # NOTHING NAMED: the last newsletter this house drafted or sent, out of its own ledger.
+    # NOTHING NAMED: the last newsletter this house DRAFTED OR SENT, out of its own ledger.
+    #
+    # BY TIMESTAMP AND REGARDLESS OF OUTCOME, which is the whole of this repair. Drafting is
+    # the more recent signal of what the boss currently wants: he asks for a newsletter on
+    # something, reads back what it would say, and then says "send the newsletter" - and the
+    # thing he means is the one he just drafted, not the last one that actually went out.
+    # So a `drafted` row (outcome done, sent 0) and a `sent` row compete on their timestamp
+    # alone, and the newest wins.
+    #
+    # THE DEFECT THIS REPLACES, live-confirmed: tools/compose_newsletter.py wrote no row at
+    # all, so "the most recent newsletter row" could only ever be a past SEND. A boss who
+    # drafted "B2B Agents" and then said "send the newsletter" was offered a card for
+    # "useEffect cleanup" - the previous test send - six rows of which were sitting in the
+    # ledger, every one of them a send. The compose hand now leaves its own line; this reads
+    # whichever line is newest.
+    #
+    # SORTED RATHER THAN REVERSED. The file is append-ordered today, so reversed() happened to
+    # work, but "most recent" is a claim about `at` and not about position - and this is the
+    # third time newsletter topic-resolution has had a subtle bug, which is reason enough to
+    # say what is meant instead of relying on how the rows arrived.
     try:
         import jobs
-        for row in reversed(jobs.ledger() or []):
-            if str(row.get("name") or "") == "newsletter" and row.get("topic"):
-                return str(row["topic"])
+        rows = [r for r in (jobs.ledger() or [])
+                if str(r.get("name") or "") == "newsletter" and r.get("topic")]
+        if rows:
+            rows.sort(key=lambda r: str(r.get("at") or ""))
+            return str(rows[-1]["topic"])
     except Exception:                                          # noqa: BLE001
         pass
     return ""
