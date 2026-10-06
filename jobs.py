@@ -120,7 +120,18 @@ ROW_KEYS = ("at", "job", "name", "topic", "outcome", "elapsedS", "steps", "detai
             # defect invisible. `reads` is how many times it was asked. `corrects` names the
             # earlier row a correction row is about; the ledger is append-only, so a row is
             # never edited and a later row says what the earlier one got wrong.
-            "confirmSeconds", "reads", "corrects")
+            "confirmSeconds", "reads", "corrects",
+            # THE PUBLISHER's six, additive and touching no existing row shape. A newsletter
+            # row has to answer "did it reach everybody", which no boolean can: `subscribers`
+            # is how many were on the list when the word was given, `sent` and `failedCount`
+            # split them, and `recipients` carries ONE ENTRY PER ADDRESS so a partial send is
+            # legible per person instead of being rounded to a pass or a fail.
+            # THE ADDRESSES ARE DIGESTS IN THERE, never plaintext - see newsletter.digest().
+            # The standing law is that no account email appears in anything written except as
+            # a sha256, and a subscriber list is other people's addresses, which are worse to
+            # leak than the boss's own. A digest still proves a particular subscriber was
+            # written to, and is useless to anybody not already holding the list.
+            "subscribers", "sent", "failedCount", "recipients", "subject")
 
 _LOCK = threading.Lock()
 _JOBS = {}              # job id -> the record below, insertion-ordered (dicts are, since 3.7)

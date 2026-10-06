@@ -10627,3 +10627,222 @@ the first film after the fix, and the fix caught it.
   write to `config.json`; the ledger remains append-only.
 
 The publish tells the truth in both directions now.
+
+# THE PUBLISHER — a newsletter from the notes, gated like every other hand
+
+Two registry entries, one root module, one subscriber file, one proof. No new daemon, no new
+progress bus, no second pending slot: the send is `send_email`'s shape behind the Chain Card
+that already exists, because composing and mailing take seconds and the gate was already
+built and already proved.
+
+## PART 1 — what was built
+
+| symbol / file | file:line | what it is |
+|---|---|---|
+| `newsletter.py` | new, 259 lines | the composition half: the list, the draft, the refusals |
+| `digest()` | [newsletter.py:67](newsletter.py#L67) | sha256 prefix — the only form an address may take in anything written |
+| `subscribers()` | [newsletter.py:79](newsletter.py#L79) | the boss's list, validated; read-only to every tool |
+| `snippets()` | [newsletter.py:113](newsletter.py#L113) | fenced code out of the cited notes, verified back against them twice |
+| `cited_line()` | [newsletter.py:147](newsletter.py#L147) | the provenance line, ids never filenames |
+| `subject_for()` | [newsletter.py:161](newsletter.py#L161) | a subject carrying no number this file did not count |
+| `compose()` | [newsletter.py:183](newsletter.py#L183) | the draft; pure when `cited` is passed, so the proof needs no store |
+| `compose_newsletter` hand | [tools/compose_newsletter.py:48](tools/compose_newsletter.py#L48) | drafts and reports the SHAPE of the draft, never its prose |
+| `send_newsletter` hand | [tools/send_newsletter.py:81](tools/send_newsletter.py#L81) | re-reads the list, [:90](tools/send_newsletter.py#L90) re-composes, [:117](tools/send_newsletter.py#L117) one message each, [:143](tools/send_newsletter.py#L143) the ledger row, [:165](tools/send_newsletter.py#L165) the drift clause |
+| registry entries | [tools/registry.json:357](tools/registry.json#L357) and [:397](tools/registry.json#L397) | both with `_why` blocks |
+| ledger keys | [jobs.py:134](jobs.py#L134) | `subscribers`, `sent`, `failedCount`, `recipients`, `subject` — additive |
+| `newsletter_subscribers.json` | new, repo root | seeded with ONE entry, the connected account |
+| gitignore | [.gitignore:94](.gitignore#L94) | the list is ignored — see the judgment calls |
+| `publisher_proof.mjs` | new, 48 assertions | — |
+
+**The grounding is reused, not reimplemented.** `compose()` calls `ingest.recall()`, which is
+what the chat path reaches through `semantic_recall()` at
+[server.py:5232](server.py#L5232). Nothing here re-does vector search; `server.py` and
+`viewer/index.html` are untouched.
+
+**The Gmail path is reused as a library call.** `send_newsletter.py` does
+`from send_email import build` and calls `google_api.send_message()` — the same serialiser and
+the same transport the one-recipient hand uses, once per address. No OAuth dance, no SMTP, no
+`app_password` anywhere in it (asserted by source scan with docstrings stripped). One message
+per subscriber, so no subscriber ever sees another's address.
+
+**Three refusals, each a named sentence.** A missing list names the file and the shape; a
+malformed one and a right-shaped file with the wrong type inside both get the same refusal; an
+empty list is a *different* sentence, because it is a different problem. A single malformed
+entry is skipped and the surviving count is the count that will be written to.
+
+## PART 2 — the ledger, and why it is not hands.py's
+
+`hands.py`'s ledger holds four integers and one timestamp per tool and says why in its own
+docstring: *"there is no key a recipient could be put into."* That is a privacy claim this
+mandate must not break in order to satisfy its own reporting clause, so the newsletter's rich
+row goes into **`jobs-ledger.json`** — the house's append-only record, which the Director and
+Broadcaster already use and which §40 and §43 already extended additively. No existing row
+shape was touched.
+
+**The addresses in it are digests.** The standing law is that no account email appears in
+anything written except as a sha256, and a subscriber list is *other people's* addresses,
+which are worse to leak than the boss's own. A digest still proves a particular subscriber was
+written to and is useless to anybody not already holding the list. One entry per address, so a
+partial send is legible per person rather than rounded to a boolean.
+
+## PART 3 — proof
+
+`publisher_proof.mjs` — **48/48 PASS**, `_runs/sweep44/publisher_proof.txt`. **`.mjs`, and the
+mandate asked to be told why:** the central claim is that `send_newsletter` cannot fire without
+a propose and a Yes, and that is a claim about the real `/tools` and `/execute` doors.
+`broadcaster_proof.mjs` is the house's template for exactly that shape, and a `.py` harness
+would have to either reimplement those routes or prove a weaker thing — that the *library*
+refuses, rather than that the *door* does. The predicate half runs as one `python -c` per
+section, which is broadcaster_proof's own arrangement.
+
+| the mandate asked | how it is proved |
+|---|---|
+| (a) cannot fire without propose + Yes | by constant (both hands are registry entries, so `propose()` is the only thing that can build a slot); by source (`execute()` reads `slot["params"]` and never `data.get("params")`; the hand contains no `hands.*`, no `propose(`, no `execute(`); by **live execution** — `POST /execute` with nothing pending answers **409 `nothing-pending`**, and a confirmation naming a different proposal answers **409** |
+| (b) the card's count is the real list length | the live card's `subscribers` row equals `len(subscribers())` at the moment it was raised, asserted both in-process and over HTTP |
+| (c) no backing citation ⇒ refused | the exact sentence asserted: *"I have nothing in your notes about that, sir, so there is no newsletter to write - I will not compose one on a subject your own research does not cover"* |
+| (d) missing/malformed list refused by name | four distinct named refusals, no stack trace |
+| (e) no credential in the registry or the card | the registry carries no key, no token and **not one `@`**; the live card carries neither |
+
+**Two extras worth naming.** A fixture note with two fenced blocks yields exactly one snippet —
+the 2000-character one is dropped as a file rather than an illustration — and the shipped one
+is asserted to be a verbatim substring of the note's own text. And a send with no subscriber
+file is refused **before a token is even asked for**: the stubs in that case raise if Gmail is
+touched, and they were not.
+
+### Every suite run, before and after
+
+| suite | before | after | artifact |
+|---|---|---|---|
+| `publisher_proof` | — | **48/48 PASS** (new) | `_runs/sweep44/publisher_proof.txt` |
+| `broadcaster_proof` | 110/110 | **110/110 PASS** | `_runs/sweep44/broadcaster_proof.txt` |
+| `bus_proof` | 81/81 | **81/81 PASS** (80/81 on one run — the documented render flake) | `_runs/sweep44/bus_proof.txt` |
+| `connectors_proof` | 61/61 | **61/61 PASS** | `_runs/sweep44/connectors_proof.txt` |
+| `persona_proof` | 19/19 | **19/19 PASS** | `_runs/sweep44/persona_proof.txt` |
+| `clock_proof` | 94/94 | **94/94 PASS** | `_runs/sweep44/clock_proof.txt` |
+| `handshake_proof` | 59/59 | **59/59 PASS** after a restart (57/59 before) | `_runs/sweep44/handshake_proof.txt` |
+| `preflight.py` | 37 pass, 4 fail, 2 warn (§43) | **38 pass, 1 fail, 4 warn** | `_runs/sweep44/preflight.txt` |
+| `capabilities_proof` | 16/16 | 14/16 · 15/16 — **not mine**, see below | `_runs/sweep44/capabilities_*.txt` |
+| `chain_proof` | 78/78 | 44/72 — **not mine**, see below | `_runs/sweep44/chain_proof.txt` |
+| `followup_proof` | 48/48 | 43/48 — **not mine**, see below | `_runs/sweep44/followup_proof.txt` |
+
+## PART 4 — the live acceptance
+
+**The draft, through the conversational route.** `POST /chat "draft the newsletter on useEffect
+cleanup in React"` raised the card with the registry's own sentence:
+
+> *"I can draft the newsletter on useEffect cleanup in React, sir, from your own notes. Nothing
+> goes out - it only writes. Shall I?"*
+
+`POST /execute` (door `button`, exit 0, 0.89 s):
+
+> *"Drafted 'useEffect cleanup in React - from my notes', sir - 230 words, 0 code snippets, from
+> 2 of your notes (2b7aa0777dba00d1, 21eb986fbe0ecee9). Say send the newsletter and I shall put
+> the card up."*
+
+**The send card, raised over the real server** (`POST /tools cmd=propose`, door `button`, 120 s):
+
+> *"The newsletter on useEffect cleanup in React is ready, sir - 'useEffect cleanup in React -
+> from my notes', going to 1 subscriber(s). The card carries the opening and the notes it cites.
+> Shall I send it?"*
+
+| card row | as rendered |
+|---|---|
+| `topic` | `useEffect cleanup in React` |
+| `subject` | `useEffect cleanup in React - from my notes` |
+| `subscribers` | `1` |
+| `opening` | `## useEffect cleanup in React - from my notes` … first 400 characters of the body |
+| `cited` | `2b7aa0777dba00d1#0000, 21eb986fbe0ecee9#0000` |
+| `snippets` | `0` |
+
+The card contains no `@`. **`POST /execute`** (exit 0, 1.61 s):
+
+> *"The newsletter has gone to 1 subscriber, sir, under 'useEffect cleanup in React - from my
+> notes'."*
+
+**The ledger row that was written** — the real `jobs-ledger.json`, one newsletter row:
+
+```json
+{"at": "2026-10-06T13:38:35", "job": "0edf94165e", "name": "newsletter",
+ "topic": "useEffect cleanup in React", "outcome": "done", "steps": 2,
+ "detail": "1 of 1 subscriber(s) written to",
+ "cited": ["2b7aa0777dba00d1#0000", "21eb986fbe0ecee9#0000"],
+ "subscribers": 1, "sent": 1, "failedCount": 0,
+ "recipients": [{"i": 0, "sha": "ddb4af0135792737", "ok": true, "id": "1a11041e2e2b93d7"}],
+ "subject": "useEffect cleanup in React - from my notes"}
+```
+
+**Proof the email really went: Gmail's own message id `1a11041e2e2b93d7`**, returned by
+`users.messages.send` and recorded per recipient. The recipient digest `ddb4af0135792737`
+matches the connected account's digest, so it went to the boss's own address and to nobody
+else. There is no `@` anywhere in the row.
+
+**What I could not verify:** that it *arrived*. The grant is `gmail.send` + `gmail.compose` with
+no read scope, so this house cannot open the mailbox to look — by design. The message id from
+Google's own response is the strongest evidence available from here, which is what the mandate
+asked for; the inbox is the boss's to check.
+
+## Left open, named
+
+- **Three suites' counts moved and none of them is the Publisher's doing — I checked rather
+  than assumed, and I was wrong once on the way.** `capabilities_proof` 14/16, `chain_proof`
+  44/72 and `followup_proof` 43/48 are all **model-driven hands proofs**, and §41's local
+  fallback drops every system block — including the hands manifest and the chain protocol — so
+  when Groq is throttled the brain cannot propose a hand at all. I first measured
+  `capabilities_proof` at 16/16 with my entries removed and reported to myself that my registry
+  change had caused it; re-running the control twice gave **14/16 and 14/16** with 2 and 4
+  fallbacks, and the 16/16 was simply a lucky run where Groq answered. `followup_proof` is
+  43/48 with and without my entries, and its failures show the local model writing an email
+  body instead of proposing the mailer. `chain_proof` is 47/75 without and 44/72 with. **This
+  is a pre-existing §41 consequence that nobody had seen, because the §39–§43 sweeps never
+  included these three suites** — and it means every hands-routing proof in this house is
+  unrunnable while the Groq daily limit holds. It deserves its own mandate: either the fallback
+  prompt carries the hands manifest, or a tired Groq refuses a tool turn outright instead of
+  answering it conversationally.
+- **`handshake_proof` 57/59 was my doing and is fixed.** My live cards were raised through the
+  `button` door, which is in `HANDSHAKE_HUMAN_DOORS`, so each one armed a 120-second BOSS
+  window; four were still standing in process memory. A restart cleared them and it reads
+  59/59. Anything that raises a real card in a live house leaves this behind.
+- **Judgment call: `compose_newsletter` is carded.** The mandate says drafting needs no consent
+  gate, and it does not — but this house has exactly one hand pipeline and a registry entry is
+  inseparable from the Chain Card. Registering it costs one confirmation on a harmless act;
+  *not* registering it would leave the brain unable to learn it exists, and building an ungated
+  execution path is the parallel mechanism PART 0 forbids. I chose the confirmation. **Worth
+  checking:** if you would rather the draft were silent, the entry can come out of the registry
+  and the script stays runnable by hand.
+- **Judgment call: the subscriber list is gitignored.** The mandate put it at the repo root
+  because it holds no credential, which is right, and I added it to `.gitignore` anyway — these
+  are other people's addresses, and a third party who subscribed did not consent to appearing
+  in a git history. Say the word and I will unignore it.
+- **Judgment call: the subject is in the ledger row.** `hands.py`'s ledger excludes subjects
+  by law; `jobs-ledger.json` already stores the Director's free-text topics, so a newsletter
+  subject there is consistent — but it is the boss's own prose in a written record, so I am
+  naming it rather than assuming. Bodies are never stored anywhere.
+- **The live newsletter carries zero code snippets, and that is correct.** Not one note in the
+  corpus contains a fenced code block — `grep -rln '```' notes/` returns nothing — so there was
+  no code to lift and none was invented. The extraction and its double verification are proved
+  against fixtures instead, which is the only honest way to prove them today.
+- **A routing gap I did not fix, because it is outside the mandate.** `"send the newsletter"`
+  typed into `/chat` was answered as a **notes** question — the retrieval scored a note about
+  sending emails and the notes door opened before the hand could be proposed. `"draft the
+  newsletter on X"` routes correctly. The send card was therefore raised over `POST /tools`,
+  which is the same door the page's own button uses and a real card either way, but the spoken
+  phrase needs either a protected route like `publish_asked()` or a stronger trigger before the
+  boss can rely on saying it. Named, not papered over.
+- **I could not produce a spoken Yes.** PART 5 asks for one through the handshake window; a
+  BOSS-sealed utterance needs his larynx, which no harness can stand in for. Both cards were
+  answered through the `button` door — the real `/execute` under the Doorman, which is the
+  keyboard-is-the-boss path — and the handshake window was armed exactly as a spoken yes would
+  need. The voice half is his to give.
+
+**No existing proof suite's pass count moved as a result of this work.** Seven suites were
+re-run and are identical (`broadcaster` 110/110, `bus` 81/81, `connectors` 61/61, `persona`
+19/19, `clock` 94/94, `handshake` 59/59 after the restart, `preflight` better than §43's at
+38/1/4). The three that moved were measured with my registry entries removed and move the same
+way without them. `routing_proof`, `deck_proof`, `study_proof`, `census_proof`, `salutation_proof`
+and `cine_proof` were **not** re-run — they are long and none reads the registry or the jobs
+ledger — so I am not claiming them either way.
+
+**Ready for the boss's live acceptance?** It has already had one: a real draft, a real card, a
+real send, Gmail's own id `1a11041e2e2b93d7`. What needs his decision first is the routing gap —
+whether `"send the newsletter"` should get a protected route so the phrase works by voice — and
+whether he wants `compose_newsletter` carded or silent.
