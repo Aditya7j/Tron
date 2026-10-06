@@ -86,3 +86,9 @@ say-cache/
 Thumbs.db
 .vscode/
 .idea/
+# THE SUBSCRIBER LIST. No credential in it - addresses and an optional display name - so it
+# is not under secrets/ and newsletter.py reads it from the project root. Ignored anyway,
+# because these are OTHER PEOPLE'S email addresses: the boss may publish his own, and a
+# third party who subscribed to a newsletter did not consent to appearing in a git history.
+# Read-only to every tool in this house; nothing in newsletter.py or tools/ writes it.
+newsletter_subscribers.json

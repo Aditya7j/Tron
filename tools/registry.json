@@ -1,357 +1,465 @@
 {
- "_comment": [
-  "THE REGISTRY, and it is the only source of truth about what this machine can do.",
-  "",
-  "A tool that is not in this file does not exist. The brain is shown the capability",
-  "sentences and nothing else; it asks for a tool by id with a control tag; and the id",
-  "it names is looked up here EXACTLY - no fuzzy match, no nearest name, no guessing at",
-  "a near neighbour. That is the same discipline as the model allowlist, for the same",
-  "reason: a machine that guesses which action you meant will one day guess wrong while",
-  "holding something sharp.",
-  "",
-  "No key, token or password ever appears here, and none is ever passed to a script. A",
-  "tool that needs a credential fetches it itself, server-side - config.json for the",
-  "model keys, secrets/google_token.json for the Google grant - and the wire between",
-  "this machine and the browser never carries one.",
-  "",
-  "  proposal blanks are usually parameter names, but the calendar hand earns two DERIVED",
-  "              blanks that hands.py composes and the script never receives: {when} and",
-  "              {duration}, from a start/end pair. They exist so the spoken sentence can",
-  "              be a human reading of a machine stamp - 'Monday 28 September at 4:00 pm'",
-  "              rather than '2026-09-28T16:00' - while the rows underneath still show the",
-  "              employer the exact values that will travel. They are computed from the",
-  "              validated parameters by the same code the script uses, so the card and the",
-  "              wire cannot disagree.",
-  "              An email body has NO such blank, on purpose: `proposal` is spoken out loud,",
-  "              and preflight check 16(f) plants a canary in that body and fails if it is",
-  "              ever heard. The body is shown on the card and never read to the room.",
-  "",
-  "Each entry:",
-  "  id          the name the brain asks for and the ledger counts under. [a-z0-9_-]",
-  "  name        what a human calls it, shown above the Yes/No pair",
-  "  script      a bare filename inside tools/ - never a path, never a shell string",
-  "  capabilities the sentences the brain may match a request against. Write them the",
-  "              way your employer would say the thing, not the way a manual would.",
-  "  triggers    regular expressions that decide only ONE thing: whether a message is",
-  "              worth offering the brain a chance to ask for hands at all. They never",
-  "              choose a tool - the brain does that, and the id above is checked",
-  "              exactly. A trigger that is too greedy costs a model call; a trigger",
-  "              that is too narrow means the hands are never offered.",
-  "  params      name / type / required. string, text, integer, number, boolean.",
-  "              Anything not listed here is dropped before the script sees it.",
-  "  timeout_s   how long it may run before it is killed and reported as failed",
-  "  proposal    the sentence spoken before anything happens, with {param} blanks.",
-  "              This is where your voice lives: write it the way you would want to be",
-  "              asked. It is composed from THIS template and never from model prose,",
-  "              because a model that paraphrases an action can understate it.",
-  "",
-  "Adding a hand is a ten-line script and four lines of JSON. Nothing else."
- ],
- "version": 1,
- "tools": [
-  {
-   "id": "add_calendar_event",
-   "name": "Write something into the calendar",
-   "script": "add_calendar_event.py",
-   "capabilities": [
-    "put an appointment, a reminder or a meeting in the employer's calendar",
-    "remind the employer to do something at a particular time",
-    "book or schedule something for a given day or hour"
-   ],
-   "triggers": [
-    "\\bremind\\s+me\\b",
-    "\\breminder\\b",
-    "\\b(?:my\\s+)?(?:calendar|diary|schedule)\\b",
-    "\\b(?:book|schedule|pencil)\\s+(?:me\\s+)?in\\b",
-    "\\bput\\b[^.]{0,40}\\b(?:calendar|diary)\\b",
-    "\\bappointment\\b"
-   ],
-   "params": [
-    {
-     "name": "title",
-     "type": "string",
-     "required": true
-    },
-    {
-     "name": "start",
-     "type": "string",
-     "required": true
-    },
-    {
-     "name": "end",
-     "type": "string",
-     "required": false
-    },
-    {
-     "name": "description",
-     "type": "text",
-     "required": false
-    }
-   ],
-   "timeout_s": 45,
-   "proposal": "That would be '{title}', {when}, {duration}, sir, written into your Google calendar. Shall I put it in?",
-   "step": "Write '{title}' into your Google calendar, {when}, {duration}."
-  },
-  {
-   "id": "send_email",
-   "name": "Send an email",
-   "script": "send_email.py",
-   "capabilities": [
-    "send an email to somebody on the employer's behalf",
-    "write to a person or an address and say something to them"
-   ],
-   "triggers": [
-    "\\be-?mail\\b",
-    "\\bsend\\b[^.]{0,30}\\b(?:a\\s+)?(?:note|message|line)\\b",
-    "\\bwrite\\s+to\\b"
-   ],
-   "params": [
-    {
-     "name": "to",
-     "type": "string",
-     "required": true
-    },
-    {
-     "name": "subject",
-     "type": "string",
-     "required": true
-    },
-    {
-     "name": "body",
-     "type": "text",
-     "required": true
-    }
-   ],
-   "timeout_s": 45,
-   "proposal": "I have an email ready for {to}, sir, under the subject '{subject}'. The card carries what it says. Shall I send it?",
-   "step": "Send an email to {to} under the subject '{subject}'."
-  },
-  {
-   "id": "set_voice",
-   "name": "Change the voice he speaks in",
-   "script": "set_voice.py",
-   "capabilities": [
-    "change the voice the assistant speaks in, to one of the voices installed on this machine",
-    "make yourself sound like somebody else - ryan, joe, alan, or the northern one",
-    "switch, swap or recast the spoken voice"
-   ],
-   "triggers": [
-    "\\b(?:switch|change|swap|cast|use|set|pick|choose|make)\\b[^.]{0,30}\\bvoice\\b",
-    "\\bvoice\\b[^.]{0,20}\\b(?:to|as|into|like)\\b",
-    "\\bsound\\s+like\\b",
-    "\\bspeak\\s+(?:with|like|in)\\b",
-    "\\b(?:in|with|as)\\s+(?:ryan|joe|alan|the\\s+northern)(?:'s)?\\b"
-   ],
-   "params": [
-    {
-     "name": "voice",
-     "type": "string",
-     "required": true
-    },
-    {
-     "name": "current",
-     "type": "string",
-     "required": false
-    }
-   ],
-   "timeout_s": 10,
-   "proposal": "You are hearing {current} at the moment, sir. That would make it {voice} from the next word on. Shall I change the voice?",
-   "step": "Change the voice from {current} to {voice}."
-  },
-  {
-   "id": "relaunch_chrome",
-   "name": "Relaunch Chrome with the debugging port",
-   "script": "relaunch_chrome.py",
-   "capabilities": [
-    "open Chrome's debugging port so a focus session can lock a TAB rather than the whole browser",
-    "restart the browser with the debugging port when locking a tab is impossible without it",
-    "put back the tab-level watching that a browser started without the port cannot do"
-   ],
-   "triggers": [
-    "\\brelaunch\\b[^.]{0,20}\\b(?:chrome|browser)\\b",
-    "\\bdebugg?ing\\s+port\\b",
-    "\\bremote[-\\s]debugging\\b",
-    "\\b(?:restart|reopen)\\b[^.]{0,20}\\bchrome\\b"
-   ],
-   "params": [],
-   "timeout_s": 120,
-   "proposal": "I need Chrome relaunched with the debugging port to lock a tab, sir. Shall I?",
-   "step": "Relaunch Chrome with the debugging port."
-  },
-  {
-   "id": "summon_tab",
-   "name": "Bring you back to the locked tab",
-   "script": "summon_tab.py",
-   "capabilities": [
-    "bring the employer back to the tab he locked a focus session on"
-   ],
-   "triggers": [
-    "\\bbring\\s+me\\s+back\\b",
-    "\\btake\\s+me\\s+back\\b[^.]{0,20}\\btab\\b"
-   ],
-   "params": [],
-   "timeout_s": 15,
-   "proposal": "Shall I bring you back?",
-   "step": "Bring you back to the locked tab."
-  },
-  {
-   "id": "selftest",
-   "name": "Test the hands themselves",
-   "script": "selftest.py",
-   "capabilities": [
-    "prove that the tool machinery itself works, touching nothing at all"
-   ],
-   "triggers": [
-    "\\bself[-\\s]?test\\b",
-    "\\btest\\s+your\\s+(?:hands|tools)\\b"
-   ],
-   "params": [
-    {
-     "name": "token",
-     "type": "string",
-     "required": true
-    }
-   ],
-   "timeout_s": 10,
-   "proposal": "A self test, sir, carrying the token {token} and touching nothing. Shall I run it?",
-   "step": "Run a self test carrying the token {token}."
-  },
-  {
-   "id": "save_minutes",
-   "name": "Save the minutes of a meeting",
-   "script": "save_minutes.py",
-   "capabilities": [
-    "write up the minutes of a meeting the Scribe transcribed and keep them as a note",
-    "save minutes that have already been drafted into notes/, under a title like Meeting-2026-09-26-1432"
-   ],
-   "triggers": [
-    "\\bminutes\\b",
-    "\\b(?:write|type)\\s+up\\b[^.]{0,30}\\bmeeting\\b",
-    "\\bsave\\b[^.]{0,20}\\b(?:the\\s+)?(?:meeting|transcript)\\b"
-   ],
-   "params": [
-    {
-     "name": "title",
-     "type": "string",
-     "required": true
-    },
-    {
-     "name": "minutes",
-     "type": "text",
-     "required": true
-    },
-    {
-     "name": "overwrite",
-     "type": "boolean",
-     "required": false
-    }
-   ],
-   "timeout_s": 15,
-   "proposal": "I have the minutes drafted, sir, to be kept as '{title}'. Shall I save it?",
-   "step": "Save the minutes as '{title}'."
-  },
-  {
-   "id": "save_note",
-   "name": "Write a thought down as a note",
-   "script": "save_note.py",
-   "capabilities": [
-    "write something the employer wants remembered into his own collection as a note",
-    "keep a thought, a decision or a fact he has just said, so it can be cited later",
-    "leave folder out unless the Census is asking: it is captures unless told otherwise"
-   ],
-   "triggers": [
-    "\\bremember\\s+that\\b",
-    "\\b(?:write|note|jot)\\b[^.]{0,12}\\b(?:that|this|it)\\b[^.]{0,8}\\bdown\\b",
-    "\\bmake\\s+a\\s+note\\b",
-    "\\b(?:add|keep)\\s+(?:a\\s+|this\\s+)?note\\b"
-   ],
-   "params": [
-    {
-     "name": "title",
-     "type": "string",
-     "required": true
-    },
-    {
-     "name": "body",
-     "type": "text",
-     "required": true
-    },
-    {
-     "name": "folder",
-     "type": "string",
-     "required": false
-    }
-   ],
-   "timeout_s": 15,
-   "proposal": "That would go into your collection as '{title}', sir, a note of its own. The card carries what it says. Shall I write it down?",
-   "step": "Write a note titled '{title}'."
-  },
-  {
-   "id": "publish_video",
-   "name": "Make a film public",
-   "script": "publish_video.py",
-   "_why": [
-    "THE ONLY HAND THAT PUBLISHES, and it is a hand rather than a server route for one reason:",
-    "this is the instant a film becomes visible to the world, and the Hands' gate exists to put",
-    "a human between this house and an act that strangers can see. The upload itself is NOT a",
-    "hand - it takes a minute and lands unlisted, so it runs behind the Doorman with a progress",
-    "bus, which is the Director's shape.",
+  "_comment": [
+    "THE REGISTRY, and it is the only source of truth about what this machine can do.",
     "",
-    "EVERY PARAMETER IS A ROW OF THE CHAIN CARD, which is why there are six of them and why",
-    "four are only ever read and never used. S40 asks the card to show title, description, tags,",
-    "thumbnail and the unlisted URL before the boss says yes - and in this house the card IS the",
-    "slot's parameters. So they are parameters: not because the script needs them, but because",
-    "approving something invisible is not approving it. publish_video.py uses `video` alone, and",
-    "checks even that against the ledger rather than trusting the request.",
+    "A tool that is not in this file does not exist. The brain is shown the capability",
+    "sentences and nothing else; it asks for a tool by id with a control tag; and the id",
+    "it names is looked up here EXACTLY - no fuzzy match, no nearest name, no guessing at",
+    "a near neighbour. That is the same discipline as the model allowlist, for the same",
+    "reason: a machine that guesses which action you meant will one day guess wrong while",
+    "holding something sharp.",
     "",
-    "NO CAPABILITY SENTENCE MENTIONS A TOPIC OR A TITLE, so the brain cannot be led into",
-    "proposing this for a film that does not exist: the only legitimate source of a video id is",
-    "an upload this machine has already done, and the script refuses any id that is not in its",
-    "own ledger."
-   ],
-   "capabilities": [
-    "make a film that is already uploaded and unlisted visible to everybody on YouTube",
-    "publish, release or go public with the video that was just put up unlisted"
-   ],
-   "triggers": [
-    "\\b(?:publish|go\\s+public|make\\s+it\\s+public|release\\s+it)\\b",
-    "\\bunlist(?:ed)?\\b[^.]{0,30}\\bpublic\\b"
-   ],
-   "params": [
+    "No key, token or password ever appears here, and none is ever passed to a script. A",
+    "tool that needs a credential fetches it itself, server-side - config.json for the",
+    "model keys, secrets/google_token.json for the Google grant - and the wire between",
+    "this machine and the browser never carries one.",
+    "",
+    "  proposal blanks are usually parameter names, but the calendar hand earns two DERIVED",
+    "              blanks that hands.py composes and the script never receives: {when} and",
+    "              {duration}, from a start/end pair. They exist so the spoken sentence can",
+    "              be a human reading of a machine stamp - 'Monday 28 September at 4:00 pm'",
+    "              rather than '2026-09-28T16:00' - while the rows underneath still show the",
+    "              employer the exact values that will travel. They are computed from the",
+    "              validated parameters by the same code the script uses, so the card and the",
+    "              wire cannot disagree.",
+    "              An email body has NO such blank, on purpose: `proposal` is spoken out loud,",
+    "              and preflight check 16(f) plants a canary in that body and fails if it is",
+    "              ever heard. The body is shown on the card and never read to the room.",
+    "",
+    "Each entry:",
+    "  id          the name the brain asks for and the ledger counts under. [a-z0-9_-]",
+    "  name        what a human calls it, shown above the Yes/No pair",
+    "  script      a bare filename inside tools/ - never a path, never a shell string",
+    "  capabilities the sentences the brain may match a request against. Write them the",
+    "              way your employer would say the thing, not the way a manual would.",
+    "  triggers    regular expressions that decide only ONE thing: whether a message is",
+    "              worth offering the brain a chance to ask for hands at all. They never",
+    "              choose a tool - the brain does that, and the id above is checked",
+    "              exactly. A trigger that is too greedy costs a model call; a trigger",
+    "              that is too narrow means the hands are never offered.",
+    "  params      name / type / required. string, text, integer, number, boolean.",
+    "              Anything not listed here is dropped before the script sees it.",
+    "  timeout_s   how long it may run before it is killed and reported as failed",
+    "  proposal    the sentence spoken before anything happens, with {param} blanks.",
+    "              This is where your voice lives: write it the way you would want to be",
+    "              asked. It is composed from THIS template and never from model prose,",
+    "              because a model that paraphrases an action can understate it.",
+    "",
+    "Adding a hand is a ten-line script and four lines of JSON. Nothing else."
+  ],
+  "version": 1,
+  "tools": [
     {
-     "name": "video",
-     "type": "string",
-     "required": true
+      "id": "add_calendar_event",
+      "name": "Write something into the calendar",
+      "script": "add_calendar_event.py",
+      "capabilities": [
+        "put an appointment, a reminder or a meeting in the employer's calendar",
+        "remind the employer to do something at a particular time",
+        "book or schedule something for a given day or hour"
+      ],
+      "triggers": [
+        "\\bremind\\s+me\\b",
+        "\\breminder\\b",
+        "\\b(?:my\\s+)?(?:calendar|diary|schedule)\\b",
+        "\\b(?:book|schedule|pencil)\\s+(?:me\\s+)?in\\b",
+        "\\bput\\b[^.]{0,40}\\b(?:calendar|diary)\\b",
+        "\\bappointment\\b"
+      ],
+      "params": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "start",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "end",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "required": false
+        }
+      ],
+      "timeout_s": 45,
+      "proposal": "That would be '{title}', {when}, {duration}, sir, written into your Google calendar. Shall I put it in?",
+      "step": "Write '{title}' into your Google calendar, {when}, {duration}."
     },
     {
-     "name": "title",
-     "type": "string",
-     "required": true
+      "id": "send_email",
+      "name": "Send an email",
+      "script": "send_email.py",
+      "capabilities": [
+        "send an email to somebody on the employer's behalf",
+        "write to a person or an address and say something to them"
+      ],
+      "triggers": [
+        "\\be-?mail\\b",
+        "\\bsend\\b[^.]{0,30}\\b(?:a\\s+)?(?:note|message|line)\\b",
+        "\\bwrite\\s+to\\b"
+      ],
+      "params": [
+        {
+          "name": "to",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "subject",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "body",
+          "type": "text",
+          "required": true
+        }
+      ],
+      "timeout_s": 45,
+      "proposal": "I have an email ready for {to}, sir, under the subject '{subject}'. The card carries what it says. Shall I send it?",
+      "step": "Send an email to {to} under the subject '{subject}'."
     },
     {
-     "name": "url",
-     "type": "string",
-     "required": true
+      "id": "set_voice",
+      "name": "Change the voice he speaks in",
+      "script": "set_voice.py",
+      "capabilities": [
+        "change the voice the assistant speaks in, to one of the voices installed on this machine",
+        "make yourself sound like somebody else - ryan, joe, alan, or the northern one",
+        "switch, swap or recast the spoken voice"
+      ],
+      "triggers": [
+        "\\b(?:switch|change|swap|cast|use|set|pick|choose|make)\\b[^.]{0,30}\\bvoice\\b",
+        "\\bvoice\\b[^.]{0,20}\\b(?:to|as|into|like)\\b",
+        "\\bsound\\s+like\\b",
+        "\\bspeak\\s+(?:with|like|in)\\b",
+        "\\b(?:in|with|as)\\s+(?:ryan|joe|alan|the\\s+northern)(?:'s)?\\b"
+      ],
+      "params": [
+        {
+          "name": "voice",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "current",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "timeout_s": 10,
+      "proposal": "You are hearing {current} at the moment, sir. That would make it {voice} from the next word on. Shall I change the voice?",
+      "step": "Change the voice from {current} to {voice}."
     },
     {
-     "name": "tags",
-     "type": "string",
-     "required": false
+      "id": "relaunch_chrome",
+      "name": "Relaunch Chrome with the debugging port",
+      "script": "relaunch_chrome.py",
+      "capabilities": [
+        "open Chrome's debugging port so a focus session can lock a TAB rather than the whole browser",
+        "restart the browser with the debugging port when locking a tab is impossible without it",
+        "put back the tab-level watching that a browser started without the port cannot do"
+      ],
+      "triggers": [
+        "\\brelaunch\\b[^.]{0,20}\\b(?:chrome|browser)\\b",
+        "\\bdebugg?ing\\s+port\\b",
+        "\\bremote[-\\s]debugging\\b",
+        "\\b(?:restart|reopen)\\b[^.]{0,20}\\bchrome\\b"
+      ],
+      "params": [],
+      "timeout_s": 120,
+      "proposal": "I need Chrome relaunched with the debugging port to lock a tab, sir. Shall I?",
+      "step": "Relaunch Chrome with the debugging port."
     },
     {
-     "name": "thumbnail",
-     "type": "string",
-     "required": false
+      "id": "summon_tab",
+      "name": "Bring you back to the locked tab",
+      "script": "summon_tab.py",
+      "capabilities": [
+        "bring the employer back to the tab he locked a focus session on"
+      ],
+      "triggers": [
+        "\\bbring\\s+me\\s+back\\b",
+        "\\btake\\s+me\\s+back\\b[^.]{0,20}\\btab\\b"
+      ],
+      "params": [],
+      "timeout_s": 15,
+      "proposal": "Shall I bring you back?",
+      "step": "Bring you back to the locked tab."
     },
     {
-     "name": "description",
-     "type": "text",
-     "required": false
+      "id": "selftest",
+      "name": "Test the hands themselves",
+      "script": "selftest.py",
+      "capabilities": [
+        "prove that the tool machinery itself works, touching nothing at all"
+      ],
+      "triggers": [
+        "\\bself[-\\s]?test\\b",
+        "\\btest\\s+your\\s+(?:hands|tools)\\b"
+      ],
+      "params": [
+        {
+          "name": "token",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "timeout_s": 10,
+      "proposal": "A self test, sir, carrying the token {token} and touching nothing. Shall I run it?",
+      "step": "Run a self test carrying the token {token}."
+    },
+    {
+      "id": "save_minutes",
+      "name": "Save the minutes of a meeting",
+      "script": "save_minutes.py",
+      "capabilities": [
+        "write up the minutes of a meeting the Scribe transcribed and keep them as a note",
+        "save minutes that have already been drafted into notes/, under a title like Meeting-2026-09-26-1432"
+      ],
+      "triggers": [
+        "\\bminutes\\b",
+        "\\b(?:write|type)\\s+up\\b[^.]{0,30}\\bmeeting\\b",
+        "\\bsave\\b[^.]{0,20}\\b(?:the\\s+)?(?:meeting|transcript)\\b"
+      ],
+      "params": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "minutes",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "overwrite",
+          "type": "boolean",
+          "required": false
+        }
+      ],
+      "timeout_s": 15,
+      "proposal": "I have the minutes drafted, sir, to be kept as '{title}'. Shall I save it?",
+      "step": "Save the minutes as '{title}'."
+    },
+    {
+      "id": "save_note",
+      "name": "Write a thought down as a note",
+      "script": "save_note.py",
+      "capabilities": [
+        "write something the employer wants remembered into his own collection as a note",
+        "keep a thought, a decision or a fact he has just said, so it can be cited later",
+        "leave folder out unless the Census is asking: it is captures unless told otherwise"
+      ],
+      "triggers": [
+        "\\bremember\\s+that\\b",
+        "\\b(?:write|note|jot)\\b[^.]{0,12}\\b(?:that|this|it)\\b[^.]{0,8}\\bdown\\b",
+        "\\bmake\\s+a\\s+note\\b",
+        "\\b(?:add|keep)\\s+(?:a\\s+|this\\s+)?note\\b"
+      ],
+      "params": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "body",
+          "type": "text",
+          "required": true
+        },
+        {
+          "name": "folder",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "timeout_s": 15,
+      "proposal": "That would go into your collection as '{title}', sir, a note of its own. The card carries what it says. Shall I write it down?",
+      "step": "Write a note titled '{title}'."
+    },
+    {
+      "id": "publish_video",
+      "name": "Make a film public",
+      "script": "publish_video.py",
+      "_why": [
+        "THE ONLY HAND THAT PUBLISHES, and it is a hand rather than a server route for one reason:",
+        "this is the instant a film becomes visible to the world, and the Hands' gate exists to put",
+        "a human between this house and an act that strangers can see. The upload itself is NOT a",
+        "hand - it takes a minute and lands unlisted, so it runs behind the Doorman with a progress",
+        "bus, which is the Director's shape.",
+        "",
+        "EVERY PARAMETER IS A ROW OF THE CHAIN CARD, which is why there are six of them and why",
+        "four are only ever read and never used. S40 asks the card to show title, description, tags,",
+        "thumbnail and the unlisted URL before the boss says yes - and in this house the card IS the",
+        "slot's parameters. So they are parameters: not because the script needs them, but because",
+        "approving something invisible is not approving it. publish_video.py uses `video` alone, and",
+        "checks even that against the ledger rather than trusting the request.",
+        "",
+        "NO CAPABILITY SENTENCE MENTIONS A TOPIC OR A TITLE, so the brain cannot be led into",
+        "proposing this for a film that does not exist: the only legitimate source of a video id is",
+        "an upload this machine has already done, and the script refuses any id that is not in its",
+        "own ledger."
+      ],
+      "capabilities": [
+        "make a film that is already uploaded and unlisted visible to everybody on YouTube",
+        "publish, release or go public with the video that was just put up unlisted"
+      ],
+      "triggers": [
+        "\\b(?:publish|go\\s+public|make\\s+it\\s+public|release\\s+it)\\b",
+        "\\bunlist(?:ed)?\\b[^.]{0,30}\\bpublic\\b"
+      ],
+      "params": [
+        {
+          "name": "video",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "tags",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "thumbnail",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "required": false
+        }
+      ],
+      "timeout_s": 60,
+      "proposal": "'{title}' is up and unlisted, sir - {url}. The card carries the description, the tags and the thumbnail. Shall I make it public?",
+      "step": "Make '{title}' public on YouTube."
+    },
+    {
+      "id": "compose_newsletter",
+      "name": "Draft the newsletter",
+      "script": "compose_newsletter.py",
+      "_why": [
+        "THE DRAFT, AND IT SENDS NOTHING. This hand composes from the boss's own notes and",
+        "reports the shape of what it wrote - how long, how many snippets, which note ids.",
+        "It opens no socket. The Director's render is not a hand for the same reason this",
+        "one barely needs to be: making a thing is not the act the gate exists for.",
+        "",
+        "IT IS REGISTERED ANYWAY, because the registry is the only way the brain learns a",
+        "tool exists, and in this house a registry entry is inseparable from the Chain Card",
+        "- hands.propose() builds one for every tool there is. That costs a confirmation on",
+        "a harmless act, and it is the right cost: the alternative is a second execution",
+        "path that runs scripts without a card, which is the parallel mechanism the mandate",
+        "forbids building.",
+        "",
+        "NO CAPABILITY SENTENCE NAMES A SUBJECT OR A SUBSCRIBER, exactly as publish_video's",
+        "name no topic: the brain must not be led into drafting for a list that does not",
+        "exist, and the only legitimate source of a topic is the boss asking for one."
+      ],
+      "capabilities": [
+        "draft a newsletter from the employer's own notes on a subject he names",
+        "write up what the notes say about something, as an issue to go out later"
+      ],
+      "triggers": [
+        "\\bnewsletter\\b",
+        "\\bdraft\\b[^.]{0,30}\\b(?:issue|digest|round-?up)\\b"
+      ],
+      "params": [
+        {
+          "name": "topic",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "timeout_s": 90,
+      "proposal": "I can draft the newsletter on {topic}, sir, from your own notes. Nothing goes out - it only writes. Shall I?",
+      "step": "Draft the newsletter on {topic}."
+    },
+    {
+      "id": "send_newsletter",
+      "name": "Send the newsletter",
+      "script": "send_newsletter.py",
+      "_why": [
+        "THE HAND THAT GOES OUT, and the second one in this house whose work cannot be taken",
+        "back. send_email reaches one person; this reaches the whole list, one message each,",
+        "and an email cannot be unsent. So it is gated by the Chain Card exactly as",
+        "publish_video is, and for the identical reason: the Hands' gate exists to put a",
+        "human between this house and an act that strangers can see.",
+        "",
+        "EVERY PARAMETER IS A ROW OF THE CARD, which is why five of them are only ever READ",
+        "and never used by the script. publish_video's own law applies without a word",
+        "changed - approving something invisible is not approving it - so the subject, the",
+        "recipient count, the opening of the body and the cited note ids are parameters: not",
+        "because the script needs them, but because a boss approving a send must be able to",
+        "read what is being sent. send_newsletter.py uses `topic` alone, and re-reads the",
+        "subscriber list and re-composes the body from the notes at send time rather than",
+        "trusting anything that travelled on this card.",
+        "",
+        "NO CAPABILITY SENTENCE NAMES A SUBJECT OR A RECIPIENT. The brain must not be able",
+        "to propose a send for a newsletter that was never composed, and a capability that",
+        "mentioned a subject is an invitation to do exactly that."
+      ],
+      "capabilities": [
+        "send the drafted newsletter to everybody on the employer's subscriber list",
+        "put the newsletter out to the list that is already on file"
+      ],
+      "triggers": [
+        "\\bsend\\b[^.]{0,20}\\bnewsletter\\b",
+        "\\b(?:publish|put\\s+out|mail)\\b[^.]{0,20}\\bnewsletter\\b"
+      ],
+      "params": [
+        {
+          "name": "topic",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "subject",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "subscribers",
+          "type": "integer",
+          "required": true
+        },
+        {
+          "name": "opening",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "cited",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "snippets",
+          "type": "integer",
+          "required": false
+        }
+      ],
+      "timeout_s": 180,
+      "proposal": "The newsletter on {topic} is ready, sir - '{subject}', going to {subscribers} subscriber(s). The card carries the opening and the notes it cites. Shall I send it?",
+      "step": "Send the newsletter '{subject}' to {subscribers} subscriber(s)."
     }
-   ],
-   "timeout_s": 60,
-   "proposal": "'{title}' is up and unlisted, sir - {url}. The card carries the description, the tags and the thumbnail. Shall I make it public?",
-   "step": "Make '{title}' public on YouTube."
-  }
- ]
+  ]
 }
