@@ -545,10 +545,17 @@ def state_report(probe=False):
     out["scopes"] = [s.rsplit("/", 1)[-1] for s in str(data.get("scope") or "").split()]
     email = str(data.get("email") or "")
     out["emailSha"] = hashlib.sha256(email.encode("utf-8")).hexdigest()[:12] if email else ""
-    try:
-        out["expiresInS"] = round(float(data.get("expires_at") or 0) - _now(), 1)
-    except (TypeError, ValueError):
+    # None WHEN THERE IS NO TOKEN, not a number. With no file at all the old arithmetic
+    # subtracted the clock from zero and reported expiresInS -1791309305.6, which is a
+    # fifty-seven-year-old token and reads like a parsing bug in a tool whose whole job is to
+    # be believed. An absent token has no expiry; saying so is the honest answer.
+    if data.get("expires_at") is None:
         out["expiresInS"] = None
+    else:
+        try:
+            out["expiresInS"] = round(float(data.get("expires_at") or 0) - _now(), 1)
+        except (TypeError, ValueError):
+            out["expiresInS"] = None
     bearer, state, why = access()
     out["state"], out["why"] = state, why
     out["bearerChars"] = len(str(bearer or ""))

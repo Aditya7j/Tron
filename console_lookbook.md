@@ -11451,3 +11451,127 @@ Not papered over. The local engine is **8.2B at Q4 on a CPU** against Groq's hos
    `followup_proof`, `persona_proof`) should now be re-run under a real throttle — 1a is
    exactly the fix they were failing for, and if it works they come back. I have not claimed
    that; it needs the limit to bite to measure.
+
+---
+
+# VOICE CUTOFF · CAPTION SYNC · GMAIL — NONE OF THE THREE WAS WHAT IT LOOKED LIKE
+
+Three items, all reported live. One fixed. Two diagnosed to a root cause inside a fence the
+mandate drew itself, and stopped there rather than crossed. Full report:
+`_runs/sweep47/report.md`.
+
+## PART 1 — the voice is innocent
+
+It is not the `wave.Error` bug recurring. The counter says so: say.py's named refusal
+(`say.py:221`) has fired **0** times, and all **6** `wave.Error`s in the trace predate the fix.
+Had a new kind of chunk been normalising to nothing, that counter would be non-zero — which is
+the entire reason it exists.
+
+The real cause is upstream of the mouth. `OLLAMA_FALLBACK_PREDICT = 48` caps the local model at
+48 tokens, and since §41 routes Groq → local with the Groq daily limit routinely saturated, the
+local engine is answering most turns. Measured on a real request: **226 chars, 40 words, ending
+on the word `My`.** Mid-clause. The voice then speaks all 40 of those words faithfully and
+stops, because there is nothing more. Every chunk had an `end`; none were skipped.
+
+"I speak only half" is literally true, and the half was cut before the voice ever saw it.
+
+`OLLAMA_FALLBACK_PREDICT` is in server.py, which PART 0 fenced. Diagnosis proved the root cause
+is there, so this is the report and not the fix.
+
+## PART 2 — the fix works, measures 0ms, and had to be reverted
+
+Implemented as PART 2's smaller option: hold `captionShow` until the audio clock starts, let
+`karArm`'s reveal be the only display. I picked that over teaching `captionShow` to find the
+clock because `karaChunk` is already called at `src.start()` and already reads it — deferring to
+a point that exists beats inventing one.
+
+New `_runs/sweep47/voice_sync_proof.mjs` (port 9245, **9/9 PASS**) speaks a real 3-sentence
+36-word line through the real Piper path: **gap 0ms** between `caption.at` and the first chunk's
+`start`, 2 chunks, 0 skipped, 36/36 words.
+
+And it took `karaoke_proof` 91/92 → **90/92**, on §38's two caption assertions. The cause is
+structural: **`karArm` takes the caption as its reveal surface when the card yields.** An empty
+caption at arm time has no spans to build on. So the deferral cannot be done by *when* alone —
+it needs karArm to build its own spans, which is *how* it reveals, which PART 2 said to stop for.
+
+Reverted in full (`grep -c captionPending` → 0; karaoke back to 91/92). The conflict, plainly:
+**§39 wants the caption empty at arm time so the reveal owns the display; §38 wants it full so
+the reveal has a surface.** Both cannot hold. The proof is kept on disk at 9/9, ready for the
+moment that question is answered.
+
+## PART 3 — nothing was broken; the token was deleted by hand
+
+`state_report(probe=True)`, run now: `state: absent`, `tokenFile: false`, `hasRefresh: false`,
+`bearerChars: 0`, `coherent: true`. `secrets/google_token.json` does not exist; its siblings do.
+`pending()` is `{}`, so not a half-finished consent either.
+
+The send path itself is healthy, and was proved three ways before the token went:
+`1a112279d1719630` (library), `1a11227d309d804b` (the hand as hands.py runs it),
+`1a11246a421e84a3` (the hand, this mandate) — with the probe reading
+`accepted (47090 message(s)...)`.
+
+What deleted it: **two `POST /google` calls, each immediately followed by a `POST /say`**, a web
+lookup for `'The token'`, and a speaker turn 284s old. A hand on the Command Panel's Google
+button, and the house announcing the result aloud. `cmd == "disconnect"` reaches
+`google_api.disconnect()` → `forget()` → `TOKEN_FILE.unlink()`. Working as designed.
+
+**The pattern, named as the mandate asked:** the disconnect is silent and the house never
+mentions it again. One click deletes the token, with no confirmation and no standing reminder.
+Mail then fails generically hours later, long after the press is forgotten — and reads as "mail
+is broken again". Twice now the Gmail report has been a token-state problem, not a send problem.
+
+The fix is a reconnect, and the consent click is yours by construction. I am not inventing a
+code fix for a non-code problem.
+
+## THE ONE CHANGE
+
+- **`google_api.py:548-558`** — `state_report()` reports `expiresInS: None` when there is no
+  token, instead of subtracting the wall clock from zero and printing `-1791309305.6`. A
+  fifty-seven-year-old token reads like a parsing bug in the one tool whose whole job is to be
+  believed.
+
+`viewer/graph-data.js` also differs from HEAD — that is build.py's auto-study regenerating, not
+mine.
+
+## Suites
+
+| suite | before | now | verdict |
+|---|---|---|---|
+| `voice_sync_proof` | — | **9/9 PASS** | new; gap **0ms** |
+| `karaoke_proof` | 91/92 | **91/92** | dipped to 90/92 under PART 2, recovered on revert |
+| `fallback_proof` | 15/15 | **15/15** | unchanged |
+| `preflight.py` | 37 pass, 2 fail, 4 warn | **37 pass, 2 fail, 4 warn** | identical; fails 13 and 20 |
+
+Preflight's two fails are **13** (`check_watch`) and **20** (`check_scribe`) — the same two, at
+the same counts, as the previous run, and both already documented here as the Groq-throttle set.
+The throttle is also why PART 1's local engine is answering at all. Neither check reaches
+say.py, google_api.py or the caption path.
+
+## Left open, named
+
+- **`OLLAMA_FALLBACK_PREDICT = 48`** — PART 1's actual root cause. 48 → 512 is one line and
+  costs latency. Fenced by PART 0; yours to authorise.
+- **The §38/§39 caption conflict** — the sync fix exists and measures 0ms but cannot land
+  without karArm owning its own spans. Fenced by PART 2; yours to authorise.
+- **The Google reconnect** — yours alone. Mail stays down until that click.
+- **The silent disconnect** — no confirmation, no visible disconnected state. It will recur.
+- **`/chat` email requests never reach the hand, and this one is real.** `POST /chat`
+  *"email <addr> and tell him..."* returns `kind: compose`, no card, 0 ollama fallbacks, and the
+  model answers *"I do not have the hand to send email. I can only prepare the text for you to
+  send manually."* — false; the hand exists and works. `task_intent()` is **True for all four**
+  send-email sentences including the plainest; `substantial_question()` is **False** for one,
+  skipping the hands offer entirely. Your own three attempts sit in the trace as
+  `'Draft me a email to stroyteller0007@gmail.com with subject a' is a task; composed, not
+  searched`. **This is most likely what "mail is not working" has actually felt like from the
+  chair** — even with a live token, asking for an email in conversation gets a refusal instead
+  of a send. Root cause is in server.py's funnel, so it is reported, not fixed.
+
+## LIVE ACCEPTANCE
+
+- **Voice:** real multi-sentence response spoken end to end. No chunk lost, 36/36 words. And it
+  confirmed the cutoff is upstream — the answer arrived already truncated at 40 words.
+- **Caption/audio together:** measured **0ms** under the deferral. Now reverted, so the live
+  house is back to text-before-audio pending the §39 decision.
+- **Gmail real send post-diagnosis: BLOCKED.** The token file is deleted; no send is possible
+  from this machine until you reconnect. The three message ids above are real but pre-diagnosis.
+  I am not going to call that acceptance met.
