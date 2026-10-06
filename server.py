@@ -364,6 +364,16 @@ except Exception as _broadcast_exc:                            # noqa: BLE001
     broadcast = None
     sys.stderr.write("broadcast: unavailable - %s\n" % _broadcast_exc)
 
+# THE PUBLISHER, on the same terms and tested the same way: `newsletter is not None` is the
+# guard every branch below uses. It composes from the notes and reads a json file; it opens no
+# socket and it cannot send - tools/send_newsletter.py is the hand that goes out, and it is
+# behind the Chain Card like every other.
+try:
+    import newsletter
+except Exception as _newsletter_exc:                           # noqa: BLE001
+    newsletter = None
+    sys.stderr.write("newsletter: unavailable - %s\n" % _newsletter_exc)
+
 # =============================================================================
 #  THE PERSONA - everything the character is, lives in this one block.
 #
@@ -3068,6 +3078,131 @@ def publish_asked(question):
     return any(PUBLISH_RE.match(form) for form in _addressless_forms(question))
 
 
+# =============================================================================================
+#  THE PUBLISHER'S ONE SENTENCE
+# =============================================================================================
+# "SEND THE NEWSLETTER". Anchored at ^ with the Broadcaster's discipline and for a sharper
+# version of its reason: the failure mode of a loose anchor here is not a wasted render and not
+# even a film on the internet, it is mail in strangers' inboxes that cannot be recalled.
+#
+# IT NAMES NO SUBJECT AND NO ADDRESS, deliberately, exactly as PUBLISH_RE names no video id. The
+# newsletter it refers to is whatever the notes compose for the topic the boss names in the same
+# breath, or - when he names none - the one the composer last drafted; a sentence that could
+# carry a subject line would be a sentence a model could fill with one nobody wrote.
+#
+# WHY IT EXISTS AT ALL, which is the whole of this fix: "send the newsletter" typed into /chat
+# used to lose the race to notes retrieval. There is a note in this corpus about sending email,
+# it scored over the threshold, the notes door opened first, and the boss got a paragraph of his
+# own research read back at him instead of a Chain Card. The §44 live acceptance had to raise
+# that card over POST /tools to get past it. A protected route is the same answer §29's
+# fullscreen, §30's study and §40's two sentences all got, and for the same reason: a fixed
+# phrase with a consequence must not be at the mercy of what happens to be in the notes.
+NEWSLETTER_RE = re.compile(r"""^(?:
+      (?:please\s+)?(?:can\s+you\s+)?
+      (?:send|mail|publish|put)\s+(?:out\s+)?(?:the|my|this|that)\s+newsletter
+      (?:\s+(?:on|about)\s+\S.{1,79})?
+    | (?:send|mail)\s+(?:it|that)\s+(?:out\s+)?to\s+(?:the\s+)?(?:list|subscribers)
+    | (?:the\s+)?newsletter\s+(?:can\s+)?go(?:es)?\s+out
+    )(?:\s+(?:now|today|please|for\s+me|abhi|zara))?[.!]?$""",
+    re.IGNORECASE | re.VERBOSE)
+
+# WHAT MUST NOT MATCH, and publisher_proof carries every one as a control. The first three are
+# questions ABOUT the newsletter, which belong to the brain; "draft" must reach the composer and
+# not the sender; and the last three are the expensive ones - a refusal, an impossibility, and a
+# sentence about somebody else's newsletter that must never find this route.
+_NEWSLETTER_NOT = ("what is in the newsletter", "who is on the newsletter list",
+                   "how many subscribers do i have", "draft the newsletter",
+                   "draft the newsletter on react", "do not send the newsletter",
+                   "don't send the newsletter", "unsend the newsletter",
+                   "delete the newsletter", "subscribe to a newsletter")
+
+
+def newsletter_asked(question):
+    """True when this sentence asks for the newsletter to GO. Nothing else returns True."""
+    return any(NEWSLETTER_RE.match(form) for form in _addressless_forms(question))
+
+
+def newsletter_allowed(spoken, seal):
+    """(True, "") if this voice may send the newsletter, else (False, the refusal).
+
+    THE SAME DOOR AS THE UPLOAD'S, called and not copied - broadcast_allowed(), which is itself
+    study_allowed()'s BOSS-only verdict under a fourth name. A guest asking for a send is
+    refused BEFORE a card exists, which is §40's stronger half applied to mail: there is then no
+    proposal standing for any later "yes" to inherit.
+
+    AND IT IS THE RIGHT STRICTNESS, not an approximation of it. The upload's door admits a BOSS
+    voice to an UNLISTED film - a URL nobody has - and §40 argued that down from the Hands'
+    stricter gate on exactly that ground. This sentence has no unlisted half: the mail goes to
+    real people and cannot be recalled. So the voice gate is the same BOSS-only test, and the
+    Chain Card behind it is the Hands' gate as well - two gates, not one, which is what the
+    publish flip gets and for the same reason.
+    """
+    return broadcast_allowed(spoken, seal)
+
+
+def _newsletter_card(cfg=None, topic=""):
+    """(params, why) for the send Chain Card, built from the NOTES and never from a sentence.
+
+    _publish_card()'s shape and its discipline: every row the boss reads is re-derived from the
+    boss's own material - the subscriber file and the notes - rather than filled in by whatever
+    composed the request. newsletter.compose() is pure and reads ingest.recall(), so the opening
+    on the card is the opening that will be mailed.
+
+    THE TOPIC IS THE ONE THING A SENTENCE MAY CARRY, and it is carried as a topic and not as
+    content: "send the newsletter on useEffect cleanup" names a subject to RESEARCH, and what
+    gets written is still whatever the notes say about it. Where the topic comes from when the
+    sentence names none is _newsletter_topic()'s business; given none at all, this refuses
+    rather than guessing, because the alternative is mailing the list about something nobody
+    asked for.
+    """
+    if newsletter is None:
+        return None, "the Publisher is not available on this machine"
+    said = str(topic or "").strip()
+    if not said:
+        return None, ("Which newsletter, sir? Name the subject - say draft the newsletter on "
+                      "something, and I shall write it from your notes first")
+    kit = newsletter.compose(said)
+    if not kit["ok"]:
+        return None, kit["why"]
+    return {"topic": said,
+            "subject": kit["subject"],
+            "subscribers": kit["subscribers"],
+            "opening": kit["body"][:400],
+            "cited": ", ".join(kit["citedIds"]),
+            "snippets": len(kit["snippets"])}, ""
+
+
+def _newsletter_topic(question):
+    """The subject named in the sentence, or "" - and "" is a refusal rather than a guess.
+
+    "send the newsletter on useEffect cleanup" carries one; "send the newsletter" does not, and
+    in that case the last topic the composer drafted is used, read out of the jobs ledger. That
+    is the same authority _publish_card() uses for "make it public": the boss said it a moment
+    ago and this house wrote it down, so it does not have to be said twice.
+    """
+    # THE RAW SENTENCE IS TRIED FIRST, AND THAT IS NOT AN OPTIMISATION. _addressless_forms()
+    # lower-cases, and a topic is a search query that becomes a SUBJECT LINE: taken off a
+    # lowered form, "useEffect cleanup" arrives as "useeffect cleanup" and goes out as
+    # "Useeffect cleanup - from my notes", which is the identifier spelled wrong in the
+    # most-read line of the mail. The lowered forms are still tried after it, because the peel
+    # is what strips a vocative and the match has to survive one.
+    for form in [str(question or "").strip()] + list(_addressless_forms(question)):
+        hit = re.match(r"^(?:please\s+)?(?:can\s+you\s+)?(?:send|mail|publish|put)\s+(?:out\s+)?"
+                       r"(?:the|my|this|that)\s+newsletter\s+(?:on|about)\s+(.{2,80}?)"
+                       r"(?:\s+(?:now|today|please|for\s+me))?[.!]?$", form, re.IGNORECASE)
+        if hit:
+            return re.sub(r"\s+", " ", hit.group(1)).strip()
+    # NOTHING NAMED: the last newsletter this house drafted or sent, out of its own ledger.
+    try:
+        import jobs
+        for row in reversed(jobs.ledger() or []):
+            if str(row.get("name") or "") == "newsletter" and row.get("topic"):
+                return str(row["topic"])
+    except Exception:                                          # noqa: BLE001
+        pass
+    return ""
+
+
 def broadcast_allowed(spoken, seal):
     """(True, "") if this voice may put a film up UNLISTED, else (False, the refusal).
 
@@ -3341,6 +3476,10 @@ def protected_answer(question, cfg=None, ear_open=False, offer_standing=False,
     # dict's `publish` field is what tells the two branches apart - False is "put it up", True is
     # "make it public" - so the page and the proof read one key instead of two routes.
     gcast = None
+    # And the Publisher's, on the same sentinel discipline: None means the newsletter was not
+    # asked for at all. `pending` empty beside asked True is the refusal a proof asserts - no
+    # card was left standing for a later word to confirm.
+    gnews = None
     if said_it(META_RE):
         name = "meta"
         # FROM LIVE STATE, not from a hopeful fixed string. He is asking whether the ear
@@ -3574,6 +3713,54 @@ def protected_answer(question, cfg=None, ear_open=False, offer_standing=False,
                 sys.stderr.write("  route: broadcast - publish proposed for %s, status %s\n"
                                  % (params["video"], st))
 
+    # ---- THE PUBLISHER, AHEAD OF RETRIEVAL AND FOR THE SAME REASON THE PUBLISH FLIP IS ----
+    # IT SITS EXACTLY WHERE publish_asked() SITS and it is here because of a measured defect:
+    # "send the newsletter" typed into /chat used to be answered as a NOTES question. There is a
+    # note in this corpus about sending email, it scored over the threshold, the notes door
+    # opened before any card could be raised, and the boss got his own research read back at him
+    # instead of being asked whether to mail the list. §44's live acceptance had to go round it
+    # through POST /tools. A fixed phrase with an irreversible consequence must not be at the
+    # mercy of what happens to be in the notes - which is the argument §29's fullscreen, §30's
+    # study and §40's two sentences each made in turn.
+    #
+    # THE FOUR PROTECTED CLASSES ARE UNTOUCHED. Like the clock and the Broadcaster, this is a
+    # ROUTE and not a class: PROTECTED_CLASSES still names the four it always has.
+    if not name and newsletter is not None and newsletter_asked(question):
+        name = "newsletter"
+        allowed, refusal = newsletter_allowed(spoken, seal)
+        if not allowed:
+            # A GUEST ASKING FOR A SEND IS REFUSED BEFORE A CARD EXISTS - §40's stronger half,
+            # applied to mail, which has no unlisted state to fall back to. NOTHING IS LEFT
+            # PENDING by this path, so there is no card for a later word to confirm.
+            gnews = {"asked": True, "refused": "not-the-boss", "pending": "", "subscribers": 0}
+            line = refusal
+            sys.stderr.write("  route: newsletter - a send asked by a voice sealed %r, refused "
+                             "at the doorman; nothing was mailed\n" % (seal or "?"))
+        else:
+            params, why = _newsletter_card(cfg, _newsletter_topic(question))
+            if not params:
+                gnews = {"asked": True, "refused": "nothing-to-send", "pending": "",
+                         "subscribers": 0}
+                line = why
+            else:
+                # THE PROPOSAL IS RAISED HERE AND CONFIRMED NOWHERE NEAR HERE, which is the
+                # publish flip's own arrangement: propose() puts the six card fields in the
+                # slot, the window that lets a one-word "yes" answer it is opened by
+                # handshake_offer() on the way out of /chat from THIS utterance's measured seal,
+                # and the parameters the script eventually receives come from the slot rather
+                # than from whatever sentence confirms it.
+                st, payload = hands.propose("send_newsletter", params, door="voice")
+                pend = (payload or {}).get("pending") or {}
+                line = str(pend.get("line") or payload.get("answer") or
+                           "Shall I send the newsletter, sir?")
+                gnews = {"asked": True,
+                         "refused": "" if st == 200 else "proposal-refused",
+                         "pending": str(pend.get("id") or ""),
+                         "subscribers": int(params["subscribers"])}
+                sys.stderr.write("  route: newsletter - send proposed for %r to %d "
+                                 "subscriber(s), status %s\n"
+                                 % (params["topic"], params["subscribers"], st))
+
     # ---- THE CLOCK, AND IT IS LAST ON PURPOSE -------------------------------------------
     # THE FOUR FUNNEL CLASSES ABOVE ARE UNTOUCHED. This branch is reached only when all four
     # have declined, it cannot shadow any of them, and PROTECTED_CLASSES still names the four
@@ -3665,6 +3852,17 @@ def protected_answer(question, cfg=None, ear_open=False, offer_standing=False,
             said["broadcastJob"] = gcast["job"]
         if gcast["refused"]:
             said["refused"] = gcast["refused"]
+    if gnews is not None:
+        # WHAT A HARNESS READS INSTEAD OF PARSING THE SENTENCE BACK, exactly as `broadcastPublish`
+        # is. A refused send is the pair (newsletterAsked true, newsletterPending empty) plus the
+        # reason code - and an empty pending id is the assertion that no card was left standing
+        # for any later word to confirm, which is the guest law stated as a readable fact.
+        said["newsletter"] = True
+        said["newsletterAsked"] = bool(gnews["asked"])
+        said["newsletterPending"] = gnews["pending"]
+        said["newsletterSubscribers"] = int(gnews["subscribers"])
+        if gnews["refused"]:
+            said["refused"] = gnews["refused"]
     if gclock is not None:
         # WHAT A HARNESS READS INSTEAD OF PARSING THE SENTENCE BACK. `clockPlace` is empty for
         # his own clock, the canonical LABEL for a city that resolved, and empty for one that

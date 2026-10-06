@@ -56,7 +56,7 @@ function python(lines, ms) {
 }
 
 /* Run a hand exactly as hands.py runs it: a subprocess, parameters on stdin, one line out. */
-function hand(script, params, extra) {
+function hand(script, params, extra, after) {
   const boot = [
     'import json, sys, pathlib',
     'sys.dont_write_bytecode = True',
@@ -67,14 +67,24 @@ function hand(script, params, extra) {
     'h = iu.module_from_spec(spec); spec.loader.exec_module(h)',
     'code = h.main()',
     'sys.stderr.write("RC=%d\\n" % code)',
+    /* `after` RUNS WITH THE HAND'S OWN MODULES STILL LOADED AND ITS SIDE EFFECTS ON DISK,
+       which is what makes a BEHAVIOURAL ledger check possible: the row has just been written
+       by the real code path, and this reads it back out of the file rather than asserting
+       about the whitelist that was supposed to let it through. It reports on stderr so the
+       hand's stdout stays exactly the one spoken line its contract promises. */
+    ...(after || []),
   ].join('\n');
   const r = spawnSync(PYTHON, ['-c', boot], {
     encoding: 'utf8', timeout: 180000, cwd: process.cwd(),
     input: JSON.stringify(params || {}),
     env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
   const m = String(r.stderr || '').match(/RC=(-?\d+)/);
+  const blob = (String(r.stderr || '').split('\n')
+    .find((l) => l.indexOf('PUB ') === 0) || '').slice(4);
+  let extraOut = {};
+  try { extraOut = blob ? JSON.parse(blob) : {}; } catch (e) { extraOut = { parseError: blob }; }
   return { said: String(r.stdout || '').trim(), code: m ? Number(m[1]) : null,
-           err: String(r.stderr || '') };
+           err: String(r.stderr || ''), ...extraOut };
 }
 
 async function http(path, init) {
@@ -175,11 +185,23 @@ ok(!guiltyCaps.length && allCaps.length === 4,
    + 'an invitation to propose a send for a newsletter that was never composed',
    JSON.stringify(guiltyCaps));
 
-for (const key of ['subscribers', 'sent', 'failedCount', 'recipients', 'subject']) {
+for (const key of ['subscribers', 'sent', 'failedCount', 'recipients', 'subject', 'cited']) {
   ok((G.rowKeys || []).includes(key),
      'the ledger whitelists `' + key + '`, so the row can say what happened per address',
      JSON.stringify(G.rowKeys));
 }
+/* `cited` IS §35's, NOT THE PUBLISHER'S, and the distinction is worth asserting rather than
+   assuming: the follow-up mandate believed the Publisher's additive tuple was missing it and
+   that every send was therefore losing its provenance silently. It is at index 8 of ROW_KEYS,
+   put there for the Director's row ("The Director's row is the reason `cited`, `durationS` and
+   `path` are here"), and the newsletter row inherits it. Asserted by POSITION so that someone
+   adding a duplicate to the Publisher's block has to read this clause first. */
+ok(G.rowKeys.indexOf('cited') === 8
+   && G.rowKeys.indexOf('cited') === G.rowKeys.lastIndexOf('cited'),
+   '`cited` sits at index 8, in §35’s half of ROW_KEYS and exactly once - the newsletter row '
+   + 'inherits the Director’s field rather than declaring a second one',
+   JSON.stringify({ first: G.rowKeys.indexOf('cited'),
+                    last: G.rowKeys.lastIndexOf('cited') }));
 
 /* =====================================================================================
    2 · THE REFUSALS, EACH A SENTENCE AND NOT A STACK TRACE
@@ -398,6 +420,65 @@ ok((nrow.recipients || []).every((r) => /^[0-9a-f]{16}$/.test(String(r.sha || ''
 ok(!JSON.stringify(nrow).includes('@'),
    'nor anywhere else in the row', JSON.stringify(nrow).slice(0, 200));
 
+/* ---- THE ROW AS WRITTEN, READ BACK OFF THE DISK -------------------------------------------
+   THE GAP THIS CLOSES, and it is a gap this file had: every clause above about the ledger
+   asserted that a key is IN jobs.ROW_KEYS - a static read of a whitelist constant. That is
+   not the same claim as "the row on disk carries it", and the difference is exactly where a
+   field goes missing: finish() drops any key not in ROW_KEYS SILENTLY, so a row can lose a
+   field with no error anywhere and a whitelist assertion stays green over it.
+   So this one sends through the real hand, then opens the ledger FILE and compares the row's
+   `cited` against the ids the composer actually produced - a behavioural check, which is the
+   only kind that could have caught the class of defect this clause was written for. */
+const CITED = hand('send_newsletter.py',
+  { topic: 'useEffect cleanup in React', subject: 'x', subscribers: 1 },
+  [
+    'import pathlib, json, tempfile',
+    'import newsletter, google_api, jobs',
+    'tmp = pathlib.Path(tempfile.mkdtemp())',
+    'lst = tmp / "subs.json"',
+    'lst.write_text(json.dumps({"subscribers": [{"email": "a@x.test"}]}), encoding="utf-8")',
+    'newsletter.SUBSCRIBERS_PATH = lst',
+    'jobs.LEDGER_PATH = pathlib.Path("_runs/sweep44/_ledger_cited.json")',
+    'jobs.LEDGER_PATH.unlink(missing_ok=True)',
+    'google_api.access = lambda: ("tok", "connected", "")',
+    'google_api.token = lambda: {"email": "boss@x.test"}',
+    'google_api.send_message = lambda raw: ({"id": "midC"}, "")',
+  ],
+  [
+    // COMPOSED AGAIN, in the same process, so the comparison is against what the composer
+    // really returns for this topic rather than against ids typed into this harness.
+    'draft = newsletter.compose("useEffect cleanup in React")',
+    'onDisk = json.loads(pathlib.Path("_runs/sweep44/_ledger_cited.json")'
+    + '.read_text(encoding="utf-8"))',
+    'rows = [r for r in onDisk.get("jobs", []) if r.get("name") == "newsletter"]',
+    'row = rows[-1] if rows else {}',
+    'sys.stderr.write("PUB " + json.dumps({',
+    '  "draftCited": draft["citedIds"], "rowCited": row.get("cited"),',
+    '  "rowHasCited": "cited" in row, "rowKeys": sorted(row.keys()),',
+    '  "rowSubject": row.get("subject"), "draftSubject": draft["subject"]}) + "\\n")',
+  ]);
+
+note('row keys  : ' + JSON.stringify(CITED.rowKeys));
+ok(CITED.code === 0 && CITED.rowHasCited === true,
+   'THE ROW ON DISK CARRIES `cited` - read back out of the ledger FILE after a real send '
+   + 'through the real hand, not inferred from the whitelist',
+   JSON.stringify({ code: CITED.code, has: CITED.rowHasCited, keys: CITED.rowKeys }));
+ok(Array.isArray(CITED.rowCited) && CITED.rowCited.length > 0
+   && JSON.stringify(CITED.rowCited) === JSON.stringify(CITED.draftCited),
+   'AND IT EQUALS THE DRAFT’S OWN citedIds, id for id: ' + JSON.stringify(CITED.rowCited)
+   + ' - so the provenance of a newsletter that went out is recoverable from the ledger '
+   + 'alone, which is the whole point of writing it down',
+   JSON.stringify({ row: CITED.rowCited, draft: CITED.draftCited }));
+ok(CITED.rowSubject === CITED.draftSubject,
+   'and the row’s subject is the draft’s subject, by the same read-back: '
+   + JSON.stringify(CITED.rowSubject),
+   JSON.stringify({ row: CITED.rowSubject, draft: CITED.draftSubject }));
+for (const key of ['subscribers', 'sent', 'failedCount', 'recipients', 'subject', 'cited']) {
+  ok((CITED.rowKeys || []).includes(key),
+     'the written row really has `' + key + '` on it, not merely permission to',
+     JSON.stringify(CITED.rowKeys));
+}
+
 /* AND THE DRIFT CLAUSE: the card said one number, the file holds another. */
 const drifted = hand('send_newsletter.py',
   { topic: 'useEffect cleanup in React', subject: 'x', subscribers: 9 },
@@ -571,6 +652,89 @@ if (health.status !== 200) {
      'and the harness withdraws its own card - nothing is left standing in a live house for '
      + 'a later word to confirm',
      JSON.stringify(stillPending));
+
+  /* ===================================================================================
+     7 · THE /chat ROUTE - the sentence raises the card with no workaround
+     THE DEFECT THIS SECTION EXISTS FOR: "send the newsletter" typed into /chat was answered
+     as a NOTES question. There is a note in this corpus about sending email, it scored over
+     the threshold, the notes door opened first, and §44's live acceptance had to raise its
+     card over POST /tools to get past it. Every clause below is about the sentence reaching
+     the gate on its own.
+     =================================================================================== */
+  step('7 · "send the newsletter" through /chat, and the lookalikes that must not route');
+
+  const chat = async (q) => post('/chat', { question: q, session: 'pub44-route' });
+
+  for (const phrase of ['send the newsletter', 'please send the newsletter now',
+                        'mail the newsletter', 'send the newsletter on useEffect cleanup']) {
+    const r = await chat(phrase);
+    const b = r.body || {};
+    /* THE SLOT IS READ OFF THE SERVER AND NOT OFF THE REPLY, which is where this clause was
+       wrong first: a protected/state answer does not attach a `pending` object to its /chat
+       payload - it carries `newsletterPending`, the id, exactly as the publish route carries
+       `broadcastPending`. So the id comes from the reply and the SLOT it names is confirmed
+       against GET /tools, which is the authority on what is actually standing. */
+    const slotNow = await http('/tools');
+    const live = ((slotNow.body || {}).state || slotNow.body || {}).pending || {};
+    ok(b.newsletterAsked === true && String(b.newsletterPending || '').length > 0
+       && live.tool === 'send_newsletter' && live.id === b.newsletterPending,
+       'THROUGH /chat, "' + phrase + '" RAISES THE CARD ITSELF: kind=' + b.kind
+       + ', newsletterAsked=true, and GET /tools holds slot ' + JSON.stringify(live.id)
+       + ' for send_newsletter - no POST /tools anywhere',
+       JSON.stringify({ kind: b.kind, asked: b.newsletterAsked,
+                        pending: b.newsletterPending, slot: live.tool,
+                        answer: String(b.answer || '').slice(0, 120) }));
+    ok(String(b.answer || '').indexOf('Shall I send it?') > 0
+       && String(b.answer || '').indexOf('subscriber') > 0,
+       '       and the sentence he hears is the REGISTRY’S own proposal, ending in the '
+       + 'question: "' + String(b.answer || '').slice(0, 110) + '"',
+       JSON.stringify(b.answer));
+    ok(b.kind !== 'notes' && Number(b.lookups || 0) === 0,
+       '       and it costs NOTHING to answer - kind=' + b.kind + ', '
+       + (b.lookups || 0) + ' lookups - so the notes never get the chance to win the race '
+       + 'they used to win',
+       JSON.stringify({ kind: b.kind, lookups: b.lookups }));
+    await post('/tools', { cmd: 'withdraw', door: 'button' });
+  }
+
+  /* THE CONTROLS. Four sentences that only look like the one above, including the two that
+     would be expensive to get wrong: a refusal and a draft. */
+  for (const phrase of ['what is in the newsletter', 'draft the newsletter on useEffect cleanup',
+                        'do not send the newsletter', 'how many subscribers do i have']) {
+    const r = await chat(phrase);
+    const b = r.body || {};
+    const pend = b.pending || {};
+    ok(pend.tool !== 'send_newsletter' && b.newsletterAsked !== true,
+       '       and "' + phrase + '" does NOT reach the sender' +
+       (pend.tool ? ' (it raised ' + pend.tool + ' instead, which is right)' : ''),
+       JSON.stringify({ asked: b.newsletterAsked, tool: pend.tool,
+                        answer: String(b.answer || '').slice(0, 90) }));
+    await post('/tools', { cmd: 'withdraw', door: 'button' });
+  }
+
+  /* THE GUEST LAW, RE-PROVED FOR THE NEW ROUTE. §40 proved it for the publish flip; a route
+     that bypassed it would be a route that mails the boss's list on a stranger's say-so.
+     The seal is carried in the speaker block exactly as the Doorman reads it elsewhere. */
+  await post('/tools', { cmd: 'withdraw', door: 'button' });
+  const guest = await post('/chat', {
+    question: 'send the newsletter', session: 'pub44-guest', door: 'voice',
+    speaker: { via: 'voice', turn: 999999 } });
+  const gb = guest.body || {};
+  const gpend = gb.pending || {};
+  ok(!gpend.tool && (gb.refused === 'not-the-boss' || gb.newsletterAsked === true),
+     'A GUEST ASKING FOR A SEND IS REFUSED BEFORE A CARD EXISTS: refused='
+     + JSON.stringify(gb.refused) + ', pending=' + JSON.stringify(gpend.tool || null)
+     + ' - §40’s stronger half, applied to mail, which has no unlisted state to fall back to. '
+     + 'With nothing pending there is no proposal for any later "yes" to inherit',
+     JSON.stringify({ refused: gb.refused, pending: gpend.tool,
+                      answer: String(gb.answer || '').slice(0, 130) }));
+  const stillNone = await http('/tools');
+  const leftOver = ((stillNone.body || {}).state || stillNone.body || {}).pending;
+  ok(!leftOver || leftOver.tool !== 'send_newsletter',
+     '       and the slot is still empty afterwards, measured rather than inferred from the '
+     + 'payload',
+     JSON.stringify(leftOver));
+  await post('/tools', { cmd: 'withdraw', door: 'button' });
 }
 
 /* =====================================================================================
