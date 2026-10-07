@@ -11985,3 +11985,317 @@ this time (41.4 s).
 None of the four touches anything this mandate changed: not the caption paths, not the port
 guard, not the hands offer, and not generation time — which A1's own measurement puts at a flat
 3.3 s whether the cap is 48 or 512.
+
+---
+
+# §49 — THE DUOTONE, THE ORBIT MAP, AND A FACE WITH EDGES
+
+*2026-10-07 · UI enhancement mandate, presentation layer only*
+
+Every route, payload, hand contract, routing decision and caption law is untouched. The diff is
+`viewer/index.html` (markup, CSS, the orbit map's drawing code, the face's point layout and one
+shader line), one new proof, and this section. No server file was opened for writing.
+
+**One discrepancy in what arrived:** the mandate names three reference photos and five SVG direction
+previews. Four raster images arrived and no SVGs. I treated the four as the targets: the four-panel
+composite, the Jarvis/five-orb screen, the knowledge galaxy with the Focus card, and the wireframe
+head.
+
+---
+
+## What I read before writing any CSS, and what it froze
+
+I read every proof that renders or reads the page before touching it. These assertions bounded the
+design, and each one is still green:
+
+| constraint | where | what it forced |
+|---|---|---|
+| the note panel's glass is exactly `blur(12px) saturate(150%)` | deck_proof:2985 | `--blur` and `--glass` keep their values; the new glass work is *added*, not substituted |
+| `#panel` is "a pane of the same glass rather than a lit slab": no inset glow, `--line` hairline, `--glass` alpha | karaoke_proof:1287–1327 | the ribbon goes on summoned sheets only, **never** on `#panel` |
+| the deck wears the **core** by default | conversation_proof:1194 pins the literal `'core'` | the face stays a selectable mode; making it the default is a behaviour change (see PART 3) |
+| one object, one material, four buffers allocated once at `PRES.CAP` | preflight check 34 | the face's mesh is **points in the same buffer**, not a second object |
+| ≤14,000 presence points | §17.2 / deck_proof | the mesh is carved out of the shell's own budget; total unchanged at 13,800 |
+| ring colour is cluster, a partition; jewels pinned at s .55 / l .47; no "boiled sweets" | deck_proof:753–797, 894–913 | the new jewels are hue-only choices under the sweet ceiling |
+| `title` is in the governor's no-overlap set | layout.rects, index.html (`get rects`) | the orbit map's door glyph takes **zero** layout width |
+| every z-index is in the stack list | stylesheet header | `#galaxywash` and `#orbit` are added to the list, with reasons |
+| motion is transform and opacity only | stylesheet header | the orbit map moves by `transform`, the dims by `opacity` |
+| `tonesPlayed` is a 12-deep ring that deck_proof reads for `wake` and `no` | deck_proof:3685 | the new cool chime keeps its own ring |
+
+---
+
+## PART 1 — Palette and light
+
+**The token block: [index.html:96–143](viewer/index.html#L96)** (`THE DUOTONE`).
+
+| family | tokens | meaning |
+|---|---|---|
+| gold | `--gold-core` #ffb23c, `--gold-core-rgb`, `--gold-hot` #fff2d2, `--gold-glow`, `--gold-dim`, `--gold-trace`, `--gold-local` #f0b866 | **presence and active state**: the word being said, a row under the pointer, the field with the caret, the live dot |
+| blue | `--blue-structure` #7cc4ff, `--blue-structure-rgb`, `--blue-glow`, `--blue-dim`, `--blue-trace`, `--blue-deep`, `--blue-deep-rgb`, `--blue-live` #22e0ff | **structure and idle**: frames, edges, scrollbars, sparklines, the title's glow |
+| both | `--duo-ribbon` (gold → blue), `--void-rgb` | the edge of a summoned sheet; the floor as a triplet |
+
+**The two masters were not invented.** `--blue-structure` is `PRES.TINT`, the presence's filament
+shell and the value `--accent` always carried. `--gold-core` is `PRES.CORE_TINT`, its amber heart.
+The chrome is now lit by the same two lamps as the hologram, which is also the rule cine_proof
+already holds the core to ("blue shade, amber heart").
+
+**The old names are members now, with byte-identical computed values.** `--accent` is
+`var(--blue-structure)` (line 53), `--live`/`--web` are `var(--blue-live)`, and `--local`/`--doc` are
+`var(--gold-local)` (lines 61, 70, 93–94). Instrumentation light (cyan = somebody else's page,
+gold = this machine, red = failure) is untouched. ui_enhancement_proof asserts the computed values
+in the browser: `--live rgb(34, 224, 255)`, `--local rgb(240, 184, 102)`.
+
+**47 accent sites moved onto the families:** 26 active states to gold (hover, focus-within, the
+`.w.now` word, the bar's dot), 19 structure sites to blue (frames, scrollbars, sparklines, the
+focus card's brackets), and 2 focus-card traces to the gold→blue ribbon. The amber variant now
+reads `--gold-core` (index.html:2904). Literal colours in the rules fell from **357 to 314**, and
+every distinct coloured literal left outside `:root` is one the stylesheet already had (asserted).
+
+**The cluster jewels** ([index.html:3696](viewer/index.html#L3696)) are now nine hues inside
+the two families (warm 15–65°, cool 185–245°). **The order is measured spacing.** `colorOf` hands
+them out in folder order, and my first cut put `unfiled` 12° from `captures`: distinct enough to
+pass deck_proof's partition test, too close for an eye to tell in a legend. The first four are now
+blue 208°, gold 46°, copper 22°, indigo 236°, with the nearest pair 24° apart. Today that is
+**auto blue, captures gold, census copper, unfiled indigo**.
+
+## PART 2 — The galaxy view
+
+**The orbit map: [index.html:5961–6330](viewer/index.html#L5961)**, opened from the stats line
+under the title (a ◎ glyph in the gutter), from `__galaxy.orbit.open()`, or with `?orbit=1`.
+
+**Where the real data comes from.** Every name and number is read, at the moment it is drawn, from
+the same arrays and the same scope the legend and the stats line already read:
+
+- `groups`, from `GRAPH.meta.groups` in `viewer/graph-data.js` ([index.html:4415](viewer/index.html#L4415));
+- `colorOf` (4418);
+- `nodes`, `activeLinks`, `allLinks` and `hidden` (the legend's mutes), with the counts computed the
+  way `paintLegend()` (6345) and `paintStats()` (6380) compute them.
+
+`paintStats()` now calls `orbitRefresh()`, so a mute or a density toggle redraws the open map. The
+orbit module contains **none of the four folder names as a literal** (asserted), and the proof
+counts the clusters independently in Node from `graph-data.js` on disk:
+
+| | on disk | drawn |
+|---|---|---|
+| auto | 51 | AUTO · 51 notes |
+| census | 17 | CENSUS · 17 notes |
+| captures | 11 | CAPTURES · 11 notes |
+| unfiled | 2 | UNFILED · 2 notes |
+| summary | 81 notes · 1 connection · 4 clusters | identical to the stats line |
+
+The heart is the presence sphere (gold at the centre, blue at the limb), labelled with the deck's
+own title and note count. Clusters orbit on two tilted ellipses, largest alternating, and each
+world is sized by √count. Spokes run to the heart. The corpus's **one** cross-cluster link is drawn
+as an arc with its count; where there is no link, nothing is drawn. Sub-labels carry only the
+count and the mute state. My first cut also printed "local" or "studied" off the jewel's colour
+family, which was a claim the corpus never made, so I removed it.
+
+## PART 3 — The presence avatar, honestly
+
+**What exists and what I changed.** The presence was already a procedural point cloud: 13,800
+points on one ShaderMaterial, with four modes (ring, cube, face, core), blinking lids, gaze, a jaw
+that swings, and a rim and fresnel. **The core is the default the deck wears**, by §32, pinned by
+conversation_proof:1194. The face is one Command Panel press away (P cycles the modes) and is the
+mode voice_proof auditions.
+
+I gave the face what your wireframe reference has and it lacked: **edges**.
+`presFaceMesh()` ([index.html:21817](viewer/index.html#L21817)) lays 3,600 of the shell's own
+points along an 11×10 jittered, triangulated lattice on the head's actual surface (289 edges, 11
+points each, 110 bright vertices). The shell, nose, ears, lids, lips and neck keep their places.
+Constants and their reasoning are at 20319; the shader branch is one line at 22284. The face also
+brightens with the voice (`FACE_SPEAK_GLOW` 0.55; before, only the lips reacted), and its dimmest
+third drifts by about a pixel.
+
+**Two first-cut failures, both caught on the plates.** My first lattice was 16×15 at four points
+per edge, and it read as a dot-grid rather than lines. I had also tried to light the mesh through
+the existing `0.40 + 0.14·aRnd` rule, which spans only 0.40–0.54, so the "bright" mesh was 5%
+brighter than the haze. My first comment claimed otherwise, and it was wrong. Mesh points now carry
+`aRnd ≥ 1`, a band nothing else in the face uses, so the shader lights them at 0.86 (vertices 1.0)
+without a fifth buffer.
+
+**The verdict, with no middle ground:**
+
+- **Your wireframe reference (the low-poly head): achievable procedurally, and now close in kind.**
+  The plate shows a triangulated, edge-lit head with bright vertices over a volumetric haze, which
+  is that reference's language. Where it falls short: the reference's edge loops follow anatomy
+  (brow ridge, cheekbones, jaw, neck into shoulders), while mine is a regular lattice projected
+  onto the surface, so its lines run in rows and columns rather than along the face. Closing that
+  procedurally means hand-authoring a topology, which is an asset by another name.
+- **The glowing photographic face in the composite and Jarvis references: not achievable this
+  way, and I won't pretend otherwise.** Hair strands, a sculpted nose and lips, a recognisable
+  likeness and skin are geometry the page doesn't have. No amount of analytic tables, point
+  sprites or shader work will produce them from a formula. **True parity needs an external head
+  mesh.** My recommendation is to source a license-clear head (CC0, or CC-BY with attribution) as a
+  glTF of roughly 10–30k vertices, and **sample it into the existing point buffer at boot**:
+  vertices become points, edges become the mesh stratum. That keeps one object, one material and
+  one allocation, so preflight 34 and every presence proof keep holding. One candidate: three.js
+  ships a scanned head ("LeePerrySmith") in its examples under a Creative Commons Attribution
+  licence, as I recall it. Read its licence file before using it; I have not verified it this
+  round.
+- **Default mode.** If you want the face worn by default instead of the core, that is a one-word
+  change to `PRES.RICH`, but it reverses §32 and reddens conversation_proof:1194 by design, so it's
+  your decision, not something to slip in under "presentation".
+
+## PART 4 — Glass, ribbon, dim, and the motion vocabulary
+
+- **The glass was already there.** Every summoned surface is backdrop-blurred hyper-glass
+  (`--glass`, `--blur`), and deck_proof and karaoke_proof freeze it. I added light, not a new glass.
+- **The ribbon** ([index.html:2940](viewer/index.html#L2940)): a 1px gold-to-blue ring cut from
+  `--duo-ribbon` by a mask on `::after`, on the command panel, the focus card and the orbit map. It
+  has no border, no box-shadow and no pointer, so it changes nothing that's measured. **Honestly,
+  it reads as a hairline, not the references' ambient glow.** A real glow needs a blurred shadow
+  outside the box, and I held back because the focus card's box is measured by three proofs.
+- **The dim** ([index.html:2954](viewer/index.html#L2954)): `#galaxywash`, a fixed opacity-only
+  layer on z-2 (added to the stack list), driven by `:has()`. The sky steps back to 0.72 behind an
+  open command panel and fully behind the orbit map. While the map is open, the docked presence
+  falls to 8% and the title and legend to 22%, so there is one heart on screen.
+- **The named curves** ([index.html:145–171](viewer/index.html#L145)): `--ease-panel-open`
+  (= `--spring`), `--ease-node-orbit-drift` (linear), `--ease-caption-reveal` (linear),
+  `--ease-sphere-pulse`, plus `--ease-lane` (the governor's curve, previously **pasted 16 times**)
+  and `--ease-glide`, each with a `--dur-*` partner. The stylesheet now contains **zero**
+  `cubic-bezier()` outside that block (20 before). The orbit map's script reads the curves back out
+  of the cascade through `EASE` (5986) rather than holding copies, so retuning a curve in `:root`
+  moves the CSS and the canvas together. Caption: index.html:1888. Command panel and note panel:
+  `--ease-panel-open`.
+
+## PART 5 — Layered audio
+
+**A sound layer exists** (the chime bus: wake, yes, no, the boot flourish), so I extended it rather
+than building one. `TONE_FAMILY` ([index.html:19380](viewer/index.html#L19380)) names the
+split the light already makes. **Warm** is the presence acting: wake (C major 7th), yes (a rising
+fifth), boot. **Cool** is structure: a new `glass` cue, E6→B6 sine at a third of the yes's peak,
+for a sheet arriving (the command panel at 7931, the orbit map). `no` is neither, as red is neither.
+Cool cues keep their own ring (`__galaxy.audio.structure`), so opening the panel a dozen times can
+never push `wake` out of the ring deck_proof reads. A muted tab stays silent, as before.
+
+## PART 6 — Zero functional drift
+
+### The new proof
+
+**`ui_enhancement_proof.mjs` — 31/31 PASS.** It checks the source and the running page:
+
+- the 15 tokens exist at `:root` and resolve in the browser, with each `-rgb` triplet equal to its
+  master;
+- provenance colours are unchanged;
+- the `.w.now` word computes gold, active states read gold and structure reads blue;
+- no new hue appears outside the token block (357 → 314 literals);
+- the jewels sit in the families with no sweets;
+- the four named curves are declared and referenced, with no pasted `cubic-bezier` anywhere;
+- the orbit map carries no folder names, draws exactly the clusters and counts `graph-data.js`
+  has on disk, matches the stats line, orbits, dims the sky and closes fully;
+- the ribbon and the command-panel dim work;
+- the face's mesh sits inside one object at the cap, and the deck returns to the core;
+- the chime families exist.
+
+Its "no new hue" comparison is pinned to the pre-mandate commit `e08ed4f`, so it stays meaningful
+after this work is committed.
+
+### Before / after, every suite that renders or reads the page
+
+Run solo and sequentially in a background shell, the same conditions for both phases. Excluded:
+five diagnostic probes with no pass count, and `tools_live`, which presses `add_calendar_event`
+**for real** and would write to your calendar.
+
+| suite | before | after (sweep) | solo re-run, new build | verdict |
+|---|---|---|---|---|
+| layout_proof | 168/168 | **168/168** | | same |
+| deck_proof | 230/239 | **248/253** | | 4 fewer reds, none new |
+| desk_proof | 44/44 | **44/44** | | same |
+| karaoke_proof | 93/93 | 92/93 | **93/93** | environmental, below |
+| voice_proof | 162/169 | **162/169** | | same, identical fail list |
+| boot_proof | 21/21 | **21/21** | | same |
+| cine_proof | 62/62 | **62/62** | | same |
+| roll_proof | 114/114 | 75/76, 1,775 s | **114/114 ×2** (62 s, 69 s) | environmental, below |
+| bus_proof | 78/81 | **80/81** | | 2 fewer reds |
+| clock_proof | 95/95 | **95/95** | | same |
+| census_proof | 36/44 | **36/44** | | same |
+| connectors_proof | 59/61 | **61/61** | | better |
+| console_proof | 9/10 (aborted) | **29/30** | | better |
+| lock_proof | 67/73 | 56/73 | 59/73, then **78/78** | environmental, below |
+| scribe_proof | 59/59 | **59/59** | | same |
+| speaker_proof | 70/70 | **70/70** | | same |
+| salutation_proof | 23/24 | 0/1 | 6/7 | Groq throttle, below |
+| echo_proof | 44/49 | **47/49** | | better |
+| nudge_proof | 21/21 | 20/21 | **21/21** | environmental |
+| study_proof | 115/121 | **118/121** | | better |
+| broadcaster_proof | 110/110 | **110/110** | | same |
+| groq_proof | 91/106 | **91/106** | | same |
+| memory_proof | 40/40 | **40/40** | | same |
+| routing_proof | 94/96 | 84/85, timed out at 45 min | 44 ok / 0 FAIL when stopped | Groq throttle, below |
+| persona_proof | 18/19 | **18/19** | | same |
+| followup_proof | 13/15 | 3/4 | 3/4 | Groq throttle, below |
+| chain_proof | 71/75 | **71/75** | | same |
+| conversation_proof | 105/114 | **105/114** | | same |
+| voice_sync_proof | 9/9 | **9/9** | | same |
+| ui_enhancement_proof | — | **31/31** | | new |
+| test_brain | 142/142 | **142/142** | | same |
+| test_eyes | 104/109 | **104/109** | | same |
+| test_hands_privacy | 7/13 (stops) | **7/13 (stops)** | | same, pre-existing |
+| test_watch | 73 ok, then crashes | **same** | | pre-existing stale anchor |
+
+**For every suite where the counts are equal, I diffed the failure lists, and no new assertion went
+red in any of them.**
+
+**The seven flagged rows, and why each is not a regression:**
+
+- **karaoke, roll, nudge:** fully green when re-run alone on the new build (roll twice). The sweep's
+  roll ran at 1/30th speed throughout, then hit one 30 s evaluate bomb. That's this desktop's
+  documented throttling of a headed harness window that loses the foreground, and it came and went
+  between runs.
+- **lock:** the same build scored 56, 59 and then **78/78** across three runs, better than the
+  baseline's 67. Its reds are all the server's tab watcher (`watchers=0`, `lockedTab=""`), which
+  follows the real front tab. Nothing in the diff touches it, and the ribbon over its button takes
+  no pointer.
+- **salutation, followup, routing:** proved by the engine ledger, not argued. Each wraps
+  `__galaxy.ask()` in a CDP evaluate with `awaitPromise` under a **20 s bomb**, so the bomb has to
+  cover a whole `/chat` round trip. The ledger shows the failing turns served by the **local
+  fallback at 21.9 s, 130 s, and 36–77 s** while Groq's daily limit was saturated. The baseline
+  passed when Groq happened to serve those turns. Routing's solo run had 44 ok and 0 FAIL when I
+  stopped it.
+
+## Live acceptance — plates against the references
+
+The real server, a real headless Chrome on the GPU (Intel Arc 140V, D3D11), 1600×900. Plates are in
+`_runs/sweep49/plates/`.
+
+| plate | reference | where it matches | where it falls short |
+|---|---|---|---|
+| **02 orbit map** | the knowledge-galaxy panel in the composite | a gold-hearted sphere on a ringed plinth with labelled worlds on tilted orbits; the room dims behind it; every label and number is real (AUTO 51, CENSUS 17, CAPTURES 11, UNFILED 2) | four worlds, not six, because your corpus has four folders; worlds carry an initial, not a pictogram icon; the sphere is SVG gradients and motes, not a particle nebula; flat 2D, not a 3D camera |
+| **01 galaxy** | the dense knowledge galaxy | worlds wear the new jewels; the legend reads in the same four colours; the title glow is structure blue | **sparse**, because the archive is 81 notes and 1 link and I won't draw density that doesn't exist; no in-sky cluster cards (adding objects to the 3D scene is what deck_proof measures most closely) |
+| **05/06 face, idle/speaking** | the wireframe head | a triangulated, edge-lit head with bright vertices over a volumetric haze; the mouth opens and the head brightens with the voice | lattice lines, not anatomical edge loops; no neck and shoulders; and nothing like the photographic face (see PART 3) |
+| **03/04 core, idle/speaking** | the "blue structure, gold heart" light of every reference | a blue filament shell, amber heart, amber orbital bands and reticle brackets, with the duotone exactly | it's an abstract core, not a face; that's §32's choice, and it stays the default |
+| **07 command panel** | the left rail and glass panels | glass sheet, sky dimmed behind it, gold active rows and blue structure, gold-to-blue edge ring | the ribbon is a hairline, not a glow; the references' icon nav (Chat / Galaxy / Memory / Web / Focus / Settings) is a different information architecture and wasn't in scope |
+| **09 focus card (with Lock Tab)** | the Focus Session card | glass card, blue frame and brackets, gold-to-blue traces, 24:56 countdown, green "on target", the LOCK THIS TAB control, red tab-lock state | ribbon is subtle; the card keeps its gyroscope visage rather than the reference's compact pill, because its layout is measured by layout, desk and karaoke |
+
+"Lock Tab" isn't a separate card in this house. It's the `LOCK THIS TAB` control and its status
+line inside the Focus card, so the two plates are one plate.
+
+## Left open
+
+1. **The photographic face needs an asset.** It's a sourcing decision, then a boot-time sampler into
+   the existing buffer. I've recommended the route, not taken it.
+2. **The ribbon is a hairline.** A true ambient glow means a blurred shadow outside the focus card's
+   box, which three proofs measure. It's worth doing with those proofs' owners in mind, not slipped in.
+3. **The references' navigation and chat layout** (icon rail, right-hand chat column, quick-actions
+   dashboard) is an information-architecture change, not a palette, galaxy, avatar, glass or motion
+   change. I didn't build it.
+4. **In-sky cluster labels** in the 3D galaxy would put new objects in the scene deck_proof measures
+   most closely. The orbit map gives the overview without touching that scene.
+5. **The face's mesh follows a lattice, not anatomy.** Hand-topology would close the gap but is an
+   asset by another name; item 1 closes it properly.
+6. **Pre-existing reds remain:** throttle-driven model proofs, test_watch's stale `ask(question)`
+   anchor, and test_hands_privacy stopping after 13 checks. They were the same before this round.
+7. **The orbit map's footer motto "explore · learn · build · grow"** is lifted from your composite
+   reference. It's decoration, not data. Delete it if it reads as borrowed.
+
+## Preflight
+
+```
+38 pass, 3 fail, 2 warn   (43 checks, count unchanged)
+```
+
+One more pass than the last mandate's 37. The three fails are checks 7, 12 and 13, the vision checks,
+each quoting `HTTP 502: Groq is rate limiting … (429)`. That's the documented throttle set, and the
+eyes have no local engine by §41's design. The two warns (10, 11) are the routine ones. **Every check
+that reads `viewer/index.html` passes:** 32 (one surface), **34 (the head is large and shaded, and
+still one object and one allocation)**, which is the law the face's mesh was built inside, 35, and
+**36 (the palette fits the clusters)**.

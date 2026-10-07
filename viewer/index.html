@@ -50,7 +50,7 @@
        point of the glass is that an answer looks like something said rather than
        something published. */
     --answermax:min(46vh,560px);
-    --accent:#7cc4ff;
+    --accent:var(--blue-structure);
     /* §39 - HOW LONG THE CARD TAKES TO LEAVE. The grace before it starts is a script
        constant (VANISH_GRACE_MS) because it is a decision about attention; this is only the
        dissolve, and it is here so the stylesheet and the script cannot disagree about it -
@@ -58,7 +58,7 @@
     --vanish-ms:420ms;
     /* The web's colour, and nothing else's. Kept in step with WEB_CYAN in the script
        below, which washes the galaxy with the same value. */
-    --web:#22e0ff;
+    --web:var(--blue-live);
     /* THE THIRD PROVENANCE, and it is deliberately NOT cyan. The eye has already been
        taught one rule on this deck - cyan means somebody else's page - and a contract in
        the employer's own archive is the opposite of that: it is theirs, it is on this
@@ -67,7 +67,7 @@
        by shape rather than by hue: a planet's marker is a round dot, a document's is a
        small square, because a file is not a star and must never be clicked expecting a
        camera flight. */
-    --doc:#f0b866;
+    --doc:var(--gold-local);
     /* THE SETTLE, and it replaces a spring. This deck used to overshoot on purpose -
        cubic-bezier(.34,1.56,.64,1), a surface arriving, leaning past its mark and coming
        back. That is the motion language of a phone, not of an instrument: the y=1.56
@@ -90,9 +90,85 @@
        --void is the deck's floor: near-black with a trace of blue so the fog has
        somewhere to go. */
     --void:#05060A;
-    --live:#22e0ff;
-    --local:#f0b866;
+    --live:var(--blue-live);
+    --local:var(--gold-local);
     --fail:#ff6b6b;
+    /* ======================= THE DUOTONE ===================================
+       TWO FAMILIES OF LIGHT, AND EVERY HUE ON THE DECK IS A MEMBER OF ONE OF THEM.
+       NOT INVENTED FOR THE CHROME. Both masters are the presence's own two lights, which
+       the house already had: --blue-structure is PRES.TINT, the filament shell's cold end
+       and the value --accent has always carried, and --gold-core is PRES.CORE_TINT, the
+       amber heart. So the chrome and the hologram are lit by the same two lamps, and a
+       panel's hover is the same gold as the thing that is speaking. The reference plates
+       the boss supplied for this round are blue structure with a gold heart, and that is
+       also the rule cine_proof already holds the core to ("blue shade, amber heart").
+       WHAT EACH FAMILY MEANS, and it is a rule rather than a mood:
+         gold  - PRESENCE AND ACTIVE STATE. The word being said, a row under the pointer,
+                 a field with the caret in it, the live dot. Something is happening HERE.
+         blue  - STRUCTURE AND IDLE. A frame, an edge, a scrollbar at rest, a sparkline,
+                 the title's glow. Something is standing ready.
+       THE PROVENANCE MEMBERS ARE NOT RENAMED. --blue-live and --gold-local are the two
+       values INSTRUMENTATION LIGHT has always meant - cyan is somebody else's page, gold is
+       this machine - and --live/--local/--web/--doc now point at them instead of carrying
+       a literal each. Same computed values, byte for byte; what changed is that the deck
+       can no longer grow a third cyan by accident, because there is one place it is said.
+       Red is outside both families on purpose: --fail means failure and nothing else, and
+       a failure that was drawn in the family colours would look like a state.
+       THE -rgb TRIPLETS are the same lamp in the one form rgba() can take an alpha from -
+       CSS cannot pull channels out of a hex - and ui_enhancement_proof asserts each triplet
+       resolves to exactly its master, so the two forms cannot drift apart.
+       ===================================================================== */
+    --gold-core:#ffb23c;
+    --gold-core-rgb:255,178,60;
+    --gold-hot:#fff2d2;
+    --gold-glow:rgba(var(--gold-core-rgb),.55);
+    --gold-dim:rgba(var(--gold-core-rgb),.18);
+    --gold-trace:rgba(var(--gold-core-rgb),.07);
+    --gold-local:#f0b866;
+    --blue-structure:#7cc4ff;
+    --blue-structure-rgb:124,196,255;
+    --blue-glow:rgba(var(--blue-structure-rgb),.45);
+    --blue-dim:rgba(var(--blue-structure-rgb),.12);
+    --blue-trace:rgba(var(--blue-structure-rgb),.06);
+    --blue-deep:#0f2f63;
+    --blue-deep-rgb:15,47,99;
+    /* THE FLOOR AS A TRIPLET, for the same reason: a dim laid over the sky is the void at an
+       alpha, and that alpha needs the channels. Same value as --void. */
+    --void-rgb:5,6,10;
+    --blue-live:#22e0ff;
+    /* THE RIBBON: one light that runs from the heart's gold into the structure's blue, for
+       the edge of a summoned surface. A token, so the command panel, the focus card and the
+       orbit map are lit by the same strip rather than three that were tuned separately. */
+    --duo-ribbon:linear-gradient(118deg,rgba(var(--gold-core-rgb),.9) 0%,
+      rgba(var(--gold-core-rgb),.22) 30%,rgba(var(--blue-structure-rgb),.18) 62%,
+      rgba(var(--blue-structure-rgb),.85) 100%);
+    /* ======================= THE MOTION VOCABULARY ==========================
+       ONE CURVE PER KIND OF MOVEMENT, NAMED FOR WHAT IS MOVING. Before this block the
+       governor's lane curve was pasted sixteen times and --spring's own curve twice more as
+       a literal, which is how a deck ends up with two "settles" that differ in the third
+       decimal. Every value here is the one that was already on the glass - the names are
+       new, the motion is not - except where a name is new because the thing is new (the
+       orbit map's drift and its sphere's pulse).
+         panel-open        a summoned sheet arriving: the command panel, the note panel
+         lane              the layout governor moving a rectangle (the probe's lane case)
+         caption-reveal    the subtitle's own fade; words inside it reveal on the audio
+                           clock and have no curve at all, by §39
+         sphere-pulse      a breathing sphere: the orbit map's heart
+         node-orbit-drift  a world going round its orbit: constant angular speed, so linear
+         glide             a light that eases into place: the sun's streak, the mind's lens
+       THE SCRIPT READS THESE BACK rather than holding copies - see EASE in the orbit map -
+       so a curve retuned here moves the canvas and the stylesheet together. */
+    --ease-panel-open:var(--spring);
+    --dur-panel-open:var(--spring-ms);
+    --ease-lane:cubic-bezier(.22,.7,.25,1);
+    --dur-lane:.22s;
+    --ease-caption-reveal:linear;
+    --dur-caption-reveal:.5s;
+    --ease-sphere-pulse:cubic-bezier(.37,0,.63,1);
+    --dur-sphere-pulse:5.2s;
+    --ease-node-orbit-drift:linear;
+    --dur-node-orbit-drift:140s;
+    --ease-glide:cubic-bezier(.2,.8,.2,1);
     /* THE RAIL'S HEIGHT, declared once because two rules depend on it: the rail itself,
        and #title, which is the one top-lane surface the governor does not place and which
        would otherwise be printed straight through the rail's glass. Everything the
@@ -134,6 +210,10 @@
                           |  band is the same field at a different temperature, not a new
                           |  thing in the room, so it does not get a number of its own.
          2   #graph       |
+         2   #galaxywash  |  THE SUMMONED DIM: the sky steps back while a sheet is open.
+                          |  After #graph in the document, so it lies over the worlds and
+                          |  UNDER the sun, the film and the presence - the hologram is an
+                          |  object in the room and the room is what dims, not the object.
          3   #sunglow     |  THE DISTANT SUN and its anamorphic streak. ABOVE the graph on
                           |  purpose: a flare is an artefact of the LENS, not an object in
                           |  the scene, so it lies over what it is flaring from. Under the
@@ -152,6 +232,10 @@
          6   #toprail       THE TELEMETRY RAIL: four facts across the top. Same layer as
                             the corners because it is the same kind of thing - painted
                             chrome - and pointer-events:none, so it takes no clicks.
+         6   #orbit         THE ORBIT MAP: the clusters as worlds round one heart. On the
+                            corners' own layer and BEFORE them in the document, so the
+                            title, the legend and the presence paint over it - the map is
+                            about the galaxy, and the instruments stay in front of it.
          7   #brainchip     which brain is answering
          8   #handswash     THE GATE'S VIGNETTE: the deck dims while a hand is offered.
                             Before #brainmenu in the DOM and pointer-events:none, so it
@@ -249,8 +333,8 @@
   ::-webkit-scrollbar{width:4px;height:4px}
   ::-webkit-scrollbar-track{background:transparent}
   ::-webkit-scrollbar-thumb{background:rgba(140,170,220,.2);border-radius:4px}
-  ::-webkit-scrollbar-thumb:hover{background:rgba(124,196,255,.55);
-    box-shadow:0 0 8px rgba(124,196,255,.55)}
+  ::-webkit-scrollbar-thumb:hover{background:rgba(var(--gold-core-rgb),.55);
+    box-shadow:0 0 8px rgba(var(--gold-core-rgb),.55)}
   ::-webkit-scrollbar-corner{background:transparent}
   /* ---------- THE DEEP FIELD ----------
      THE NEBULA, AT A TWENTIETH OF WHAT IT WAS. Three radial gradients and not one of them
@@ -318,7 +402,7 @@
      See deckSunFrame(), which owns which of the two states is on. */
   #sunglow.lit.grazing{opacity:.66}
   #sunglow i{position:absolute;display:block;
-    transition:opacity .7s linear,transform .7s cubic-bezier(.2,.8,.2,1)}
+    transition:opacity .7s linear,transform .7s var(--ease-glide)}
   #sunglow.grazing .score{opacity:0}
   /* AND THE VEIL IS A WEDGE, NOT A LINE. Glare with no source in frame has no shape, so the
      same 4px streak is stretched twelve times in one axis - which stretches its own 2px
@@ -355,13 +439,13 @@
      the top one is the rail's height plus the margin it always had. */
   #title{top:calc(var(--rail-h) + 16px);left:26px;max-width:38ch}
   #title h1{margin:0;font-size:15px;letter-spacing:.34em;text-transform:uppercase;
-    font-weight:600;color:#fff;text-shadow:0 0 18px rgba(124,196,255,.45)}
+    font-weight:600;color:#fff;text-shadow:0 0 18px rgba(var(--blue-structure-rgb),.45)}
   #title p{margin:7px 0 0;font-size:11.5px;color:var(--muted);letter-spacing:.06em}
   #title .hint{margin-top:9px;font-size:11px;color:rgba(143,160,192,.62)}
   #density{margin-top:7px;padding:0;background:none;border:0;cursor:pointer;
-    font:inherit;font-size:11px;color:var(--accent);opacity:.8;letter-spacing:.04em;
+    font:inherit;font-size:11px;color:var(--blue-structure);opacity:.8;letter-spacing:.04em;
     text-align:left;transition:.2s}
-  #density:hover{opacity:1;text-shadow:0 0 12px rgba(124,196,255,.5)}
+  #density:hover{opacity:1;text-shadow:0 0 12px rgba(var(--gold-core-rgb),.5)}
 
   /* Which brain is answering. Small, always there, and it changes the moment a
      swap lands - a chip that lags is worse than no chip, because it is evidence
@@ -373,8 +457,8 @@
     backdrop-filter:var(--blur);font-size:10.5px;letter-spacing:.16em;
     text-transform:uppercase;color:var(--muted);cursor:pointer;
     transition:color .25s,border-color .25s,background .25s}
-  #brainchip:hover{border-color:rgba(124,196,255,.5);color:#cfe4ff}
-  #brainchip:focus-visible{outline:1px solid rgba(124,196,255,.7);outline-offset:3px}
+  #brainchip:hover{border-color:rgba(var(--gold-core-rgb),.5);color:#cfe4ff}
+  #brainchip:focus-visible{outline:1px solid rgba(var(--gold-core-rgb),.7);outline-offset:3px}
   #brainchip i{width:6px;height:6px;border-radius:50%;background:currentColor;
     box-shadow:0 0 9px currentColor;flex:0 0 auto}
   #brainchip.swapped{color:#ffc65c;border-color:rgba(255,198,92,.55);
@@ -401,7 +485,7 @@
     font:inherit;font-size:11px;letter-spacing:.12em;text-transform:uppercase;
     text-align:left;padding:7px 10px;border-radius:8px;cursor:pointer;
     transition:background .15s,color .15s}
-  #brainmenu button:hover{background:rgba(124,196,255,.12);color:#fff}
+  #brainmenu button:hover{background:rgba(var(--gold-core-rgb),.12);color:#fff}
   #brainmenu button.on{color:#ffd88f}
   #brainmenu button.on::after{content:' ·';opacity:.7}
   #brainmenu .hr{height:1px;margin:5px 4px;background:var(--line)}
@@ -410,7 +494,7 @@
   /* The legend shares the top-right lane with the card and the face, and it is last
      in it: the governor walks the lane downwards and hands it whatever is left. */
   #legend{text-align:right;max-width:30ch;
-    transition:top .22s cubic-bezier(.22,.7,.25,1),right .22s cubic-bezier(.22,.7,.25,1)}
+    transition:top .22s var(--ease-lane),right .22s var(--ease-lane)}
   #legend .lg{display:flex;align-items:center;justify-content:flex-end;gap:8px;
     font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
     padding:2.5px 0;cursor:pointer;user-select:none;transition:color .2s,opacity .2s}
@@ -448,7 +532,7 @@
     text-transform:uppercase;color:var(--muted);
     background:linear-gradient(180deg,rgba(9,11,19,.88),rgba(5,6,10,.6));
     backdrop-filter:var(--blur);border-bottom:1px solid var(--line);
-    transition:right .22s cubic-bezier(.22,.7,.25,1);
+    transition:right .22s var(--ease-lane);
     pointer-events:none;user-select:none}
   #toprail .rl{display:flex;align-items:center;gap:6px;padding:0 12px;white-space:nowrap}
   #toprail .rl+.rl{border-left:1px solid rgba(140,170,220,.1)}
@@ -510,8 +594,8 @@
     border:1px solid var(--line);border-left:0;
     border-radius:0 6px 6px 0;
     opacity:0;transform:translateX(-102%);pointer-events:none;
-    transition:opacity var(--spring-ms) var(--spring),
-               transform var(--spring-ms) var(--spring)}
+    transition:opacity var(--dur-panel-open) var(--ease-panel-open),
+               transform var(--dur-panel-open) var(--ease-panel-open)}
   #cmd.open{opacity:1;transform:translateX(0);pointer-events:auto}
   #cmd .ch{display:flex;align-items:center;gap:8px;flex:0 0 auto;
     padding:9px 13px;border-bottom:1px solid var(--line);
@@ -530,7 +614,7 @@
      rather than here, so that the whole of that argument sits in one place. */
   .cmdact[aria-disabled="true"]{opacity:.42;cursor:default}
   .cmdact .ck{flex:0 0 auto;width:13px;text-align:center;
-    font-family:var(--mono);font-size:var(--t-key);color:var(--accent);opacity:.7}
+    font-family:var(--mono);font-size:var(--t-key);color:var(--blue-structure);opacity:.7}
   .cmdact .cw{flex:1 1 auto;min-width:0}
   /* flex 1 1 auto and min-width 0 are new: the label now shares a row with the hint, and a long
      label must give way rather than push the hint off the panel. overflow-wrap:anywhere for the
@@ -627,13 +711,13 @@
      tab order on purpose - see cmdPaint's note on aria-disabled - and focus you cannot see is
      worse than focus on a row that will not move. The whole row is already at .42. */
   .cmdact{position:relative}
-  .cmdact:hover{background:rgba(124,196,255,.07);
-    border-color:rgba(124,196,255,.24);outline:none}
-  .cmdact:focus-visible{background:rgba(124,196,255,.12);
-    border-color:rgba(124,196,255,.52);outline:none}
+  .cmdact:hover{background:rgba(var(--gold-core-rgb),.07);
+    border-color:rgba(var(--gold-core-rgb),.24);outline:none}
+  .cmdact:focus-visible{background:rgba(var(--gold-core-rgb),.12);
+    border-color:rgba(var(--gold-core-rgb),.52);outline:none}
   .cmdact:focus-visible::before{content:"";position:absolute;
     left:-1px;top:7px;bottom:7px;width:2px;border-radius:0 2px 2px 0;
-    background:var(--accent);box-shadow:0 0 9px var(--accent);
+    background:var(--gold-core);box-shadow:0 0 9px var(--gold-core);
     pointer-events:none}
   .cmdact[aria-disabled="true"]:hover,
   .cmdact[aria-disabled="true"]:focus-visible{background:none;border-color:transparent}
@@ -648,7 +732,7 @@
      the only affordance a man can DRAG. It is not the affordance this heal relies on, because
      every plate on this deck is taken with --hide-scrollbars and a reader with overlay
      scrollbars would see nothing either; the fade is what is always there. Both, then. */
-  #cmd .cb{scrollbar-width:thin;scrollbar-color:rgba(124,196,255,.3) transparent}
+  #cmd .cb{scrollbar-width:thin;scrollbar-color:rgba(var(--blue-structure-rgb),.3) transparent}
   #cmd .cb.can-up{
     -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 24px);
     mask-image:linear-gradient(to bottom,transparent 0,#000 24px)}
@@ -699,8 +783,8 @@
     background:rgba(255,255,255,.02);color:var(--ink);cursor:pointer;
     font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;
     transition:background .16s,border-color .16s}
-  .cand button:hover:not(:disabled){background:rgba(124,196,255,.1);
-    border-color:rgba(124,196,255,.3)}
+  .cand button:hover:not(:disabled){background:rgba(var(--gold-core-rgb),.1);
+    border-color:rgba(var(--gold-core-rgb),.3)}
   .cand button.keep:hover:not(:disabled){background:rgba(240,184,102,.12);
     border-color:rgba(240,184,102,.45)}
   .cand button:disabled{opacity:.4;cursor:default}
@@ -761,13 +845,13 @@
   .btile.bad .bs{color:rgba(255,107,107,.72)}
   /* THE HOME TILE is the one every other reading is "against", so it is marked. A left edge
      rather than a glow: it is a reference, not a state. */
-  .btile.home{border-left:2px solid var(--accent)}
+  .btile.home{border-left:2px solid var(--gold-core)}
   .btile button{margin-top:7px;width:100%;padding:5px 7px;border:1px solid var(--line);
     border-radius:3px;background:rgba(255,255,255,.02);color:var(--ink);cursor:pointer;
     font-family:var(--mono);font-size:9px;letter-spacing:.11em;text-transform:uppercase;
     transition:background .16s,border-color .16s}
-  .btile button:hover:not(:disabled){background:rgba(124,196,255,.1);
-    border-color:rgba(124,196,255,.3)}
+  .btile button:hover:not(:disabled){background:rgba(var(--gold-core-rgb),.1);
+    border-color:rgba(var(--gold-core-rgb),.3)}
   .btile button:disabled{opacity:.4;cursor:default}
 
   /* ---- THE CENSUS'S THREE EXTRA FIELDS ----
@@ -822,7 +906,7 @@
   #panel{position:fixed;z-index:10;
     background:var(--glass);
     border-left:1px solid var(--line);backdrop-filter:var(--blur);
-    transform:translateX(102%);transition:transform var(--spring-ms) var(--spring);
+    transform:translateX(102%);transition:transform var(--dur-panel-open) var(--ease-panel-open);
     display:flex;flex-direction:column;padding:26px 26px 22px}
   #panel.open{transform:none}
   #panel .kicker{display:flex;align-items:center;gap:9px;font-size:10.5px;
@@ -856,10 +940,10 @@
   #close:hover{color:#fff;border-color:rgba(140,170,220,.5)}
 
   .chips{display:flex;flex-wrap:wrap;gap:7px}
-  .chip{border:1px solid var(--line);background:rgba(124,196,255,.06);color:var(--ink);
+  .chip{border:1px solid var(--line);background:rgba(var(--blue-structure-rgb),.06);color:var(--ink);
     border-radius:999px;padding:5px 11px;font-size:11.5px;cursor:pointer;text-align:left;
     transition:background .18s,border-color .18s,transform .12s ease-out}
-  .chip:hover{background:rgba(124,196,255,.18);border-color:rgba(124,196,255,.5);
+  .chip:hover{background:rgba(var(--gold-core-rgb),.18);border-color:rgba(var(--gold-core-rgb),.5);
     transform:translateY(-2px)}
   .chip i{width:6px;height:6px;border-radius:50%;background:currentColor;
     display:inline-block;margin-right:7px;box-shadow:0 0 7px currentColor}
@@ -964,8 +1048,8 @@
      narrows and re-centres in the space that is left, so a spoken report cannot bury
      the panel's Connected chips. Width and left are the governor's. */
   #brain{position:fixed;z-index:9;display:flex;flex-direction:column;gap:10px;
-    transition:left .22s cubic-bezier(.22,.7,.25,1),
-               width .22s cubic-bezier(.22,.7,.25,1)}
+    transition:left .22s var(--ease-lane),
+               width .22s var(--ease-lane)}
   #answer{display:none;background:var(--glass);border:1px solid var(--line);
     border-radius:16px;padding:16px 18px;backdrop-filter:var(--blur);
     box-shadow:0 20px 60px rgba(0,0,0,.55)}
@@ -1086,7 +1170,7 @@
      while it is being said and plain afterwards, which is the whole of the effect. */
   #answer .a .w{visibility:hidden}
   #answer .a .w.said{visibility:visible}
-  #answer .a .w.now{color:var(--accent)}
+  #answer .a .w.now{color:var(--gold-core)}
   /* AND THE SAME THREE RULES ON THE OTHER SURFACE. §38's ONE SURFACE AT A TIME hands the
      sentence to the caption whenever the caption is carrying it word for word, which is true
      of every short spoken answer - so the reveal has to be able to run there too or the
@@ -1094,7 +1178,7 @@
      caption's own geometry, fade and pointer law are untouched. See karaSurface(). */
   #caption .w{visibility:hidden}
   #caption .w.said{visibility:visible}
-  #caption .w.now{color:var(--accent)}
+  #caption .w.now{color:var(--gold-core)}
   /* ---------- §39 - THE VANISH ----------
      OPACITY ONLY, on the card's own element, and then the card is taken out of the flow
      entirely by losing .show. The fade exists so that the sky arrives rather than snaps;
@@ -1368,7 +1452,7 @@
     backdrop-filter:var(--blur);
     box-shadow:0 18px 54px rgba(0,0,0,.58),inset 0 0 40px rgba(233,185,120,.05)}
   #scribepanel.show{display:block;
-    animation:scriberise .32s cubic-bezier(0.16,1,0.3,1)}
+    animation:scriberise .32s var(--ease-panel-open)}
   @keyframes scriberise{from{opacity:0;transform:translateY(14px)}
     to{opacity:1;transform:none}}
   /* THE MARGIN CAME DOWN WHEN THE RULE WENT IN, and it is not a taste adjustment. A rule under
@@ -1549,7 +1633,7 @@
     backdrop-filter:var(--blur);
     box-shadow:0 18px 54px rgba(0,0,0,.58),inset 0 0 40px rgba(183,156,255,.05)}
   #digestpanel.show{display:block;
-    animation:digestrise .32s cubic-bezier(0.16,1,0.3,1)}
+    animation:digestrise .32s var(--ease-panel-open)}
   @keyframes digestrise{from{opacity:0;transform:translateY(14px)}
     to{opacity:1;transform:none}}
   /* Transform and opacity only, and stood down entirely for a machine that has asked for
@@ -1653,10 +1737,10 @@
     border:1px solid var(--line);border-radius:999px;padding:6px 6px 6px 18px;
     backdrop-filter:var(--blur);box-shadow:0 18px 50px rgba(0,0,0,.6);
     transition:border-color .25s,box-shadow .25s}
-  #bar:focus-within{border-color:rgba(124,196,255,.45);
-    box-shadow:0 18px 50px rgba(0,0,0,.6),0 0 0 4px rgba(124,196,255,.08)}
-  #bar .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);
-    box-shadow:0 0 12px var(--accent);flex:0 0 auto}
+  #bar:focus-within{border-color:rgba(var(--gold-core-rgb),.45);
+    box-shadow:0 18px 50px rgba(0,0,0,.6),0 0 0 4px rgba(var(--gold-core-rgb),.08)}
+  #bar .dot{width:7px;height:7px;border-radius:50%;background:var(--gold-core);
+    box-shadow:0 0 12px var(--gold-core);flex:0 0 auto}
   #bar .dot.busy{animation:pulse 1.05s ease-in-out infinite}
   @keyframes pulse{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.25)}}
 
@@ -1773,7 +1857,7 @@
     display:grid;place-items:center;
     transition:color .2s,border-color .2s,background .2s,transform .12s ease-out}
   #slash:hover{color:#fff;border-color:rgba(140,170,220,.6);
-    background:rgba(124,196,255,.08);transform:translateY(-2px)}
+    background:rgba(var(--gold-core-rgb),.08);transform:translateY(-2px)}
 
   /* ---------- THE SUMMONED LINE ----------
      TYPING IS A GUEST. It has no seat in the room; it is shown in when it knocks and it
@@ -1790,8 +1874,8 @@
     border:1px solid var(--line);border-radius:13px;padding:11px 16px;
     color:var(--ink);font-family:var(--mono);font-size:13px;letter-spacing:.02em;
     outline:0;backdrop-filter:var(--blur)}
-  #qline:focus{border-color:rgba(124,196,255,.5);
-    box-shadow:0 0 0 3px rgba(124,196,255,.07)}
+  #qline:focus{border-color:rgba(var(--gold-core-rgb),.5);
+    box-shadow:0 0 0 3px rgba(var(--gold-core-rgb),.07)}
   #qline::placeholder{color:rgba(143,160,192,.45);letter-spacing:.08em}
 
   /* ---------- THE CAPTION ----------
@@ -1801,7 +1885,7 @@
      his voice ends, and it is not the record: the card above it keeps the answer, its
      citations and its gate, and this is the line you read while you listen.
      pointer-events:none because it overlaps nothing you can press and must never begin to. */
-  #caption{opacity:0;transition:opacity .5s linear;pointer-events:none;
+  #caption{opacity:0;transition:opacity var(--dur-caption-reveal) var(--ease-caption-reveal);pointer-events:none;
     padding:0 26px 11px;text-align:center;font-size:15.5px;line-height:1.55;
     color:#f4f7ff;max-height:4.7em;overflow:hidden;
     text-shadow:0 2px 16px rgba(0,0,0,.92),0 0 30px rgba(0,0,0,.72)}
@@ -1923,7 +2007,7 @@
      hardcoded 62px is wrong the moment a chip wraps to two lines. */
   #sharing{position:fixed;z-index:13;display:none;
     align-items:center;gap:10px;padding:8px 10px 8px 14px;
-    transition:top .2s cubic-bezier(.22,.7,.25,1),left .22s cubic-bezier(.22,.7,.25,1);
+    transition:top .2s var(--ease-lane),left .22s var(--ease-lane);
     border-radius:999px;background:rgba(38,6,10,.86);border:1px solid rgba(255,77,94,.7);
     backdrop-filter:blur(12px);box-shadow:0 10px 34px rgba(255,0,30,.28);
     font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#ffd7dc}
@@ -1955,7 +2039,7 @@
     background:rgba(255,179,71,.16)}
   #eyeing{position:fixed;z-index:13;display:none;
     align-items:center;gap:10px;padding:8px 10px 8px 14px;
-    transition:top .2s cubic-bezier(.22,.7,.25,1),left .22s cubic-bezier(.22,.7,.25,1);
+    transition:top .2s var(--ease-lane),left .22s var(--ease-lane);
     border-radius:999px;background:rgba(20,12,38,.88);
     border:1px solid rgba(157,124,255,.6);backdrop-filter:blur(12px);
     box-shadow:0 10px 34px rgba(110,70,255,.24);font-size:11px;letter-spacing:.2em;
@@ -1979,7 +2063,7 @@
      in numbers, which is the only honest way to show a clock you cannot hear. */
   #watching{position:fixed;z-index:13;display:none;
     align-items:center;gap:10px;padding:8px 10px 8px 14px;
-    transition:top .2s cubic-bezier(.22,.7,.25,1),left .22s cubic-bezier(.22,.7,.25,1);
+    transition:top .2s var(--ease-lane),left .22s var(--ease-lane);
     border-radius:999px;background:rgba(36,24,6,.88);
     border:1px solid rgba(255,183,77,.62);backdrop-filter:blur(12px);
     box-shadow:0 10px 34px rgba(255,150,0,.22);font-size:11px;letter-spacing:.2em;
@@ -2005,7 +2089,7 @@
     background:rgba(14,10,4,.92);border:1px solid rgba(255,183,77,.5);
     backdrop-filter:blur(14px);box-shadow:0 18px 50px rgba(0,0,0,.6);
     color:#ffe7c2;font-size:11px;letter-spacing:.06em;
-    transition:top .22s cubic-bezier(.22,.7,.25,1),right .22s cubic-bezier(.22,.7,.25,1)}
+    transition:top .22s var(--ease-lane),right .22s var(--ease-lane)}
   #facecard.show{display:block}
   #facecard .row{display:flex;align-items:center;gap:10px}
   /* FACE_MARKUP's own wrapper, styled here rather than in a string that only the
@@ -2102,7 +2186,7 @@
      support gets the old card back, whole. */
   #focuscard{position:fixed;z-index:12;display:none;
     --cardw:460px;--cardpad:15px;--textmax:calc(var(--cardw) - 2 * var(--cardpad));
-    --cut:15px;--edge:rgba(124,196,255,.5);
+    --cut:15px;--edge:rgba(var(--blue-structure-rgb),.5);
     min-width:var(--cardw);
     padding:12px var(--cardpad) 11px;border-radius:0;
     clip-path:polygon(var(--cut) 0,calc(100% - var(--cut)) 0,100% var(--cut),
@@ -2110,10 +2194,10 @@
       0 calc(100% - var(--cut)),0 var(--cut));
     background:linear-gradient(200deg,rgba(12,18,34,.9),rgba(6,9,18,.94));
     border:1px solid var(--line);backdrop-filter:var(--blur);
-    box-shadow:0 14px 44px rgba(0,0,0,.55),inset 0 0 44px rgba(124,196,255,.05);
+    box-shadow:0 14px 44px rgba(0,0,0,.55),inset 0 0 44px rgba(var(--blue-structure-rgb),.05);
     transition:border-color .35s,box-shadow .35s,background .35s,
-      top .22s cubic-bezier(.22,.7,.25,1),right .22s cubic-bezier(.22,.7,.25,1),
-      width .22s cubic-bezier(.22,.7,.25,1)}
+      top .22s var(--ease-lane),right .22s var(--ease-lane),
+      width .22s var(--ease-lane)}
   #focuscard.live{display:block}
 
   /* ---------- the card's own frame: cuts, brackets, traces, one scanline ----------
@@ -2144,7 +2228,7 @@
   #focuscard .acut.c3{right:0;bottom:0}
   #focuscard .acut.c4{left:0;bottom:0}
   #focuscard .abr{position:absolute;width:13px;height:13px;
-    border:0 solid rgba(124,196,255,.72)}
+    border:0 solid rgba(var(--blue-structure-rgb),.72)}
   #focuscard .abr.c1{left:var(--cut);top:4px;border-left-width:1px;border-top-width:1px}
   #focuscard .abr.c2{right:var(--cut);top:4px;border-right-width:1px;border-top-width:1px}
   #focuscard .abr.c3{right:var(--cut);bottom:4px;border-right-width:1px;
@@ -2153,9 +2237,9 @@
     border-bottom-width:1px}
   #focuscard .atrace{position:absolute;opacity:.85}
   #focuscard .atrace.t,#focuscard .atrace.b{height:1px;width:74px;
-    background:linear-gradient(90deg,transparent,rgba(124,196,255,.9),transparent)}
+    background:linear-gradient(90deg,transparent,rgba(var(--gold-core-rgb),.9),rgba(var(--blue-structure-rgb),.75),transparent)}
   #focuscard .atrace.l,#focuscard .atrace.r{width:1px;height:58px;
-    background:linear-gradient(180deg,transparent,rgba(124,196,255,.9),transparent)}
+    background:linear-gradient(180deg,transparent,rgba(var(--gold-core-rgb),.9),rgba(var(--blue-structure-rgb),.75),transparent)}
   #focuscard .atrace.t{left:0;top:0;animation:atraceX 9.2s linear infinite}
   #focuscard .atrace.r{right:0;top:0;animation:atraceY 9.2s linear infinite;
     animation-delay:-6.9s}
@@ -2171,8 +2255,8 @@
      without watching for it - the point of a scanline on an instrument is that the glass
      is being refreshed, not that something is happening. */
   #focuscard .ascan{position:absolute;left:0;right:0;top:0;height:38%;
-    background:linear-gradient(180deg,transparent,rgba(124,196,255,.085) 62%,
-      rgba(124,196,255,.13) 88%,transparent);
+    background:linear-gradient(180deg,transparent,rgba(var(--blue-structure-rgb),.085) 62%,
+      rgba(var(--blue-structure-rgb),.13) 88%,transparent);
     transform:translateY(-110%);animation:ascansweep 11s linear infinite}
   @keyframes ascansweep{from{transform:translateY(-110%)}to{transform:translateY(300%)}}
   /* THE LAW ABOUT MOTION'S SECOND HALF, applied here because this card is measured by two
@@ -2206,7 +2290,7 @@
     font-variant-numeric:tabular-nums;white-space:nowrap}
   #focuscard .acell .asp{grid-column:1/-1;display:block;width:100%;height:11px;
     overflow:visible}
-  #focuscard .acell .asp polyline{fill:none;stroke:rgba(124,196,255,.8);
+  #focuscard .acell .asp polyline{fill:none;stroke:rgba(var(--blue-structure-rgb),.8);
     stroke-width:1;vector-effect:non-scaling-stroke;stroke-linejoin:round}
   #focuscard.drift .acell .asp polyline{stroke:rgba(255,122,138,.85)}
   #focuscard.drift .abr,#focuscard.drift .acut{--edge:rgba(255,107,127,.6)}
@@ -2307,8 +2391,8 @@
   #focuscard.deferred .fbar span{background:#8fa0c0;box-shadow:none}
   #focuscard.grace{border-color:rgba(255,179,71,.6)}
   #focuscard.grace .fh i{background:#ffb347;box-shadow:0 0 11px #ffb347}
-  #focuscard.excused{border-color:rgba(124,196,255,.55)}
-  #focuscard.excused .fh i{background:#7cc4ff;box-shadow:0 0 11px #7cc4ff;
+  #focuscard.excused{border-color:rgba(var(--blue-structure-rgb),.55)}
+  #focuscard.excused .fh i{background:var(--blue-structure);box-shadow:0 0 11px var(--blue-structure);
     animation:none}
   #focuscard.excused #focus-clock{color:#dceaff}
   #focuscard.paused{border-color:rgba(140,170,220,.3);opacity:.72}
@@ -2407,7 +2491,7 @@
   #presence .pb{position:absolute;opacity:.5;
     width:max(10px, calc(var(--pw) * .036));
     height:max(10px, calc(var(--pw) * .036));
-    border:0 solid rgba(124,196,255,.5)}
+    border:0 solid rgba(var(--blue-structure-rgb),.5)}
   #presence .pb.b1{left:0;top:0;border-left-width:1px;border-top-width:1px}
   #presence .pb.b2{right:0;top:0;border-right-width:1px;border-top-width:1px}
   #presence .pb.b3{right:0;bottom:0;border-right-width:1px;border-bottom-width:1px}
@@ -2469,7 +2553,7 @@
      and the angle each waveform bar stands at is written once at boot.
      ========================================================================= */
   .mind{
-    --visage:#7cc4ff;      /* one colour for the whole instrument, retinted by state */
+    --visage:var(--blue-structure);      /* one colour for the whole instrument, retinted by state */
     --iris:.72;            /* the aperture, dilated or contracted: the pose in one number */
     /* THE WAVEFORM IS TWO NUMBERS, and which half owns which is the whole
        arrangement: --amp is how far this POSE opens, and it belongs to the stylesheet
@@ -2498,9 +2582,9 @@
     perspective:420px;transform-style:preserve-3d}
   #focusface{height:116px;margin:5px 0 9px;overflow:hidden;border-radius:13px;
     background:
-      radial-gradient(62% 78% at 50% 46%,rgba(124,196,255,.10),transparent 70%),
-      linear-gradient(180deg,rgba(124,196,255,.035),rgba(0,0,0,0) 60%);
-    box-shadow:inset 0 0 0 1px rgba(124,196,255,.10)}
+      radial-gradient(62% 78% at 50% 46%,rgba(var(--blue-structure-rgb),.10),transparent 70%),
+      linear-gradient(180deg,rgba(var(--blue-structure-rgb),.035),rgba(0,0,0,0) 60%);
+    box-shadow:inset 0 0 0 1px rgba(var(--blue-structure-rgb),.10)}
   /* THE SMALL MIND, in the Command Panel header. The same element, the same five
      poses, the same script: when the machine is thinking, the thing you opened the
      panel from is thinking too. Four numbers and no second stylesheet. */
@@ -2549,7 +2633,7 @@
     width:var(--lenspx);height:var(--lenspx);
     margin:calc(var(--lenspx) / -2) 0 0 calc(var(--lenspx) / -2);
     border-radius:50%;
-    transform:scale(var(--iris));transition:transform .5s cubic-bezier(.2,.8,.2,1)}
+    transform:scale(var(--iris));transition:transform .5s var(--ease-glide)}
   .mind .miris{position:absolute;inset:0;border-radius:50%;
     border:2px solid currentColor;
     background:radial-gradient(circle at 50% 50%,
@@ -2780,7 +2864,7 @@
     padding-top:7px;border-top:1px solid var(--line);
     font-family:var(--mono);font-size:9.5px;letter-spacing:.11em}
   #brainmenu .prov[aria-disabled="true"]{opacity:.5;cursor:default}
-  #brainmenu .prov b{font-weight:500;color:var(--accent);letter-spacing:.06em}
+  #brainmenu .prov b{font-weight:500;color:var(--blue-structure);letter-spacing:.06em}
   #brainmenu .prov i{font-style:normal;float:right;border:1px solid var(--line);
     border-radius:4px;padding:0 4px;font-size:10px;color:var(--muted)}
 
@@ -2817,13 +2901,13 @@
      as a literal because CSS cannot read the script's constants. A proof asserts the
      two agree; if they ever drift, the core and its accent stop being the same light.
      ========================================================================= */
-  body.accent-amber{--accent:#ffb23c}
+  body.accent-amber{--accent:var(--gold-core)}
   /* The bar's dot and the pill's focus ring are the accent's two GLOWS, and a glow is
      an rgba() that no variable can carry, so those two are the only declarations that
      have to be restated rather than inherited. Same geometry, same blur radii, same
      opacities as the house rule - only the three channels change. */
-  body.accent-amber #bar .dot{box-shadow:0 0 12px rgba(255,178,60,.85)}
-  body.accent-amber #bar:focus-within{border-color:rgba(255,178,60,.30)}
+  body.accent-amber #bar .dot{box-shadow:0 0 12px rgba(var(--gold-core-rgb),.85)}
+  body.accent-amber #bar:focus-within{border-color:rgba(var(--gold-core-rgb),.30)}
   /* THE SEALS. The resting seal and the three chips keep their own state colours -
      pink for a live ear, mint for the boss, violet for a filing - because those are
      readings. What the amber takes is the seal's RESTING word and its rule, which is
@@ -2841,6 +2925,148 @@
   body.accent-amber #cmd-presence .cl{color:var(--accent)}
   body.accent-amber #cmd-presence .ck{color:var(--accent);opacity:.85}
 
+
+  /* ======================= THE RIBBON, THE DIM, THE ORBIT MAP ================
+     ADDED IN ONE BLOCK AT THE FOOT, so everything this round put on the glass can be read
+     in one place and taken off in one place. Nothing above was restyled except by token.
+
+     THE RIBBON is the edge light of a SUMMONED surface - a sheet you asked for - and only
+     those: the command panel, the focus card and the orbit map. It is a 1px ring cut out of
+     --duo-ribbon by a mask, on ::after, so it adds nothing to the surface's own box: no
+     border, no box-shadow, no inset glow, no reflow, and a pointer goes straight through it.
+     NOT ON #panel, and that is a decision rather than an omission: the note panel's glass is
+     an INSTRUMENT - karaoke_proof measures the sky THROUGH it, and its law is "a pane of the
+     same glass rather than a lit slab". A lit edge on it would be a lit slab. */
+  #cmd::after,#focuscard::after,#orbit .ob-frame::after{content:"";position:absolute;inset:0;
+    border-radius:inherit;padding:1px;pointer-events:none;background:var(--duo-ribbon);
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor;mask-composite:exclude;
+    opacity:.6;transition:opacity var(--dur-panel-open) var(--ease-panel-open)}
+  #cmd.open::after{opacity:1}
+  #focuscard::after{opacity:.85}
+  /* The card in its desktop window is a static row in a flex column - there is no frame for
+     a ring to follow out there, and an absolute ::after would go looking for one. */
+  #deskshell #focuscard::after{display:none}
+
+  /* THE SUMMONED DIM. Opacity only, on a layer of its own, so the worlds are not repainted
+     to step back - see the stack. Driven by :has(), so no script decides when it shows:
+     the command panel being open IS the condition, read where it is true. */
+  #galaxywash{position:fixed;inset:0;z-index:2;pointer-events:none;opacity:0;
+    background:radial-gradient(120% 100% at 50% 46%,rgba(var(--void-rgb),.30) 0%,
+      rgba(var(--void-rgb),.58) 58%,rgba(var(--void-rgb),.80) 100%);
+    transition:opacity var(--dur-panel-open) var(--ease-panel-open)}
+  body:has(#cmd.open) #galaxywash{opacity:.72}
+  body:has(#orbit.open) #galaxywash{opacity:1}
+
+  /* ---------- THE ORBIT MAP ---------- */
+  #orbit{position:fixed;left:0;right:0;top:var(--rail-h);bottom:0;z-index:6;
+    visibility:hidden;opacity:0;pointer-events:none;
+    transition:opacity var(--dur-panel-open) var(--ease-panel-open),
+               visibility 0s linear var(--dur-panel-open)}
+  #orbit.open{visibility:visible;opacity:1;pointer-events:auto;
+    transition:opacity var(--dur-panel-open) var(--ease-panel-open),visibility 0s}
+  #orbit:not(.open) *{animation-play-state:paused}
+  /* THE FRAME STOPS ABOVE THE BOTTOM COLUMN. The toast, the caption and the ask bar live in
+     the bottom ~210px and are the employer's conversation - the map is consulted over the sky,
+     never over what he is being told. The first plate put the footer under the greeting. */
+  #orbit .ob-frame{position:absolute;left:50%;top:14px;bottom:214px;
+    width:min(1180px,94vw);transform:translateX(-50%) scale(.985);
+    border-radius:14px;border:1px solid var(--line);
+    background:linear-gradient(180deg,rgba(var(--blue-deep-rgb),.20),rgba(var(--void-rgb),.30));
+    transition:transform var(--dur-panel-open) var(--ease-panel-open)}
+  #orbit.open .ob-frame{transform:translateX(-50%) scale(1)}
+  /* AND THE ROOM STEPS BACK BEHIND IT - the mandate's "dimmed background galaxy behind an open
+     panel", extended to the three things that share the corners' layer with the map. The
+     presence most of all: the map's own heart stands for it while the map is up, and two
+     hearts on one screen read as two houses. The first plate had AUTO orbiting inside the
+     docked hologram. Opacity only, so nothing is torn down, re-measured or re-placed - the
+     governor's rectangles are exactly what they were.
+     NO TRANSITION IS DECLARED ON THESE THREE, and that is a constraint, not an oversight:
+     #legend already transitions top and right on the governor's lane curve, and a transition
+     list cannot be appended to - a rule here would have REPLACED the lane motion layout_proof
+     measures. So they step back in one frame while the map fades in over them. */
+  body:has(#orbit.open) #presence{opacity:.08}
+  body:has(#orbit.open) #title,body:has(#orbit.open) #legend{opacity:.22}
+  #orbit .ob-h{position:absolute;left:18px;right:12px;top:12px;display:flex;align-items:center;
+    gap:12px;font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--muted);z-index:1}
+  #orbit .ob-h b{color:#fff;font-weight:500;letter-spacing:.26em;
+    text-shadow:0 0 16px var(--blue-glow)}
+  #orbit .ob-h .ob-live{display:inline-flex;align-items:center;gap:7px;color:var(--gold-core)}
+  #orbit .ob-h .ob-live i{width:7px;height:7px;border-radius:50%;background:var(--gold-core);
+    box-shadow:0 0 10px var(--gold-glow)}
+  #orbit .ob-h .ob-s{margin-left:auto;letter-spacing:.1em;text-transform:none}
+  #orbit #ob-close{margin-left:8px;font:inherit;font-size:10px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--muted);background:var(--blue-trace);
+    border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer}
+  #orbit #ob-close:hover,#orbit #ob-close:focus-visible{color:#fff;outline:none;
+    background:var(--gold-trace);border-color:var(--gold-glow)}
+  #orbit svg{position:absolute;left:0;top:34px;width:100%;height:calc(100% - 70px);
+    overflow:visible}
+  #orbit .ob-f{position:absolute;left:18px;right:18px;bottom:11px;display:flex;gap:18px;
+    justify-content:center;flex-wrap:wrap;font-family:var(--mono);font-size:11px;
+    letter-spacing:.12em;color:var(--muted)}
+  #orbit .ob-f b{color:#fff;font-weight:500}
+  #orbit .ob-f .ob-motto{color:var(--blue-glow);letter-spacing:.42em;text-transform:uppercase}
+
+  /* The drawing. Every colour is a token, so the map is lit by the same two lamps as the
+     deck it is a map of. */
+  #orbit .s-gh{stop-color:var(--gold-hot)}
+  #orbit .s-gc{stop-color:var(--gold-core)}
+  #orbit .s-bs{stop-color:var(--blue-structure)}
+  #orbit .s-bd{stop-color:var(--blue-deep)}
+  #orbit .ob-orbit{fill:none;stroke:var(--blue-structure);stroke-opacity:.22;stroke-width:1.1}
+  #orbit .ob-orbit.gold{stroke:var(--gold-core);stroke-opacity:.2}
+  #orbit .ob-lat{fill:none;stroke:var(--blue-structure);stroke-opacity:.34;stroke-width:1}
+  #orbit .ob-pl{fill:none;stroke:var(--blue-structure);stroke-width:1.2}
+  #orbit .ob-pl.gold{stroke:var(--gold-core)}
+  #orbit .ob-spoke{stroke-width:1;stroke-dasharray:2 7;stroke-opacity:.42}
+  #orbit .ob-spoke.gold{stroke:var(--gold-core)}
+  #orbit .ob-spoke.blue{stroke:var(--blue-structure)}
+  #orbit .ob-cross{fill:none;stroke:var(--gold-core);stroke-opacity:.5;stroke-width:1.4}
+  #orbit .ob-cross-n{fill:var(--gold-hot);font:11px var(--mono);text-anchor:middle}
+  #orbit .ob-ring.gold{stroke:var(--gold-core)}
+  #orbit .ob-ring.blue{stroke:var(--blue-structure)}
+  #orbit .ob-ring{fill:none;stroke-width:1.6;stroke-opacity:.9}
+  #orbit .ob-lbl{fill:var(--ink);font:500 14px var(--mono);letter-spacing:.2em;
+    text-anchor:middle;paint-order:stroke;stroke:rgba(var(--void-rgb),.85);stroke-width:4px}
+  #orbit .ob-sub{fill:var(--muted);font:11px var(--mono);letter-spacing:.08em;
+    text-anchor:middle;paint-order:stroke;stroke:rgba(var(--void-rgb),.85);stroke-width:3px}
+  #orbit .ob-ini{fill:#fff;font:600 13px var(--mono);text-anchor:middle;
+    dominant-baseline:central;opacity:.85}
+  #orbit .ob-node.muted{opacity:.32}
+  #orbit .ob-cn{fill:#fff;font:500 11px var(--mono);letter-spacing:.26em;text-anchor:middle;
+    paint-order:stroke;stroke:rgba(var(--void-rgb),.6);stroke-width:3px}
+  #orbit .ob-cc{fill:var(--gold-hot);font:11px var(--mono);letter-spacing:.12em;
+    text-anchor:middle;paint-order:stroke;stroke:rgba(var(--void-rgb),.8);stroke-width:3px}
+  /* THE HEART BREATHES, on its own named curve. Transform and opacity only, per the law
+     about motion, and the box it scales about is its own. */
+  #orbit .ob-pulse{fill:none;stroke:var(--gold-core);stroke-width:2;
+    transform-box:fill-box;transform-origin:center;
+    animation:obpulse var(--dur-sphere-pulse) var(--ease-sphere-pulse) infinite}
+  @keyframes obpulse{0%{transform:scale(1);opacity:.75}100%{transform:scale(1.32);opacity:0}}
+  #orbit .ob-mote{animation:obmote var(--dur-sphere-pulse) var(--ease-sphere-pulse) infinite
+    alternate}
+  @keyframes obmote{0%{opacity:.25}100%{opacity:1}}
+  /* AND #stats BECOMES THE DOOR. The line that counts the clusters opens the map of them.
+     THE GLYPH TAKES NO ROOM, and that is measured rather than hoped: #title is in the
+     governor's no-overlap set (layout.rects) and is capped at 38ch, which the stats line
+     already nearly fills - a suffix would wrap it and grow the corner into whatever sits
+     below. So the cue is ::after, positioned ABSOLUTELY into the 26px gutter to the line's
+     left: not part of textContent, not part of the title's rectangle, and the counting
+     assertions that read this line read exactly what they always read. The words "orbit map"
+     live in the title attribute and the aria label, where they cost no width. */
+  #stats[role="button"]{position:relative;cursor:pointer;border-radius:4px;outline:none;
+    transition:color var(--dur-lane) var(--ease-lane)}
+  #stats[role="button"]::after{content:"\25CE";position:absolute;left:-17px;top:0;
+    color:var(--blue-structure);opacity:.75;font-family:var(--mono);font-size:1em;
+    pointer-events:none}
+  #stats[role="button"]:hover,#stats[role="button"]:focus-visible{color:#fff}
+  #stats[role="button"]:hover::after,#stats[role="button"]:focus-visible::after,
+  #stats[aria-expanded="true"]::after{color:var(--gold-core);opacity:1}
+  @media (prefers-reduced-motion: reduce){
+    #orbit .ob-pulse,#orbit .ob-mote{animation:none}
+  }
 </style>
 </head>
 <body>
@@ -2850,6 +3076,7 @@
 <div id="nebula-work"></div>
 <div id="sunglow" aria-hidden="true"><i class="score"></i><i class="sstreak"></i></div>
 <div id="graph"></div>
+<div id="galaxywash" aria-hidden="true"></div>
 <div id="grain"></div>
 <div id="vignette"></div>
 <!-- THE PRESENCE, docked. One canvas, one WebGLRenderer, one Points object and one shader
@@ -2887,6 +3114,20 @@
   <div class="rl" id="rail-web"><span class="rk">web:</span><b class="rv">…</b></div>
 </div>
 
+<!-- THE ORBIT MAP. The folders of the corpus drawn as worlds round one heart - the same
+     counts, the same colours and the same mutes as the legend and the stats line, read from
+     the same arrays in the same scope, so the map cannot say something the legend does not.
+     Before the corners in the document on purpose: same layer, painted under them. -->
+<div id="orbit" role="dialog" aria-label="Orbit map of the knowledge galaxy" aria-hidden="true">
+  <div class="ob-frame">
+    <div class="ob-h"><span class="ob-live"><i></i>live</span><b id="ob-name">orbit map</b>
+      <span class="ob-s" id="ob-sum"></span>
+      <button id="ob-close" type="button" title="Close the orbit map (Esc)">close</button></div>
+    <svg id="ob-svg" viewBox="-580 -330 1160 640" preserveAspectRatio="xMidYMid meet"
+         aria-hidden="true"></svg>
+    <div class="ob-f" id="ob-foot"></div>
+  </div>
+</div>
 <div class="hud" id="title">
   <h1>Knowledge Galaxy</h1>
   <p id="stats">mapping…</p>
@@ -3438,8 +3679,22 @@ const STAR_BANDS = [
    seven hues already present are 0, 22, 45.6, 52.2, 163.7, 207.7 and 257, whose one
    wide gap is the 103 degrees between violet and rosewood, and 310 sits in it 53 from
    one neighbour and 50 from the other - the most separated hue the wheel still had. */
-const PALETTE = ['#5B8DB8','#C9A227','#7E6BAE','#4FA08A','#C46A6A','#B5A642','#C77B4F',
-                 '#A9609D','#6BBC57'];
+/* THE JEWELS ON THE DUOTONE. Nine, every one a member of the warm family (15-65 deg) or
+   the cool one (185-245 deg); what left the list is the purple, the teal, the rose and the
+   green, none of which is in either. The first two are the two this list has always opened
+   with - steel blue and gold - so the two largest folders keep the colours their worlds
+   have worn since the deck was built.
+   THE ORDER IS SPACING, MEASURED. colorOf hands these out in folder order, and two families
+   are narrower than a rainbow, so a careless order puts two folders 12 degrees apart -
+   distinct enough to pass a partition test and too close for an eye to tell in a legend.
+   The first four are therefore the four most separable: blue 208, gold 46, copper 22,
+   indigo 236 - the nearest pair is 24 degrees apart, warm against warm. For today's
+   corpus that is auto blue, captures gold, census copper, unfiled indigo.
+   None of these is the live cyan: that is still reserved for a page fetched in THIS answer.
+   Every value sits under deck_proof's sweet ceiling (no channel over 224 with a spread over
+   120); the rings take only the hue and pin saturation and lightness themselves. */
+const PALETTE = ['#5B8DB8','#C9A227','#C77B4F','#5A62B5','#B5A642','#4A9AAE','#B5803A',
+                 '#4F72B8','#5AA0C8'];
 /* THE SECOND HOME, and the one line in this file that knows about it.
    The countdown card does not get rebuilt on the desktop - it is MOVED there, into a
    Document Picture-in-Picture window, so that every listener, every button handler and
@@ -5702,6 +5957,386 @@ async function loadLib() {
            el.isContentEditable === true;
   }
 
+
+  /* ======================= THE ORBIT MAP ===================================
+     THE CLUSTERS AS WORLDS ROUND ONE HEART. Every number and every name on it is read, at the
+     moment it is drawn, from the four arrays the legend and the stats line already read -
+     `groups`, `nodes`, `activeLinks`/`allLinks` and `hidden` - with colorOf for the jewels.
+     There is no list of folder names in this block and there must never be one: a map that
+     carried its own copy of the corpus would be right on the day it was written and wrong the
+     first time the Scholar filed a new folder.
+     WHAT IT IS NOT: a replacement for the galaxy. The 3D sky is the instrument - every world
+     in it is a real note, and deck_proof measures its rings, tiers and orbits. This is the
+     overview the reference plates draw, laid over that sky while the sky steps back.
+     `var`, NOT const, FOR THE STATE: paintStats() calls orbitRefresh() and paintStats runs at
+     boot before this block's statements have, so the state has to exist (as undefined) from
+     the top of the scope - a const here would be a temporal-dead-zone throw on first paint. */
+  var orbitState;
+  const OB_NS = 'http://www.w3.org/2000/svg';
+  const OB = {
+    /* Two orbits, tilted in opposite senses so the system reads as one in depth rather than
+       as two flat hoops. `k` is how much longer the outer one takes to go round. */
+    RINGS: [{ rx: 330, ry: 110, tilt: -0.105, k: 1.0 },
+            { rx: 478, ry: 168, tilt: 0.072, k: 1.42 }],
+    CORE_R: 64, NODE_MIN: 16, NODE_MAX: 36, PLINTH_Y: 172, MOTES: 54
+  };
+  /* THE MOTION VOCABULARY, READ BACK OUT OF THE CASCADE. Not a second copy of the curves -
+     the stylesheet's :root is the one place they are said, and this asks it. A curve retuned
+     there moves the canvas and the CSS together. */
+  const EASE = (function () {
+    function read(name) {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+    function bezier(x1, y1, x2, y2) {
+      const bx = function (s) { return 3 * x1 * s * (1 - s) * (1 - s) + 3 * x2 * s * s * (1 - s) + s * s * s; };
+      const by = function (s) { return 3 * y1 * s * (1 - s) * (1 - s) + 3 * y2 * s * s * (1 - s) + s * s * s; };
+      return function (x) {
+        if (x <= 0) return 0;
+        if (x >= 1) return 1;
+        let lo = 0, hi = 1, s = x;
+        for (let i = 0; i < 24; i++) {
+          s = (lo + hi) / 2;
+          if (bx(s) < x) lo = s; else hi = s;
+        }
+        return by(s);
+      };
+    }
+    const memo = {};
+    return {
+      read: read,
+      curve: function (name) {
+        const v = read(name);
+        if (memo[name] && memo[name].v === v) return memo[name].f;
+        let f = function (x) { return Math.max(0, Math.min(1, x)); };
+        const m = /cubic-bezier\(\s*([^,]+),\s*([^,]+),\s*([^,]+),\s*([^)]+)\)/.exec(v);
+        if (m) f = bezier(+m[1], +m[2], +m[3], +m[4]);
+        memo[name] = { v: v, f: f };
+        return f;
+      },
+      ms: function (name) {
+        const v = read(name);
+        const n = parseFloat(v);
+        if (!isFinite(n)) return 0;
+        return /ms$/.test(v) ? n : n * 1000;
+      }
+    };
+  })();
+  function obEl(tag, attrs, parent) {
+    const e = document.createElementNS(OB_NS, tag);
+    Object.keys(attrs || {}).forEach(function (k) { e.setAttribute(k, attrs[k]); });
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  /* WHICH FAMILY A JEWEL BELONGS TO, read off its hue rather than off a table of names, so
+     a folder the palette has not met yet is still drawn in the right family. */
+  function obFamily(hex) {
+    const n = parseInt(String(hex || '#9fb4d8').slice(1), 16);
+    const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    if (mx === mn) return 'blue';
+    let h;
+    if (mx === r) h = ((g - b) / (mx - mn)) % 6;
+    else if (mx === g) h = (b - r) / (mx - mn) + 2;
+    else h = (r - g) / (mx - mn) + 4;
+    h = (h * 60 + 360) % 360;
+    return (h < 90 || h > 330) ? 'gold' : 'blue';
+  }
+  /* THE DATA, and every line of it is the legend's or the stats line's own arithmetic. */
+  function orbitData() {
+    const counts = {};
+    nodes.forEach(function (n) { counts[n.group] = (counts[n.group] || 0) + 1; });
+    const byId = {};
+    nodes.forEach(function (n) { byId[n.id] = n; });
+    const gOf = function (e) {
+      if (e && typeof e === 'object') return e.group;
+      return byId[e] ? byId[e].group : undefined;
+    };
+    let within = 0, across = 0;
+    const crossed = {};
+    allLinks.forEach(function (l) {
+      const a = gOf(l.source), b = gOf(l.target);
+      if (!a || !b) return;
+      if (a === b) { within++; return; }
+      across++;
+      const k = [a, b].sort().join('|');
+      crossed[k] = (crossed[k] || 0) + 1;
+    });
+    const liveN = nodes.filter(function (n) { return !hidden.has(n.group); }).length;
+    const liveL = activeLinks.filter(function (l) {
+      return !hidden.has(gOf(l.source)) && !hidden.has(gOf(l.target));
+    }).length;
+    return {
+      clusters: groups.map(function (g) {
+        return { name: g, count: counts[g] || 0, colour: colorOf[g] || '#9fb4d8',
+                 family: obFamily(colorOf[g]), muted: hidden.has(g) };
+      }),
+      notes: nodes.length, liveNotes: liveN,
+      links: activeLinks.length, liveLinks: liveL, allLinks: allLinks.length,
+      within: within, across: across, crossed: crossed,
+      clusterCount: groups.length, liveClusters: groups.length - hidden.size,
+      name: (($('title') && $('title').querySelector('h1')) || {}).textContent || ''
+    };
+  }
+  /* THE STILL PARTS, drawn once: the gradients, the plinth, the orbits and the heart. */
+  function orbitBuild() {
+    const svg = $('ob-svg');
+    if (!svg || orbitState.built) return;
+    const defs = obEl('defs', {}, svg);
+    const sphere = obEl('radialGradient', { id: 'ob-sphere', cx: '50%', cy: '46%', r: '52%' }, defs);
+    [['0%', 's-gh', 1], ['16%', 's-gc', 0.95], ['44%', 's-gc', 0.42], ['74%', 's-bs', 0.22],
+     ['100%', 's-bs', 0]].forEach(function (s) {
+      obEl('stop', { offset: s[0], class: s[1], 'stop-opacity': s[2] }, sphere);
+    });
+    const halo = obEl('radialGradient', { id: 'ob-halo', cx: '50%', cy: '50%', r: '50%' }, defs);
+    [['0%', 's-bs', 0.30], ['45%', 's-bd', 0.32], ['100%', 's-bd', 0]].forEach(function (s) {
+      obEl('stop', { offset: s[0], class: s[1], 'stop-opacity': s[2] }, halo);
+    });
+    const floor = obEl('radialGradient', { id: 'ob-floor', cx: '50%', cy: '50%', r: '50%' }, defs);
+    [['0%', 's-gc', 0.30], ['22%', 's-bs', 0.20], ['100%', 's-bd', 0]].forEach(function (s) {
+      obEl('stop', { offset: s[0], class: s[1], 'stop-opacity': s[2] }, floor);
+    });
+    const gloss = obEl('radialGradient', { id: 'ob-gloss', cx: '36%', cy: '30%', r: '70%' }, defs);
+    obEl('stop', { offset: '0%', 'stop-color': '#ffffff', 'stop-opacity': 0.55 }, gloss);
+    obEl('stop', { offset: '60%', 'stop-color': '#ffffff', 'stop-opacity': 0 }, gloss);
+    const soft = obEl('filter', { id: 'ob-soft', x: '-80%', y: '-80%', width: '260%', height: '260%' }, defs);
+    obEl('feGaussianBlur', { stdDeviation: 9 }, soft);
+
+    /* THE PLINTH: the rings the reference plates stand their sphere on. */
+    const pl = obEl('g', { id: 'ob-plinth', transform: 'translate(0,' + OB.PLINTH_Y + ')' }, svg);
+    obEl('ellipse', { rx: 330, ry: 48, fill: 'url(#ob-floor)' }, pl);
+    [[318, 44, 0.10, ''], [252, 35, 0.16, ''], [188, 26, 0.24, ''], [126, 17, 0.36, ''],
+     [70, 9, 0.62, 'gold'], [30, 4, 0.9, 'gold']].forEach(function (r) {
+      obEl('ellipse', { rx: r[0], ry: r[1], class: 'ob-pl ' + r[3], 'stroke-opacity': r[2] }, pl);
+    });
+    /* THE ORBITS, one ellipse each, tilted the way their worlds will travel. */
+    const orbits = obEl('g', { id: 'ob-orbits' }, svg);
+    OB.RINGS.forEach(function (R, i) {
+      obEl('ellipse', { rx: R.rx, ry: R.ry, class: 'ob-orbit' + (i ? '' : ' gold'),
+                        transform: 'rotate(' + (R.tilt * 180 / Math.PI).toFixed(2) + ')' }, orbits);
+    });
+    obEl('g', { id: 'ob-back' }, svg);
+    obEl('g', { id: 'ob-links' }, svg);
+    /* THE HEART: a blue halo, three latitude rings, a sphere that is gold at the centre and
+       blue at the limb - the presence's own "blue shade, amber heart" - and a pulse. */
+    const core = obEl('g', { id: 'ob-core' }, svg);
+    obEl('circle', { r: 190, fill: 'url(#ob-halo)' }, core);
+    [[-14, 1.0], [8, 0.78], [-3, 0.56]].forEach(function (l) {
+      obEl('ellipse', { rx: OB.CORE_R * 1.55 * l[1], ry: OB.CORE_R * 0.42 * l[1], class: 'ob-lat',
+                        transform: 'rotate(' + l[0] + ')' }, core);
+    });
+    obEl('circle', { r: OB.CORE_R, fill: 'url(#ob-sphere)' }, core);
+    obEl('circle', { r: OB.CORE_R, class: 'ob-pulse' }, core);
+    /* MOTES: a fixed scatter inside the sphere, seeded so the heart looks the same every time
+       the map opens. They twinkle on the sphere's own curve. */
+    let x = 0x9e3779b9 >>> 0;
+    const rnd = function () { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; };
+    for (let i = 0; i < OB.MOTES; i++) {
+      const a = rnd() * Math.PI * 2, rr = Math.sqrt(rnd()) * OB.CORE_R * 0.92;
+      const warm = rr < OB.CORE_R * 0.5;
+      const m = obEl('circle', { cx: (Math.cos(a) * rr).toFixed(1), cy: (Math.sin(a) * rr * 0.9).toFixed(1),
+                                 r: (0.7 + rnd() * 1.5).toFixed(2), class: 'ob-mote',
+                                 fill: warm ? 'var(--gold-hot)' : 'var(--blue-structure)' }, core);
+      m.style.animationDelay = (-rnd() * 5).toFixed(2) + 's';
+    }
+    obEl('circle', { r: 6, fill: 'var(--gold-hot)' }, core);
+    orbitState.coreName = obEl('text', { y: -6, class: 'ob-cn' }, core);
+    orbitState.coreName2 = obEl('text', { y: 10, class: 'ob-cn' }, core);
+    orbitState.coreCount = obEl('text', { y: OB.CORE_R + 26, class: 'ob-cc' }, core);
+    obEl('g', { id: 'ob-front' }, svg);
+    orbitState.built = true;
+  }
+  /* THE MOVING PARTS, rebuilt whenever the data changes - a mute, a new folder, a density
+     toggle - and otherwise left alone while the loop moves them by transform. */
+  function orbitPaint() {
+    if (!orbitState) return;
+    orbitBuild();
+    const d = orbitData();
+    orbitState.data = d;
+    const back = $('ob-back'), front = $('ob-front'), links = $('ob-links');
+    if (!back || !front || !links) return;
+    back.textContent = ''; front.textContent = ''; links.textContent = '';
+    const words = String(d.name || 'Knowledge Galaxy').trim().split(/\s+/);
+    orbitState.coreName.textContent = (words.length > 1 ? words.slice(0, -1).join(' ') : words[0]).toUpperCase();
+    orbitState.coreName2.textContent = (words.length > 1 ? words[words.length - 1] : '').toUpperCase();
+    orbitState.coreCount.textContent = d.notes + ' notes';
+    const max = Math.max.apply(null, d.clusters.map(function (c) { return c.count; }).concat([1]));
+    /* LARGEST FIRST, alternating rings, so the two biggest folders never share an orbit. */
+    const order = d.clusters.slice().sort(function (a, b) { return b.count - a.count || (a.name < b.name ? -1 : 1); });
+    const perRing = [[], []];
+    order.forEach(function (c, i) { perRing[i % 2].push(c); });
+    orbitState.nodes = [];
+    perRing.forEach(function (list, ri) {
+      list.forEach(function (c, j) {
+        const R = OB.NODE_MIN + (OB.NODE_MAX - OB.NODE_MIN) * Math.sqrt(c.count / max);
+        const g = obEl('g', { class: 'ob-node' + (c.muted ? ' muted' : ''), 'data-group': c.name }, front);
+        obEl('title', {}, g).textContent = c.name + ' - ' + c.count + ' notes' + (c.muted ? ' (muted in the legend)' : '');
+        obEl('circle', { r: (R * 1.7).toFixed(1), fill: c.colour, 'fill-opacity': 0.30, filter: 'url(#ob-soft)' }, g);
+        obEl('circle', { r: R.toFixed(1), fill: c.colour }, g);
+        obEl('circle', { r: R.toFixed(1), fill: 'url(#ob-gloss)' }, g);
+        obEl('circle', { r: (R + 6).toFixed(1), class: 'ob-ring ' + c.family }, g);
+        obEl('text', { class: 'ob-ini' }, g).textContent = c.name.charAt(0).toUpperCase();
+        const lbl = obEl('text', { y: (R + 26).toFixed(1), class: 'ob-lbl' }, g);
+        lbl.textContent = c.name.toUpperCase();
+        const sub = obEl('text', { y: (R + 43).toFixed(1), class: 'ob-sub' }, g);
+        /* COUNT AND STATE, NOTHING ELSE. The family decides how the world is LIT, and it is
+           not a fact about where the notes came from - a label that read "local" or "studied"
+           off a colour would be a claim the corpus never made. */
+        sub.textContent = c.count + (c.count === 1 ? ' note' : ' notes') +
+                          (c.muted ? ' · muted' : '');
+        const spoke = obEl('line', { class: 'ob-spoke ' + c.family }, links);
+        orbitState.nodes.push({
+          group: c.name, count: c.count, family: c.family, ring: ri, r: R, el: g, spoke: spoke,
+          phase: (j / list.length) * Math.PI * 2 + ri * 0.62 + 0.38, side: 1, x: 0, y: 0
+        });
+      });
+    });
+    /* LINKS BETWEEN FOLDERS, from the corpus's own links: only the ones whose two ends are
+       in different folders, with the count on the curve. Today that is often none, and then
+       nothing is drawn - a map that drew a connection the archive does not have would be
+       inventing structure. */
+    orbitState.cross = [];
+    Object.keys(d.crossed).forEach(function (k) {
+      const ends = k.split('|');
+      const path = obEl('path', { class: 'ob-cross' }, links);
+      const lab = obEl('text', { class: 'ob-cross-n' }, links);
+      lab.textContent = d.crossed[k];
+      orbitState.cross.push({ a: ends[0], b: ends[1], path: path, lab: lab });
+    });
+    const of = function (live, all, word) {
+      return (live === all ? String(all) : live + ' of ' + all) + ' ' + word;
+    };
+    $('ob-sum').textContent = of(d.liveNotes, d.notes, 'notes') + ' · ' +
+      of(d.liveLinks, d.links, 'connections') + ' · ' + of(d.liveClusters, d.clusterCount, 'clusters');
+    $('ob-name').textContent = (d.name || 'Knowledge Galaxy') + ' · orbit map';
+    $('ob-foot').innerHTML =
+      '<span><b>' + d.clusterCount + '</b> clusters</span>' +
+      '<span><b>' + d.notes + '</b> notes</span>' +
+      '<span><b>' + d.allLinks + '</b> links found</span>' +
+      '<span><b>' + d.across + '</b> between clusters</span>' +
+      '<span class="ob-motto">explore · learn · build · grow</span>';
+    orbitPlace(performance.now());
+  }
+  /* ONE FRAME OF ORBIT. Transform only. The angle is the drift curve applied to how far round
+     this orbit's period the clock is - linear today, because a world goes round at constant
+     speed, but read from --ease-node-orbit-drift so that is a decision made in one place. */
+  function orbitPlace(now) {
+    if (!orbitState || !orbitState.nodes.length) return;
+    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const period = Math.max(1000, EASE.ms('--dur-node-orbit-drift'));
+    const drift = EASE.curve('--ease-node-orbit-drift');
+    const openMs = EASE.ms('--dur-panel-open');
+    const enter = EASE.curve('--ease-panel-open')(openMs > 0
+      ? Math.min(1, (now - orbitState.openedAt) / openMs) : 1);
+    const t = still ? 0 : now - orbitState.t0;
+    const back = $('ob-back'), front = $('ob-front');
+    const at = {};
+    orbitState.nodes.forEach(function (n) {
+      const R = OB.RINGS[n.ring];
+      const p = R.k * period;
+      const th = n.phase + Math.PI * 2 * drift(((t % p) + p) % p / p);
+      const x0 = R.rx * Math.cos(th), y0 = R.ry * Math.sin(th);
+      const ct = Math.cos(R.tilt), st = Math.sin(R.tilt);
+      const x = (x0 * ct - y0 * st) * enter, y = (x0 * st + y0 * ct) * enter;
+      const depth = Math.sin(th);                  // -1 is the far side of the heart
+      const s = (0.80 + 0.20 * (depth + 1) / 2) * (0.6 + 0.4 * enter);
+      n.el.setAttribute('transform', 'translate(' + x.toFixed(1) + ',' + y.toFixed(1) + ') scale(' + s.toFixed(3) + ')');
+      n.el.style.opacity = (0.58 + 0.42 * (depth + 1) / 2).toFixed(3);
+      const side = depth < 0 ? -1 : 1;
+      if (side !== n.side) { (side < 0 ? back : front).appendChild(n.el); n.side = side; }
+      const len = Math.hypot(x, y) || 1;
+      n.spoke.setAttribute('x1', (x / len * OB.CORE_R * 1.08).toFixed(1));
+      n.spoke.setAttribute('y1', (y / len * OB.CORE_R * 1.08).toFixed(1));
+      n.spoke.setAttribute('x2', (x - x / len * (n.r + 8) * s).toFixed(1));
+      n.spoke.setAttribute('y2', (y - y / len * (n.r + 8) * s).toFixed(1));
+      n.x = x; n.y = y;
+      at[n.group] = n;
+    });
+    (orbitState.cross || []).forEach(function (c) {
+      const a = at[c.a], b = at[c.b];
+      if (!a || !b) return;
+      /* THE ARC GOES ROUND THE HEART, NEVER THROUGH IT. The first plate drew the one link in
+         the corpus as a chord across the core, where it read as two spokes. The control point
+         sits off the chord's midpoint on the side AWAY from the origin, far enough that the
+         curve clears the sphere. */
+      const cx0 = (a.x + b.x) / 2, cy0 = (a.y + b.y) / 2;
+      let nx = -(b.y - a.y), ny = b.x - a.x;
+      const nl = Math.hypot(nx, ny) || 1;
+      nx /= nl; ny /= nl;
+      if (nx * cx0 + ny * cy0 < 0) { nx = -nx; ny = -ny; }
+      const push = OB.CORE_R * 2.4 + Math.max(0, OB.CORE_R * 1.6 - Math.hypot(cx0, cy0));
+      const mx = cx0 + nx * push, my = cy0 + ny * push;
+      c.path.setAttribute('d', 'M' + a.x.toFixed(1) + ',' + a.y.toFixed(1) + ' Q' + mx.toFixed(1) + ',' +
+                          my.toFixed(1) + ' ' + b.x.toFixed(1) + ',' + b.y.toFixed(1));
+      c.lab.setAttribute('x', ((a.x + 2 * mx + b.x) / 4).toFixed(1));
+      c.lab.setAttribute('y', ((a.y + 2 * my + b.y) / 4 - 6).toFixed(1));
+    });
+    orbitState.frames++;
+  }
+  function orbitLoop() {
+    if (!orbitState || !orbitState.open || orbitState.raf) return;
+    const step = function (now) {
+      orbitState.raf = 0;
+      if (!orbitState.open) return;
+      if (document.visibilityState !== 'hidden') orbitPlace(now);
+      orbitState.raf = requestAnimationFrame(step);
+    };
+    orbitState.raf = requestAnimationFrame(step);
+  }
+  function orbitOpen(on, why) {
+    const el = $('orbit');
+    if (!el || !orbitState) return false;
+    const want = on === undefined ? !orbitState.open : !!on;
+    if (want === orbitState.open) return want;
+    orbitState.open = want;
+    orbitState.why = why || '';
+    el.classList.toggle('open', want);
+    el.setAttribute('aria-hidden', want ? 'false' : 'true');
+    if ($('stats')) $('stats').setAttribute('aria-expanded', want ? 'true' : 'false');
+    if (want) {
+      orbitState.opens++;
+      orbitState.openedAt = performance.now();
+      if (!orbitState.t0) orbitState.t0 = orbitState.openedAt;
+      orbitPaint();
+      orbitLoop();
+      chime('glass');
+    } else if (orbitState.raf) {
+      cancelAnimationFrame(orbitState.raf);
+      orbitState.raf = 0;
+    }
+    return want;
+  }
+  /* Called from paintStats(), which is called whenever the counts can have changed. A shut map
+     does no work at all. */
+  function orbitRefresh() {
+    if (orbitState && orbitState.open) orbitPaint();
+  }
+  orbitState = { open: false, built: false, frames: 0, raf: 0, t0: 0, openedAt: 0,
+                 nodes: [], cross: [], opens: 0, why: '', data: null };
+  (function wireOrbit() {
+    const s = $('stats');
+    if (s) {
+      s.setAttribute('role', 'button');
+      s.setAttribute('tabindex', '0');
+      s.setAttribute('aria-controls', 'orbit');
+      s.setAttribute('aria-expanded', 'false');
+      s.title = 'Open the orbit map of these clusters';
+      s.addEventListener('click', function () { orbitOpen(undefined, 'the stats line'); });
+      s.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); orbitOpen(undefined, 'the stats line'); }
+      });
+    }
+    if ($('ob-close')) $('ob-close').onclick = function () { orbitOpen(false, 'its close button'); };
+    if ($('orbit')) $('orbit').addEventListener('click', function (e) {
+      if (e.target === $('orbit')) orbitOpen(false, 'a click outside the map');
+    });
+    addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && orbitState.open) orbitOpen(false, 'Escape');
+    });
+    if (/(^|[?&])orbit=1(&|$)/.test(location.search)) {
+      requestAnimationFrame(function () { orbitOpen(true, '?orbit=1'); });
+    }
+  })();
+
   /* ---- legend ----
      Repaintable rather than built once: a capture can create a whole new folder
      (captures/), and a cluster the galaxy contains but the legend does not is a
@@ -5769,6 +6404,7 @@ async function loadLib() {
     $('density').textContent = (activeLinks === strongLinks)
       ? 'showing strongest links · see all ' + allLinks.length + ' →'
       : 'showing all ' + allLinks.length + ' links · simplify →';
+    orbitRefresh();             // the orbit map counts what this line counts
   }
   $('density').onclick = function () {
     activeLinks = (activeLinks === strongLinks) ? allLinks : strongLinks;
@@ -7288,9 +7924,11 @@ async function loadLib() {
     const want = on === undefined ? !el.classList.contains('open') : !!on;
     if (want) {
       cmdPaint();
+      const wasOpen = el.classList.contains('open');
       el.classList.add('open');
       el.setAttribute('aria-hidden', 'false');
       cmd.opens++;
+      if (!wasOpen) chime('glass');            // a sheet arriving: the cool family
       /* AFTER the class, and on the next frame: cmdScroll refuses to measure a shut panel, and
          the panel's height is not final until the browser has laid it out once with .open on. */
       requestAnimationFrame(cmdScroll);
@@ -18730,6 +19368,17 @@ async function loadLib() {
   let actx = null, toneBus = null, toneTrouble = '';
   let toneDucked = false;
   const tonesPlayed = [];
+  /* THE DUOTONE IN SOUND. The chimes already split the way the light does, and this names
+     it: the WARM family is the presence acting - the wake chord (a C major seventh), the
+     yes (a rising fifth), the boot flourish - consonant, mid-register, triangle and sine.
+     The COOL family is structure: a sheet arriving, a map opening - one high glassy sine
+     pair, short and quiet, so it reads as a surface rather than as a voice. The no is
+     neither, as red is neither in the light: a failure must not sound like a state.
+     THE COOL CUES KEEP THEIR OWN RING. tonesPlayed is twelve deep and deck_proof reads it
+     for the wake and the no; a run that opened the command panel a dozen times would push
+     both out of it and fail a test about something else entirely. */
+  const TONE_FAMILY = { warm: ['wake', 'yes', 'boot'], cool: ['glass'], neither: ['no'] };
+  const tonesStructure = [];
 
   function tonesUp() {
     if (toneBus) return true;
@@ -18822,6 +19471,10 @@ async function loadLib() {
         // Crisp and rising: two short notes a fifth apart. "Done" has an upward shape.
         toneNote(kind, 784.00, t, 0.075, 0.5, 'triangle');          // G5
         toneNote(kind, 1174.66, t + 0.075, 0.13, 0.42, 'triangle'); // D6
+      } else if (kind === 'glass') {
+        /* E6 then B6, a fifth up, sine, 70ms and 90ms at a third of the yes's peak. */
+        toneNote(kind, 1318.51, t, 0.07, 0.07, 'sine');
+        toneNote(kind, 1975.53, t + 0.055, 0.09, 0.05, 'sine');
       } else if (kind === 'no') {
         /* A breath through a closing filter. Nothing punitive about it - a refusal is a
            perfectly good answer, so this falls away rather than buzzing. */
@@ -18848,8 +19501,9 @@ async function loadLib() {
       toneTrouble = 'tone: ' + ((e && e.message) || 'failed');
       return false;
     }
-    tonesPlayed.push({ at: Date.now(), kind: kind });
-    while (tonesPlayed.length > 12) tonesPlayed.shift();
+    const ring = TONE_FAMILY.cool.indexOf(kind) >= 0 ? tonesStructure : tonesPlayed;
+    ring.push({ at: Date.now(), kind: kind });
+    while (ring.length > 12) ring.shift();
     return true;
   }
 
@@ -19624,6 +20278,47 @@ async function loadLib() {
        lamps. */
     NOSE_PTS: 900, LIP_PTS: 300, IRIS_PTS: 210, LID_PTS: 200, NECK_PTS: 1100,
     EAR_PTS: 260,
+    /* ---- UI MANDATE PART 3: THE MESH, THE SPEAKING GLOW, THE DRIFT ----
+       THE REFERENCE PLATE IS A TRIANGULATED HEAD - bright edges, brighter vertices, a faint
+       volume between - and this cloud already HAS the head: outline, relief, nose, ears,
+       lids, lips, a jaw that swings. What it did not have was the edges. So a share of the
+       SHELL'S OWN BUDGET is laid along the edges of a lattice on the same surface instead of
+       scattered over it: same points, same buffer, same pen, the total unchanged, and the
+       one-allocation law untouched because nothing is allocated. Each mesh point takes the
+       role and the cell a surface point at that spot would have had, so the jaw swings the
+       mesh with the chin and every reading by cell still means what it meant.
+         WHY POINTS AND NOT LINES. A THREE.LineSegments would draw a cleaner edge and would be
+       a second object, a second material and a second allocation - three of the four things
+       preflight check 34 exists to forbid - and it would not ride the jaw, the gaze, the nod
+       or the rim light, all of which live in this one vertex program. Dense points on an
+       additive material ARE a line at this size: where they overlap they brighten, and an
+       edge is exactly where they overlap.
+         THE LATTICE: ROWS x COLS vertices over the front and both cheeks (ARC radians either
+       side of the nose), jittered by JIT of a cell so it reads as hand-cut low-poly rather
+       than as graph paper, and triangulated with diagonals that alternate by cell so the
+       facets are triangles and not hatching. VERT points sit on each vertex - the reference's
+       bright nodes.
+         THE MESH IS FLAGGED BY aRnd >= 1, NOT BY A NEW ATTRIBUTE. Every other point in the
+       face is laid with aRnd in [0, 1), so a band above 1 is a flag the shader can read with
+       step() and that no other point can trip - and a real flag would have needed a fifth
+       buffer, which is the realloc this arrangement exists to prevent. Edge points carry
+       [1.00, 1.20), vertices [1.25, 1.30]. Measured on the FIRST cut of this, which tried to
+       ride the existing rule instead: 0.40 + 0.14 * aRnd only spans 0.40 to 0.54, so "the bright
+       end of the same rule" was five per cent brighter than the haze and the plate showed a
+       faint dot-grid rather than edges. Edges are now lit at 0.86 and vertices at 1.0 on their
+       own branch; the haze is untouched.
+         AND THE FACETS ARE BIG. The first cut used a 16 x 15 lattice: 659 edges at four points
+       each, about 4px apart in a 420px well, which reads as dotted rows. 11 x 10 gives 289
+       edges at eleven points each - under 2px apart, which an additive sprite fills into a
+       line - and facets the size of the reference plate's.
+       SPEAK_GLOW is how much brighter the whole head is at full voice - the face's lips
+       already brightened with uLevel and nothing else did, so a talking face was a mouth
+       moving in a still mask. DRIFT is a wander of a few thousandths of a unit, about a pixel
+       in a 420px well, and only for the dimmest DRIFT_SHARE of points, which the mesh never
+       is: the haze lives and the edges stay put. */
+    FACE_MESH_PTS: 3600, FACE_MESH_ROWS: 11, FACE_MESH_COLS: 10, FACE_MESH_ARC: 1.72,
+    FACE_MESH_JIT: 0.30, FACE_MESH_VERT: 3,
+    FACE_SPEAK_GLOW: 0.55, FACE_DRIFT: 0.007, FACE_DRIFT_SHARE: 0.32,
     HEAD_S: 0.94,
     JAW_MAX: 0.20,            // radians at full level: 11 degrees of hinge, not a hinge-open
     YAW_IDLE: 0.087,          // +/- 5 degrees, the mandate's figure, in radians
@@ -21118,8 +21813,74 @@ async function loadLib() {
     return PRES_LIP.y - 0.072 * (1 - f * f * 0.8);
   }
 
+  /* THE MESH STRATUM. See PRES.FACE_MESH_* for why it exists and why it is points. */
+  function presFaceMesh(pen, rnd, budget) {
+    const R = PRES.FACE_MESH_ROWS, C = PRES.FACE_MESH_COLS, ARC = PRES.FACE_MESH_ARC;
+    const Y0 = -0.90, Y1 = 0.92;
+    const V = [];
+    for (let i = 0; i < R; i++) {
+      const row = [];
+      for (let j = 0; j < C; j++) {
+        /* The border rows and columns are not jittered, so the mesh has a clean edge where it
+           meets the haze rather than a ragged one. */
+        const jy = (i > 0 && i < R - 1) ? (rnd() - 0.5) * PRES.FACE_MESH_JIT : 0;
+        const ja = (j > 0 && j < C - 1) ? (rnd() - 0.5) * PRES.FACE_MESH_JIT : 0;
+        row.push({ y: Y0 + (Y1 - Y0) * (i + jy) / (R - 1),
+                   a: -ARC + 2 * ARC * (j + ja) / (C - 1) });
+      }
+      V.push(row);
+    }
+    const E = [];
+    for (let i = 0; i < R; i++) {
+      for (let j = 0; j < C; j++) {
+        if (j + 1 < C) E.push([V[i][j], V[i][j + 1]]);
+        if (i + 1 < R) E.push([V[i][j], V[i + 1][j]]);
+        if (i + 1 < R && j + 1 < C) {
+          E.push((i + j) % 2 ? [V[i][j], V[i + 1][j + 1]] : [V[i][j + 1], V[i + 1][j]]);
+        }
+      }
+    }
+    const nV = R * C, vert = PRES.FACE_MESH_VERT;
+    const per = Math.max(2, Math.floor((budget - nV * vert) / E.length));
+    let made = 0;
+    /* ON THE SURFACE, by the shell's own formulas: an edge is interpolated in (y, azimuth) and
+       mapped back through presHalf and presShellZ, so it follows the cheek's curve rather
+       than cutting a chord through the head. */
+    const put = function (y, a, rn) {
+      if (made >= budget) return;
+      const ca = Math.cos(a);
+      const x = presHalf(y) * Math.sin(a);
+      const z = presShellZ(x, y, ca);
+      const role = (z > -0.12 && y < presMandible(Math.abs(x)))
+        ? PRES_ROLE.JAW : PRES_ROLE.SKULL;
+      pen.put(x, y, z, role, rn, presShellCell(x, y, ca));
+      made++;
+    };
+    E.forEach(function (e) {
+      for (let k = 1; k <= per; k++) {
+        const u = k / (per + 1);
+        put(e[0].y + (e[1].y - e[0].y) * u, e[0].a + (e[1].a - e[0].a) * u, 1.0 + 0.20 * rnd());
+      }
+    });
+    V.forEach(function (row) {
+      row.forEach(function (v) {
+        for (let k = 0; k < vert; k++) {
+          put(v.y + (rnd() - 0.5) * 0.006, v.a + (rnd() - 0.5) * 0.006, 1.25 + 0.05 * rnd());
+        }
+      });
+    });
+    /* What the division left over goes on edges too, at random places along them, so the
+       budget is spent exactly and the shell's share is what PRES says it is. */
+    while (made < budget && E.length) {
+      const e = E[Math.floor(rnd() * E.length) % E.length], u = rnd();
+      put(e[0].y + (e[1].y - e[0].y) * u, e[0].a + (e[1].a - e[0].a) * u, 1.0 + 0.20 * rnd());
+    }
+    pres.meshPts = made; pres.meshEdges = E.length; pres.meshVerts = nV; pres.meshPer = per;
+  }
+
   function presFaceFill(pen, rnd) {
-    const shell = presN(PRES.CAP - PRES.NOSE_PTS - PRES.LIP_PTS * 2 -
+    const MESH_PTS = presN(PRES.FACE_MESH_PTS);
+    const shell = presN(PRES.CAP - PRES.FACE_MESH_PTS - PRES.NOSE_PTS - PRES.LIP_PTS * 2 -
                         PRES.IRIS_PTS * 2 - PRES.LID_PTS * 2 - PRES.NECK_PTS -
                         PRES.EAR_PTS * 2);
     const NOSE_PTS = presN(PRES.NOSE_PTS), LIP_PTS = presN(PRES.LIP_PTS);
@@ -21151,6 +21912,7 @@ async function loadLib() {
        gather on the ridge and thin toward the flanks, which is what makes a wedge read as
        an edge. The flank falls from the ridge to the face by a 0.7 power: a straight
        linear fall makes a pyramid, and noses are not pyramids. */
+    presFaceMesh(pen, rnd, MESH_PTS);
     for (let i = 0; i < NOSE_PTS; i++) {
       const y = PRES_NOSE.tip + rnd() * (PRES_NOSE.top - PRES_NOSE.tip);
       const u = rnd() + rnd() - 1;
@@ -21519,7 +22281,11 @@ async function loadLib() {
        0.40 + 0.14 * aRnd is 1.35:1, which keeps the grain that makes a point cloud look like
        a point cloud and leaves the brow, the cheek and the far jaw free to differ from each
        other by more than their own speckle does. */
-    '      a = 0.40 + 0.14 * aRnd;',
+    '      float fMesh = step(1.0, aRnd), fVert = step(1.24, aRnd);',
+    '      a = mix(0.40 + 0.14 * aRnd, 0.86 + 0.14 * fVert, fMesh) * (1.0 + ' + PRES.FACE_SPEAK_GLOW.toFixed(3) + ' * uLevel);',
+    '      sz *= 1.0 + 0.10 * fMesh + 0.24 * fVert;',
+    '      if (aRnd < ' + PRES.FACE_DRIFT_SHARE.toFixed(3) + ') p += ' + PRES.FACE_DRIFT.toFixed(4) +
+    ' * vec3(sin(t * 0.71 + aRnd * 61.0), cos(t * 0.57 + aRnd * 47.0), sin(t * 0.43 + aRnd * 29.0));',
     '    }',
     /* THE HINGE, applied after the role work so the lower lip gets both its own ripple
        and the jaw's swing. Rotation about the ear line in the YZ plane: the chin drops
@@ -28458,6 +29224,27 @@ async function loadLib() {
        about what reached the renderer. `core` is PRES.CORE_TINT written as a hex string,
        so a proof can assert the accent and the presence are the same light - if those ever
        drift the deck has two ambers in it, which is worse than having one blue. */
+    /* ================= THE ORBIT MAP, for a harness ================================
+       What it DREW, read off the SVG it drew - labels and counts as text on the glass - beside
+       what it was GIVEN, so a proof can hold the drawing to the data and the data to the
+       corpus. open/close go through the same function the stats line does. */
+    orbit: {
+      open: function () { return orbitOpen(true, 'a harness'); },
+      close: function () { return orbitOpen(false, 'a harness'); },
+      get isOpen() { return !!(orbitState && orbitState.open); },
+      get frames() { return orbitState ? orbitState.frames : 0; },
+      get opens() { return orbitState ? orbitState.opens : 0; },
+      get data() { return orbitState && orbitState.data ? JSON.parse(JSON.stringify(orbitState.data)) : null; },
+      get drawn() {
+        return Array.prototype.map.call(document.querySelectorAll('#orbit .ob-node'), function (g) {
+          const lbl = g.querySelector('.ob-lbl'), sub = g.querySelector('.ob-sub');
+          return { group: g.getAttribute('data-group'), label: lbl ? lbl.textContent : '',
+                   sub: sub ? sub.textContent : '', transform: g.getAttribute('transform') || '' };
+        });
+      },
+      get sum() { return $('ob-sum') ? $('ob-sum').textContent : ''; },
+      ease: function (name) { return { css: EASE.read(name), at: [0, 0.25, 0.5, 0.75, 1].map(EASE.curve(name)) }; }
+    },
     accent: function (which) {
       const now = (which === undefined || which === null)
         ? (document.body && document.body.classList.contains('accent-amber')
@@ -28472,7 +29259,7 @@ async function loadLib() {
         }).join('');
       };
       return { accent: now, asked: ACCENT_ASKED || '(none)',
-               value: cs.getPropertyValue('--accent').trim(),
+               value: hex(cs.getPropertyValue('--accent').trim()),
                core: '#' + ('000000' + PRES.CORE_TINT.toString(16)).slice(-6),
                /* THE THREE THE AMBER MUST NOT HAVE TOUCHED. Reported every time so the
                   instrumentation-light law is a reading and not a promise in a comment. */
@@ -28524,6 +29311,10 @@ async function loadLib() {
       },
       get shader() { return !!(presMat && presMat.isShaderMaterial); },
       get points() { return pres.points; },
+      /* The face's mesh stratum, as laid: points, edges, vertices and points per edge. Zero
+         until the face has been built once - it is laid with the face, not with the deck. */
+      get mesh() { return { points: pres.meshPts || 0, edges: pres.meshEdges || 0,
+                            verts: pres.meshVerts || 0, perEdge: pres.meshPer || 0 }; },
       get capacity() { return PRES.CAP; },
       get switches() { return pres.switches; },
       get frames() { return pres.frames; },
@@ -29191,7 +29982,9 @@ async function loadLib() {
       get trouble() { return toneTrouble; },
       /* What it has played, newest last. A muted tab plays nothing and this stays empty,
          which is how ?mute=1 covering the chimes is checkable without being audible. */
-      get played() { return tonesPlayed.slice(); }
+      get played() { return tonesPlayed.slice(); },
+      get structure() { return tonesStructure.slice(); },
+      family: TONE_FAMILY
     },
     /* THE BOOT CEREMONY, as a reading rather than a sound. `fired` is 1 from the instant it
        is claimed and `healthy` counts every healthy poll after it, so "once per session"
