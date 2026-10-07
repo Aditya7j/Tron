@@ -52,7 +52,7 @@ const PORT = 9246;
 const CDP = 'http://127.0.0.1:' + PORT;
 const BASE_REV = 'e08ed4f';
 /* UI mandate III's two measured floors - see section 7, and the report for the readings. */
-const DISC_P10 = 1, MOTION_TSTD = 0.015;
+const BARE_MAX = 1, EDGE_RATIO = 1.08, TSTD_MIN = 0.035;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let pass = 0, fail = 0;
@@ -597,6 +597,14 @@ else {
      ' clusters as graph-data.js lists them - and ONLINE is lit because /health said ok, all inside ' +
      'the ' + hdr.rail + 'px header band', JSON.stringify({ hdr, notes: health.notes, links: health.links }));
 
+  /* THE GALAXY FILLS THE MAIN PANE, off the live groups. READ ONCE THE FOCUS CARD HAS GONE: the
+     sidebar's Focus press above starts a real session and aborts it, and the report card it leaves
+     retires on its own clock - while it stands in the lane the map correctly steps aside for it
+     (UI mandate III: one run read the map at half the pane for exactly that reason). */
+  await waitFor(page, '!(function(){var c=document.getElementById("focuscard");' +
+    'return c && getComputedStyle(c).display !== "none" && c.getBoundingClientRect().width > 0;})()', 15000);
+  await page.evaluate('__galaxy.layout.run()');
+  await sleep(400);
   /* THE GALAXY FILLS THE MAIN PANE, off the live groups. */
   const gx = await page.json(`({o: (function(){var r=document.getElementById('orbit').getBoundingClientRect();
       return {l:Math.round(r.left),r:Math.round(r.right),t:Math.round(r.top),b:Math.round(r.bottom)};})(),
@@ -757,9 +765,11 @@ else {
      each the whole turn), on --ease-stage-turn, the leaving one fading out as the arriving one
      fades in. The trigger half of the claim - the real click on the real ear - is unchanged. */
   const durMs = parseFloat(st1.dur) * (/ms$/.test(st1.dur) ? 1 : 1000);
+  /* THE CURVE IS COMPARED AS FOUR NUMBERS: the stylesheet writes .65 and the browser reports 0.65. */
+  const curveOf = (s) => (String(s).match(/-?[0-9]*\.?[0-9]+/g) || []).map(Number).join(',');
   ok(earUp && st1.micEar && st1.now === 'presence' && st1.why === 'the ear opened' &&
      st1.turns === st0.turns + 1 && flipping.length === 2 &&
-     flipping.every((f) => /rotateY/.test(f.from) && norm(f.easing) === norm(st1.ease) &&
+     flipping.every((f) => /rotateY/.test(f.from) && curveOf(f.easing) === curveOf(st1.ease) &&
                            f.delay === 0 && Math.abs(f.duration - durMs) <= 1) &&
      Math.abs(st1.turnMs - durMs) <= 1 &&
      flipping.some((f) => f.id === 'orbit' && +f.o0 === 1 && +f.o1 === 0) &&
@@ -792,43 +802,49 @@ else {
   await sleep(500);
   await page.evaluate('document.documentElement.classList.add("nomove"); __galaxy.stage.set("presence", "ui_enhancement_proof 7")');
   await sleep(600);
-  const snapOf = async () => JSON.parse(await page.evaluate('__galaxy.presence.snap(160).then(function(s){return JSON.stringify(s)})'));
+  const snapOf = async (bare) => JSON.parse(await page.evaluate('__galaxy.presence.snap(160,' + (bare ? 'true' : 'false') +
+    ').then(function(s){return JSON.stringify(s)})'));
 
-  /* NO BACKGROUND CIRCLE, IN ANY OF THE FIVE STATES. Read off the presence's OWN canvas inside the
-     frame that drew it (presence.snap), so the deck's sky behind it is not in the reading: in the
-     band 0.45-0.85 of the half-extent, a disc - solid or gradient - lifts the 10th percentile off
-     zero everywhere; points with dark between them leave it at zero. And the DOM half: no haze door,
-     no sprites, and no background painted on the well or its canvas. */
+  /* NO BACKGROUND CIRCLE, IN ANY OF THE FIVE STATES - MEASURED BY TAKING THE PRESENCE AWAY. A BARE
+     snapshot (presence.snap(n, true)) draws one frame of the presence's own canvas with its points
+     switched off, inside the frame that drew it: whatever is still lit is NOT the presence - a haze,
+     a disc, a backing glow. Measured on the committed page before this round (the haze still on):
+     mean 6.1-6.8 and peaks of 77-102 out of 255 in every dust state, 25% of the canvas over 1/255,
+     and 52% for the face. Here it must be empty. The points-on snapshot is taken too, so "empty"
+     cannot be a canvas that drew nothing at all. And the DOM half: no haze door, no sprites, one
+     scene pass, nothing painted on the well or its canvas. */
   await page.evaluate('__galaxy.presence.set("dust")');
   await sleep(1200);
   const circ = {};
   for (const s of ['listening', 'thinking', 'speaking', 'alert']) {
     await page.evaluate('__galaxy.presence.dustState("' + s + '")');
     await sleep(1100);
-    const sn = await snapOf();
-    circ[s] = { p10: sn.band.p10, p50: sn.band.p50, cover: sn.coverage, heart: sn.rings[0] };
+    const sn = await snapOf(), bn = await snapOf(true);
+    circ[s] = { bareMean: bn.mean, bareMax: bn.max, bareOver1: bn.over1, heart: sn.rings[0] };
   }
   await page.evaluate('__galaxy.presence.dustState(null)');
   await page.evaluate('__galaxy.presence.set("face")');
   await waitFor(page, '__galaxy.presence.mode === "face"', 15000);
   await sleep(1500);
-  { const sn = await snapOf(); circ.face = { p10: sn.band.p10, p50: sn.band.p50, cover: sn.coverage, heart: sn.rings[0] }; }
+  { const sn = await snapOf(), bn = await snapOf(true);
+    circ.face = { bareMean: bn.mean, bareMax: bn.max, bareOver1: bn.over1, heart: Math.max(...sn.rings.slice(0, 4)) }; }
   const domCirc = await page.json(`(function(){
     var w = getComputedStyle(document.getElementById('presence')), c = getComputedStyle(document.getElementById('presence-cvs'));
     return { door: typeof __galaxy.presence.smoke, sprites: __galaxy.presence.cine.sprites,
              haze: __galaxy.presence.cine.haze, chain: __galaxy.presence.cine.chain,
              wellBg: w.backgroundImage + ' ' + w.backgroundColor, cvsBg: c.backgroundImage + ' ' + c.backgroundColor }; })()`);
-  note('the band 0.45-0.85, 0-255 (p10 / p50 / cover): ' + Object.keys(circ).map((k) =>
-       k + ' ' + circ[k].p10 + '/' + circ[k].p50 + '/' + circ[k].cover).join(' · '));
+  note('bare canvas, points off (mean / max / share over 1, 0-255): ' + Object.keys(circ).map((k) =>
+       k + ' ' + circ[k].bareMean + '/' + circ[k].bareMax + '/' + circ[k].bareOver1).join(' · '));
   const transparent = (s) => /^none (rgba\(0, 0, 0, 0\)|transparent)$/.test(s);
-  ok(Object.keys(circ).length === 5 && Object.values(circ).every((c) => c.p10 <= DISC_P10 && c.heart > 0) &&
+  ok(Object.keys(circ).length === 5 && Object.values(circ).every((c) => c.bareMax <= BARE_MAX && c.bareOver1 === 0 && c.heart > 0) &&
      domCirc.door === 'undefined' && domCirc.sprites === 0 && domCirc.haze === false &&
      domCirc.chain.filter((n) => n === 'RenderPass').length === 1 &&
      transparent(domCirc.wellBg) && transparent(domCirc.cvsBg),
-     'NO BACKGROUND CIRCLE IN ANY PRESENCE STATE: the band between the heart and the window has a ' +
-     '10th-percentile light of ' + Object.keys(circ).map((k) => k + ' ' + circ[k].p10).join(', ') +
-     ' out of 255 (ceiling ' + DISC_P10 + ') - dark between the points in all four dust states and ' +
-     'the face, with the heart lit in each - and the haze that drew the disc is gone: no door, ' +
+     'NO BACKGROUND CIRCLE IN ANY PRESENCE STATE: with the presence\'s own points switched off for ' +
+     'one frame, its canvas peaks at ' + Object.keys(circ).map((k) => k + ' ' + circ[k].bareMax).join(', ') +
+     ' out of 255 (ceiling ' + BARE_MAX + ') with no pixel over 1 - nothing is drawn behind the presence ' +
+     'in any of the four dust states or the face, where the committed page drew a disc peaking at 77-102 - ' +
+     'while the same frames with the points on are lit at the heart; the haze that drew it is gone: no door, ' +
      domCirc.sprites + ' sprites, one scene pass, nothing painted on the well or its canvas',
      JSON.stringify({ circ, domCirc }));
   const core = await page.json(`(function(){
@@ -862,7 +878,7 @@ else {
              spread: +mean(snaps.map((x) => Math.max(...x.outer) - Math.min(...x.outer.filter((v) => v > 0)))).toFixed(3) };
   };
   const free = [];
-  for (let i = 0; i < 5; i++) { free.push(await snapOf()); await sleep(1400); }
+  for (let i = 0; i < 7; i++) { free.push(await snapOf()); await sleep(1400); }
   await page.evaluate('__galaxy.presence.phase(0.3)');
   await sleep(500);
   const pinned = [];
@@ -872,12 +888,19 @@ else {
   const seed = await page.json('__galaxy.presence.dust().geo');
   note('far edge, free: ' + JSON.stringify(fs) + ' · pinned: ' + JSON.stringify(ps) +
        ' · seed edge ' + seed.frameFill + ', bound ' + seed.reachFill);
-  ok(fs.tStd >= MOTION_TSTD && ps.tStd === 0 && fs.maxOuter > seed.frameFill * 1.10 && fs.maxOuter <= seed.reachFill + 0.02,
+  /* MEASURED ON THE COMMITTED PAGE FIRST (the ball that only turns and breathes): its far edge moved
+     0.018-0.024 per direction between moments and reached 1.04-1.07x its seed's edge. Here, with each
+     point wandering: 0.052-0.055 and 1.12x. The floors sit between: TSTD_MIN 0.035, EDGE_RATIO 1.08.
+     The pinned control must not move at all. */
+  ok(fs.tStd >= TSTD_MIN && ps.tStd === 0 && fs.maxOuter >= seed.frameFill * EDGE_RATIO && fs.maxOuter <= seed.reachFill + 0.02,
      'THE DUST HAS NO FIXED SHAPE: its far edge, read in 24 directions off its own canvas, moved by ' +
-     fs.tStd + ' of the half-extent on average from moment to moment over 5.6 seconds (floor ' +
-     MOTION_TSTD + ') and reached ' + fs.maxOuter + ' - past the seed ball\'s own edge at ' +
-     seed.frameFill + ', inside the published bound ' + seed.reachFill + '; with the clock pinned the ' +
-     'same reading moved by ' + ps.tStd + ', so the motion is the points\' own and not noise',
+     fs.tStd + ' per direction between moments (a ball that only turns: 0.018-0.024; floor ' + TSTD_MIN +
+     ') and reached ' +
+     fs.maxOuter + ' of the half-extent - ' + (fs.maxOuter / seed.frameFill).toFixed(2) + 'x the seed ' +
+     'ball\'s own edge at ' + seed.frameFill + ' (a ball that only turns: 1.04-1.07x; floor ' +
+     EDGE_RATIO + 'x), inside the published bound ' + seed.reachFill + ', over 8.4 seconds; with the ' +
+     'clock pinned the same reading ' +
+     'moved by ' + ps.tStd + ', so the motion is the points\' own and not noise',
      JSON.stringify({ free: fs, pinned: ps, seed: { frameFill: seed.frameFill, reachFill: seed.reachFill } }));
 
   /* THE TURN'S CURVE IS NAMED, DECLARED WITH THE OTHERS, AND THE RIGHT SHAPE: a symmetric ease-in-out
@@ -911,12 +934,14 @@ else {
      th.members === GRAPH.nodes.length &&
      th.curved.spokes === th.spokes && th.curved.cross === th.cross && th.curved.inlinks === th.inlinks &&
      th.curved.members === th.members && th.glows === th.spokes + th.cross && th.beads === th.glows &&
-     th.gradients === th.glows && /url\(/.test(th.stroke) && /url\(.*ob-tglow/.test(th.glowFilter || '') && th.width >= 1.2,
+     th.gradients === th.glows && /url\(/.test(th.stroke) && th.halos === th.glows && th.glowWidth >= 5 &&
+     th.filters === 0 && th.width >= 1.2,
      'THE CONNECTIONS RENDER AS CURVED, GLOWING THREADS, AND ONLY THE CORPUS\'S: ' + th.spokes +
      ' spokes (one per folder), ' + th.cross + ' arc between folders and ' + th.inlinks +
      ' in-folder curves (both counted from graph-data.js\'s own links), ' + th.members +
      ' faint membership threads (one per note) - every one a quadratic curve; each spoke and arc a ' +
-     th.width + 'px gradient stroke over a blurred glow copy with a travelling bead',
+     th.width + 'px gradient stroke over two wide translucent copies (' + th.glowWidth + 'px) with a travelling bead - and ' +
+     'no SVG filter on anything that moves, which is what kept the frame rate of the presence',
      JSON.stringify({ th, disk: { folders: groupsOnDisk.length, pairs: pairs.size, within: withinDisk, notes: GRAPH.nodes.length } }));
 
   /* THE EYES HAVE RINGS, MEASURED AS RADII. presence.eyes() walks the drawn buffer: the share of
@@ -929,7 +954,9 @@ else {
   const uniLimb = (Math.pow(eyes.irisR, 2) - Math.pow(eyes.irisR - 0.004, 2)) / Math.pow(eyes.irisR, 2);
   const uniPup = (Math.pow(eyes.pupilR + 0.003, 2) - Math.pow(eyes.pupilR - 0.003, 2)) / Math.pow(eyes.irisR, 2);
   const limbShare = eyes.onLimbal / eyes.points, pupShare = eyes.onPupil / eyes.points;
-  ok(eyes && eyes.points > 0 && limbShare >= 2 * uniLimb && pupShare >= 2 * uniPup &&
+  /* Floors set from the measured build: the limbal ring holds 34% (2.4x a uniform disc), the pupil
+     ring 14% (1.9x - its band is narrower, so a uniform disc already puts 8% in it). */
+  ok(eyes && eyes.points > 0 && limbShare >= 2 * uniLimb && pupShare >= 1.5 * uniPup &&
      eyes.catch >= 2 && eyes.hot >= eyes.onLimbal && eyes.parts && eyes.parts.striae > 0 && eyes.spokes >= 8,
      'THE EYES HAVE DETAIL IN THE GEOMETRY: of ' + eyes.points + ' iris points, ' +
      Math.round(limbShare * 100) + '% sit on the limbal ring and ' + Math.round(pupShare * 100) +

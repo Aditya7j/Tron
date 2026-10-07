@@ -3024,9 +3024,8 @@
      glow is a wider, blurred copy of the same ellipse, so the ring reads as light, not as ink. */
   #orbit .ob-orbit{fill:none;stroke:var(--blue-structure);stroke-opacity:.34;stroke-width:1}
   #orbit .ob-orbit.gold{stroke:var(--gold-core);stroke-opacity:.32}
-  #orbit .ob-orbit-glow{fill:none;stroke:var(--blue-structure);stroke-opacity:.16;stroke-width:5;
-    filter:url(#ob-tglow)}
-  #orbit .ob-orbit-glow.gold{stroke:var(--gold-core);stroke-opacity:.14}
+  #orbit .ob-orbit-glow{fill:none;stroke:var(--blue-structure);stroke-opacity:.10;stroke-width:5}
+  #orbit .ob-orbit-glow.gold{stroke:var(--gold-core);stroke-opacity:.09}
   #orbit .ob-lat{fill:none;stroke:var(--blue-structure);stroke-opacity:.34;stroke-width:1}
   #orbit .ob-pl{fill:none;stroke:var(--blue-structure);stroke-width:1.2}
   #orbit .ob-pl.gold{stroke:var(--gold-core)}
@@ -3039,11 +3038,15 @@
      (ob-inlink). A note's faint thread to its own folder (ob-member) is MEMBERSHIP - the note is
      in that folder on disk - and is drawn far fainter, so it can never be mistaken for a link. */
   #orbit .ob-thread{fill:none;stroke-width:1.5;stroke-linecap:round}
-  #orbit .ob-thread-glow{fill:none;stroke-width:6;stroke-opacity:.30;stroke-linecap:round;
-    filter:url(#ob-tglow)}
+  /* THE GLOW IS A WIDE TRANSLUCENT STROKE AND NOT A BLUR FILTER, on purpose and measured: an SVG
+     filter on a path whose d changes every frame is re-rasterised every frame, and the first cut of
+     this - blurred threads and blurred beads - dropped the presence's own audition from 60fps to
+     ~50 on the same machine. Two translucent widths read as a glow at a fraction of the cost. */
+  #orbit .ob-thread-glow{fill:none;stroke-width:7;stroke-opacity:.12;stroke-linecap:round}
+  #orbit .ob-thread-halo{fill:none;stroke-width:3.4;stroke-opacity:.22;stroke-linecap:round}
   #orbit .ob-spoke.ob-thread{stroke-opacity:.78}
   #orbit .ob-cross.ob-thread{stroke-width:1.8;stroke-opacity:.95}
-  #orbit .ob-bead{fill:var(--gold-hot);filter:url(#ob-tglow)}
+  #orbit .ob-bead{fill:var(--gold-hot);stroke:var(--gold-hot);stroke-opacity:.30;stroke-width:5}
   #orbit .ob-member{fill:none;stroke-width:.7;stroke-opacity:.24;stroke-linecap:round}
   #orbit .ob-cross-n{fill:var(--gold-hot);font:11px var(--mono);text-anchor:middle}
   #orbit .ob-ring.gold{stroke:var(--gold-core)}
@@ -6242,11 +6245,6 @@ async function loadLib() {
     const gloss = obEl('radialGradient', { id: 'ob-gloss', cx: '36%', cy: '30%', r: '70%' }, defs);
     obEl('stop', { offset: '0%', 'stop-color': '#ffffff', 'stop-opacity': 0.55 }, gloss);
     obEl('stop', { offset: '60%', 'stop-color': '#ffffff', 'stop-opacity': 0 }, gloss);
-    const soft = obEl('filter', { id: 'ob-soft', x: '-80%', y: '-80%', width: '260%', height: '260%' }, defs);
-    obEl('feGaussianBlur', { stdDeviation: 9 }, soft);
-    /* THE THREADS' GLOW: a soft blur, kept small so a thread stays a line with light round it. */
-    const tglow = obEl('filter', { id: 'ob-tglow', x: '-30%', y: '-30%', width: '160%', height: '160%' }, defs);
-    obEl('feGaussianBlur', { stdDeviation: 2.2 }, tglow);
 
     /* THE PLINTH: the rings the reference plates stand their sphere on. */
     const pl = obEl('g', { id: 'ob-plinth', transform: 'translate(0,' + OB.PLINTH_Y + ')' }, svg);
@@ -6312,9 +6310,10 @@ async function loadLib() {
       obEl('stop', { offset: '0%', style: 'stop-color:' + from }, grad);
       obEl('stop', { offset: '100%', style: 'stop-color:' + to }, grad);
       const glow = obEl('path', { class: 'ob-thread-glow ' + cls, stroke: 'url(#' + id + ')' }, parent);
+      const halo = obEl('path', { class: 'ob-thread-halo ' + cls, stroke: 'url(#' + id + ')' }, parent);
       const path = obEl('path', { class: 'ob-thread ' + cls, stroke: 'url(#' + id + ')' }, parent);
       const bead = obEl('circle', { r: 2.3, class: 'ob-bead' }, parent);
-      return { grad: grad, glow: glow, path: path, bead: bead, seed: (gradN * 0.6180339) % 1 };
+      return { grad: grad, glow: glow, halo: halo, path: path, bead: bead, seed: (gradN * 0.6180339) % 1 };
     };
     const famVar = function (f) { return f === 'gold' ? 'var(--gold-core)' : 'var(--blue-structure)'; };
     const words = String(d.name || 'Knowledge Galaxy').trim().split(/\s+/);
@@ -6332,7 +6331,15 @@ async function loadLib() {
         const R = OB.NODE_MIN + (OB.NODE_MAX - OB.NODE_MIN) * Math.sqrt(c.count / max);
         const g = obEl('g', { class: 'ob-node' + (c.muted ? ' muted' : ''), 'data-group': c.name }, front);
         obEl('title', {}, g).textContent = c.name + ' - ' + c.count + ' notes' + (c.muted ? ' (muted in the legend)' : '');
-        obEl('circle', { r: (R * 1.7).toFixed(1), fill: c.colour, 'fill-opacity': 0.30, filter: 'url(#ob-soft)' }, g);
+        /* UI MANDATE III PART 3: THE WORLD'S GLOW IS A RADIAL GRADIENT, not a feGaussianBlur on a
+           disc that moves every frame - the same re-rasterisation the threads' first cut paid for.
+           The light falls to nothing at its edge, so it reads as glow and not as a disc. */
+        const wg = 'ob-wg' + (gradN++);
+        const wgr = obEl('radialGradient', { id: wg, class: 'ob-grad' }, defs);
+        obEl('stop', { offset: '0%', style: 'stop-color:' + c.colour, 'stop-opacity': 0.42 }, wgr);
+        obEl('stop', { offset: '55%', style: 'stop-color:' + c.colour, 'stop-opacity': 0.12 }, wgr);
+        obEl('stop', { offset: '100%', style: 'stop-color:' + c.colour, 'stop-opacity': 0 }, wgr);
+        obEl('circle', { r: (R * 1.9).toFixed(1), fill: 'url(#' + wg + ')' }, g);
         /* ITS NOTES, AS ITS STARS. One dot per note in this folder, from the same `nodes` the
            legend counts, placed round the world by a hash of the note's own id - so the same
            note sits in the same place on every load - and links between two notes of the same
@@ -6487,6 +6494,7 @@ async function loadLib() {
     const d = 'M' + ax.toFixed(1) + ',' + ay.toFixed(1) + ' Q' + cx.toFixed(1) + ',' + cy.toFixed(1) +
               ' ' + bx.toFixed(1) + ',' + by.toFixed(1);
     th.glow.setAttribute('d', d);
+    th.halo.setAttribute('d', d);
     th.path.setAttribute('d', d);
     th.grad.setAttribute('x1', ax.toFixed(1)); th.grad.setAttribute('y1', ay.toFixed(1));
     th.grad.setAttribute('x2', bx.toFixed(1)); th.grad.setAttribute('y2', by.toFixed(1));
@@ -20783,14 +20791,14 @@ async function loadLib() {
        starts from), but the drawn cloud is that ball with every point on its OWN wandering path:
        three sines per point at frequencies and phases hashed from its own aRnd, a second octave so
        no path is a clean loop, and a radial swing of its own. Heart points wander a little
-       (WANDER_HEART), edge points a lot (WANDER_EDGE), and one point in ten is a stray that goes
+       (WANDER_HEART), edge points a lot (WANDER_EDGE), and one point in six is a stray that goes
        STRAY times further - so the outline is a different, ragged edge every second, and no two
        directions breathe together. DUST_S came down from 0.86 to 0.62 so that even the bound on
        the furthest stray (presDustReach) lands inside the canvas's window, never cut by it.
        Same 13,800 points, same one object; this is motion only. */
     DUST_PTS: 13800, DUST_R: 1.0, DUST_S: 0.62,
     DUST_FALLOFF: 1.5, DUST_FREQ: 1.9, DUST_FLOOR: 0.05, DUST_CONTRAST: 2.6,
-    DUST_WANDER_HEART: 0.07, DUST_WANDER_EDGE: 0.26, DUST_STRAY: 1.25, DUST_STRAY_SHARE: 0.10,
+    DUST_WANDER_HEART: 0.07, DUST_WANDER_EDGE: 0.26, DUST_STRAY: 1.25, DUST_STRAY_SHARE: 0.16,
     DUST_WANDER_HZ_LO: 0.05, DUST_WANDER_HZ_HI: 0.21, DUST_RADIAL: 0.14,
     DUST_SPIN: 0.105, DUST_BREATH: 0.018, DUST_BREATH_HZ: 0.11,
     DUST_LEVEL_SWELL: 0.10, DUST_PULSE_SWELL: 0.06,
@@ -23141,6 +23149,10 @@ async function loadLib() {
        AND THE DIRECT PATH IS KEPT. If the composer never built - no addons, no WebGL2, both
        flags off - this is presR.render(presScene, presCam), byte for byte the §32 line. A
        machine that cannot have the cinema still has the core. */
+    /* A BARE SNAPSHOT draws this one frame WITHOUT the presence's points: whatever is still on the
+       canvas is not the presence - a haze, a disc, a backing glow. See presSnapTake. */
+    const snapBare = presSnapQ.some(function (q) { return q.bare; });
+    if (snapBare && presPts) presPts.visible = false;
     const glow = cineStrength(now, lvl);
     if (presComposer) {
       if (presBloomPass && cine.bloom) presBloomPass.strength = glow;
@@ -23158,6 +23170,7 @@ async function loadLib() {
       presR.render(presScene, presCam);
     }
     if (presSnapQ.length) presSnapTake();
+    if (snapBare && presPts) presPts.visible = true;
     pres.frames++;
     if (!presHost.classList.contains('lit')) presHost.classList.add('lit');
     if (pres.frames % PRES.MIRROR_EVERY === 0) { presMirror(); convoMirror(); }
@@ -23460,6 +23473,8 @@ async function loadLib() {
                  behind the presence lifts the 10th percentile off zero everywhere in it; points
                  with dark between them leave it at zero
        coverage  the share of that band brighter than 8/255
+       fog       the share of that band lit but faint (0.5-8/255) - what a haze or a gradient
+                 disc fills in between points, and what bare points leave empty
        sectors   for 24 directions, the radius out to which 98% of that direction's light lies -
                  the outline, read as a number per direction
        outer     for the same 24, the third-farthest lit pixel's radius - the cloud's far edge in
@@ -23479,14 +23494,14 @@ async function loadLib() {
         const rings = new Array(12).fill(0), rn = new Array(12).fill(0);
         const band = [], sec = [];
         for (let k = 0; k < 24; k++) sec.push([]);
-        let lit = 0, all = 0, bits = '', nib = 0, nb = 0;
+        let lit = 0, all = 0, fog = 0, bits = '', nib = 0, nb = 0;
         for (let y = 0; y < N; y++) {
           for (let x = 0; x < N; x++) {
             const i = (y * N + x) * 4;
             const L = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) * d[i + 3] / 255;
             const dx = x + 0.5 - h, dy = y + 0.5 - h, r = Math.hypot(dx, dy) / h;
             if (r < 1) { const k = Math.min(11, Math.floor(r * 12)); rings[k] += L; rn[k]++; }
-            if (r >= 0.45 && r <= 0.85) { band.push(L); all++; if (L > 8) lit++; }
+            if (r >= 0.45 && r <= 0.85) { band.push(L); all++; if (L > 8) lit++; else if (L > 0.5) fog++; }
             if (L > 12 && r < 1) {
               let a = Math.atan2(dy, dx); if (a < 0) a += Math.PI * 2;
               sec[Math.min(23, Math.floor(a / (Math.PI * 2) * 24))].push([r, L]);
@@ -23510,10 +23525,16 @@ async function loadLib() {
           for (let j = 0; j < s.length; j++) { acc += s[j][1]; if (acc >= 0.98 * tot) return +s[j][0].toFixed(3); }
           return +s[s.length - 1][0].toFixed(3);
         });
-        req.resolve({ n: N, mode: pres.mode, frame: pres.frames,
+        let tot = 0, mx = 0, cnt = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          const L = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) * d[i + 3] / 255;
+          tot += L; if (L > mx) mx = L; if (L > 1) cnt++;
+        }
+        req.resolve({ n: N, mode: pres.mode, frame: pres.frames, bare: !!req.bare,
+                      mean: +(tot / (N * N)).toFixed(3), max: +mx.toFixed(2), over1: +(cnt / (N * N)).toFixed(4),
                       rings: rings.map(function (v, k) { return +(v / Math.max(1, rn[k])).toFixed(2); }),
                       band: { p10: pct(0.10), p50: pct(0.50), p90: pct(0.90) },
-                      coverage: +(lit / Math.max(1, all)).toFixed(3), sectors: sectors, outer: outer, mask: bits });
+                      coverage: +(lit / Math.max(1, all)).toFixed(3), fog: +(fog / Math.max(1, all)).toFixed(3), sectors: sectors, outer: outer, mask: bits });
       } catch (e) { req.resolve({ error: String((e && e.message) || e) }); }
     });
   }
@@ -29351,7 +29372,10 @@ async function loadLib() {
         const gl = all('path.ob-thread-glow');
         return { spokes: sp.length, cross: cr.length, inlinks: il.length, members: mb.length,
                  curved: { spokes: curved(sp), cross: curved(cr), inlinks: curved(il), members: curved(mb) },
-                 glows: gl.length, glowFilter: gl[0] ? getComputedStyle(gl[0]).filter : null,
+                 glows: gl.length, halos: all('path.ob-thread-halo').length,
+                 glowWidth: gl[0] ? parseFloat(getComputedStyle(gl[0]).strokeWidth) : 0,
+                 filters: all('[filter]').length + all('path,circle,ellipse').filter(function (e) {
+                   return /ob-tglow/.test(getComputedStyle(e).filter); }).length,
                  stroke: one ? one.getAttribute('stroke') : null,
                  width: cs ? parseFloat(cs.strokeWidth) : 0,
                  gradients: all('linearGradient.ob-grad').length,
@@ -29929,9 +29953,9 @@ async function loadLib() {
       },
       /* A PLATE'S PIN: hold the dust in a named state (or null to hand it back to the house).
          For photographs of each state; nothing in the house calls it. */
-      snap: function (n) {
+      snap: function (n, bare) {
         return new Promise(function (res) {
-          presSnapQ.push({ n: Math.max(32, Math.min(320, Number(n) || 160)), resolve: res });
+          presSnapQ.push({ n: Math.max(32, Math.min(320, Number(n) || 160)), resolve: res, bare: !!bare });
           setTimeout(function () { res({ error: 'no frame drew within 3s' }); }, 3000);
         });
       },

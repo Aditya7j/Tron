@@ -97,7 +97,7 @@ const T = {
      nothing on that canvas runs on a clock of its own. NULL_BOUND is how far toggling the
      removed haze's flag may move the chain's paired dispatch: a flag with nothing to switch. */
   STILL: 0, NULL_BOUND: 0.02,
-  DISC_P10: 1,               // the band's 10th percentile, 0-255: a disc lifts it off zero everywhere
+  BARE_MAX: 1,               // the presence canvas with its points off, peak 0-255: nothing behind it
   CORNER_LUM: 0.02,       // how much DARKER than the ground a corner may be - i.e. not at all
   FALLOFF: 4,             // centre contribution / worst corner: a glow falls off, a fill does not
   TEXT_DELTA: 2,          // max per-channel change in a text crop when the bloom comes on
@@ -1438,11 +1438,11 @@ async function main() {
   /* ============================ PART 2, REPLACED: NO DISC IN THE WELL ===========================
      §34 PART 2 proved the haze's hue (the shell's blue, not amber) off its material and its pixels.
      UI mandate III removed the haze, so the claim that replaces it is the one the boss's new note
-     asks for: there is no disc behind the presence at all. Read off the presence's OWN canvas
-     (presence.snap), in the band 0.45-0.85 of the half-extent: a disc - solid or gradient - lifts
-     the band's 10th percentile off zero everywhere inside it, while points with dark between them
-     leave it at zero. In both modes, with the bloom on. Old: tint === shell blue and B > R. New:
-     band p10 <= DISC_P10 in dust and in face. */
+     asks for: there is no disc behind the presence at all. Measured by taking the presence away: a
+     BARE snapshot (presence.snap(n, true)) draws one frame of its own canvas with its points off,
+     so anything still lit is not the presence. On the committed page the haze left a disc peaking
+     at 77-102 out of 255 in the dust and 36 round the face. Both modes, bloom on. Old: tint === shell
+     blue and B > R. New: the bare canvas peaks at <= BARE_MAX with no pixel over 1, in dust and face. */
   await page.send('Emulation.setDeviceMetricsOverride',
     { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false });
   await sleep(1600);
@@ -1451,17 +1451,17 @@ async function main() {
   for (const m of ['dust', 'face']) {
     await page.evaluate('__galaxy.presence.set("' + m + '")');
     await sleep(1800);
-    const s = JSON.parse(await page.evaluate('__galaxy.presence.snap(160).then(function(s){return JSON.stringify(s)})'));
-    discs[m] = { band: s.band, coverage: s.coverage, rings: s.rings };
+    const s = JSON.parse(await page.evaluate('__galaxy.presence.snap(160, true).then(function(s){return JSON.stringify(s)})'));
+    const w = JSON.parse(await page.evaluate('__galaxy.presence.snap(160).then(function(s){return JSON.stringify(s)})'));
+    discs[m] = { bareMean: s.mean, bareMax: s.max, bareOver1: s.over1, wholeMax: w.max };
   }
   await page.evaluate('__galaxy.presence.set("dust")');
-  note('the band 0.45-0.85 of the well, 0-255: dust ' + JSON.stringify(discs.dust.band) + ' cover ' +
-       discs.dust.coverage + ' · face ' + JSON.stringify(discs.face.band) + ' cover ' + discs.face.coverage);
-  ok(discs.dust.band.p10 <= T.DISC_P10 && discs.face.band.p10 <= T.DISC_P10,
-     'PART 2, REPLACED - THERE IS NO DISC BEHIND THE PRESENCE, IN EITHER MODE: off the presence\'s ' +
-     'own canvas, the band between its heart and its window has a 10th-percentile light of ' +
-     discs.dust.band.p10 + ' (dust) and ' + discs.face.band.p10 + ' (face) out of 255, at or under ' +
-     T.DISC_P10 + ' - dark between the points, which no solid or gradient fill behind them allows; ' +
+  note('the presence canvas with its points off, 0-255: ' + JSON.stringify(discs));
+  ok(['dust', 'face'].every((m) => discs[m].bareMax <= T.BARE_MAX && discs[m].bareOver1 === 0 && discs[m].wholeMax > 50),
+     'PART 2, REPLACED - THERE IS NO DISC BEHIND THE PRESENCE, IN EITHER MODE: with its points ' +
+     'switched off for one frame, the presence\'s own canvas peaks at ' + discs.dust.bareMax + ' (dust) and ' +
+     discs.face.bareMax + ' (face) out of 255, no pixel over 1, where the same frames with the points ' +
+     'on peak at ' + discs.dust.wholeMax + ' and ' + discs.face.wholeMax + ' - nothing behind the presence; ' +
      'failure mode this catches: the pale circle the boss circled, by any route - a sprite, a ' +
      'backing mesh, a CSS gradient on the canvas',
      JSON.stringify(discs));
