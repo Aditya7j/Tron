@@ -12081,7 +12081,26 @@ async function loadLib() {
      NOT A TRANSCRIPT. One line at a time, replaced rather than appended: a caption that
      accumulates is a chat log with a fade on it. */
   const CAPTION_HOLD_MS = 4000;              // after his voice ends, as specified
-  const caption = { shows: 0, text: '', at: 0, fades: 0 };
+  const caption = { shows: 0, text: '', at: 0, fades: 0,
+                    holds: 0, flushes: 0, fallbacks: 0, holdWhy: '' };
+  /* ---- A2 - THE CAPTION WAITS FOR THE AUDIO CLOCK ----
+     The sentence used to go up as speakLine's FIRST act, before a single sample had been
+     decoded, while the word-by-word reveal is driven by the audio clock a long way further
+     down - so the text arrived first and the voice caught up with it. The two now begin on
+     the same edge: src.start(), which is the one instant the clock and the chunk agree about.
+
+     A HOLD, NOT A SUPPRESSION. The line is kept here and raised on that edge, and every path
+     that can end without audio flushes it instead: a chunk that will not start, a queue that
+     drains, a cancel, and a patience timer for the case nobody anticipated. The caption is
+     NEVER lost - it is only ever late by the length of one decode.
+
+     AND THE REVEAL IS ARMED HERE TOO, which is the part §38 turns on. karaSurface() takes the
+     caption as its reveal surface when the card has yielded, and it finds that surface by
+     matching the caption's own text against the line word for word - so a caption raised
+     AFTER the arm has nothing to build spans on and the reveal declines. Raising the text and
+     arming the reveal are therefore one act, in that order, in one place. */
+  const CAP_HOLD_PATIENCE_MS = 1500;   // no audio by now => put the sentence up anyway
+  let capHold = null;
   let captionTimer = null;
 
   /* ONE SURFACE AT A TIME, and the whole of the decision is the comparison below.
@@ -12134,6 +12153,29 @@ async function loadLib() {
     return same;
   }
 
+  /* A2 - WOULD THE CARD YIELD THIS LINE? The same test answerYield() makes, with none of its
+     side effects, so speakLine can ask the question BEFORE raising the caption. Split out
+     rather than duplicated in spirit: a second nearly-identical rule here is how the yield law
+     and the reveal law drift apart. */
+  function karaWouldYield(line) {
+    const body = $('a-text');
+    if (!body) return false;
+    const held = capCollapse(body.textContent), spoken = capCollapse(line);
+    return !!held && (spoken === held || spoken.indexOf(held) === 0) &&
+           body.scrollHeight <= body.clientHeight + 1;
+  }
+
+  /* A2 - AND WILL THE REVEAL'S SURFACE BE THE CARD? karaSurface()'s card branch, asked ahead
+     of time. This is the whole of what A2 must NOT touch: when the card is holding the
+     paragraph the card is where a person is reading, the words are already on the glass, and
+     §39 has armed on them at speakLine() since it was written. Only the CAPTION path waits for
+     the audio clock, because only the caption has to be RAISED before it can be a surface. */
+  function karaCardPath(line) {
+    const card = $('answer'), body = $('a-text');
+    return !!(card && body && card.classList.contains('show') && !karaWouldYield(line) &&
+              body.getClientRects().length && karaFits(line));
+  }
+
   function captionShow(text) {
     const el = $('caption');
     const line = String(text == null ? '' : text).trim();
@@ -12174,6 +12216,55 @@ async function loadLib() {
     answerYield('');                 // a cancelled subtitle gives the paragraph back at once
     if (!el) return;
     el.classList.remove('up');
+  }
+
+  /* A2: hold this line until the audio clock starts. `id` is the first chunk queued for it,
+     so a second line appended to a draining queue is raised by ITS first chunk and not by the
+     previous line's third. */
+  function capHoldArm(line, id, w0) {
+    capHoldClear();
+    capHold = {
+      line: line, id: id, w0: w0,
+      timer: setTimeout(function () {
+        capHoldFall('no audio within ' + CAP_HOLD_PATIENCE_MS + 'ms');
+      }, CAP_HOLD_PATIENCE_MS)
+    };
+    caption.holds++;
+    return true;
+  }
+
+  function capHoldClear() {
+    if (capHold && capHold.timer) clearTimeout(capHold.timer);
+    capHold = null;
+  }
+
+  /* THE NORMAL PATH. Raised because audio has actually begun, so the reveal is armed behind
+     it and the words arrive on the clock. Returns false for a chunk that is not the one this
+     caption is waiting for, which is how two lines in one queue stay in their own lanes. */
+  function capHoldFlush(why, forId) {
+    if (!capHold) return false;
+    if (forId != null && capHold.id !== forId) return false;
+    const held = capHold;
+    capHoldClear();
+    caption.holdWhy = why;
+    caption.flushes++;
+    captionShow(held.line);
+    if (held.w0 > 0) karaArm(held.line, held.w0);
+    return true;
+  }
+
+  /* THE FALLBACK PATH, and it is deliberately NOT the one above. Audio failed, or never
+     started, or was stopped - so there is no clock for a reveal to read, and arming one would
+     hide every word behind a timer nothing is going to fire. The whole line goes up at once,
+     exactly as it did before A2. This is the path §38's assertions are written against. */
+  function capHoldFall(why) {
+    if (!capHold) return false;
+    const held = capHold;
+    capHoldClear();
+    caption.holdWhy = why;
+    caption.fallbacks++;
+    captionShow(held.line);
+    return true;
   }
 
   /* ==================================================================
@@ -14392,7 +14483,21 @@ async function loadLib() {
        raised BEFORE the three gates below, because a tab that cannot make a sound is exactly
        the tab in which the subtitle is the whole of the answer - and in that tab the fade is
        armed on the spot, since no voice will ever end to arm it. */
-    captionShow(line);
+    /* A2 - AND ON THE PIPER PATH IT IS HELD INSTEAD, for the few hundred milliseconds between
+       here and the first decoded sample. The test is every condition that stands between this
+       line and src.start(): muted, no voice, not yet unlocked, the browser's own engine, or a
+       piper that has already fallen over. If ANY of them holds there will be no audio clock,
+       so the sentence goes up now exactly as it always did. Only the path that is genuinely
+       about to play waits, and capHoldArm() below is what makes the wait safe. */
+    /* AND THE CARD PATH IS EXCLUDED, which is the correction that matters. The first cut of
+       this deferred BOTH surfaces, and karaoke_proof said so at once: three card assertions
+       went red reading 0 spans for a 115-word paragraph, because the arm had moved to
+       src.start() while the card was already on the glass holding the words. The card never
+       needed to wait - it was never raised by this function in the first place. */
+    const capWillReveal = !MUTED && speakPossible() && audioUnlocked &&
+                          speakEngine === 'piper' && !speakPiperDown &&
+                          !karaCardPath(line);
+    if (!capWillReveal) captionShow(line);
     /* ---- §39 RIDES THE FUNNEL TOO, and for the identical reason the caption does ----
        WHAT COUNTS AS AN UTTERANCE BEGINNING, and it is the one judgement the two rules below
        both rest on: a line that is about to be CUT AND QUEUED. A muted tab, a tab with no
@@ -14457,6 +14562,7 @@ async function loadLib() {
        Computed here rather than in the pump because the pump sees chunk four several
        seconds after the reveal needs to know how long chunks one to three were. */
     let w0 = 0;
+    let capFirstId = 0;          // A2: the chunk whose start() raises this line's caption
     for (let i = 0; i < chunks.length; i++) {
       const wn = karaWords(chunks[i]);
       const item = {
@@ -14465,6 +14571,7 @@ async function loadLib() {
         w0: w0, wn: wn, starts: null, clock: null, flat: false
       };
       w0 += wn;
+      if (!capFirstId) capFirstId = item.id;
       speakChunkLog.push(item);
       speakQueue.push(item);
       speakFifo.queued++;
@@ -14476,7 +14583,12 @@ async function loadLib() {
        web-voice tab shows the paragraph whole, exactly as it did before §39.
        `w0` is now the total word count of everything about to be spoken, which is what tells
        the reveal where the voice stops and the unspoken tail begins - see karaLight(). */
-    if (speakEngine === 'piper' && !speakPiperDown) karaArm(line, w0);
+    /* A2 - AND THE ARM MOVES WITH THE CAPTION. karaArm() needs the caption already holding
+       this sentence to take it as a surface (see karaSurface), so on the held path both
+       happen together at src.start() - capHoldFlush() raises the text and arms the reveal
+       in that order. The unheld path is untouched and arms here exactly as before. */
+    if (capWillReveal) capHoldArm(line, capFirstId, w0);
+    else if (speakEngine === 'piper' && !speakPiperDown) karaArm(line, w0);
     else kara.why = 'the browser\'s own voice has no audio clock';
     noteSaid(line, true);      // ONE record per line, whatever it was cut into
     /* THE FUNNEL SAYS WHAT IT TOOK - speakDone's twin, one event per line accepted. It is
@@ -14590,6 +14702,9 @@ async function loadLib() {
        AND THE GRACE BEGINS, for the same reason the caption's four seconds begin here and not
        when the line was handed over. VANISH_GRACE_MS after his voice ends means after the LAST
        chunk. If no card is up, or ?vanish=0 pinned it, vanishArm() declines and says so. */
+    /* A2 - THE BACKSTOP. If every chunk of a line was skipped, or synthesis failed outright,
+       no start() ever happened and the caption is still being held. It is owed either way. */
+    capHoldFall('the queue finished without audio');
     karaAll('the voice finished');
     vanishArm(VANISH_GRACE_MS, 'the voice ended');
     try {
@@ -14638,6 +14753,9 @@ async function loadLib() {
        stopping the VOICE is not a request to take the words away. Nothing is armed here - the
        vanish belongs to an answer that finished, and a cancelled one is either about to be
        replaced by the next question's card or is being left alone deliberately. */
+    /* A2 - AND A HELD CAPTION IS OWED TOO, for the same reason karaAll() completes the
+       half-revealed one above: stopping the voice is not a request to take the words away. */
+    capHoldFall('the voice was stopped by ' + reason);
     karaAll('the voice was stopped by ' + reason);
     return true;
   }
@@ -14775,6 +14893,38 @@ async function loadLib() {
     const beforeUrls = s;
     s = s.replace(TONGUE_URL_RE, ' ');
     const strippedUrl = (s !== beforeUrls);
+    /* ---- rule 6: A SYMBOL IS A WORD OUT LOUD, AND PIPER DOES NOT AGREE ----
+       REPORTED AND REPRODUCED: "@" is read as "at the rate" rather than "at". The voice is a
+       neural model trained on prose, and a bare glyph is outside what it was taught to say -
+       so it either guesses a regional reading, spells it, or in the worst case emits nothing
+       at all and takes the whole chunk down with it (see say.py's "nothing speakable" refusal
+       and the hole it was leaving mid-sentence).
+       AFTER THE URL STRIP AND BEFORE THE ID RULE, which is the only correct slot: an address
+       is full of @ and / and ., and expanding those first would turn one unreadable token
+       into six readable words and read the URL out loud - which is exactly what §42 removed.
+       EXPANDED, NOT DELETED, because these carry meaning a reader would miss: "50% of revenue"
+       must not become "50 of revenue". And spaced on both sides so the voice does not run the
+       word into its neighbour - the whitespace collapse at the end tidies the rest. */
+    s = s.replace(/@/g, ' at ')
+         .replace(/&/g, ' and ')
+         .replace(/%/g, ' per cent ')
+         .replace(/\+/g, ' plus ')
+         .replace(/=/g, ' equals ')
+         /* THE SLASH IS DELIBERATELY LEFT ALONE, and this is a rule I wrote and then removed
+            on the evidence: expanding it to " or " turns "and/or" - far and away the commonest
+            slash in prose - into "and or or", which is literally correct and sounds like a
+            stutter. A date ("12/05") must not be touched either. Two common cases made worse
+            and none made better is not a rule worth having.
+            The whole currency amount, not its first digit: /\$(\d)/ read "$40" as
+            "4 dollars0", which is the kind of defect that only shows when somebody says a
+            number out loud. */
+         .replace(/\$(\d[\d,.]*)/g, '$1 dollars')
+         .replace(/£(\d[\d,.]*)/g, '$1 pounds')
+         .replace(/€(\d[\d,.]*)/g, '$1 euros')
+         .replace(/₹(\d[\d,.]*)/g, '$1 rupees')
+         /* The degree sign and the asterisk: one is a unit, the other is already stripped as
+            markdown by rule 1 and only survives when it stood alone. */
+         .replace(/°/g, ' degrees ');
     if (strippedUrl) {
       /* WHAT THE REMOVAL LEAVES BEHIND, tidied before the clause is added. "It is up at
          <url>." becomes "It is up at ." with the stop orphaned, and a neural voice reads an
@@ -15098,6 +15248,7 @@ async function loadLib() {
       item.skipped = true;
       speakNote('chunk ' + item.i + ' would not start (' + item.error +
                 '); the queue goes on');
+      capHoldFall('a chunk would not start');     // A2: no clock, so the whole line goes up
       speakNodeDrop(src);
       return speakAdvance(item);
     }
@@ -15115,6 +15266,10 @@ async function loadLib() {
        clock: a wall clock drifts from the speakers by tens of milliseconds a second on a busy
        main thread, which over a long answer is a word and a half. */
     item.clock = actx.currentTime;
+    /* A2 - THE CAPTION GOES UP ON THIS EDGE, before karaChunk() below starts reading the
+       clock, because capHoldFlush() arms the reveal and karaChunk() drives one that is
+       already armed. Same instant, same chunk, one order. */
+    if (!silent) capHoldFlush('the audio clock started', item.id);
     if (!silent) karaChunk(item);
     if (!silent) setStatus('speaking', 'speaking');
   }
@@ -27472,6 +27627,17 @@ async function loadLib() {
       get fades() { return caption.fades; },
       get at() { return caption.at; },
       get pending() { return captionTimer !== null; },
+      /* A2 - THE HOLD, as readings. `held` says a caption is waiting for the audio clock RIGHT
+         NOW; `flushes` counts the normal path (raised by src.start(), reveal armed behind it)
+         and `fallbacks` the path where there was never going to be a clock. The two counters
+         are kept apart on purpose: a proof that cannot tell them apart cannot tell the
+         word-by-word reveal from the whole line arriving at once. */
+      HOLD_PATIENCE_MS: CAP_HOLD_PATIENCE_MS,
+      get held() { return capHold !== null; },
+      get holds() { return caption.holds; },
+      get flushes() { return caption.flushes; },
+      get fallbacks() { return caption.fallbacks; },
+      get holdWhy() { return caption.holdWhy; },
       /* ONE SURFACE AT A TIME, where a harness can read it. `yielded` is off the card's own
          class list rather than off the counter, so it is the state the employer's eye is in;
          `carries` is what the two surfaces actually hold, so a harness can assert that exactly

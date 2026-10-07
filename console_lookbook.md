@@ -11220,3 +11220,768 @@ about which topic the card shows, and the send path was accepted live last round
 
 **Ready for the boss?** Yes. The one thing wanting your word is the outcome-word decision
 above, and `bus_proof`'s shutter if you want it chased.
+
+# ROUTING LAW HARDENING · PIPER · GMAIL
+
+Four items, diagnosed before touched. Three are fixed and proved. One — PART 2(c) — is
+diagnosed to the line and **not** changed, because the fix lands in frozen glass; it is put to
+you below rather than guessed at. One premise (PART 3) did not reproduce, and that is reported
+as a finding rather than papered over with a fix for a working path.
+
+`fallback_proof.mjs` — **15/15 PASS** (new).
+
+## PART 1a — the hands manifest and the persona, on the fallback path
+
+**Root cause, one function.** [server.py:7293](server.py#L7293), `_ollama_fallback_messages()`,
+dropped **every** system block and substituted a 343-character constant. Measured: the real
+system prompt is **8,620 characters** — 7,041 of persona, 1,579 of hands manifest — so the
+local engine was being handed **4%** of what the cloud gets. Two consequences, both of them
+the ones you saw:
+
+- **No hand could ever be proposed on fallback.** The manifest is the only place the model
+  learns a tool exists. With it gone, every hand in the house was unreachable the moment Groq
+  throttled — which is why `capabilities_proof`, `chain_proof`, `followup_proof` and
+  `persona_proof` all collapse together under the limit, as §44 recorded.
+- **The persona went with it.** *"Please use your preferred ride-hailing app"* is what a model
+  says when nobody told it who it is.
+
+**Fix: there is now one construction, not two.** The fallback sends the same list the cloud
+path sends, built by the same `assemble()`. Measured after: **8,621 characters reaching the
+local engine, naming 11 of 11 hands**, persona intact.
+
+## PART 1b — the model
+
+`OLLAMA_CHAT_MODEL = "qwen3:latest"` at [server.py:1302](server.py#L1302), a named constant
+`DEFAULT_CONFIG` takes its value from — one line to swap, no code-reading.
+
+**Re-measured, because the job changed.** Everything §41 concluded was measured against a
+model receiving 343 characters. Against the real prompt:
+
+| model | ttft | total | register |
+|---|---|---|---|
+| `qwen3:4b` | 0.2s | **7.5s** | *"Hmm, the user has sent a very long message repeating the sam…"* — still narrates |
+| **`qwen3:latest`** (8.2B, Q4_K_M, 40960 ctx) | 0.3s | **4.0s** | *"Pricing should start from the urgency of the problem…"* |
+
+**There is no trade-off to report, and I was ready to report one.** The bigger model won on
+latency *and* on register — the 4b is slower because it spends its tokens narrating, not
+because it is smaller. qwen3:latest stays.
+
+**Per-turn cost in service: 4.4s to first token, 5.8s total**, with the system block cached as
+a stable prefix. A *cold* prefix costs **138s** once per model load — so
+[server.py:7537](server.py#L7537) now primes `ollama_warm()` with the **real system block**
+instead of a two-word "hi", which cached nothing a real turn would reuse. Live: `§41 fallback:
+qwen3:latest resident in 1.2s, keep_alive forever`.
+
+## PART 1c — the degradation at turn 10–12
+
+**Diagnosed with evidence before fixing.** A secret word placed **once** at the top of the
+prompt, then asked for back:
+
+| prompt | num_ctx | `prompt_eval_count` | secret survived |
+|---|---|---|---|
+| 547 chars (~136 tok) | 4096 | 121 | **yes** — answers `PELICAN` |
+| 8,152 chars (~2,038 tok) | 1024 | **514** | **no** — answers `"fox"`, a word from the filler |
+| 24,172 chars (~6,043 tok) | 4096 | **2050** | **no** — answers `"dog"`, from the filler |
+
+**Ollama truncates from the FRONT, silently, and `_ollama_chatml()` puts the system block
+first — so the system block is precisely what goes.** `prompt_eval_count` coming back at a
+third of what was sent is the truncation, visible. That is the mechanism behind "after 10–12
+responses the answers go wrong": the conversation grows, the window does not, and the persona
+and manifest are pushed out of the top while the model keeps answering from whatever filler
+survived.
+
+**Fix, in three parts, and the order of trimming is the law:**
+
+| what | file:line |
+|---|---|
+| `num_ctx` 4096 → **8192** | [server.py:7188](server.py#L7188) |
+| a **24,000-char prompt budget** under it, so trimming is this file's decision and not the runtime's silent one | [server.py:7195](server.py#L7195) |
+| history trimmed oldest-first **in pairs**, system block never touched, newest question never dropped | [server.py:7293](server.py#L7293) |
+| timeout 30s → **180s**, because the real prompt and a cold prefix need it | [server.py:7180](server.py#L7180) |
+
+**Proved to 20 turns:** the system block is **8,621 characters at every single turn**, manifest
+and persona intact at all 20 including turn 12; every turn fits the budget (largest 23,487 of
+24,000); and it is history that gives way — 3 turns kept at turn 1, 19 at turn 12, 19 at turn
+20.
+
+## PART 2 — Piper: two root causes, not one, and a third I did not touch
+
+You asked whether the three symptoms share a cause. **They do not.** (a) and (b) are separate,
+and (c) is a third thing entirely.
+
+**(a) the cutoff — root cause found in the house's own trace.** Six occurrences of
+`piper exited 1: wave.Error: # channels not specified`. Reproduced on demand:
+`say.synthesise("...")` fails exactly that way. Piper emits no frames for a line with no
+speakable content and its own wave writer then dies with an error about *channels* that says
+nothing about the cause. **The page treats a failed chunk as one to skip and advance past** —
+so a sentence split into three chunks, one of which normalised down to punctuation, is heard
+with a hole in it. That is your "only half a sentence".
+
+Not a chunking bug: `speakSplit()` already splits on sentence boundaries first and only cuts
+mid-sentence when a single sentence exceeds the 180-char ceiling. Fixed at
+[say.py:221](say.py#L221) — an unspeakable line is now refused with a sentence
+(*"there is nothing speakable in that line."*) before Piper is ever started. The caller still
+skips it, but it skips something this house understood.
+
+**(b) the symbols — no normalization existed anywhere.** `tongueNormalize()` had rules for
+markdown, URLs, unspeakable ids and dashes, and nothing for symbols, so `@` went to Piper raw.
+Note `@` *does* synthesise (8,748 bytes) — it is mispronounced, not fatal, which is why this is
+a different root cause from (a). Rule 6 added at
+[viewer/index.html:14778](viewer/index.html#L14778), **after** the URL strip and **before** the
+id rule — the only correct slot, since an address is full of `@` and `.` and expanding those
+first would read the URL aloud, which is exactly what §42 removed. Measured:
+
+```
+"Email me at aditya@example.com please."  -> "Email me at aditya at example.com please."
+"Tom & Jerry"                             -> "Tom and Jerry"
+"50% of revenue"                          -> "50 per cent of revenue"
+"2+2=4"                                   -> "2 plus 2 equals 4"
+"$1,250.50 today"                         -> "1,250.50 dollars today"
+"It is 30° outside"                       -> "It is 30 degrees outside"
+"See https://x.io/a and mail me@x.io"     -> "See and mail me at x.io. The link is on the glass beside me."
+```
+
+Two of my own rules were wrong and were caught by running them: `/\$(\d)/` read `$40` as
+*"4 dollars0"*, and a slash rule turned `and/or` into *"and or or"*. The currency regex now
+takes the whole amount; the slash rule was **removed** — two common cases made worse and none
+made better is not a rule worth having.
+
+**(c) text-then-audio — diagnosed, NOT fixed, and this is the scope conflict PART 0 asked me
+to stop on.** The cause is two surfaces with two timings:
+`captionShow(line)` at [viewer/index.html:14395](viewer/index.html#L14395) is the **first act**
+of `speakLine()` and dumps the whole line onto the glass immediately, before any audio exists;
+the word-by-word reveal `karaArm(line, w0)` is armed ~80 lines later and lights words off the
+audio clock. So the caption pre-empts the reveal, and you read the sentence before you hear it.
+
+The existing mechanism you asked me to reuse is `karaArm`, and the fix is to stop the caption
+pre-empting it — hold the caption until the first audio chunk starts. **But `captionShow`'s
+timing inside `speakLine` is §39's Word-by-Word reveal law and the Glass Laws, frozen by
+§38/§39 and not among PART 0's four items.** PART 0 says to stop and report rather than
+proceed, so I have. The change is small and I can make it on your word; it needs
+`karaoke_proof` re-run against it, since that suite asserts caption behaviour directly.
+
+## PART 3 — the Gmail send: it works, and here is what I found instead
+
+**The regression does not reproduce.** Three real sends tonight, three real message ids:
+
+| path | result |
+|---|---|
+| `google_api.send_message()` directly | `1a112279d1719630` |
+| `tools/send_email.py` as a subprocess, as hands.py runs it | `1a11227d309d804b` |
+| **the real route: Chain Card → `/execute`** | **`1a1123283fb7d131`** |
+
+> *"Email sent to adityasingh0076@gmail.com. Google's id for it is 1a1123283fb7d131."*
+
+**Why it failed for you, and why it does not now.** The token file carries
+`connected_at: 2026-10-06T21:07:33` — tonight. The hands ledger shows `send_email` last ran
+**2026-10-01**, with 14 failures recorded against 17 successes. Your failures were real; the
+reconnect you performed is what fixed them, and these are the first sends after it.
+
+**There is no stale-token bug.** `access()` calls `token()`, which reads the file on **every**
+call — there is no module-level bearer cache anywhere, so a reconnect that rewrites the file is
+picked up by the very next call, in-process, with no restart needed. I checked this specifically
+because you asked.
+
+**But the instrumentation found a real defect, and it is fixed.** At
+[google_api.py:499](google_api.py#L499), a refresh failure that is *not* `invalid_grant`
+returned `state="connected"` **with an empty bearer** — a contradiction, and the state field
+exists precisely so a caller need not parse English. Every caller survives it by accident
+(each tests `if why:` after the two named states), but the one case where the state matters
+most was the one it lied about. It now returns `"offline"`, which the Command Panel's existing
+`else` branch already words correctly.
+
+And `state_report()` at [google_api.py:516](google_api.py#L516) is the instrumentation you
+asked for — five conditions in plain words, including the one `access()` structurally cannot
+see, because it only ever talks to the token endpoint:
+
+```json
+{"state": "connected", "clientFile": true, "tokenFile": true, "hasRefresh": true,
+ "scopes": ["gmail.compose", "gmail.send", "calendar.events"],
+ "emailSha": "ddb4af013579", "expiresInS": 2746.3, "bearerChars": 253,
+ "gmail": "accepted (47088 message(s) in the mailbox it can see)", "coherent": true}
+```
+
+No credential in it: the bearer is a length, the address a sha256 prefix, the refresh token a
+boolean. `coherent` is the assertion that `state="connected"` with no bearer is impossible.
+
+### Suites re-run
+
+| suite | before | after |
+|---|---|---|
+| `fallback_proof` | — | **15/15 PASS** (new) |
+| `karaoke_proof` | 91 / 89 / 91 of 92 across §42 | **91/92** — the same band |
+
+`karaoke_proof`'s single red is *"A HAND IN THE PANEL RE-ARMS IT: 16227ms left before the
+pointer moved inside, 19739ms after"* - a sidebar hover re-arm timing assertion, in the
+family that has been oscillating all session and nothing to do with rule 6. The tongue's own
+clauses pass.
+
+## The honest gap between the fallback and Groq
+
+Not papered over. The local engine is **8.2B at Q4 on a CPU** against Groq's hosted model:
+
+- **Latency**: ~6s a turn warm, against Groq's sub-second. A cold prefix is 138s, which the
+  boot warm-up now absorbs — but a model eviction mid-session puts it back.
+- **History**: the local budget is 24,000 chars against the cloud's `MAX_CONTEXT` of 48,000.
+  A long conversation keeps **half** as much history locally. That is the cost of the window
+  and it is paid in history, never in the system block.
+- **Quality**: it answers in character and can see its hands, which is the bar this mandate
+  set. It is not Groq. Expect shorter, blunter answers and worse synthesis across many
+  sources.
+- **What I have not proved**: that it reliably *formats* a tool call well enough to drive a
+  hand end-to-end. 1a makes the hands **visible**; whether qwen3:latest proposes them as
+  cleanly as Groq does is a question only a live throttled conversation answers, and Groq was
+  not throttled while I had the server up. See below.
+
+## Left open, for you to decide
+
+1. **PART 2(c)** — the caption/reveal coordination. Diagnosed to the line, not changed, because
+   it is frozen glass outside PART 0's four. Say the word and it is a small change plus a
+   `karaoke_proof` re-run.
+2. **The live 12-turn throttled conversation** was not run end-to-end through the server,
+   because Groq was **not** throttled while the server was up, and I will not fake a 429 into a
+   live server to claim a transcript. The equivalent is proved in-process in
+   `fallback_proof.mjs` §3: Groq forced to 429 via its own `transient` flag, the local engine
+   answering with the real prompt, and the ledger row reading
+   `served=ollama outcome=fallback model=qwen3:latest`. Its answer, verbatim: *"I am Galaxy,
+   the personal assistant of Sir Aditya Singh… I can write something into the calendar, send an
+   email, change the voice…"* — in character, naming its hands, which was impossible before.
+   Ask and I will hold the real 12-turn conversation the next time the limit bites.
+3. **The four throttle-blocked suites** (`capabilities_proof`, `chain_proof`,
+   `followup_proof`, `persona_proof`) should now be re-run under a real throttle — 1a is
+   exactly the fix they were failing for, and if it works they come back. I have not claimed
+   that; it needs the limit to bite to measure.
+
+---
+
+# VOICE CUTOFF · CAPTION SYNC · GMAIL — NONE OF THE THREE WAS WHAT IT LOOKED LIKE
+
+Three items, all reported live. One fixed. Two diagnosed to a root cause inside a fence the
+mandate drew itself, and stopped there rather than crossed. Full report:
+`_runs/sweep47/report.md`.
+
+## PART 1 — the voice is innocent
+
+It is not the `wave.Error` bug recurring. The counter says so: say.py's named refusal
+(`say.py:221`) has fired **0** times, and all **6** `wave.Error`s in the trace predate the fix.
+Had a new kind of chunk been normalising to nothing, that counter would be non-zero — which is
+the entire reason it exists.
+
+The real cause is upstream of the mouth. `OLLAMA_FALLBACK_PREDICT = 48` caps the local model at
+48 tokens, and since §41 routes Groq → local with the Groq daily limit routinely saturated, the
+local engine is answering most turns. Measured on a real request: **226 chars, 40 words, ending
+on the word `My`.** Mid-clause. The voice then speaks all 40 of those words faithfully and
+stops, because there is nothing more. Every chunk had an `end`; none were skipped.
+
+"I speak only half" is literally true, and the half was cut before the voice ever saw it.
+
+`OLLAMA_FALLBACK_PREDICT` is in server.py, which PART 0 fenced. Diagnosis proved the root cause
+is there, so this is the report and not the fix.
+
+## PART 2 — the fix works, measures 0ms, and had to be reverted
+
+Implemented as PART 2's smaller option: hold `captionShow` until the audio clock starts, let
+`karArm`'s reveal be the only display. I picked that over teaching `captionShow` to find the
+clock because `karaChunk` is already called at `src.start()` and already reads it — deferring to
+a point that exists beats inventing one.
+
+New `_runs/sweep47/voice_sync_proof.mjs` (port 9245, **9/9 PASS**) speaks a real 3-sentence
+36-word line through the real Piper path: **gap 0ms** between `caption.at` and the first chunk's
+`start`, 2 chunks, 0 skipped, 36/36 words.
+
+And it took `karaoke_proof` 91/92 → **90/92**, on §38's two caption assertions. The cause is
+structural: **`karArm` takes the caption as its reveal surface when the card yields.** An empty
+caption at arm time has no spans to build on. So the deferral cannot be done by *when* alone —
+it needs karArm to build its own spans, which is *how* it reveals, which PART 2 said to stop for.
+
+Reverted in full (`grep -c captionPending` → 0; karaoke back to 91/92). The conflict, plainly:
+**§39 wants the caption empty at arm time so the reveal owns the display; §38 wants it full so
+the reveal has a surface.** Both cannot hold. The proof is kept on disk at 9/9, ready for the
+moment that question is answered.
+
+## PART 3 — nothing was broken; the token was deleted by hand
+
+`state_report(probe=True)`, run now: `state: absent`, `tokenFile: false`, `hasRefresh: false`,
+`bearerChars: 0`, `coherent: true`. `secrets/google_token.json` does not exist; its siblings do.
+`pending()` is `{}`, so not a half-finished consent either.
+
+The send path itself is healthy, and was proved three ways before the token went:
+`1a112279d1719630` (library), `1a11227d309d804b` (the hand as hands.py runs it),
+`1a11246a421e84a3` (the hand, this mandate) — with the probe reading
+`accepted (47090 message(s)...)`.
+
+What deleted it: **two `POST /google` calls, each immediately followed by a `POST /say`**, a web
+lookup for `'The token'`, and a speaker turn 284s old. A hand on the Command Panel's Google
+button, and the house announcing the result aloud. `cmd == "disconnect"` reaches
+`google_api.disconnect()` → `forget()` → `TOKEN_FILE.unlink()`. Working as designed.
+
+**The pattern, named as the mandate asked:** the disconnect is silent and the house never
+mentions it again. One click deletes the token, with no confirmation and no standing reminder.
+Mail then fails generically hours later, long after the press is forgotten — and reads as "mail
+is broken again". Twice now the Gmail report has been a token-state problem, not a send problem.
+
+The fix is a reconnect, and the consent click is yours by construction. I am not inventing a
+code fix for a non-code problem.
+
+## THE ONE CHANGE
+
+- **`google_api.py:548-558`** — `state_report()` reports `expiresInS: None` when there is no
+  token, instead of subtracting the wall clock from zero and printing `-1791309305.6`. A
+  fifty-seven-year-old token reads like a parsing bug in the one tool whose whole job is to be
+  believed.
+
+`viewer/graph-data.js` also differs from HEAD — that is build.py's auto-study regenerating, not
+mine.
+
+## Suites
+
+| suite | before | now | verdict |
+|---|---|---|---|
+| `voice_sync_proof` | — | **9/9 PASS** | new; gap **0ms** |
+| `karaoke_proof` | 91/92 | **91/92** | dipped to 90/92 under PART 2, recovered on revert |
+| `fallback_proof` | 15/15 | **15/15** | unchanged |
+| `preflight.py` | 37 pass, 2 fail, 4 warn | **37 pass, 2 fail, 4 warn** | identical; fails 13 and 20 |
+
+Preflight's two fails are **13** (`check_watch`) and **20** (`check_scribe`) — the same two, at
+the same counts, as the previous run, and both already documented here as the Groq-throttle set.
+The throttle is also why PART 1's local engine is answering at all. Neither check reaches
+say.py, google_api.py or the caption path.
+
+## Left open, named
+
+- **`OLLAMA_FALLBACK_PREDICT = 48`** — PART 1's actual root cause. 48 → 512 is one line and
+  costs latency. Fenced by PART 0; yours to authorise.
+- **The §38/§39 caption conflict** — the sync fix exists and measures 0ms but cannot land
+  without karArm owning its own spans. Fenced by PART 2; yours to authorise.
+- **The Google reconnect** — yours alone. Mail stays down until that click.
+- **The silent disconnect** — no confirmation, no visible disconnected state. It will recur.
+- **`/chat` email requests never reach the hand, and this one is real.** `POST /chat`
+  *"email <addr> and tell him..."* returns `kind: compose`, no card, 0 ollama fallbacks, and the
+  model answers *"I do not have the hand to send email. I can only prepare the text for you to
+  send manually."* — false; the hand exists and works. `task_intent()` is **True for all four**
+  send-email sentences including the plainest; `substantial_question()` is **False** for one,
+  skipping the hands offer entirely. Your own three attempts sit in the trace as
+  `'Draft me a email to stroyteller0007@gmail.com with subject a' is a task; composed, not
+  searched`. **This is most likely what "mail is not working" has actually felt like from the
+  chair** — even with a live token, asking for an email in conversation gets a refusal instead
+  of a send. Root cause is in server.py's funnel, so it is reported, not fixed.
+
+## LIVE ACCEPTANCE
+
+- **Voice:** real multi-sentence response spoken end to end. No chunk lost, 36/36 words. And it
+  confirmed the cutoff is upstream — the answer arrived already truncated at 40 words.
+- **Caption/audio together:** measured **0ms** under the deferral. Now reverted, so the live
+  house is back to text-before-audio pending the §39 decision.
+- **Gmail real send post-diagnosis: BLOCKED.** The token file is deleted; no send is possible
+  from this machine until you reconnect. The three message ids above are real but pre-diagnosis.
+  I am not going to call that acceptance met.
+
+---
+
+# THE PENDING MICRO-FIX, AND WHY THE BRAIN FELT CONFUSED
+
+Half A applied in full. Half B instrumented and answered from an 18-turn measured session.
+
+**Two of the mandate's own premises turned out to be wrong, and both were my own earlier
+findings.** I am naming them first because the rest of the report rests on correcting them:
+
+1. **A3's premise — "`substantial_question()` returns False for some send-email sentences" — does
+   not reproduce.** I measured all 26 phrasings gate by gate: `substantial_question()` is **True
+   for every single one**, including `send the email`, `email him`, `Jarvis, send the email` and
+   `please send the email`. Nothing is dropped there. The real cause was somewhere else entirely
+   and is far more interesting (below).
+2. **A5's premise — "preflight spawns a server.py without `-u`" — is also wrong.** Preflight
+   spawns no server at all; it *refuses* to run without one (`preflight.py:367`). The only thing
+   in the repository that launches a server is `capabilities_proof.mjs:135`, and it already does
+   a careful kill-first restart. I had written that attribution last round hedged as "most
+   likely", and it was not true. The underlying hazard is real, so I fixed it at the root
+   instead.
+
+---
+
+## §38's ACTUAL PROTECTED INTENT (read first, as A2 required)
+
+§38 is **THE TOPIC GUARD, THE LIST PARSER, AND VOICE AT FRAME ZERO** — the Director's film
+pipeline, not the viewer. Its PART 3, *voice at frame zero*, is the part karaoke_proof's
+assertions descend from:
+
+> `lead=0.0`. The hook card carries a headline of ≤8 words and **no body**; the sentence lives
+> in the captions, spoken from the first frame … the hook card is for the first time *under* the
+> duplication law rather than exempt from it.
+
+**So §38 protects the duplication law: the sentence is on exactly one surface.** When the voice
+says precisely what the card holds, the card *yields* its paragraph and the caption carries the
+sentence — never both, never neither. In the viewer that becomes `answerYield()`
+([viewer/index.html:12131](viewer/index.html#L12131)) toggling `#answer.yield`, and
+`karaSurface()` ([viewer/index.html:12299](viewer/index.html#L12299)) taking the caption as the
+reveal surface in exactly that case.
+
+That is **why last round's deferral broke it**, and the mechanism is worth stating because it
+dictated A2's design: `karaSurface()` finds the caption by matching the caption's own text
+against the line *word for word*. A caption raised **after** the arm has nothing to build spans
+on, so the reveal declines and §38's case collapses. Raising the text and arming the reveal are
+therefore **one act, in that order, in one place**.
+
+---
+
+# HALF A
+
+## A1 — THE PREDICT CAP
+
+**[server.py:7216](server.py#L7216)** — `OLLAMA_FALLBACK_PREDICT` 48 → 512, with the measurement
+in the comment above it.
+
+Verified live: `GET /health` → `"routing": {… "numPredict": 512 …}`.
+
+**And a finding that matters more than the change:** I expected 512 to cost latency, and
+measured it instead of assuming. It costs almost nothing.
+
+| prompt | ttft (prefill) | generation | total |
+|---|---|---|---|
+| 3,851 chars | 8.9 s | **3.2 s** | 12.1 s |
+| 7,568 chars | **64.1 s** | **3.3 s** | 67.4 s |
+
+Generation is a flat ~3.2 s whether the cap is 48 or 512. **All the local latency is prompt
+prefill on a CPU**, and it is superlinear: doubling the prompt took prefill from 8.9 s to 64.1 s.
+So raising the cap removed the mid-clause truncation for free. This also disposes of my own
+worry mid-mandate that A1 had caused the two timeouts in the B session — it had not.
+
+## A2 — §38 AND §39 RECONCILED
+
+The design the mandate specified, implemented as two paths:
+
+- **NORMAL PATH** — the caption is *held*, then raised and armed together at `src.start()`:
+  [viewer/index.html:15272](viewer/index.html#L15272) (`capHoldFlush('the audio clock started',
+  item.id)`), one line before `karaChunk()`. The hold itself is
+  [viewer/index.html:12224](viewer/index.html#L12224) (`capHoldArm`) and
+  [12244](viewer/index.html#L12244) (`capHoldFlush`, which raises the text **then** arms the
+  reveal — that order is the whole fix).
+- **FALLBACK PATH** — the whole line goes up at once, exactly as before A2, via `capHoldFall`
+  ([viewer/index.html:12260](viewer/index.html#L12260)) from four places that can end without
+  audio: a chunk that will not start ([15251](viewer/index.html#L15251)), a queue that drains
+  ([14707](viewer/index.html#L14707)), a cancel ([14758](viewer/index.html#L14758)), and a
+  1,500 ms patience timer for the case nobody anticipated.
+- **The decision** is at [viewer/index.html:14492](viewer/index.html#L14492): hold only when
+  every condition between here and `src.start()` is clear — not muted, voice possible, audio
+  unlocked, piper, piper not down.
+- **Readings** for harnesses at [viewer/index.html:27630](viewer/index.html#L27630):
+  `caption.held / holds / flushes / fallbacks / holdWhy`, with the normal and fallback counters
+  deliberately kept apart — a proof that cannot tell them apart cannot tell a word-by-word
+  reveal from the whole line arriving at once.
+
+### The correction karaoke_proof forced, and I am glad it did
+
+My first cut deferred **both** surfaces and karaoke_proof went to 87/93, reporting *"0 spans for
+115 words"* on three **card**-path assertions. The card never needed to wait: it is not raised by
+`speakLine` at all — `renderAnswer` already put the words on the glass, and §39 has armed on them
+there since it was written. So the deferral now excludes the card path, decided by
+`karaWouldYield()` ([viewer/index.html:12160](viewer/index.html#L12160)) and `karaCardPath()`
+([12173](viewer/index.html#L12173)), which reuse `answerYield()`'s own test rather than restating
+it — two nearly-identical rules is how the yield law and the reveal law drift apart.
+
+**Only the caption path waits, because only the caption has to be raised before it can be a
+surface.** That is the whole of A2 in one sentence, and it is why §39's mechanism is untouched:
+nothing about *how* karArm reveals words changed, only *when* it is armed, and only on the one
+surface that did not exist yet at the old arming moment.
+
+### Proofs, as specified
+
+- **karaoke_proof §38 now tests the FALLBACK path** —
+  [karaoke_proof.mjs:911](karaoke_proof.mjs#L911) (`A2, PATH ONE: NO AUDIO CLOCK AT ALL`): the
+  line is handed to the funnel, the queue is emptied before anything can start, and the proof
+  asserts the card yielded, the caption carries the sentence, the hold *fell back*
+  (`fallbacks === before + 1`), nothing is still held, and the caption reads the **complete**
+  sentence. A deferred caption that could be left waiting for audio that never comes would be an
+  answer the employer never sees — a worse bug than the one A2 fixes, so it is now asserted
+  against.
+- **voice_sync_proof keeps the NORMAL path** —
+  [karaoke_proof.mjs:940](karaoke_proof.mjs#L940) holds the normal-path reveal assertion (waited
+  for rather than read in the same tick), and `voice_sync_proof` measures the gap: **1 ms**,
+  inside the named 250 ms tolerance. **9/9 PASS.**
+
+## A3 — /chat EMAIL REQUESTS: THE REAL ROOT CAUSE
+
+**It is not the funnel. It is Groq dropping the tool tag.**
+
+The mandate's premise was that `substantial_question()` drops these sentences. Measured, it does
+not — it is True for all of them. So I instrumented the actual decision point and ran the
+hands-offer prompt ten times over two send-email sentences:
+
+| engine that served the hands-offer | calls | emitted a correct `[[tool: send_email …]]` tag |
+|---|---|---|
+| **local** (`qwen3:latest`) | 8 | **8 / 8** |
+| **Groq** (`qwen/qwen3.8-27b`) | 2 | **0 / 2** |
+
+The two Groq-served calls are identifiable by latency (0.6 s and 0.4 s against 7–87 s locally)
+and by the eight `FALLBACK` lines in the trace. One asked for a date it had just been given; the
+other promised to *"draft that note"*. Both then fell through to the compose branch — which
+carries **no manifest** and therefore cannot know the hand exists — and the house said:
+
+> *"Understood, Sir. I do not have a hand for sending email on this machine."*
+
+That is false. `send_email` is in the registry, in the manifest handed to that very call
+(4,754 chars, `send_email` present — measured), and it worked two minutes either side of it.
+
+**This is the whole of "mail is not working", and it explains why it felt random:** a throttled
+Groq falls to the local engine and the mail goes; a healthy Groq answers in half a second and
+denies the hand.
+
+**The fix** — [server.py:9386](server.py#L9386) (`A3: THE SECOND ASK, ON THE OTHER ENGINE`) and
+the helper `hands_offer_locally()` at [server.py:7645](server.py#L7645). A task the registry has
+a hand for gets **one** second ask, on the local engine, before it is allowed to become prose.
+Narrow on purpose: only when `hands_wanted()` already matched, only when `task_intent()` agrees
+it is work, only when the first ask produced **no tag at all** (a model that proposed something
+is never second-guessed), one retry and never two. `substantial_question()` is **untouched** —
+it gates the block from above and correctly passes every one of these.
+
+It is also cheap: it fired **once** in the whole B session, at **3,641 ms**, and answered.
+
+### Verified end to end, with a real message id
+
+Three consecutive live `/chat` attempts at the sentence that used to fail, all reaching a card:
+
+```
+HTTP 200  kind: tool  tool: send_email  id: 6ac56f28-1
+HTTP 200  kind: tool  tool: send_email  id: 6ac56f55-2
+HTTP 200  kind: tool  tool: send_email  id: 6ac56f5c-3
+  "I have an email ready for stroyteller0007@gmail.com, sir, under the subject
+   'Meeting Time'. The card carries what it says. Shall I send it?"
+```
+
+`POST /execute` on the third:
+
+```json
+{"ok": true, "ran": "send_email", "door": "button", "exitCode": 0, "tookS": 0.82,
+ "answer": "Email sent to stroyteller0007@gmail.com. Google's id for it is 1a1133b49fbf6240."}
+```
+
+**Real message id `1a1133b49fbf6240`.** `state_report(probe=True)` beforehand:
+`state: connected`, `bearerChars: 254`, `gmail: "accepted (47095 message(s)…)"`, `coherent: true`.
+
+An honest note on the refusal I met on the way: one attempt returned HTTP 400 with *"I should
+need the subject before I could do that, sir, so I have set the request aside."* That is the
+parameter validator doing its job, not a fault — and it is already a world better than a false
+denial.
+
+## A4 — THE SILENT DISCONNECT
+
+**[server.py:11578](server.py#L11578)** — the disconnect already returned a spoken confirmation;
+what it never did was name the **consequence**, which is exactly why the button press and "mail
+is broken again" were never connected. All three branches now do:
+
+> *"The token is deleted, sir, and Google has been told to forget it as well. **Mail and calendar
+> will not work until you connect again from this same row.**"*
+
+The route, the payload and the page are untouched — this is the sentence the Command Panel
+already speaks, so it reuses the house's existing pattern for announcing a state change exactly
+as the mandate asked. The "nothing to disconnect" branch now also says *why* ("this machine was
+not connected to Google in the first place") instead of a bare dismissal.
+
+**Deliberately not exercised live.** Triggering a real disconnect would delete the working token
+I had just proved sends mail, and the mandate opens by saying Google is connected and working.
+A4 is verified by reading the path, not by breaking it. Say the word and I will press it.
+
+## A5 — THE STRAY SERVER
+
+Fixed at the root rather than in preflight, **because preflight is not what spawns it** (see the
+corrected premise above). The real mechanism is in the standard library: `ThreadingHTTPServer`
+inherits `allow_reuse_address = 1`, and on Windows `SO_REUSEADDR` lets a second socket bind a
+port the first is still holding. The second process starts with **no error**, prints its whole
+banner, opens the vector store — and the **old** process goes on answering. The symptom is code
+you can prove is loaded serving answers from before your edit.
+
+**[server.py:12033](server.py#L12033)** `_port_already_answering()` and
+**[server.py:12072](server.py#L12072)** the guard in `main()`.
+
+**Which approach, and why: it FAILS LOUDLY rather than killing.** The process already on the
+port may be the one the employer is using, and taking it out from under him to start a copy is
+the worse of the two failures. The probe is an **active connect**, not a second bind — a bind is
+precisely the thing that wrongly succeeds here — and it reads `/focus/diag` for the pid so the
+message carries the number you need next.
+
+Verified live, twice, against the real running server:
+
+```
+server.py: 127.0.0.1:4700 is ALREADY being served by pid 36760.
+  This process would have started anyway - Windows allows the second bind -
+  and the OLD server would have gone on answering, so anything you tested
+  next would have been the old code. Refusing to be the second server.
+  Stop the one that is there first:  taskkill //PID 36760 //T //F
+```
+
+Exit 1, and the running server was not disturbed. **And the hazard was live while I worked:** a
+kill sweep mid-mandate found **two** servers (36220 and 25768) already sharing 4700.
+
+---
+
+# HALF B — WHY RESPONSES AND VOICE FELT INCONSISTENT
+
+## B1 — the instrumented session (18 real turns, 7 spoken)
+
+Instrumentation added at **[server.py:4814](server.py#L4814)** (`turn_engine` grew `ms` and
+`groq_ms`) and **[server.py:4858](server.py#L4858)** (why they are separate from `triggerMs`,
+which measures the *handover* and is tens of milliseconds, not what anybody waits for). Read
+back from `/health → engines.log`. The engine is **read from the ledger, never inferred from the
+latency** — inferring "slow means local" is the guess this instrumentation exists to replace.
+
+Session: `_runs/sweep48/b1_session.py`, table `_runs/sweep48/b1_table.json`, log
+`_runs/sweep48/b1_session.log`.
+
+| # | mode | engine | turn | groq | voice | words | question |
+|---|---|---|---|---|---|---|---|
+| 1 | spoken | local | 3.17s | 108ms | ok | 14 | good evening |
+| 2 | text | no model call | 0.00s | - | - | 172 | what can you do |
+| 3 | spoken | local | 91.69s | 144ms | ok | 14 | what is the capital of japan |
+| 4 | text | local | 213.38s | 192ms | - | 100 | summarise what you know about b2b ai agents |
+| 5 | spoken | local | 180.20s **502** | 129ms | - | 0 | tell me about my notes on pricing |
+| 6 | text | no model call | 0.05s | - | - | 14 | what time is it in sydney |
+| 7 | spoken | local | 84.78s | 127ms | ok | 43 | explain what a vector store is in two sentences |
+| 8 | text | local | 124.49s | 118ms | - | 14 | how many notes do you have |
+| 9 | spoken | local | 72.75s | 114ms | ok | 14 | what did i ask you a moment ago |
+| 10 | text | local | 220.04s | 132ms | - | 14 | draft a short thank you note to a client |
+| 11 | spoken | local | 222.15s | 101ms | ok | 119 | give me three ideas for a newsletter |
+| 12 | text | local | 129.90s | 137ms | - | 72 | what is useeffect in react |
+| 13 | spoken | local | 252.03s **502** | 266ms | - | 0 | remind me what you can do with email |
+| 14 | text | **groq** | 0.36s | 261ms | - | 1 | translate good morning into french |
+| 15 | spoken | local | 28.95s | 100ms | ok | 14 | what is two hundred and forty divided by six |
+| 16 | text | no model call | 0.03s | - | - | 14 | who am i |
+| 17 | spoken | local | 17.21s | 76ms | ok | 26 | describe the weather in london in one sentence |
+| 18 | text | local | 103.87s | 106ms | - | 65 | what is the difference between a note and a document |
+
+**Counts.** 18 turns, 16 answered 200. Served by **local 12**, by **Groq 1**, by **no model call
+at all 3**. Local wall: min 3.17 s, **median 103.87 s**, max 222.15 s. Groq attempted on **15**
+turns, failing in **76–266 ms**, every one a 429. Ledger counters: `chat: 17, refused: 0,
+fallback: 13`. Spoken turns **7, voice complete 7, cut 0**.
+
+## B2 — the verdicts, plainly
+
+### Response time: **this is Groq throttling under heavy testing load, no code bug.**
+
+Saying it in the mandate's own words because it is true in the mandate's own words. The evidence:
+
+- **Groq was attempted on every single turn and never skipped.** `refused: 0`, and 15 recorded
+  attempts each failing in 76–266 ms with a 429. **There is no cooldown or backoff anywhere in
+  the routing** — `groq_ready()` refuses only when there is no key — so no turn was ever
+  "skipped entirely because of a cooldown". That possibility the mandate asked about does not
+  exist in this code.
+- **No flapping, no silent retry, no double call.** One Groq attempt and at most one local call
+  per turn, visible as one ledger row per turn. The only retry in the system is A3's second ask,
+  which fired **once** in 18 turns, is logged by name, and cost 3.6 s.
+- **The felt inconsistency is three populations, not one confused brain:**
+  | what answered | turns | latency |
+  |---|---|---|
+  | the house's own routes, no model at all | 3 | **0.00–0.05 s** |
+  | Groq | 1 | **0.36 s** |
+  | the local engine | 12 | **3–222 s** |
+
+  "Sometimes a very good fast response, sometimes very slow" is exactly this. Which population a
+  question lands in is decided by whether Groq's daily bucket has anything left, which is not a
+  property of the question.
+- **The magnitude of "slow" is CPU prompt prefill**, measured in A1 above: 64.1 s of prefill for
+  a 7,568-char prompt against 3.3 s of generation. `ollama_warm()` is working as designed — it
+  keeps the model *resident* (`keep_alive: -1`, and the trace confirms *"qwen3:latest resident
+  … keep_alive forever"*) — but residency cannot pre-compute the prefill for a prompt it has not
+  seen, and the retrieved notes differ every turn. **So `ollama_warm()` is not broken; it was
+  never the thing that could fix this.**
+
+### Voice stability: **fully explained by A1 + A2. Confirmed by the table, not asserted.**
+
+**7 of 7 spoken turns completed with every chunk synthesised. Zero cuts — on either engine.**
+`voice cut while on groq: 0`, `voice cut while on local: 0`.
+
+And the table shows *why* the old reports were about the voice without being the voice's fault:
+every spoken turn in this session was served by the **local** engine, which is exactly where the
+48-token cap was truncating answers mid-clause. The voice was always faithfully speaking a
+sentence that had already been cut. A1 removed the cut; A2 removed the text-before-audio gap
+(1 ms, asserted). Nothing in this session shows voice instability on a Groq turn, so there is no
+separate still-open voice problem.
+
+One caveat stated rather than buried: only **one** turn was served by Groq, so "no instability on
+Groq turns" rests on a single Groq-served turn plus the 8/9 and 9/9 page-level proofs. If the
+boss sees a cut-off spoken answer while Groq is healthy, that would be new evidence and I would
+want to see it.
+
+### B3 — is there a real bug beyond A1–A5? **One, and it is not a code fault.**
+
+Turns 5 and 13 returned **HTTP 502 with no answer**: `ms` 180,009.5 and 180,026.5 — the
+`OLLAMA_CHAT_TIMEOUT_S = 180.0` ceiling to the millisecond, with the ledger reason reading
+`"Local engine timed out"` on both. Both were `kind: notes`, i.e. the largest prompts of the
+session, and per A1's measurement the 180 s went on **prefill**, not generation.
+
+So the employer *is* told ("Local engine timed out" reaches him as the error), and the engine did
+what it says on the tin. **I have made no fix for it**, and deliberately:
+
+- It is not caused by A1 — generation is 3.3 s either way.
+- The real lever is `OLLAMA_PROMPT_BUDGET_CHARS = 24000`, which is far too generous for a machine
+  that spends 64 s prefilling 7,568 chars. Lowering it would keep these turns inside the timeout.
+- But that budget is **§41's trimming law**, and changing what gets evicted from a prompt is a
+  change to §41, not to this mandate. PART 0 says stop and report. This is the report.
+
+---
+
+## PROOF COUNTS
+
+| suite | before | after | verdict |
+|---|---|---|---|
+| `voice_sync_proof` | 9/9 | **9/9 PASS** | normal path, gap **1 ms** (tolerance 250 ms) |
+| `karaoke_proof` | 91/92 (band 89–91) | **89/93** | denominator +1; all caption/reveal green |
+| `fallback_proof` | 15/15 | **15/15 PASS** | unchanged |
+| `preflight.py` | 37 pass, 2 fail, 4 warn | see below | |
+
+**karaoke_proof's four reds are all the glass/sky luminance assertions** — *"594 of 594 columns
+flat"*, i.e. the panel's backdrop blur is not compositing at all, so no sky shows through. Stable
+across two consecutive runs. They are screenshot geometry and have nothing to do with text: my
+`viewer/index.html` diff is 137 insertions over the caption and speak paths
+(12084–15272) plus the accessors at 27630, and touches no CSS, no backdrop, no sky — verified by
+grepping the diff. Every §38 and §39 assertion is green, including the three new ones.
+
+`voice_sync_proof` needed one proof-side fix: its stale-build guard searched the served HTML for
+`captionPending`, last round's variable name. Retargeted to `capHoldFlush`. That is the guard
+doing its job — it caught that the page was not the build it expected.
+
+---
+
+## LEFT OPEN
+
+1. **`OLLAMA_PROMPT_BUDGET_CHARS = 24000` is too large for this machine.** Two turns in eighteen
+   (11%) returned nothing after 180 s of prefill. The fix is a smaller local prompt budget, which
+   is a §41 change and therefore yours to authorise.
+2. **The local engine is the wrong shape for this box, and that is the real cost centre.** 64 s of
+   prefill for 7.6 k chars on CPU. A smaller fallback model, or a GPU, would do more for the
+   "brain feels confused" complaint than anything in this mandate. Reported, not acted on.
+3. **A4 is unexercised by choice** — pressing disconnect would delete the working token.
+4. **Groq's tool-tag reliability is now papered over, not cured.** A3's second ask makes the
+   outcome correct, at the cost of a local round trip whenever Groq declines. If Groq starts
+   declining on *every* hands turn, every tool turn gets slow rather than wrong. Worth watching
+   the `the second ask` lines in the trace as a rate.
+5. **The karaoke glass reds** are stable rather than oscillating, which is a change from the
+   documented band. Not mine, but no longer flaky either — worth its own look.
+
+---
+
+## PREFLIGHT
+
+```
+37 pass, 4 fail, 2 warn   (43 checks, count unchanged)
+```
+
+**The pass count did not move** — 37 before this mandate and 37 after. The fails moved from
+{13, 20} to {3, 7, 12, 13}, and all four are the saturated Groq daily limit, quoting the log:
+
+| # | check | why it failed |
+|---|---|---|
+| 7 | `/see answers a real JPEG` | `HTTP 502: Groq is rate limiting … (429)` |
+| 12 | `the eyes report posture and nothing else` | `HTTP 502 … (429)` |
+| 13 | `the screen watch costs nothing until it thinks` | `… did not earn a nudge: HTTP 502 … (429)` |
+| 3 | `/chat answers a real question, with nodes` | `the check itself raised TimeoutError` at **120,030 ms** |
+
+7, 12 and 13 are the documented throttle set, and they are the three **vision** checks: §41 gives
+the eyes no local engine by design, so a tired Groq is a flat refusal for them rather than a
+fallback. Check 3 is the same throttle one step removed — Groq 429s, the turn falls to the local
+engine, and the local engine is slower than preflight's own 120 s patience. **Half B measured
+exactly that**: local median 103.87 s, max 222.15 s. Check 20, which was failing before, passed
+this time (41.4 s).
+
+None of the four touches anything this mandate changed: not the caption paths, not the port
+guard, not the hands offer, and not generation time — which A1's own measurement puts at a flat
+3.3 s whether the cap is 48 or 512.

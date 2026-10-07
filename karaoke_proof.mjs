@@ -908,18 +908,54 @@ async function main() {
   /* ================================================================== */
   /* 4. THE CAPTION SURFACE - the commonest answer in the house           */
   /* ================================================================== */
-  const shortArm = await page.json(
+  /* ---- A2, PATH ONE: NO AUDIO CLOCK AT ALL ----
+     §38's law is about WHICH SURFACE holds the sentence, and it has to hold whether or not a
+     sample is ever decoded. This is the path where none is: the line is handed to the funnel
+     and the queue is then emptied before anything can start, which is what a cancel, a chunk
+     that will not start and a synthesis that fails all come down to. The caption must be up
+     with the WHOLE sentence on it, at once, exactly as it was before A2 - there is no clock
+     to dole it out word by word and pretending otherwise would hide the answer. */
+  const fbBefore = await page.json('__galaxy.caption.fallbacks');
+  const shortFall = await page.json(
     '(function(){var t=' + JSON.stringify(SHORT_ANSWER) + ';' +
     ' __galaxy.page.render("is the importer caught up", t);' +
     ' __galaxy.speech.speakLine(__galaxy.camera.spokenForm(t));' +
-    ' return {where:__galaxy.kara.where, why:__galaxy.kara.why, words:__galaxy.kara.words,' +
-    '  seen:__galaxy.kara.seen, yielded:__galaxy.caption.yielded,' +
-    '  carries:__galaxy.caption.carries, h0:__galaxy.kara.h0};})()');
-  ok(shortArm.yielded === true && shortArm.carries.card === '',
-     '§38 STILL HOLDS: the voice says exactly what the card holds, so the card yields and the ' +
-     'caption carries the sentence',
-     JSON.stringify({ yielded: shortArm.yielded, carries: shortArm.carries }));
-  ok(shortArm.where === 'caption' && shortArm.seen.spans === shortArm.words &&
+    ' __galaxy.speech.cancel("the fallback path under test");' +
+    ' var n=function(s){return String(s||"").replace(/\\s+/g," ").trim();};' +
+    ' return {held:__galaxy.caption.held, fallbacks:__galaxy.caption.fallbacks,' +
+    '  holdWhy:__galaxy.caption.holdWhy, yielded:__galaxy.caption.yielded,' +
+    '  carries:__galaxy.caption.carries, whole:n(__galaxy.caption.text)===n(t)};})()');
+  ok(shortFall.yielded === true && shortFall.carries.card === '',
+     '§38 STILL HOLDS ON THE FALLBACK PATH: the voice says exactly what the card holds, so ' +
+     'the card yields and the caption carries the sentence - and it holds with no audio ' +
+     'clock in the room, which is the case A2 had to leave standing',
+     JSON.stringify({ yielded: shortFall.yielded, carries: shortFall.carries }));
+  ok(shortFall.fallbacks === fbBefore + 1 && shortFall.held === false && shortFall.whole,
+     'AND THE WHOLE LINE IS UP AT ONCE: the hold fell back (' + shortFall.holdWhy + '), ' +
+     'nothing is still being held, and the caption reads the complete sentence. A deferred ' +
+     'caption that could be left waiting for audio that never comes would be an answer the ' +
+     'employer never sees, which is a worse bug than the one A2 set out to fix',
+     JSON.stringify(shortFall));
+
+  /* ---- A2, PATH TWO: THE AUDIO CLOCK STARTS ----
+     The normal path, and the one that changed. The caption and the reveal now BOTH begin at
+     src.start() rather than at speakLine(), so this is waited for rather than read in the
+     same tick - reading it synchronously is reading the moment before the feature runs. The
+     claim is unchanged from §39: the reveal takes the caption as its surface and every word of
+     the sentence is a span with a rectangle. */
+  await page.evaluate('__galaxy.speech.cancel("resetting for the normal path")');
+  await sleep(250);
+  await page.evaluate(
+    '(function(){var t=' + JSON.stringify(SHORT_ANSWER) + ';' +
+    ' __galaxy.page.render("is the importer caught up", t);' +
+    ' __galaxy.speech.speakLine(__galaxy.camera.spokenForm(t));})()');
+  const armedOk = await waitFor(page, '__galaxy.kara.where === "caption"', 30000);
+  const shortArm = await page.json(
+    '(function(){return {where:__galaxy.kara.where, why:__galaxy.kara.why,' +
+    '  words:__galaxy.kara.words, seen:__galaxy.kara.seen,' +
+    '  yielded:__galaxy.caption.yielded, carries:__galaxy.caption.carries,' +
+    '  flushes:__galaxy.caption.flushes, h0:__galaxy.kara.h0};})()');
+  ok(!!armedOk && shortArm.where === 'caption' && shortArm.seen.spans === shortArm.words &&
      shortArm.seen.onGlass === shortArm.seen.spans,
      'AND THE REVEAL FOLLOWED THE SENTENCE ONTO THE CAPTION: ' + shortArm.seen.spans +
      ' spans, all of them with a rectangle. Wired to #a-text alone this feature would have ' +

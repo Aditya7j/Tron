@@ -484,7 +484,20 @@ def access():
         if reason == "invalid_grant":
             return "", "reconnect", ("Google will not renew the connection - it has been "
                                      "revoked or has expired, and must be reconnected")
-        return "", "connected", err or "the token could not be refreshed (HTTP %d)" % status_code
+        # "offline", NOT "connected", AND THE OLD WORD WAS A CONTRADICTION. This branch returns
+        # an EMPTY bearer - the refresh did not happen - while calling the state "connected",
+        # so anything reading the state rather than the bearer was told the opposite of the
+        # truth. Every caller in this repository happens to survive it, because each one tests
+        # `if why:` after the two named states and fails on the sentence; but a state field
+        # exists so that a caller does not have to parse English, and one that lies about the
+        # single most important case is worse than not having it.
+        # The word is new and that is safe by construction: the four callers test for "absent",
+        # "no-client" and "reconnect" and then fall through to the sentence, and the Command
+        # Panel's row already has an `else` that reads "I cannot read the connection just now
+        # ... the server declining to answer rather than a verdict about Google" - which is
+        # precisely what a failed refresh that is not invalid_grant means.
+        return "", "offline", err or ("the token could not be refreshed (HTTP %d)"
+                                      % status_code)
     fresh = str(parsed.get("access_token") or "")
     if not fresh:
         return "", "reconnect", "Google renewed nothing, so the connection must be remade"
@@ -498,6 +511,65 @@ def access():
         data["email"] = _who(fresh)
     save_token(data)
     return fresh, "connected", ""
+
+
+def state_report(probe=False):
+    """The connection in plain words, for a human staring at a send that will not go.
+
+    WHY A SEPARATE FUNCTION AND NOT A LONGER access(). access() is called on every single
+    request and must stay cheap and silent; this is the thing you run once, by hand or from a
+    proof, when the question is "why". It reports the five conditions the state field cannot
+    distinguish on its own, and the last of them needs a round trip:
+
+        no-client   there is no secrets/google_client.json at all
+        absent      no token file, or one with no refresh token - never connected
+        reconnect   Google refused the refresh with invalid_grant: revoked or expired
+        offline     the refresh failed for some other reason - network, or Google being 5xx
+        connected   a bearer was issued ... which is NOT the same as Gmail accepting it
+
+    THE LAST DISTINCTION IS THE ONE THAT COSTS A REQUEST AND IS THE ONE WORTH HAVING. A grant
+    can carry gmail.send and still be refused by Gmail - wrong account, disabled API, a scope
+    the consent screen did not actually include - and from inside access() that is invisible,
+    because access() only ever talks to the token endpoint. `probe=True` asks Gmail itself.
+
+    IT PRINTS NO CREDENTIAL. The bearer is reported as a length, the address as a sha256
+    prefix, and the refresh token as a boolean - the house's standing law, in the one function
+    whose whole job is to talk about credentials.
+    """
+    out = {"state": "", "why": "", "clientFile": bool(client()),
+           "tokenFile": False, "hasRefresh": False, "scopes": [], "emailSha": "",
+           "expiresInS": None, "bearerChars": 0, "gmail": "not probed"}
+    data = token() or {}
+    out["tokenFile"] = bool(data)
+    out["hasRefresh"] = bool(data.get("refresh_token"))
+    out["scopes"] = [s.rsplit("/", 1)[-1] for s in str(data.get("scope") or "").split()]
+    email = str(data.get("email") or "")
+    out["emailSha"] = hashlib.sha256(email.encode("utf-8")).hexdigest()[:12] if email else ""
+    # None WHEN THERE IS NO TOKEN, not a number. With no file at all the old arithmetic
+    # subtracted the clock from zero and reported expiresInS -1791309305.6, which is a
+    # fifty-seven-year-old token and reads like a parsing bug in a tool whose whole job is to
+    # be believed. An absent token has no expiry; saying so is the honest answer.
+    if data.get("expires_at") is None:
+        out["expiresInS"] = None
+    else:
+        try:
+            out["expiresInS"] = round(float(data.get("expires_at") or 0) - _now(), 1)
+        except (TypeError, ValueError):
+            out["expiresInS"] = None
+    bearer, state, why = access()
+    out["state"], out["why"] = state, why
+    out["bearerChars"] = len(str(bearer or ""))
+    # THE CONTRADICTION THIS FUNCTION EXISTS TO MAKE VISIBLE, asserted rather than described:
+    # a state of "connected" with no bearer is impossible, and used to be reachable.
+    out["coherent"] = not (state == "connected" and not bearer)
+    if probe and bearer:
+        status_code, parsed, err = call("GET", GMAIL_BASE + "/users/me/profile")
+        if err or status_code >= 400:
+            out["gmail"] = "rejected: %s" % (err or "HTTP %d" % status_code)[:160]
+        else:
+            out["gmail"] = "accepted (%d message(s) in the mailbox it can see)" % int(
+                (parsed or {}).get("messagesTotal") or 0)
+    return out
 
 
 def call(method, url, body=None):

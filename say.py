@@ -32,6 +32,7 @@ here knows the name of any particular voice.
 
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 from tools import _proc
@@ -206,6 +207,18 @@ def synthesise(text, model=DEFAULT_MODEL):
     line = str(text or "").strip()
     if not line:
         return None, "there was no text to speak.", ""
+    # NOTHING SPEAKABLE IS A SENTENCE, NOT A CRASH - and this is the root of a symptom the
+    # boss reported as "audio cuts off mid-sentence, only half of it is heard".
+    # MEASURED: say.synthesise("...") returns `piper exited 1: wave.Error: # channels not
+    # specified`. Piper emits no frames for a line with no speakable content, and its own wave
+    # writer then fails with an error about channels that says nothing about the cause. The
+    # page treats a failed chunk as one to SKIP and advance past - so a sentence split into
+    # three chunks, one of which normalised down to punctuation, is heard with a hole in it.
+    # Six of those are in this machine's own trace.
+    # So the unspeakable chunk is named here, before piper is ever started: the caller still
+    # skips it, but it skips a thing this house understood rather than an error it did not.
+    if not re.search(r"[0-9A-Za-z]", line):
+        return None, "there is nothing speakable in that line.", ""
     if len(line) > MAX_CHARS:
         return None, ("the line is %d characters and the limit is %d."
                       % (len(line), MAX_CHARS)), ""
