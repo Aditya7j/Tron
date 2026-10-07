@@ -91,44 +91,13 @@ const FPS_FLOOR = 55;
    selected world sits at EMISSIVE_HOT because that is the planetary way of being selected:
    lit from within rather than painted white. */
 const PLANET_EMISSIVE_HOT = 0.34;
-/* ---- §32 PART 1: THE CORE'S POINT COUNT, RESTATED HERE RATHER THAN READ BACK ----
-   The presence's count is the sum of four written constants, and the whole value of asserting
-   it is that the number lives somewhere the page cannot move. So the arithmetic is duplicated
-   on purpose - PRES.CORE_FIL x CORE_FIL_PTS + CORE_BANDS x CORE_BAND_PTS + CORE_HEART_PTS +
-   4 corners x 2 legs x CORE_RET_PTS - and if a future edit changes a constant this goes red
-   and says which way. Reading __galaxy for the expected value would make the assertion
-   "the page agrees with itself", which is not a proof of anything.
-   AND THE THINNED FORM, because the compact tier is a real tier and the core goes through it.
-   presN is `density >= 1 ? n : max(8, round(n * density))`, and each of the four groups has
-   its own floor on top of that - 24 / 120 / 120 / 14 - so the thinned count is NOT the full
-   count times the density and a harness that assumed it was would go red at the compact tier
-   for an arithmetic reason. The floors are mirrored here in the same order as the fill. */
-/* §33 ADDS ONE TERM TO THIS SUM AND IT IS THE ONLY DO-NOT-ALTER NUMBER THE ROUND MOVES.
-   The mandate's PART 1 asks for "two additional precessing orbital bands ... point-built, within
-   the declared presence cap", and a count cannot be extended without the number that pins it
-   being extended too - so CORE_ORBITS x CORE_ORBIT_PTS joins the sum and CORE_FULL goes from
-   12,740 to 13,740. The assertion keeps its name, its shape and its failure mode; only the
-   arithmetic moved, and the old value is written here so a reader can see which way.
-   WHY THIS IS NOT A LOOSENING. The alternative was to assert "at least 12,740", which would have
-   been green for a core with the orbits silently missing - the exact failure this duplicated
-   arithmetic exists to catch. An exact number that has to be edited in two files when the
-   geometry changes is the point of it: the edit is the review.
-   THE FLOOR IS 140 AND NOT 120, mirrored from presCoreFill's `Math.max(140, presN(...))`. The
-   orbits are the sparsest thing in the core - 500 points on a circumference against the bands'
-   1,500 - so a density that thinned them to the bands' floor would leave two rings of dust, and
-   the fill's floor is correspondingly higher. A harness that assumed one shared floor would go
-   red at the compact tier for an arithmetic reason and nobody would believe the number again. */
-const CORE_FIL = 34, CORE_FIL_PTS = 190, CORE_BANDS = 2, CORE_BAND_PTS = 1500;
-const CORE_HEART_PTS = 2600, CORE_RET_PTS = 85;
-const CORE_ORBITS = 2, CORE_ORBIT_PTS = 500;
-const coreCount = (d) => {
-  const n = (v, floor) => (d >= 1 ? v : Math.max(floor, Math.max(8, Math.round(v * d))));
-  return CORE_FIL * n(CORE_FIL_PTS, 24) + CORE_BANDS * n(CORE_BAND_PTS, 120) +
-         n(CORE_HEART_PTS, 120) + 4 * 2 * n(CORE_RET_PTS, 14) +
-         CORE_ORBITS * n(CORE_ORBIT_PTS, 140);
-};
-/* 6460 + 3000 + 2600 + 680 + 1000 = 13740.  §32 shipped 12740; §33's two orbits are the 1000. */
-const CORE_FULL = coreCount(1);
+/* UI MANDATE II: THE CORE IS GONE, AND SO IS ITS SUM. The dust is one written constant - every
+   point of the allocation, DUST_PTS = 13800 - and presN is `density >= 1 ? n : max(8, round(n *
+   density))` with no per-group floors, because the dust has no groups. Duplicated here for the
+   reason the core's sum was: if the fill's count moves, this goes red and says which way. */
+const DUST_PTS = 13800;
+const dustCount = (d) => (d >= 1 ? DUST_PTS : Math.max(8, Math.round(DUST_PTS * d)));
+const DUST_FULL = dustCount(1);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /* Two seconds of digital zero, 16-bit PCM mono, which is the only shape Chrome's fake
@@ -1976,70 +1945,47 @@ async function main() {
      'the Layout Governor gave it a well ' + pr0.well.side + 'px on a side at dpr ' +
      pr0.well.dpr + ', and the canvas is lit rather than stood down',
      JSON.stringify(pr0.well));
-  note('the audition: baseline ' + pr0.baseline + 'fps with the ring, trial ' + pr0.trial +
-       'fps with the core, verdict "' + pr0.probation + '"' +
+  note('the audition: baseline ' + pr0.baseline + 'fps drawn cheap, trial ' + pr0.trial +
+       'fps with the dust whole, verdict "' + pr0.probation + '"' +
        (pr0.degraded ? ' - DEGRADED: ' + pr0.degraded : ''));
-  /* THE AUDITION EITHER KEPT THE CORE OR SAID WHY IT DID NOT, and both of those are correct
-     behaviour - so the assertion is on the pair, not on the outcome. What would be wrong is
-     a silent fall back to the ring: the spec says it degrades "and says so once in the
-     trace", and `said` plus the note is that sentence. */
-  ok(pr0.mode === 'core' || (pr0.degraded && pr0.said === true && pr0.notes.length > 0),
-     pr0.mode === 'core'
-       ? 'AND THE AUDITION KEPT THE CORE: ' + pr0.trial + 'fps with ' + pr0.points +
-         ' points on the glass, against a ' + pr0.baseline + 'fps ring'
-       : 'the core could not hold the floor on this GPU and it SAID SO ONCE: "' +
-         pr0.notes[0] + '" - degraded to ' + pr0.mode + ', which is the law working',
+  /* THE AUDITION EITHER KEPT THE DUST OR SAID WHY IT DID NOT, and both are correct behaviour -
+     so the assertion is on the pair, not on the outcome. UI MANDATE II: the rich mode is the
+     DUST now and the fallback is the dust drawn CHEAP (PRES.CHEAP_DENSITY of its points), not a
+     ring - the ring is gone. Replaces "AND THE AUDITION KEPT THE CORE". */
+  ok(pr0.mode === 'dust' || (pr0.degraded && pr0.said === true && pr0.notes.length > 0),
+     pr0.mode === 'dust' && !pr0.degraded
+       ? 'AND THE AUDITION KEPT THE DUST: ' + pr0.trial + 'fps with ' + pr0.points +
+         ' points on the glass, against ' + pr0.baseline + 'fps drawn cheap'
+       : 'the dust could not hold the floor on this GPU and it SAID SO ONCE: "' +
+         pr0.notes[0] + '" - drawn cheap, which is the law working',
      JSON.stringify({ mode: pr0.mode, probation: pr0.probation, baseline: pr0.baseline,
                       trial: pr0.trial, degraded: pr0.degraded, notes: pr0.notes }));
-  /* CORE IS WHAT THE FLOOR IS MEASURED AGAINST, so if the audition stood it down it is put
-     back by hand - the same call the Command Panel's row makes, which is the only caller
-     allowed to clear a refusal. A harness that measured the ring here would be reporting a
-     frame rate for a feature nobody asked about. */
-  if (pr0.mode !== 'core') {
-    note('putting CORE back by hand for the measurement, exactly as the P row does…');
-    await page.evaluate('__galaxy.presence.set("core")');
+  /* THE PRESENCE IS PUT ON THE GLASS FOR EVERYTHING BELOW. UI mandate II PART 4: at rest the main
+     pane shows the galaxy and the presence comes in when the voice does. "The deck holds its
+     floor with the presence on the glass" is a claim about the presence BEING on the glass, so
+     the stage is turned to it through stageSet() - the door the ear uses - and handed back at
+     the end of the section. */
+  await page.evaluate('__galaxy.stage.set("presence", "deck_proof")');
+  await sleep(1200);
+  if (pr0.mode !== 'dust' || pr0.degraded) {
+    note('putting the DUST back by hand for the measurement, exactly as the P row does…');
+    await page.evaluate('__galaxy.presence.set("dust")');
     await sleep(1200);
   }
   const core0 = await page.json('({mode: __galaxy.presence.mode,' +
     ' points: __galaxy.presence.points, capacity: __galaxy.presence.capacity,' +
     ' objects: __galaxy.presence.objects, materials: __galaxy.presence.materials,' +
     ' shader: __galaxy.presence.shader, switches: __galaxy.presence.switches,' +
-    ' frames: __galaxy.presence.frames})');
-  ok(core0.mode === 'core',
-     'CORE MODE IS LIVE for the measurement below', JSON.stringify(core0));
-  /* THE BAND MOVED WITH §27 PART 3, AND THE CEILING DID NOT. The face was 8-12k when the well
-     was a 300px square; PART 3 grows it to 420px, which is 1.96x the glass, and a point count
-     held still would have thinned the cloud by half at the exact moment the head became the
-     dominant anchor. PRES.CAP is 13800 - see the coverage arithmetic there for why 1.15x the
-     count and 1.96x the sprite area was chosen over the 23,500 points that holding per-pixel
-     density outright would have cost. The mandate's own ceiling of 14000 is untouched and is
-     still asserted below; this band is the SPEC's band, and the two are different promises: one
-     is "not more than the machine was sized for", the other is "the presence is a volume and
-     not a handful of dots".
-     The lower bound stays at 8000 deliberately: it is the number below which the cloud stops
-     reading as a volume, and the compact tier thins by DENSITY rather than by count, so no tier
-     is entitled to fall through it.
-     §32 PART 1: THE BAND IS THE SAME BAND AND THE CORE IS INSIDE IT, which is the point of
-     leaving it alone. What is ADDED is the core's exact figure, because unlike the face - whose
-     shell is sized as "the cap minus the features", so it fills PRES.CAP exactly - the core's
-     count is the sum of four written constants and is therefore a number that can be asserted
-     rather than a number that is whatever is left over:
-        34 threads x 190  +  2 bands x 1500  +  2600 heart  +  4 brackets x 2 legs x 85
-                           +  2 ORBITS x 500        <- the one term §33 added
-          = 6460 + 3000 + 2600 + 680 + 1000 = 13,740, inside the 13,800 allocation with 60 to
-          spare. §32 shipped 12,740 and the number is printed here beside the new one so that
-          "the count went up by exactly the two rings the mandate asked for" is checkable by
-          subtraction rather than by trust. SIXTY POINTS OF HEADROOM is tight on purpose and it
-          is named in §33's report: the honest place to take points from next is CORE_FIL_PTS,
-          where 190 per thread is already past the density the weave needs.
-     FAILURE MODE IF THIS LINE IS EVER LOOSENED BACK TO THE BAND ALONE: a fill that quietly
-     drops a band, or doubles a bracket, lands anywhere in 8,000-13,800 and nothing goes red. */
-  ok(core0.points === CORE_FULL && core0.points <= core0.capacity,
-     'and it is a core assembled from EXACTLY ' + core0.points.toLocaleString() + ' POINTS - ' +
-     '34x190 filament + 2x1500 band + 2600 heart + 8x85 reticle + 2x500 ORBIT = ' + CORE_FULL +
-     ', inside the ' + core0.capacity + '-point buffer allocated once, with ' +
-     (core0.capacity - core0.points) + ' to spare',
-     JSON.stringify({ points: core0.points, want: CORE_FULL, cap: core0.capacity }));
+    ' frames: __galaxy.presence.frames, stage: __galaxy.stage.now})');
+  /* Replaces "CORE MODE IS LIVE for the measurement below". */
+  ok(core0.mode === 'dust' && core0.stage === 'presence',
+     'DUST MODE IS LIVE AND ON THE STAGE for the measurement below', JSON.stringify(core0));
+  /* Replaces "a core assembled from EXACTLY 13,740 POINTS". The dust is the whole allocation, by
+     one written constant, so the exact figure is DUST_FULL and the spare is zero by design. */
+  ok(core0.points === DUST_FULL && core0.points <= core0.capacity,
+     'and it is a dust cloud of EXACTLY ' + core0.points.toLocaleString() + ' POINTS - the ' +
+     'whole ' + core0.capacity + '-point buffer allocated once, filled by one constant (' +
+     DUST_PTS + ')', JSON.stringify({ points: core0.points, want: DUST_FULL, cap: core0.capacity }));
   ok(core0.points >= 8000 && core0.points <= 13800,
      'and inside the 8-13.8k band the spec names for a presence that has to read as a volume ' +
      '- the same band the face was held to, unmoved',
@@ -2048,8 +1994,6 @@ async function main() {
      'ONE Points OBJECT, ONE SHADER MATERIAL, counted off the scene graph: ' +
      core0.objects + ' object, ' + core0.materials + ' material, and it is a ShaderMaterial ' +
      '- light rather than a textured mesh', JSON.stringify(core0));
-  /* AND NOW THE FLOOR, WITH THE CORE ON IT. Same recorder as section 2, same units, so the
-     two numbers are comparable: the cost of the hologram is the difference between them. */
   await page.evaluate(`(function(){
     window.__fps2 = { deltas: [], run: true };
     var last = performance.now();
@@ -2061,7 +2005,7 @@ async function main() {
     })(last);
     return 'armed';
   })()`);
-  note('recording ' + (IDLE_MS / 1000) + 's of the idle sky WITH THE CORE on the glass…');
+  note('recording ' + (IDLE_MS / 1000) + 's of the sky WITH THE DUST on the glass…');
   await sleep(IDLE_MS);
   await page.evaluate('window.__fps2.run = false');
   const fd = (await page.json('window.__fps2.deltas')) || [];
@@ -2075,15 +2019,15 @@ async function main() {
     ' points: __galaxy.presence.points, objects: __galaxy.presence.objects,' +
     ' degraded: __galaxy.presence.degraded, level: __galaxy.presence.level,' +
     ' from: __galaxy.presence.from})');
-  note('with CORE live: ' + fd.length + ' frames, mean ' + fmean.toFixed(1) + 'fps, p95 ' +
+  note('with DUST live: ' + fd.length + ' frames, mean ' + fmean.toFixed(1) + 'fps, p95 ' +
        fp95.toFixed(1) + 'ms  ·  the presence rendered ' +
        (core1.frames - core0.frames) + ' of them and calls it ' + core1.fps + 'fps' +
        '  ·  idle sky without it read ' + mean.toFixed(1) + 'fps');
   ok(fmean >= FPS_FLOOR,
-     'THE DECK HOLDS ' + fmean.toFixed(1) + 'fps WITH THE CORE LIVE, above the ' + FPS_FLOOR +
+     'THE DECK HOLDS ' + fmean.toFixed(1) + 'fps WITH THE DUST LIVE, above the ' + FPS_FLOOR +
      'fps floor - ' + core1.points + ' points, a live analyser tap and thirty textured ' +
      'worlds, on ' + gpu,
-     'mean ' + fmean.toFixed(1) + 'fps with core vs ' + mean.toFixed(1) + 'fps without');
+     'mean ' + fmean.toFixed(1) + 'fps with dust vs ' + mean.toFixed(1) + 'fps without');
   ok(fd.length > 100 && Math.abs((core1.frames - core0.frames) - fd.length) < fd.length * 0.35,
      'and IT RIDES THE ORBIT LOOP rather than a second one: the presence drew ' +
      (core1.frames - core0.frames) + ' frames while the page drew ' + fd.length +
@@ -2093,38 +2037,27 @@ async function main() {
      'NO PER-FRAME GEOMETRY REBUILDS: the attributes were written ' + core1.switches +
      ' times for ' + core1.switches + ' mode switches and not once during ' + fd.length +
      ' frames', JSON.stringify({ switches: [core0.switches, core1.switches] }));
-  ok(core1.mode === 'core' && !core1.degraded,
-     'and it was still the CORE at the end of the recording - the sustained guard found ' +
+  /* Replaces "it was still the CORE at the end of the recording". */
+  ok(core1.mode === 'dust' && !core1.degraded,
+     'and it was still the DUST at the end of the recording - the sustained guard found ' +
      'nothing to complain about', JSON.stringify(core1));
-  /* THE MOUTH DOES NOT MOVE WHEN NOTHING IS SPEAKING. The ear was closed at the end of
-     section 2 and nothing has spoken since, so the level is the resting level and the
-     source names itself - a mouth rippling on a timer would read 'rest' with a level. */
   ok(core1.from === 'rest' && core1.level < 0.08,
      'AND THE MOUTH IS AT REST while nothing is speaking: level ' + core1.level +
      ' from "' + core1.from + '" - it is driven by a signal, not by a clock',
      JSON.stringify({ level: core1.level, from: core1.from }));
-  /* THE EYES LAW's negative half, in passing: the camera has never been opened in this run.
-     focus_probe.mjs asserts both halves off the one variable; this is the cheap cross-check
-     that the idle deck is not staring at him. */
   ok(pr0.truth === false && pr0.lid === 0 && pr0.eye < 0.05,
      'AND THE EYES ARE CLOSED: the camera is off, so the seal reads ' + pr0.truth +
      ', the lid is ' + pr0.lid + ' and the geometry has eased to ' + pr0.eye +
      ' - the metaphor does not lie on an idle page',
      JSON.stringify({ truth: pr0.truth, lid: pr0.lid, eye: pr0.eye }));
 
-  /* THE PLATES. One full frame with the core docked, then a close-up of each of the FOUR
-     modes at 2x - the lookbook has to be able to put them side by side.
-     §32 PART 1 ADDED A MODE TO THIS LOOP RATHER THAN SWAPPING ONE OUT. The core goes first
-     because it is what the measurement above left on the glass (so it is the mode that must
-     cost zero attribute writes), and the face stays in the list LAST - which is the proof
-     that PART 1 did not delete it: it still builds, it still fills, and it is still
-     photographed. The switch accounting below counts actual changes rather than a hard-coded
-     two, so adding a mode cannot silently loosen it. */
+  /* THE PLATES: the whole deck with the dust on the stage, then each of the TWO modes at 2x.
+     UI MANDATE II PART 3 removes the ring, the cube and the core; the loop is the two modes that
+     exist. The switch accounting counts actual changes, as before. */
   const wellRect = await page.json('__galaxy.layout.rects.presence');
   await page.shot('deck-presence.png');
-  note('wrote deck-presence.png (the whole deck, with the core docked in its well)');
-  const MODE_PLATES = [['core', 'deck-presence-core.png'], ['ring', 'deck-presence-ring.png'],
-                       ['cube', 'deck-presence-cube.png'], ['face', 'deck-presence-face.png']];
+  note('wrote deck-presence.png (the whole deck, with the dust on the stage)');
+  const MODE_PLATES = [['dust', 'deck-presence-dust.png'], ['face', 'deck-presence-face.png']];
   let modeFails = 0, writeFails = 0, changes = 0;
   const modeSeen = [];
   let wasMode = core1.mode, sw = core1.switches;
@@ -2137,10 +2070,6 @@ async function main() {
       ' fps: __galaxy.presence.fps})');
     modeSeen.push(m + ' ' + s.points + 'pts');
     if (s.mode !== m || s.objects !== 1 || s.materials !== 1 || s.points < 1000) modeFails++;
-    /* ONE ATTRIBUTE WRITE PER ACTUAL CHANGE, and NONE for asking for the mode it is already
-       wearing - the first plate below is CORE, which is what the measurement above left on
-       the glass, so a switch counter that climbed here would be refilling twelve thousand
-       points to arrive where it already was. */
     const want = sw + (m === wasMode ? 0 : 1);
     if (want !== sw) changes++;
     if (s.switches !== want) {
@@ -2151,268 +2080,195 @@ async function main() {
     sw = s.switches; wasMode = s.mode;
     if (wellRect) await page.shot(file, wellRect);
   }
-  note('the four modes: ' + modeSeen.join('  ·  ') +
+  note('the two modes: ' + modeSeen.join('  ·  ') +
        (wellRect ? ' - plates at 2x from the well at ' + JSON.stringify(wellRect) : ''));
+  /* Replaces "ALL FOUR MODES SWITCH FROM THE COMMAND PANEL'S OWN CALL". */
   ok(modeFails === 0,
-     'ALL FOUR MODES SWITCH FROM THE COMMAND PANEL’S OWN CALL and every one of them is ' +
-     'the same single Points object refilled: ' + modeSeen.join(', '),
+     'BOTH MODES SWITCH FROM THE COMMAND PANEL’S OWN CALL and each is the same single Points ' +
+     'object refilled: ' + modeSeen.join(', '),
      JSON.stringify({ fails: modeFails, seen: modeSeen }));
   ok(writeFails === 0 && sw === core1.switches + changes,
      'and each one cost EXACTLY ONE attribute write - ' + sw + ' for the life of the page, ' +
      changes + ' of them here for ' + changes + ' actual changes of mode - while asking for ' +
      'the mode already on the glass cost nothing at all',
      JSON.stringify({ from: core1.switches, to: sw, changes: changes, offBy: writeFails }));
-  /* ---- THE ONE ASSERTION §32 PART 1 DELIBERATELY DID NOT TOUCH ----
-     It was written to prove the RESCULPTED HEAD had not disturbed the other two modes. It now
-     proves something PART 1 needs proved much more loudly: that replacing the presence with the
-     core left RING and CUBE byte-for-byte alone. Same two counts, same arithmetic, read off the
-     page after the core was built around them. The FACE is added to the same line for the same
-     reason - it is in the mode list above, so its count is in modeSeen, and naming it here is
-     what makes "the face is not deleted" a number rather than a promise. */
-  ok(modeSeen.indexOf('ring 5092pts') >= 0 && modeSeen.indexOf('cube 8748pts') >= 0,
-     'AND THE OTHER MODES ARE UNTOUCHED BY THE CORE: the ring is still 3x1200 arc + ' +
-     '36x22 spokes + 700 core = 5092 points and the cube still 9x9x9x12 = 8748, both ' +
-     'counted off the page after the core was built beside them',
-     JSON.stringify(modeSeen));
-  ok(modeSeen.indexOf('core ' + CORE_FULL + 'pts') >= 0 &&
+  /* Replaces "AND THE OTHER MODES ARE UNTOUCHED BY THE CORE" (ring 5092, cube 8748). The boss's
+     instruction removes ring, cube and core outright and supersedes the DO-NOT-ALTER that guarded
+     them, so the claim that matters now is the opposite one: THEY ARE GONE. The mode list is
+     exactly the two, and asking for any of the three by the panel's own call changes nothing. */
+  const presGone = await page.json(`(function(){
+    var before = __galaxy.presence.mode, out = {};
+    ['ring', 'cube', 'core'].forEach(function (m) { __galaxy.presence.set(m); out[m] = __galaxy.presence.mode; });
+    return { modes: __galaxy.presence.modes || null, before: before, after: out };
+  })()`);
+  const modesNow = presGone.modes || (await page.json('__galaxy.presence.MODES || null'));
+  ok(['ring', 'cube', 'core'].every((m) => presGone.after[m] !== m) &&
+     JSON.stringify(modesNow) === JSON.stringify(['dust', 'face']),
+     'AND RING, CUBE AND CORE ARE GONE: the mode list is exactly ' + JSON.stringify(modesNow) +
+     ', and asking for ring, cube or core by the panel\'s own call leaves the presence on ' +
+     JSON.stringify(presGone.after),
+     JSON.stringify(presGone));
+  /* Replaces "and THE FACE STILL BUILDS ... beside the core". Same claim, new neighbour. */
+  ok(modeSeen.indexOf('dust ' + DUST_FULL + 'pts') >= 0 &&
      modeSeen.some((s) => /^face \d+pts$/.test(s) && +s.slice(5, -3) >= 8000),
      'and THE FACE STILL BUILDS: it is in the list at ' +
-     (modeSeen.find((s) => s.startsWith('face ')) || '?') + ' beside the core at ' +
-     CORE_FULL + ' - §32 replaced which mode the deck WEARS, not which modes exist',
+     (modeSeen.find((s) => s.startsWith('face ')) || '?') + ' beside the dust at ' +
+     DUST_FULL + ' - selectable the same way it always was',
      JSON.stringify(modeSeen));
-  await page.evaluate('__galaxy.presence.set("core")');
+  await page.evaluate('__galaxy.presence.set("dust")');
   await sleep(1200);
-  ok((await page.evaluate('__galaxy.presence.mode')) === 'core',
-     'and the deck is left wearing its CORE for the pictures below');
+  /* Replaces "the deck is left wearing its CORE for the pictures below". */
+  ok((await page.evaluate('__galaxy.presence.mode')) === 'dust',
+     'and the deck is left wearing its DUST for the pictures below');
 
-  /* ---- 2c-2. THE CORE IS A SHELL, AND WHAT STANDS WHERE ----
-   * WHAT THIS BLOCK REPLACES, AND THE MANDATE'S OWN WORDS FOR WHY. §32 PART 1 says: "Replace
-   * the face-criteria assertions (jaw/nose slopes) with core-criteria assertions (core radius
-   * band, ring count, reticle alignment, pulse-on-speech), each replacement listed in the
-   * report with its old name, count at or above baseline." The block that stood here measured a
-   * head - the depth of a skull, the stand-off of a nose, a mandible's point count - and every
-   * one of those numbers is now a measurement of an object that is not there. Left in place they
-   * would not merely be irrelevant, they would be RED, and a harness that is red for a reason
-   * nobody intends teaches everybody to ignore it.
-   *
-   * THE TEN, EACH BESIDE THE ONE IT STANDS IN FOR:
-   *    old: THE SHAPE DOOR ANSWERS                  new: THE CORE DOOR ANSWERS
-   *    old: CRITERION 1 - AS DEEP AS IT IS WIDE      new: CRITERION 1 - A SHELL, NOT A BALL
-   *    old: CRITERION 2 - THE NOSE STANDS OFF        new: CRITERION 2 - WOVEN FROM GREAT CIRCLES
-   *    old: CRITERION 3 - THE PROFILE HAS A PROFILE  new: CRITERION 3 - TWO BANDS, PLACED, FLAT
-   *    old: CRITERION 4 - LIDS IN FRONT OF EYES      new: CRITERION 4 - A HEART WITH AIR ROUND IT
-   *    old: the eye sockets are HOLLOWS              new: FOUR BRACKETS, ONE PER QUADRANT
-   *    old: THERE IS A BACK OF THE HEAD              new: ALL FOUR AT THE SAME HALF-SIDE
-   *    old: the MANDIBLE IS A REAL PIECE             new: EACH BRACKET IS AN L
-   *    old: a head TALLER THAN IT IS WIDE            new: THE RETICLE FRAMES EVERYTHING
-   *    old: inside the mandate's ceiling             new: inside the mandate's ceiling  (kept)
-   * and TWO MORE THAN WERE REPLACED, which is how the count goes up rather than sideways:
-   *    new: THE CORE FILLS 59% OF THE FRAME HEIGHT   - the checkpoint plate's own number
-   *    new: IT PULSES ON SPOKEN SYLLABLES            - the mandate names this one explicitly
-   *
-   * A SECOND DOOR AND NOT A FOURTH BRANCH OF shape(). presence.shape() speaks the face's
-   * vocabulary - cells called NOSE and CHEEK, roles called JAW - and its criteria are named in
-   * the DO-NOT-ALTER list. So the core got presence.core(), which walks the same drawn range of
-   * the same buffer and groups it by the same aCell the fill wrote, and answers in the core's
-   * own vocabulary: filaments, bands, heart, reticle. shape() is untouched and still answers for
-   * the face; core() returns null for any mode but core, and section 2c-2b below asserts both
-   * halves of that so neither door can quietly start answering for the other.
-   *
-   * NATURAL UNITS, as before. The core is built inside a reticle box of half-side 1.06 and worn
-   * at CORE_S; every criterion is either a ratio or a figure in the stored frame, so the wearing
-   * cannot flatter or spoil any of them. */
-  const cr = await page.json('__galaxy.presence.core()');
-  ok(!!cr && cr.points > 0,
-     'THE CORE DOOR ANSWERS with the geometry it actually drew, in the units it holds it in',
-     JSON.stringify(cr && { points: cr.points, scale: cr.scale, frame: cr.frame }));
-  if (cr) {
-    note('the pieces: ' + cr.shell.filaments + ' filaments x ' + cr.shell.perFilament +
-         ' · ' + cr.bands.length + ' bands x ' + (cr.bands[0] ? cr.bands[0].n : 0) +
-         ' · heart ' + cr.heart.n + ' · reticle ' + cr.reticle.length + ' x ' +
-         (cr.reticle[0] ? cr.reticle[0].n : 0) + ' = ' + cr.points + ' points');
-    note('the radii: heart to ' + cr.heart.rMax + ' · shell at ' + cr.shell.r +
-         ' · bands at ' + cr.bands.map((b) => b.rMean).join(' and ') +
-         ' · reticle box ' + cr.box.h + ' half-side');
-
-    /* CRITERION 1, standing in for "IT IS AS DEEP AS IT IS WIDE". The old criterion existed
-       because the thing it replaced was a SHEET, and depth was the one number a sheet could
-       not fake. The core's equivalent failure is the opposite shape: a BALL - a solid dusting
-       of points through the volume, which photographs as an amber blob and is the cheapest
-       wrong answer to "a filament-sphere of holographic points". radErr is the worst deviation
-       of any shell point from the written radius, so a ball scores about the radius itself and
-       a shell scores the jitter. 0.015 is under the written jitter of 0.020 on purpose: it is a
-       ceiling the correct geometry clears and a dusting cannot approach.
-       FAILURE MODE: a fill that scattered the shell through the volume instead of onto it
-       would still have 6,460 points and the right colour, and every plate would look roughly
-       amber and roughly spherical. This is the line that would go red. */
-    ok(cr.shell.radErr <= 0.015 && cr.shell.r > 0.6,
-       'CRITERION 1 - IT IS A SHELL AND NOT A BALL: all ' + cr.shell.n + ' filament points ' +
-       'lie within ' + cr.shell.radErr + ' of the written radius ' + cr.shell.r +
-       ' where the ceiling is 0.015 and the built-in jitter is ' + cr.shell.jitter +
-       ' - a solid dusting of the same volume would score about ' + cr.shell.r,
-       JSON.stringify({ radErr: cr.shell.radErr, r: cr.shell.r, jitter: cr.shell.jitter,
-                        ceiling: 0.015 }));
-
-    /* CRITERION 2, standing in for "THE NOSE STANDS OFF THE FACE". Both are the criterion that
-       says the object has the STRUCTURE it claims and not just the outline: a nose that is part
-       of the plane is a mask, and a shell of randomly scattered surface points is a dotted
-       ball rather than a woven filament-sphere. The mandate's word is "filament", which means
-       threads, which means every point of a thread lies on one great circle.
-       HOW planeErr IS COME BY, because it is the one number here that is not a constant read
-       back. The plane's normal is the cross product of the thread's first point with the point
-       a quarter of the way round it - two vectors at right angles inside the thread's own plane,
-       which avoids both an eigen-solver and the degeneracy of three nearly-collinear samples -
-       and planeErr is then the worst absolute distance from any point of any thread to its own
-       plane. For a great circle that is zero plus the jitter's tangential component. */
-    ok(cr.shell.filaments === 34 && cr.shell.perFilament === 190 &&
-       cr.shell.planeErr <= 0.020,
-       'CRITERION 2 - THE SHELL IS WOVEN FROM GREAT CIRCLES: ' + cr.shell.filaments +
-       ' threads of ' + cr.shell.perFilament + ' points each, and no point of any thread lies ' +
-       'more than ' + cr.shell.planeErr + ' off its own thread\'s plane through the centre - ' +
-       'so they are circles round the middle and not arcs wandering over a surface',
-       JSON.stringify({ filaments: cr.shell.filaments, per: cr.shell.perFilament,
-                        planeErr: cr.shell.planeErr, ceiling: 0.020 }));
-
-    /* CRITERION 3, standing in for "THE PROFILE HAS A PROFILE". The old one asserted that the
-       silhouette survived being turned; this asserts that the two precessing orbital ring bands
-       the mandate asks for are TWO, are at the radii they were written at, and are FLAT in the
-       stored frame - which is what makes them rings rather than a shell of their own. The tilt
-       and the precession are applied in the shader from uniforms, so the buffer holds each band
-       flat and the harness must read it flat: zAbs is the worst |z| in the band and 0.0075 is
-       just over the written half-thickness. */
-    ok(cr.bands.length === 2 &&
-       cr.bands.every((b) => Math.abs(b.rMean - b.wanted) < 0.01) &&
-       cr.bands.every((b) => b.zAbs <= 0.0075),
-       'CRITERION 3 - TWO ORBITAL BANDS, EACH AT ITS WRITTEN RADIUS AND FLAT: ' +
-       cr.bands.map((b) => 'band ' + b.band + ' ' + b.n + 'pts at ' + b.rMean +
-                           ' (written ' + b.wanted + ', tilt ' + b.tilt +
-                           ', spin ' + b.spin + ', worst |z| ' + b.zAbs + ')').join('  ·  ') +
-       ' - the tilt and the precession are the shader\'s, so the buffer holds them flat',
-       JSON.stringify(cr.bands));
-
-    /* CRITERION 4, standing in for "THE LIDS ARE IN FRONT OF THE EYES". That criterion was
-       about two pieces that must not occupy the same depth, because under additive blending two
-       surfaces at one depth is a BRIGHTER thing rather than one thing in front of another. This
-       is the same law applied to the core: the bright inner core, the shell and the inner band
-       are three separate radii and there must be dark between them, or the presence is one
-       amber smear with a hot middle instead of a core inside a sphere inside two rings.
-       AND THIS IS THE ASSERTION THAT ALREADY EARNED ITS KEEP. The first cut of the geometry put
-       the bands at 0.80 against a shell at 0.78, and the plate read as a single fuzzy ball. The
-       clearances are what named it. */
-    const airIn = +(cr.shell.r - cr.heart.rMax).toFixed(3);
-    const airOut = +(Math.min(...cr.bands.map((b) => b.rMin)) - cr.shell.r).toFixed(3);
-    ok(cr.heart.rMax <= 0.305 && cr.heart.rMax > 0.24 && airIn > 0.40 && airOut > 0.10,
-       'CRITERION 4 - THE BRIGHT INNER CORE IS A BODY WITH AIR AROUND IT: a heart of ' +
-       cr.heart.n + ' points out to ' + cr.heart.rMax + ' against a written ' + cr.heart.r +
-       ', then ' + airIn + ' of dark before the shell at ' + cr.shell.r + ', then ' + airOut +
-       ' more before the inner band - three radii with nothing between them, so additive ' +
-       'blending cannot fuse them into one smear',
-       JSON.stringify({ heart: cr.heart, airIn: airIn, airOut: airOut }));
-
-    /* THE RETICLE, in four lines where the old block spent four on the skull. The mandate calls
-       for "the HUD reticle brackets as the Eyes overlay region", which is four claims and not
-       one: there are four of them, there is one in each corner, they are all the same size, and
-       each is an L rather than a dot or a bar. Split four ways on purpose - a single ANDed line
-       would report "the reticle is wrong" and leave the next man to find out how. */
-    const quads = cr.reticle.map((r) => r.quadX + ',' + r.quadY).sort().join(' ');
-    ok(cr.reticle.length === 4,
-       'THE RETICLE IS FOUR BRACKETS: ' + cr.reticle.length + ' of them, ' +
-       cr.reticle.map((r) => r.n).join('/') + ' points each',
-       JSON.stringify(cr.reticle.map((r) => r.n)));
-    ok(quads === '-1,-1 -1,1 1,-1 1,1',
-       'ONE PER QUADRANT - ' + quads + ' - so it frames the presence rather than crowding one ' +
-       'side of it', quads);
-    ok(cr.reticle.every((r) => Math.abs(r.xMax - cr.box.h) < 0.02 &&
-                               Math.abs(r.yMax - cr.box.h) < 0.02),
-       'ALL FOUR AT THE SAME HALF-SIDE, ' + cr.box.h + ': ' +
-       cr.reticle.map((r) => '(' + r.xMax + ',' + r.yMax + ')').join(' ') +
-       ' - a square bracket set and not a lopsided one',
-       JSON.stringify(cr.reticle.map((r) => [r.xMax, r.yMax])));
-    ok(cr.reticle.every((r) => r.onX > 20 && r.onY > 20),
-       'AND EACH BRACKET IS AN L: every one of them carries points on both legs (' +
-       cr.reticle.map((r) => r.onX + '+' + r.onY).join(', ') + ' of ' +
-       (cr.reticle[0] ? cr.reticle[0].n : 0) + ') - a corner, not a tick',
-       JSON.stringify(cr.reticle.map((r) => [r.onX, r.onY])));
-    /* §33 WIDENED WHAT "EVERYTHING" MEANS, and this is the one place in the file where a
-       DO-NOT-ALTER assertion was EXTENDED rather than left alone. The claim read the bands only,
-       so it would have stayed green while its own sentence went false: two new orbits outside the
-       box would have made the brackets a cage through the presence and nothing here would have
-       said so. An assertion whose words are broader than its arithmetic is worse than a missing
-       one, because it is read as coverage. The name, the shape and the failure mode are
-       unchanged; the set it quantifies over now includes the orbits, which is what the word
-       "everything" already promised. */
-    const ringMax = Math.max(...cr.bands.map((b) => b.rMax),
-                             ...(cr.orbits || []).map((o) => o.rMax));
-    ok(cr.box.h > ringMax,
-       'THE RETICLE FRAMES EVERYTHING INSIDE IT: the box half-side is ' + cr.box.h +
-       ' against the outermost of ' + (cr.bands.length + (cr.orbits || []).length) +
-       ' rings at ' + ringMax +
-       ' - the brackets are an overlay round the presence and never a cage through it',
-       JSON.stringify({ box: cr.box.h, outer: ringMax,
-                        bands: cr.bands.map((b) => b.rMax),
-                        orbits: (cr.orbits || []).map((o) => o.rMax) }));
-    /* AND THE TWO ORBITS ARE TWO ORBITS. The mandate's words are "differing inclinations and
-       speeds", which is a pair of inequalities and not an adjective, so both are checked - and
-       the signs are checked opposite, because two prograde rings at different speeds still read
-       as one system drifting apart while a retrograde pair reads as a mechanism. Failure mode
-       without this: CORE_ORBIT_SPIN edited to two equal values draws one ring twice, which looks
-       like a thicker ring and would be blamed on the point count. */
-    ok((cr.orbits || []).length === 2 &&
-       cr.orbits[0].tilt !== cr.orbits[1].tilt &&
-       Math.abs(cr.orbits[0].spin) !== Math.abs(cr.orbits[1].spin) &&
-       cr.orbits[0].spin * cr.orbits[1].spin < 0 &&
-       cr.orbits.every((o) => Math.abs(o.rMean - o.wanted) < 0.01 && o.zAbs <= 0.009),
-       'AND THE §33 ORBITS CROSS RATHER THAN NEST: ' +
-       (cr.orbits || []).map((o) => 'r' + o.rMean + ' at ' +
-         Math.round(o.tilt * 180 / Math.PI) + 'deg spin ' + o.spin).join(' and ') +
-       ' - two inclinations, two speeds, opposite senses, both flat in the buffer',
-       JSON.stringify(cr.orbits));
-
-    /* AND THE CHECKPOINT PLATE'S OWN NUMBER, computed rather than eyeballed. The mandate asks
-       for a plate with "core filling 60% of frame"; 2*tan(fov/2)*CAM_Z is the frame's height in
-       natural units at the origin, the reticle box worn at CORE_S is what fills it, and the
-       ratio is what the plate shows. PRES.CORE_S was chosen FROM this arithmetic rather than by
-       eye - see the comment on the constant - so this line is the one that would catch a future
-       change to the camera, the fov or the wearing that quietly recomposed the shot. */
-    ok(cr.frame.fill > 0.55 && cr.frame.fill < 0.65,
-       'AND THE CORE FILLS ' + Math.round(cr.frame.fill * 100) + '% OF THE FRAME HEIGHT: ' +
-       cr.frame.worn + ' of presence in ' + cr.frame.height + ' of frame at fov 42 and z ' +
-       '3.35 - the checkpoint plate\'s "60% of frame" as a number, not as a judgement of a ' +
-       'picture', JSON.stringify(cr.frame));
-
-    ok(cr.points <= 14000,
-       'all of it inside the mandate\'s ceiling: ' + cr.points + ' points, cap 14000',
-       JSON.stringify({ points: cr.points }));
+  /* ---- 2c-2. THE DUST IS A VOLUME, AND IT IS IN THE STATE THE HOUSE IS IN ----
+   * §32 REPLACED THE FACE'S CRITERIA WITH THE CORE'S; UI MANDATE II REPLACES THE CORE'S WITH THE
+   * DUST'S, one for one, each beside the one it stands in for, and the count does not go down:
+   *    old: THE CORE DOOR ANSWERS                  new: THE DUST DOOR ANSWERS
+   *    old: CRIT 1 - A SHELL, NOT A BALL            new: CRIT 1 - A VOLUME, NOT A SHELL
+   *    old: CRIT 2 - WOVEN FROM GREAT CIRCLES       new: CRIT 2 - NOISE-SHAPED, NOT A FOG
+   *    old: CRIT 3 - TWO BANDS, PLACED, FLAT        new: CRIT 3 - DENSE AT THE HEART
+   *    old: CRIT 4 - A HEART WITH AIR ROUND IT      new: CRIT 4 - NO FEATURES AT ALL
+   *    old: THE RETICLE IS FOUR BRACKETS            new: FOUR STATES, FOUR TOKENS
+   *    old: ONE PER QUADRANT                        new: EVERY OCTANT CARRIES DUST
+   *    old: ALL FOUR AT THE SAME HALF-SIDE          new: EACH STATE IS ITS OWN COLOUR
+   *    old: EACH BRACKET IS AN L                    new: THE LIVE FUNNEL DRIVES THE STATE
+   *    old: THE RETICLE FRAMES EVERYTHING           new: THE CLOUD STAYS INSIDE ITS WINDOW
+   *    old: THE §33 ORBITS CROSS                    new: A STATE CHANGE EASES, IT DOES NOT CUT
+   *    old: THE CORE FILLS 59% OF THE FRAME         new: THE DUST FILLS A STATED SHARE OF THE FRAME
+   *    old: inside the mandate's ceiling            new: inside the mandate's ceiling  (kept)
+   * Every threshold below was set AFTER measuring the shipped cloud (_runs/sweep50/dustgeo.mjs:
+   * density 12,235 at the heart against 2,257 at the edge, clumping 3.41x the Poisson figure,
+   * octants within 0.80 of each other, frame fill 0.669) and sits well clear of it, so a fill
+   * that drifts toward fog or a ball goes red rather than a measurement that wobbles. */
+  const dg = await page.json('__galaxy.presence.dust()');
+  const g = dg && dg.geo;
+  ok(!!g && dg.points > 0,
+     'THE DUST DOOR ANSWERS with the geometry it actually drew, walked off the buffer',
+     JSON.stringify(dg && { points: dg.points, geo: g }));
+  if (g) {
+    note('the shells (0-0.2 .. 0.8-1.0): ' + g.bins.join(' / ') + ' points, density ' +
+         g.density.join(' / ') + ' per unit volume · octants ' + g.octants.join('/') +
+         ' · clumping ' + g.cv + ' against Poisson ' + g.poissonCv + ' (x' + g.structure + ')');
+    ok(g.bins.every((c) => c >= dg.points * 0.01),
+       'CRITERION 1 - IT IS A VOLUME AND NOT A SHELL: every one of five radial shells holds dust (' +
+       g.bins.join(' / ') + ' of ' + dg.points + ') - a shell would leave the inner ones empty',
+       JSON.stringify(g.bins));
+    ok(g.structure >= 2.0,
+       'CRITERION 2 - IT IS NOISE-SHAPED, NOT A FOG: counts in ' + g.voxels + ' voxels of the ' +
+       '0.33-0.57 shell vary ' + g.structure + 'x as much as a uniform scatter of the same mean ' +
+       'would (CV ' + g.cv + ' against ' + g.poissonCv + ') - filaments and voids, not an even haze',
+       JSON.stringify({ cv: g.cv, poisson: g.poissonCv, structure: g.structure, floor: 2.0 }));
+    ok(g.density[0] >= 3 * g.density[4],
+       'CRITERION 3 - IT IS DENSE AT THE HEART: ' + g.density[0] + ' points per unit volume in the ' +
+       'inner fifth against ' + g.density[4] + ' in the outer - ' +
+       (g.density[0] / g.density[4]).toFixed(1) + 'x, floor 3x',
+       JSON.stringify(g.density));
+    ok(g.roles.length === 1 && g.mesh === 0,
+       'CRITERION 4 - IT HAS NO FEATURES AT ALL: one role across every point (' +
+       JSON.stringify(g.roles) + ' - no eye, lid, lip, jaw or neck) and ' + g.mesh +
+       ' points carrying the face\'s mesh flag',
+       JSON.stringify({ roles: g.roles, mesh: g.mesh }));
+    const pal = dg.palette || {};
+    ok(JSON.stringify(dg.states) === JSON.stringify(['listening', 'thinking', 'speaking', 'alert']) &&
+       Object.keys(pal).length === 4,
+       'FOUR STATES, FOUR TOKENS: ' + dg.states.join(', ') + ' - read off the stylesheet at boot',
+       JSON.stringify(pal));
+    const octMin = Math.min(...g.octants), octMax = Math.max(...g.octants);
+    ok(octMin >= 0.6 * octMax,
+       'EVERY OCTANT CARRIES DUST: ' + g.octants.join('/') + ' - the least is ' +
+       (octMin / octMax).toFixed(2) + ' of the most, floor 0.6, so the cloud is not lopsided',
+       JSON.stringify(g.octants));
+    /* The tokens as the stylesheet writes them - plain #rrggbb, read straight off :root. */
+    const tok = await page.json('(function(){var cs = getComputedStyle(document.documentElement),' +
+      ' v = function (n) { return cs.getPropertyValue(n).trim().toLowerCase(); };' +
+      ' return { listening: v("--blue-structure"), thinking: v("--gold-core"),' +
+      ' speaking: v("--gold-hot"), alert: v("--fail") }; })()');
+    ok(['listening', 'thinking', 'speaking', 'alert'].every((s) => pal[s] === tok[s]) &&
+       new Set(Object.values(pal)).size === 4,
+       'EACH STATE IS ITS OWN COLOUR, AND IT IS THE TOKEN\'S: ' +
+       Object.keys(pal).map((s) => s + ' ' + pal[s]).join(', ') +
+       ' - four different colours, each equal to the stylesheet token it was read from',
+       JSON.stringify({ palette: pal, tokens: tok }));
+    /* THE LIVE FUNNEL DRIVES IT: setStatus() - the one function every status in the house goes
+       through - and the house's own error card, not a pin. */
+    const funnel = await page.json(`(function(){
+      var out = {};
+      __galaxy.status.set('thinking'); out.thinking = __galaxy.presence.dust().live;
+      __galaxy.status.set('speaking'); out.speaking = __galaxy.presence.dust().live;
+      __galaxy.status.set('listening'); out.listening = __galaxy.presence.dust().live;
+      __galaxy.say('what failed?', 'The local engine timed out.', true, null);
+      out.alert = __galaxy.presence.dust().live;
+      __galaxy.vanish.now(true);
+      __galaxy.status.idle();
+      out.after = __galaxy.presence.dust().live;
+      return out; })()`);
+    ok(funnel.thinking === 'thinking' && funnel.speaking === 'speaking' &&
+       funnel.listening === 'listening' && funnel.alert === 'alert' && funnel.after === 'listening',
+       'THE LIVE FUNNEL DRIVES THE STATE: setStatus("thinking") -> ' + funnel.thinking +
+       ', ("speaking") -> ' + funnel.speaking + ', ("listening") -> ' + funnel.listening +
+       ', an error card from the house\'s own answer path -> ' + funnel.alert +
+       ', and idle again -> ' + funnel.after, JSON.stringify(funnel));
+    const reachOk = g.rMax <= 1.0001;
+    ok(reachOk && g.frameFill < 0.80,
+       'THE CLOUD STAYS INSIDE ITS WINDOW: the farthest point is at ' + g.rMax + ' of the written ' +
+       'radius, worn at ' + g.scale + ' - ' + g.frameFill + ' of the frame\'s half-height, inside the ' +
+       'edge window the canvas is masked to',
+       JSON.stringify({ rMax: g.rMax, frameFill: g.frameFill }));
+    /* A STATE CHANGE EASES: the heart's colour is caught strictly between two palettes on the way
+       from listening to thinking, driven through setStatus() - the live path. (The plate pin,
+       presence.dustState, writes the colour outright on purpose: a plate is of a state, not of a
+       transition.) So the claim is about the light, sampled frame by frame, not a class name. */
+    /* evaluate, not json: json() wraps the expression in JSON.stringify, which would stringify
+       the PROMISE; evaluate awaits it and the function hands back its own JSON. */
+    const eased = JSON.parse(await page.evaluate(`(async function(){
+      __galaxy.presence.dustState(null);
+      __galaxy.status.set('listening');
+      await new Promise(function (r) { setTimeout(r, 1500); });
+      var seen = [];
+      __galaxy.status.set('thinking');
+      for (var i = 0; i < 14; i++) {
+        await new Promise(function (r) { requestAnimationFrame(function () { r(); }); });
+        seen.push(__galaxy.presence.dust().heart);
+      }
+      await new Promise(function (r) { setTimeout(r, 1800); });
+      var end = __galaxy.presence.dust().heart;
+      __galaxy.status.idle();
+      return JSON.stringify({ seen: seen, end: end, from: __galaxy.presence.dust().palette.listening,
+               to: __galaxy.presence.dust().palette.thinking }); })()`));
+    /* ARRIVED is within 2/255 a channel: the lerp is exponential (TAU 320ms) and rounds to a hex,
+       so after 1.8s it sits a rounding step from the token - #ffb23d for #ffb23c - and an exact
+       match would be a test of float rounding, not of the ease. */
+    const near = (a, b) => [1, 3, 5].every((i) => Math.abs(parseInt(a.substr(i, 2), 16) -
+      parseInt(b.substr(i, 2), 16)) <= 2);
+    const between = eased.seen.filter((h) => !near(h, eased.from) && !near(h, eased.to));
+    ok(near(eased.end, eased.to) && between.length >= 2,
+       'A STATE CHANGE EASES, IT DOES NOT CUT: listening ' + eased.from + ' to thinking ' + eased.to +
+       ' passed through ' + between.length + ' intermediate colours in 14 frames (' +
+       between.slice(0, 4).join(', ') + ' …) and arrived at ' + eased.end,
+       JSON.stringify(eased));
+    ok(g.frameFill > 0.60 && g.frameFill < 0.75,
+       'AND THE DUST FILLS ' + Math.round(g.frameFill * 100) + '% OF THE FRAME\'S HALF-HEIGHT - ' +
+       'the stated band 60-75%, so the cloud reads as the presence and not as a speck or a wall',
+       JSON.stringify({ frameFill: g.frameFill }));
+    ok(dg.points <= 14000,
+       'all of it inside the mandate\'s ceiling: ' + dg.points + ' points, cap 14000',
+       JSON.stringify({ points: dg.points }));
   }
 
-  /* ---- 2c-2b. THE TWO DOORS DO NOT ANSWER FOR EACH OTHER ----
-     shape() is the face's reader and core() is the core's, and each returns null for a mode it
-     does not speak for. Worth a line because the alternative - a door that answers with
-     whatever is in the buffer - is exactly how a harness comes to assert the core's radius
-     against the face's skull and go green. */
-  const doorsCore = await page.json('({shape: __galaxy.presence.shape() === null,' +
-    ' core: __galaxy.presence.core() !== null})');
-  ok(doorsCore.shape === true && doorsCore.core === true,
-     'THE TWO SHAPE DOORS KNOW WHICH MODE THEY SPEAK FOR: with the core on the glass core() ' +
-     'answers and shape() returns null rather than reading the core\'s buffer through the ' +
-     'face\'s vocabulary', JSON.stringify(doorsCore));
+  /* ---- 2c-2b. THE DOORS DO NOT ANSWER FOR EACH OTHER ----
+     Replaces "THE TWO SHAPE DOORS KNOW WHICH MODE THEY SPEAK FOR" (core() vs shape()). With the
+     dust on the glass, dust() answers with geometry and shape() - the face's reader - returns
+     null; and core() no longer exists at all, because there is no core to read. */
+  const presDoors = await page.json('({shape: __galaxy.presence.shape() === null,' +
+    ' dust: !!(__galaxy.presence.dust() && __galaxy.presence.dust().geo),' +
+    ' core: typeof __galaxy.presence.core})');
+  ok(presDoors.shape === true && presDoors.dust === true && presDoors.core === 'undefined',
+     'THE DOORS KNOW WHICH MODE THEY SPEAK FOR: with the dust on the glass dust() answers with ' +
+     'geometry, shape() returns null rather than reading the dust through the face\'s ' +
+     'vocabulary, and core() is gone with the core', JSON.stringify(presDoors));
 
-  /* ---- 2c-2c. IT PULSES ON SPOKEN SYLLABLES ----
-     THE MANDATE NAMES THIS ONE OUT LOUD: "core luminance pulses on spoken syllables ... no
-     fidget". The resting half is already asserted above off core1.from and core1.level; this is
-     the other half, and it is driven through the door the deck itself uses. There is no level
-     setter and there must not be one: presMouth computes the level from exactly two sources -
-     the analyser while piper speaks with the ear up, and the cadence cosine otherwise - so a
-     harness that wrote the uniform would be testing its own arithmetic.
-     IT IS THE CADENCE PATH, AND THAT IS THE HARDER CASE. Headless with no microphone there is
-     no analyser, and the cadence's rises are about four times gentler than a syllable onset's:
-     0.036 per frame at its fastest beat against roughly 0.13. The first detector here was a
-     per-frame-delta threshold of 0.055, which pulsed for piper and was stone deaf to the
-     browser's own voice; it is now a rising-edge detector with that number demoted to a noise
-     floor. So a pulse count on the cadence path is the weak case passing.
-     SIX IN THREE SECONDS IS THE FLOOR, NOT THE EXPECTATION: presPose clamps the beat to between
-     0.42s and 1.15s, so three seconds of cadence is between 2.6 and 7.1 rises, and the floor is
-     set under the slowest of those. */
+  /* ---- 2c-2c. IT PULSES ON SPOKEN SYLLABLES ---- (kept: the pulse is the dust's now) */
   const wasPose = await page.json('__galaxy.face.state');
   await page.evaluate('__galaxy.face.pose("speaking")');
   const spoke = await page.json(
@@ -2441,17 +2297,7 @@ async function main() {
      ' - alive on a signal, never fidgeting on a clock',
      JSON.stringify(quiet));
 
-  /* ---- THE FOUR PLATES, at the four yaws the mandate names ----
-     PINNED, NOT CAUGHT. presence.yaw() holds the angle and stops the idle pitch, because
-     four plates taken at four unknown attitudes compare nothing, and a plate taken
-     mid-wobble is a plate of the wobble. The yaw is handed back at the end.
-     §32 PART 1 KEPT THIS BLOCK AND ONLY RENAMED ITS PLATES. The yaw is applied in the shader's
-     common trunk - `p = rot * p`, before the mode branches - so the pin holds the core exactly
-     as it held the head, and the assertion that the door works is as true of a sphere as it was
-     of a face. What is no longer true is the FILE NAME: a plate called deck-head-yaw90 showing a
-     particle core is a plate that lies in its own filename, so the four are now deck-core-yaw*.
-     The three-phase set the mandate actually asks for follows below; it is an addition, because
-     "does the plate door hold still" and "are the ring phases reproducible" are two claims. */
+  /* ---- THE FOUR PLATES, at the four yaws (kept; plates renamed deck-dust-yaw*) ---- */
   const YAWS = [-30, 0, 30, 90];
   let yawFails = 0;
   const yawSeen = [];
@@ -2466,8 +2312,7 @@ async function main() {
     }
     yawSeen.push(deg + '° (' + (u ? u.yaw.toFixed(4) : '?') + ' rad)');
     if (wellRect) {
-      await page.shot('deck-core-yaw' + (deg < 0 ? 'm' : '') + Math.abs(deg) + '.png',
-                      wellRect);
+      await page.shot('deck-dust-yaw' + (deg < 0 ? 'm' : '') + Math.abs(deg) + '.png', wellRect);
     }
   }
   ok(yawFails === 0,
@@ -2475,7 +2320,6 @@ async function main() {
      yawSeen.join('  ·  ') + ' - the uniform read back off the material each time, so the ' +
      'plates are of the attitudes they are named for',
      JSON.stringify({ fails: yawFails, seen: yawSeen }));
-  note('wrote deck-core-yawm30 / yaw0 / yaw30 / yaw90 .png at 2x from the well');
   const freed = await page.json('__galaxy.presence.yaw(null)');
   const uFree = await page.json('__galaxy.presence.uniforms');
   ok(freed === null && uFree && uFree.yawHold === 0,
@@ -2483,23 +2327,11 @@ async function main() {
      'at 90 degrees for whatever runs next',
      JSON.stringify({ freed, yawHold: uFree && uFree.yawHold }));
 
-  /* ---- 2c-2d. THE THREE RING PHASES AND THE SPEECH PULSE, AS PLATES ----
-     THE MANDATE'S CHECKPOINT SET: "three ring phases + speech-pulse frame". A ring band that
-     precesses once every twenty-one seconds cannot be photographed at a named phase by waiting
-     and hoping, and refilling the buffer to move it would be photographing a different object.
-     So presence.phase(f) pins the one clock uniform the bands are driven from - f measured in
-     REVOLUTIONS OF THE OUTER BAND, which is what makes 0, 1/3 and 2/3 three named phases rather
-     than three arbitrary moments - and phase(f, pulse) additionally pins the speech envelope at
-     a stated amount, so the pulse plate is a plate OF a pulse and not a lucky catch of a 260ms
-     transient.
-     THE PULSE PLATE IS PINNED AT THE SAME PHASE AS THE FIRST, which is the only way the pair
-     means anything: two plates that differ in the bands AND the heart prove nothing about the
-     heart. This pair differs in exactly one uniform.
-     ONE PIN, TWO USERS, AND THAT IS DELIBERATE: uYawHold has always meant "somebody is
-     photographing, hold still", so the yaw door above and the phase door here take and release
-     the same hold, and either one's null lets go of both. The release is asserted below. */
-  const PHASES = [[0, 'deck-core-phase-0.png'], [1 / 3, 'deck-core-phase-33.png'],
-                  [2 / 3, 'deck-core-phase-66.png']];
+  /* ---- 2c-2d. THREE PINNED PHASES OF THE FLOW, AND THE SPEECH PULSE, AS PLATES ----
+     Replaces "THE THREE RING PHASES ARE PINNED AND REPRODUCIBLE". presence.phase(f) pins the one
+     clock the dust's flow and turn are driven from; f is in laps of the dust's slow turn now. */
+  const PHASES = [[0, 'deck-dust-phase-0.png'], [1 / 3, 'deck-dust-phase-33.png'],
+                  [2 / 3, 'deck-dust-phase-66.png']];
   const phaseSeen = [];
   let phaseFails = 0;
   for (const [f, file] of PHASES) {
@@ -2514,86 +2346,40 @@ async function main() {
     if (wellRect) await page.shot(file, wellRect);
   }
   ok(phaseFails === 0 && new Set(phaseSeen).size === 3,
-     'THE THREE RING PHASES ARE PINNED AND REPRODUCIBLE: ' + phaseSeen.join('  ·  ') +
+     'THREE PINNED PHASES OF THE FLOW ARE REPRODUCIBLE: ' + phaseSeen.join('  ·  ') +
      ' - one clock uniform held, the buffer never rewritten, so the three plates are three ' +
-     'attitudes of ONE object and the lookbook can put them side by side',
+     'moments of ONE cloud and the lookbook can put them side by side',
      JSON.stringify({ fails: phaseFails, seen: phaseSeen }));
-  /* THE SPEECH PULSE AT PHASE 0. Named amount rather than a caught transient, and shot from the
-     same pin as the first plate above - so deck-core-phase-0.png and deck-core-pulse.png are a
-     controlled pair whose only difference is the heart. */
   await page.json('__galaxy.presence.phase(0, 1)');
   await sleep(380);
   const uPulse = await page.json('__galaxy.presence.uniforms');
   ok(uPulse && uPulse.pulse === 1 && uPulse.phase === 0,
      'AND THE SPEECH PULSE CAN BE PHOTOGRAPHED AT A STATED AMOUNT: uPulse pinned at ' +
      (uPulse && uPulse.pulse) + ' on the same phase-0 frame as the plate above, so the pair ' +
-     'differs in the heart and in nothing else - a 260ms envelope caught by waiting would be a ' +
-     'plate of whatever the timing happened to be',
+     'differs in the heart and in nothing else',
      JSON.stringify(uPulse));
-  if (wellRect) await page.shot('deck-core-pulse.png', wellRect);
-  note('wrote deck-core-phase-0 / -33 / -66 / deck-core-pulse .png at 2x from the well');
+  if (wellRect) await page.shot('deck-dust-pulse.png', wellRect);
   const phFreed = await page.json('__galaxy.presence.phase(null)');
   const uPhFree = await page.json('__galaxy.presence.uniforms');
   ok(phFreed === null && uPhFree && uPhFree.yawHold === 0 && uPhFree.pulse === 0 &&
      uPhFree.phase === 0,
      'and THAT pin comes out too: hold ' + (uPhFree && uPhFree.yawHold) + ', pulse ' +
      (uPhFree && uPhFree.pulse) + ', phase ' + (uPhFree && uPhFree.phase) +
-     ' - the presence is handed back its own clock, not left frozen mid-lap with a lit heart ' +
-     'for whatever runs next', JSON.stringify(uPhFree));
+     ' - the presence is handed back its own clock', JSON.stringify(uPhFree));
 
-  /* ---- 2c-3. THE COMPACT TIER: THE PRESENCE DOES NOT GO DARK ON A LAPTOP ------
-     WHAT WAS WRONG WITH THE OLD BEHAVIOUR, AND IT WAS NOT THE FLOOR. PRES_MIN is 168 and
-     the governor was right to refuse a 12px well - a 12px presence is a smudge. It
-     was the CONSEQUENCE that was wrong: on a window with the note panel open and a
-     countdown card up, the presence that a whole Part was spent building simply was not there.
-     So there is a second floor, PRES_MIN_COMPACT, and between the two it renders at
-     reduced point density instead of not at all: same modes, same shader, same one
-     material, fewer points.
-     THE WIDTH IS FOUND, NOT ASSUMED. How much square the governor has left at a given width
-     depends on how crowded the top-right lane is in this run, and this file's window is not
-     the 1280 the complaint was about. So the ladder is walked downwards and the first width
-     that actually produces the compact tier is the one measured - which is the measurement
-     the mandate asked for rather than a number this file asserts and the page obeys.
-     AND IT AUDITIONS ITSELF, through the mechanism that already exists. There is no second
-     audition and no new floor: presCompactAudition calls the same presAudition FACE-vs-RING
-     uses, so the verdict is the same 55fps floor and the same 90%-of-baseline rule, and the
-     fallback if even the compact tier cannot hold it is the same RING.
-     THE LANE HAS TO BE CROWDED FIRST, and this is the measurement that says so: narrowing
-     an otherwise empty deck from 1600 to 1180 left the well at 300px at every single rung,
-     because the well's room is bounded by what is ABOVE it - the chips, the toast and the
-     card - and not by the width alone. The stand-down the mandate is about was measured with
-     the note panel open and a countdown card up, so both are put there before the ladder is
-     walked. Which also means the compact tier's audition is sampled with work mode on, and
-     that is the honest condition: nobody has a narrow window and an empty room. */
+  /* ---- 2c-3. THE COMPACT TIER (kept; the dust thins by density exactly as the core did) ----
+     Changed: the fallback when even the compact tier cannot hold the floor is the CHEAP DRAW of
+     the same mode (the ring is gone), and the count is dustCount(density) - one constant, no
+     per-group floors. The ladder and its crowded-then-cleared fallback are unchanged. */
   const TIER_H = 860;
-  /* THE LADDER GOT FOUR MORE RUNGS WHEN THE FLOOR MOVED UNDER IT, and the four are measured
-     rather than chosen. PART 1 replaced the face with the core, and the core declares a lower
-     full floor than the face did: 192px, with the compact band running 120-192. The old ladder
-     stopped at 1180, and under this file's own crowding - note panel open, countdown card up -
-     the well reads 236px at EVERY rung from 1600 to 1180. 236 is clear of 192, so every rung
-     reports "full", no rung produces the compact tier, and the tier's point count and its
-     audition go unmeasured behind a red that says exactly that. Nothing is broken: the ladder
-     simply no longer reaches the floor, because the floor went down.
-     MEASURED, WITH AN INSTRUMENT, NOT CHOSEN BY EYE. _runs/_wellprobe.mjs walks width against
-     height on an UNCROWDED deck and prints the well at each pair. Two things came out of it.
-     Width is the dimension that moves the number - 1600→382px, 1366→265px, 1280→222px,
-     1180→172px compact - which is worth saying because the note above this one says the well is
-     bounded by what is above it and not by the width, and that is true of the CROWDED lane this
-     file measures and not of the empty one. And under crowding the well is LARGER, not smaller,
-     at the same width: 236px here against 172px there. So the crowded ladder has to go further
-     than the uncrowded probe did, and these four rungs are how much further.
-     FAILURE MODE IF THEY ARE REMOVED: this file reports that the compact tier cannot be measured
-     in its window, which reads like a harness that has run out of room, and the compact tier -
-     a whole Part's worth of behaviour, with its own audition and its own fallback to the RING -
-     silently stops being proved at all. */
-  const TIER_LADDER = [1600, 1536, 1440, 1366, 1280, 1180, 1100, 1024, 960, 900];
+  const TIER_LADDER = [1600, 1536, 1440, 1366, 1280, 1180, 1100, 1024, 960, 900, 820, 760];
   const TIER_READ = '({tier: __galaxy.presence.well.tier,' +
     ' builtTier: __galaxy.presence.well.builtTier, side: __galaxy.presence.well.side,' +
     ' fits: __galaxy.presence.well.fits, why: __galaxy.presence.well.why,' +
     ' density: __galaxy.presence.well.density, min: __galaxy.presence.well.min,' +
     ' minCompact: __galaxy.presence.well.minCompact, mode: __galaxy.presence.mode,' +
     ' points: __galaxy.presence.points, capacity: __galaxy.presence.capacity,' +
-    ' degraded: __galaxy.presence.degraded,' +
+    ' degraded: __galaxy.presence.degraded, cheap: __galaxy.presence.dust().cheap,' +
     ' compactAudit: __galaxy.presence.compactAudit, trial: __galaxy.presence.trial,' +
     ' baseline: __galaxy.presence.baseline, probation: __galaxy.presence.probation})';
   const atWidth = async (w) => {
@@ -2604,41 +2390,22 @@ async function main() {
     await sleep(280);
     return page.json(TIER_READ);
   };
-  /* THE CORE'S OWN COUNT, AND IT HAS TO BE THE CORE'S. presence.points is whatever the last
-     presFill() wrote, and the RING is a fill too - about 5,100 points at full density. The
-     lane below is deliberately crowded (note panel, session card, focus running), which is
-     enough on this GPU to make the presence fail its own 55fps floor and stand down to the ring
-     mid-ladder. Read blind, that turns the density ladder into a comparison between the
-     presence's compact count and the RING's full one - 5,748 against 5,092 - and reports a
-     thinned presence as having grown when it had simply been replaced.
-     So: if the core has stood down, it is put back BY HAND before the count is taken, the
-     same way this file already does at the compact tier, and it is said out loud each time.
-     Then the fill is waited for: presFill is synchronous but it is called from the resize
-     path, so points and density can be read one frame apart and disagree. */
   const settled = async (label) => {
     let r = await page.json(TIER_READ);
-    if (r.mode !== 'core') {
-      note(label + ': the core had stood down to the ' + r.mode + ' (' +
-           (r.degraded || r.probation || '?') + '), so it is put back by hand to count it - ' +
-           'the ring is a fill of its own and would be counted as a presence');
-      await page.evaluate('__galaxy.presence.set("core")');
+    if (r.mode !== 'dust' || r.cheap) {
+      note(label + ': the dust was ' + (r.cheap ? 'drawn cheap' : 'off the glass') + ' (' +
+           (r.degraded || r.probation || '?') + '), so it is put back by hand to count it');
+      await page.evaluate('__galaxy.presence.set("dust")');
       await sleep(1200);
     }
     for (let i = 0; i < 25; i++) {
       r = await page.json(TIER_READ);
-      /* THE EXPECTED COUNT IS THE CORE'S OWN ARITHMETIC, NOT capacity x density.
-         The face's shell is sized as "the cap minus the features", so for the face the two were
-         the same number and `capacity * density` was a fair expectation. The core is the sum of
-         four written constants with four separate floors under presN, so at a fractional density
-         capacity x density is simply a different number - this loop would have spun its full
-         five seconds at every compact rung and then returned an unsettled read as if it had
-         settled. coreCount(d) mirrors the fill; see its comment at the top of this file. */
-      const want = coreCount(r.density);
-      if (r.mode === 'core' && r.points === want) return r;
+      const want = dustCount(r.density);
+      if (r.mode === 'dust' && r.points === want) return r;
       await sleep(200);
     }
     note(label + ': the count never settled - ' + r.points + ' points against ' +
-         coreCount(r.density) + ' expected at density ' + r.density);
+         dustCount(r.density) + ' expected at density ' + r.density);
     return r;
   };
   const crowdId = await page.evaluate('__galaxy.nodes[0].id');
@@ -2649,12 +2416,8 @@ async function main() {
   await sleep(1400);
   await atWidth(1920);
   const wide = await settled('the full tier');
-  /* AT FULL DENSITY THE COUNT IS THE CORE'S FULL COUNT, and that is a CHANGED assertion with
-     a stated reason: it read `points === capacity` before, which was true of the face because
-     the face's shell is sized as whatever is left of the allocation. The core is 12,740 of a
-     13,800 allocation, so the old form would go red for arithmetic rather than for a fault. */
   ok(wide.tier === 'full' && wide.builtTier === 'full' && wide.density === 1 &&
-     wide.points === CORE_FULL && wide.points <= wide.capacity,
+     wide.points === DUST_FULL && wide.points <= wide.capacity,
      'at 1920x' + TIER_H + ' the well is ' + wide.side + 'px, clear of the ' + wide.min +
      'px full floor, and the presence is at full density: ' +
      wide.points.toLocaleString() + ' points of a ' + wide.capacity + '-point allocation',
@@ -2667,30 +2430,10 @@ async function main() {
     if (r.tier === 'compact') { compact = Object.assign({ w: w }, r); break; }
   }
   note('the tier ladder at ' + TIER_H + ' tall: ' + rungs.join('   '));
-  /* AND IF THE CROWDED LANE CANNOT PRODUCE IT, THE LANE IS CLEARED AND THE LADDER WALKED AGAIN -
-     because a condition this file chose is not worth more than the behaviour it was chosen to
-     measure. What the extended ladder above revealed is a cliff, not a slope: with the note panel
-     open and a session card up, the well sits pinned at 258px "beside the toast" from 1600 all the
-     way down to 1024, and then at 960 it reports "no room: -12px of 120". It steps straight over
-     the entire 120-192 compact band. So under THIS crowding there is no width at which the compact
-     tier exists, and the twelve assertions below it - the point count, the density ratio, the
-     audition, the one-object-one-material claim, the plate - were all being skipped behind a
-     single red that said "cannot be measured in this window".
-     THE EMPTY LANE CAN PRODUCE IT, measured: _runs/_wellprobe.mjs reads 1180→172px compact on an
-     uncrowded deck, inside the band. So the fixture degrades its CONDITION rather than abandoning
-     its CLAIM, and says out loud which condition it got. That is the honest order of preference:
-     the crowded lane is the truer room - nobody has a narrow window and an empty one - so it is
-     tried first and used if it works; the empty lane is weaker but it is a real measurement of a
-     real tier, and it beats not looking.
-     FAILURE MODE IF THIS FALLBACK IS REMOVED: a change that breaks the compact tier outright -
-     the wrong point count, a failed audition, a fallback to nothing instead of to the RING - goes
-     green, because the one assertion guarding all of it fails first for a reason that has nothing
-     to do with the tier and everything to do with where the toast is. */
   let crowdedForTier = true;
   if (!compact) {
-    note('no rung produced the compact tier with the lane crowded - the well steps from 258px ' +
-         'straight past the 120-192px band - so the lane is cleared and the ladder walked again, ' +
-         'which is a weaker condition and is reported as one');
+    note('no rung produced the compact tier with the lane crowded, so the lane is cleared and the ' +
+         'ladder walked again, which is a weaker condition and is reported as one');
     await page.evaluate(`(function(){
       var c = document.getElementById('close');
       if (c && document.getElementById('panel').classList.contains('open')) c.click();
@@ -2714,19 +2457,11 @@ async function main() {
          'px of room, under the ' + compact.min + 'px full floor and over the ' +
          compact.minCompact + 'px compact one - "' + compact.why + '"' +
          (crowdedForTier ? ' (lane crowded, which is the truer room)'
-                         : ' (LANE CLEARED to reach it: the crowded lane steps over the band ' +
-                           'entirely, so the audition below is sampled without work mode on)')
+                         : ' (LANE CLEARED to reach it)')
        : 'no width on the ladder produced the compact tier with the lane crowded OR clear, so ' +
          'its point count and its audition cannot be measured in this window',
      JSON.stringify(rungs));
   if (compact) {
-    /* THE VERDICT, WAITED FOR RATHER THAN GUESSED AT. The audition is two 2.2-second
-       samples and a refill between them, and it is started by the resize itself - so the
-       point count read here is the RING's until it finishes. Read after.
-       AND THE WAIT IS FOR A VERDICT, NOT FOR A VALUE. This read `compactAudit !== ""`
-       first, which returns the moment the field says "running" - so the check reported the
-       audition's own in-flight marker as its verdict ("running" - 60.2fps against 39.3fps)
-       and went red while nothing was wrong. The two words that end it are named instead. */
     const audited = await waitFor(page,
       '__galaxy.presence.compactAudit === "kept" || ' +
       '__galaxy.presence.compactAudit === "dropped"', 30000);
@@ -2735,25 +2470,27 @@ async function main() {
     ok(audited && (ca.compactAudit === 'kept' || ca.compactAudit === 'dropped'),
        'and it AUDITIONS ITSELF on the mechanism that already exists: "' +
        ca.compactAudit + '" - ' + ca.trial + 'fps compact against ' + ca.baseline +
-       'fps with the ring, floor ' + FPS_FLOOR + ', keep-ratio 90%',
+       'fps drawn cheap, floor ' + FPS_FLOOR + ', keep-ratio 90%',
        JSON.stringify({ audited: audited, ca: ca }));
-    ok(ca.compactAudit === 'kept' ? ca.mode === 'core' : ca.mode === 'ring',
+    /* Changed: "dropped" now means the same dust drawn cheap, not the ring. */
+    ok(ca.compactAudit === 'kept' ? (ca.mode === 'dust' && !ca.cheap)
+                                  : (ca.mode === 'dust' && ca.cheap === true),
        ca.compactAudit === 'kept'
-         ? 'the verdict and the room agree: kept, and the mode is still ' + ca.mode
-         : 'the verdict and the room agree: dropped, and it fell back to the RING the ' +
-           'existing law names - not to nothing, and not to a second new mode',
-       JSON.stringify({ verdict: ca.compactAudit, mode: ca.mode, degraded: ca.degraded }));
-    if (ca.mode !== 'core') {
-      note('the compact tier could not hold ' + FPS_FLOOR + 'fps on this GPU: putting ' +
-           'CORE back by hand to read the point count it would have drawn');
-      await page.evaluate('__galaxy.presence.set("core")');
+         ? 'the verdict and the room agree: kept, and the mode is still ' + ca.mode + ', drawn whole'
+         : 'the verdict and the room agree: dropped, and it fell back to the CHEAP DRAW of the same ' +
+           'dust - not to nothing, and not to a mode that no longer exists',
+       JSON.stringify({ verdict: ca.compactAudit, mode: ca.mode, cheap: ca.cheap, degraded: ca.degraded }));
+    if (ca.mode !== 'dust' || ca.cheap) {
+      note('the compact tier could not hold ' + FPS_FLOOR + 'fps on this GPU: putting the dust ' +
+           'back whole by hand to read the point count it would have drawn');
+      await page.evaluate('__galaxy.presence.set("dust")');
       await sleep(1200);
     }
     const cf = await page.json(TIER_READ);
     const ratio = wide.points > 0 ? cf.points / wide.points : 0;
-    ok(cf.builtTier === 'compact' && cf.points === coreCount(cf.density) &&
+    ok(cf.builtTier === 'compact' && cf.points === dustCount(cf.density) &&
        cf.points < wide.points && ratio > 0.3 && ratio < 0.6,
-       'AND IT IS THE SAME CORE WITH FEWER POINTS: ' + cf.points.toLocaleString() +
+       'AND IT IS THE SAME DUST WITH FEWER POINTS: ' + cf.points.toLocaleString() +
        ' points at ' + Math.round(cf.density * 100) + '% density against ' +
        wide.points.toLocaleString() + ' full - ' + Math.round(ratio * 1000) / 10 +
        '% of the vertices for ' + Math.round((compact.side / wide.side) * 100) +
@@ -2764,17 +2501,9 @@ async function main() {
     ok(three.objects === 1 && three.materials === 1 && three.shader === true,
        'still one object, one material and a real shader at the compact tier - the density ' +
        'changed and nothing else did', JSON.stringify(three));
-    /* THE WELL'S OWN RECTANGLE, RE-READ. wellRect above is where the full-size well was;
-       a plate of the compact head taken through it would be a plate of the sky beside it. */
     const compactRect = await page.json('__galaxy.layout.rects.presence');
-    if (compactRect) {
-      await page.shot('deck-core-compact.png', compactRect);
-      note('wrote deck-core-compact.png (the core in a ' + compact.side + 'px well at ' +
-           compact.w + 'px wide)');
-    }
+    if (compactRect) await page.shot('deck-dust-compact.png', compactRect);
   }
-  /* AND THE ROOM GOES BACK, because everything after this takes pictures: the width, the
-     panel and the session, in that order, each by the door that opened it. */
   await page.send('Emulation.clearDeviceMetricsOverride');
   await sleep(300);
   await page.evaluate(`(function(){
@@ -2792,10 +2521,13 @@ async function main() {
      'and the tier is not a one-way door: the window comes back and so does the full ' +
      'density - ' + backWide.points.toLocaleString() + ' points again',
      JSON.stringify(backWide));
-  if (backWide.mode !== 'core') {
-    await page.evaluate('__galaxy.presence.set("core")');
+  if (backWide.mode !== 'dust') {
+    await page.evaluate('__galaxy.presence.set("dust")');
     await sleep(1000);
   }
+  /* AND THE PANE GOES BACK TO THE GALAXY, which is what it shows at rest. */
+  await page.evaluate('__galaxy.stage.set("galaxy", "deck_proof")');
+  await sleep(1000);
 
   /* ---- 2c-4. WORK MODE IS THE ROOM, NOT THE CARD --------------------------
      WHAT IS BEING CHECKED, AND WHY EACH HALF OF IT IS SEPARATE. A tint on the countdown
@@ -3064,7 +2796,9 @@ async function main() {
                   pe: s.pointerEvents, z: s.zIndex,
                   blur: s.backdropFilter || s.webkitBackdropFilter,
                   h: Math.round(r.height), top: Math.round(r.top),
-                  left: Math.round(r.left), right: Math.round(innerWidth - r.right)},
+                  left: Math.round(r.left), right: Math.round(innerWidth - r.right),
+                  railH: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--rail-h')),
+                  titleW: (__galaxy.layout.last || {}).titleW},
             valueColour: av.color, keyMono: kv.fontFamily};
   })()`);
   const cells = trail.cells || {};
@@ -3083,10 +2817,17 @@ async function main() {
      trail.css.size === '10px' && /mono/i.test(trail.keyMono),
      'it is mono type throughout, uppercase, at 10px - an instrument label, not a sentence',
      JSON.stringify({ family: trail.css.mono, size: trail.css.size, transform: trail.css.up }));
-  ok(trail.css.pe === 'none' && trail.css.top === 0 && trail.css.left === 0 &&
-     trail.css.h === 30,
-     'a 30px band across the very top that CANNOT BE CLICKED: pointer-events none, so it ' +
-     'never takes a press meant for the sky', JSON.stringify(trail.css));
+  /* UI MANDATE II PART 1 MOVED THIS BAND: the status strip is restyled INTO the header row,
+     which is --rail-h (58px) tall and starts where the title block (brand, h1, the computed
+     note/connection counts) ends - the governor writes rail.style.left = titleW. Old: h === 30,
+     left === 0. New: h === --rail-h read off :root, left === layout.last.titleW. The claim the
+     assertion exists for - a band across the very top that never takes a press - is unchanged. */
+  ok(trail.css.pe === 'none' && trail.css.top === 0 && trail.css.railH > 0 &&
+     trail.css.h === trail.css.railH && trail.css.titleW > 0 &&
+     Math.abs(trail.css.left - trail.css.titleW) <= 1,
+     'a ' + trail.css.h + 'px header band across the very top, beside the ' + trail.css.titleW +
+     'px title block, that CANNOT BE CLICKED: pointer-events none, so it never takes a press ' +
+     'meant for the sky', JSON.stringify(trail.css));
   ok(/blur\(12px\)/.test(trail.css.blur) && trail.css.z === '6',
      'dark glass on the same blur as every other surface, at z-index 6 - under the panel ' +
      'and under the card', JSON.stringify({ blur: trail.css.blur, z: trail.css.z }));

@@ -666,9 +666,15 @@ async function main() {
   ok(!!(wide.toastBox && wide.cardBox),
      'the governor measured BOTH boxes rather than assuming they are far apart',
      JSON.stringify({ toast: wide.toastBox, card: wide.cardBox }));
-  ok(wide.overlap === false && disjoint(wideR.brain, wideR.focuscard),
+  /* UI MANDATE II: THE BOTTOM SURFACE IS #dock. The toast was #brain's whole column; the
+     mandate split the ask (caption, status, organ bar) out of it to the foot of the main pane
+     and docked the conversation on the right. These checks were always about the surface at
+     the BOTTOM meeting the card, so they follow it to #dock - against #brain (now the right-
+     hand column) they would pass by being on the other side of the room, which is a vacuous
+     green. Old: rects.brain. New: rects.dock. */
+  ok(wide.overlap === false && disjoint(wideR.dock, wideR.focuscard),
      'THE LAW at ' + W + 'x' + H + ': the toast and the card do not overlap',
-     JSON.stringify({ governor: wide.toastBox, toast: wideR.brain, card: wideR.focuscard }));
+     JSON.stringify({ governor: wide.toastBox, toast: wideR.dock, card: wideR.focuscard }));
 
   /* And now the case the law is actually FOR. At 1280x860 these two sit at opposite ends
      of the screen, so a green check up there proves only that the window is tall. The
@@ -692,8 +698,8 @@ async function main() {
      'crowded, the governor had to move to clear the card - the rule FIRED, so what ' +
      'follows is not true by luck',
      JSON.stringify({ toast: tight.toastBox, card: tight.cardBox }));
-  ok(tight.overlap === false && disjoint(tightR.brain, tightR.focuscard),
-     'and crowded they STILL do not overlap: toast ' + JSON.stringify(tightR.brain) +
+  ok(tight.overlap === false && disjoint(tightR.dock, tightR.focuscard),
+     'and crowded they STILL do not overlap: toast ' + JSON.stringify(tightR.dock) +
      ' clear of card ' + JSON.stringify(tightR.focuscard),
      JSON.stringify({ governor: { toast: tight.toastBox, card: tight.cardBox } }));
   /* REPLACES "and it gave up WIDTH, not position: Npx -> Npx, still starting at the same x",
@@ -719,9 +725,12 @@ async function main() {
      the one that catches it, and it is now checked against the formula rather than against the
      other read, so it holds even when both reads are clamped. */
   const L = await page.json('__galaxy.layout.LAYOUT');
+  /* UI MANDATE II: the ask is centred in the PANE (canvasW is the pane's width and it starts at
+     pane.left, after the sidebar), with PANE_PAD margins. Old: canvasW - EDGE*2 from x=0.
+     New: canvasW - PANE_PAD*2 from pane.left - the governor's own formula, recomputed here. */
   const wantW = (last) => Math.max(L.TOAST_MIN,
-                                   Math.min(L.TOAST_MAX, last.canvasW - L.EDGE * 2));
-  const wantX = (last) => Math.max(L.EDGE / 2, (last.canvasW - wantW(last)) / 2);
+                                   Math.min(L.TOAST_MAX, last.canvasW - L.PANE_PAD * 2));
+  const wantX = (last) => last.pane.left + Math.max(L.PANE_PAD / 2, (last.canvasW - wantW(last)) / 2);
   const openW = wantW(tight), openX = wantX(tight);
   const clearW = Math.max(L.TOAST_MIN, tight.cardBox.left - L.GAP - openX);
   note('the clamp\'s arithmetic at ' + tv.vw + 'x' + tv.vh + ': the column wants ' + openW +
@@ -729,15 +738,15 @@ async function main() {
        tight.cardBox.left + ', so the clearance width is ' + clearW + 'px' +
        (wide.clearedToast ? ' - and the roomy read was clamped too, which is why this is ' +
         'arithmetic and not a before/after' : ''));
-  ok(!!tightR.brain && Math.abs(tightR.brain.w - clearW) <= 1 && clearW < openW &&
-     Math.abs(tightR.brain.left - openX) <= 1,
+  ok(!!tightR.dock && Math.abs(tightR.dock.w - clearW) <= 1 && clearW < openW &&
+     Math.abs(tightR.dock.left - openX) <= 1,
      'and it gave up WIDTH, not position: it wanted ' + openW + 'px and took ' +
-     tightR.brain.w + 'px, which is the card\'s left edge less one ' + L.GAP + 'px gap - and ' +
-     'it still starts at x=' + tightR.brain.left + ', the x the formula gives with no card in ' +
+     tightR.dock.w + 'px, which is the card\'s left edge less one ' + L.GAP + 'px gap - and ' +
+     'it still starts at x=' + tightR.dock.left + ', the x the formula gives with no card in ' +
      'the room',
      'failure mode: the toast clears the card by sliding right instead of narrowing, so the ' +
      'countdown jumps sideways whenever an answer arrives. ' +
-     JSON.stringify({ tight: tightR.brain, wide: wideR.brain, wantW: openW, wantX: openX,
+     JSON.stringify({ tight: tightR.dock, wide: wideR.dock, wantW: openW, wantX: openX,
                       clearW: clearW, canvasW: tight.canvasW, card: tight.cardBox }));
   /* The card is the same card at both heights, and its text is still inside it: a rule
      that held at 860px and quietly stopped holding at 380px would be no rule. */
@@ -791,13 +800,13 @@ async function main() {
        constitution's claim is about the CARD, and the toast and the note panel are placed
        by a governor whose rules are tested above on their own terms. Printed so that a rail
        creeping into either one is visible here instead of being nobody's check. */
-    note(label + ': rail vs toast ' + (disjoint(r.toprail, r.brain) ? 'clear' : 'OVERLAP') +
-         ' · bar vs toast ' + (disjoint(bar.bar, r.brain) ? 'clear' : 'OVERLAP') +
+    note(label + ': rail vs toast ' + (disjoint(r.toprail, r.dock) ? 'clear' : 'OVERLAP') +
+         ' · bar vs toast ' + (disjoint(bar.bar, r.dock) ? 'clear' : 'OVERLAP') +
          ' · rail vs panel ' + (disjoint(r.toprail, r.panel) ? 'clear' : 'OVERLAP') +
          ' · rail vs title ' + (disjoint(r.toprail, r.title) ? 'clear' : 'OVERLAP') +
          ' — and "bar vs toast" reads OVERLAP because the organ rail is INSIDE the toast ' +
-         'column (#bar is a child of #brain, under the status row), so that pair is a ' +
-         'containment rather than a collision: ' + JSON.stringify(r.brain));
+         'column (#bar is a child of #dock, under the status row), so that pair is a ' +
+         'containment rather than a collision: ' + JSON.stringify(r.dock));
     ok(!!bar.sheet && bar.sheet.open === false && bar.sheet.opacity === 0 &&
        bar.sheet.pe === 'none' && !!bar.cmd && bar.cmd.right <= 1,
        label + ' - and the unsummoned command panel is covering nothing: opacity 0, ' +
@@ -842,6 +851,12 @@ async function main() {
      every governed surface at once. */
   const WELL_AT = [1280, 1600, 1920];
   let wellFitAny = false;
+  /* UI MANDATE II PART 4: AT REST THE PANE SHOWS THE GALAXY and the well is turned edge-on - a
+     0px-wide rectangle that every disjointness check below would pass by having no width.
+     So the well is measured on the stage that shows it, through the same door the ear uses,
+     and the stage is handed back afterwards. html.nomove holds the flip still for the reading. */
+  await page.evaluate('document.documentElement.classList.add("nomove"); __galaxy.stage.set("presence", "layout_proof 2e")');
+  await sleep(400);
   for (const w of WELL_AT) {
     await page.send('Emulation.setDeviceMetricsOverride',
                     { width: w, height: H, deviceScaleFactor: 0, mobile: false });
@@ -863,10 +878,14 @@ async function main() {
       /* THE LAW. Four surfaces, each of which could cover it and none of which may. */
       ok(!!r.presence, 'at ' + w + ': and the well is actually on the glass, ' +
          (r.presence && r.presence.w) + 'px square', JSON.stringify(r.presence));
-      ok(disjoint(r.presence, r.brain),
-         'at ' + w + ': THE LAW - the toast does not touch the well (' +
-         JSON.stringify(r.brain) + ' clear of ' + JSON.stringify(r.presence) + ') · ' +
-         box.why, JSON.stringify({ why: box.why, toast: r.brain, well: r.presence }));
+      /* Old: the toast (#brain) does not touch the well. New: neither the ask at the foot of
+         the pane (#dock) NOR the conversation docked on the right (#brain) - the toast became
+         two surfaces, and the law is about both of them. */
+      ok(disjoint(r.presence, r.dock) && disjoint(r.presence, r.brain),
+         'at ' + w + ': THE LAW - neither the ask nor the conversation touches the well (' +
+         JSON.stringify({ dock: r.dock, brain: r.brain }) + ' clear of ' +
+         JSON.stringify(r.presence) + ') · ' + box.why,
+         JSON.stringify({ why: box.why, dock: r.dock, brain: r.brain, well: r.presence }));
       ok(disjoint(r.presence, r.focuscard),
          'at ' + w + ': the session card does not touch the well',
          JSON.stringify({ card: r.focuscard, well: r.presence }));
@@ -876,14 +895,25 @@ async function main() {
       ok(disjoint(r.presence, r.toprail) && disjoint(r.presence, r.legend),
          'at ' + w + ': nor the telemetry rail, nor the legend',
          JSON.stringify({ rail: r.toprail, legend: r.legend, well: r.presence }));
-      /* RIGHT-OF-CENTRE, as specified, and measured against the CANVAS rather than the
-         viewport: with the panel open the canvas is the part of the glass the galaxy
-         still has, and "right of centre" is a claim about the room the eye is in. */
-      ok(r.presence.left + r.presence.w / 2 > last.canvasW / 2,
-         'at ' + w + ': and it is right-of-centre, as specified - midpoint ' +
-         Math.round(r.presence.left + r.presence.w / 2) + ' of a ' + last.canvasW +
-         'px canvas',
-         JSON.stringify({ well: r.presence, canvasW: last.canvasW }));
+      /* REPLACES "and it is right-of-centre, as specified". UI mandate II PART 2 specifies
+         CENTRE placement: the presence is centred in the free band the governor gives it -
+         the pane between the header and the ask, or beside/below the lanes when a card is up -
+         at PRES_RATIO of the pane, capped. Asserted as the browser's rectangle against the
+         governor's published band and ask, on both axes, so it is two computations of one
+         placement and not a restatement. Old: midpoint > canvasW/2. New: midpoint = band
+         centre (+/-1px) and side = min(ask, band width, band height). */
+      const bc = { x: (box.band.l + box.band.r) / 2, y: (box.band.t + box.band.b) / 2 };
+      const mid = { x: r.presence.left + r.presence.w / 2, y: r.presence.top + r.presence.h / 2 };
+      const wantSide = Math.min(box.ask, box.band.r - box.band.l, box.band.b - box.band.t);
+      ok(Math.abs(mid.x - bc.x) <= 1.5 && Math.abs(mid.y - bc.y) <= 1.5 &&
+         Math.abs(r.presence.w - wantSide) <= 1 && r.presence.left >= last.pane.left &&
+         r.presence.right <= last.pane.right,
+         'at ' + w + ': and it is CENTRED in its band, as PART 2 specifies - midpoint ' +
+         Math.round(mid.x) + ',' + Math.round(mid.y) + ' against the band\'s ' + Math.round(bc.x) +
+         ',' + Math.round(bc.y) + ', ' + r.presence.w + 'px = min(ask ' + box.ask + ' at ' +
+         box.ratio + ' x the pane, the band) and inside the pane ' + last.pane.left + '-' +
+         last.pane.right,
+         JSON.stringify({ well: r.presence, band: box.band, ask: box.ask, pane: last.pane }));
       /* AND THE RENDERER FOLLOWED. The governor writes a CSS box; the WebGLRenderer has
          to be told the same number or the hologram is drawn at the wrong scale inside a
          correctly placed square, which is the failure that looks like a layout bug and
@@ -900,6 +930,7 @@ async function main() {
          JSON.stringify({ box: box, rect: r.presence }));
     }
   }
+  await page.evaluate('__galaxy.stage.set("galaxy", "layout_proof 2e"); document.documentElement.classList.remove("nomove")');
   ok(wellFitAny,
      'and the well fitted at at least one of ' + WELL_AT.join('/') +
      ' - the checks above are about a hologram that was on the glass, not about a page ' +

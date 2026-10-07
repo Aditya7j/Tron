@@ -77,11 +77,11 @@ const HOST = (/^https:\/\/([^/]+)\//.exec(THREE_SPEC) || [])[1] || '';
 const ADDONS = ['EffectComposer', 'RenderPass', 'UnrealBloomPass', 'OutputPass'];
 
 const WIDTHS = [[1280, 800], [1600, 900], [1920, 1080]];   // the third is this run's fullscreen
-/* THE SEVEN-RADIUS LADDER, which is the core's whole silhouette as one ascending list. §32
-   shipped five rungs; §33 inserts two. Nesting is what this catches: a ring at 0.92 and another
-   at 0.9201 is two rings nobody can see apart, and the mandate asked for "differing
-   inclinations and speeds". */
-const LADDER = ['heart', 'orbit1', 'shell', 'orbit0', 'band1', 'band0', 'reticle'];
+/* UI MANDATE II: THE SEVEN-RADIUS LADDER IS GONE WITH THE CORE. The dust's silhouette is one
+   radius and a density that falls from the heart outward; section 2 reads the five radial shells
+   off the drawn buffer and asserts the fall, which is the ladder's job (a structure that cannot
+   collapse into one thick band) said for a volume. */
+const DUST_SHELLS = ['0-0.2', '0.2-0.4', '0.4-0.6', '0.6-0.8', '0.8-1.0'];
 /* THE THRESHOLDS, NAMED HERE RATHER THAN INLINE, because the mandate says "thresholds named in
    the proof" and a number buried in an expression is not named. */
 const T = {
@@ -401,76 +401,82 @@ async function main() {
     if (await page.evaluate('!!(window.__galaxy && __galaxy.presence && __galaxy.presence.on)')) break;
     await sleep(250);
   }
-  /* THE CORE IS ASKED FOR AFTER THE BOOT, not before: presMode() on a presence that has not
-     booted is a request the boot then overwrites with its own first mode, and the run would
-     measure `ring` while believing it had asked for the core. */
-  const mode = await page.evaluate("String(__galaxy.presence.set('core'))");
+  /* THE DUST IS ASKED FOR AFTER THE BOOT, not before: presMode() on a presence that has not
+     booted is a request the boot then overwrites with its own first mode. UI MANDATE II: the core
+     is gone and the rich mode is the dust; and since the main pane shows the galaxy at rest, the
+     stage is turned to the presence through stageSet() - the door the ear uses - because every
+     pixel this file reads is a pixel of the presence ON the glass. */
+  await page.evaluate('__galaxy.stage.set("presence", "cine_proof")');
+  const mode = await page.evaluate("String(__galaxy.presence.set('dust'))");
   await sleep(2500);
   const rev = await page.json('__galaxy.presence.cine.rev');
-  ok(mode === 'core' && String(rev) === String(PIN).split('.')[1],
+  ok(mode === 'dust' && String(rev) === String(PIN).split('.')[1],
      'AND THE PARITY IS LIVE AS WELL AS WRITTEN: the three the presence actually resolved ' +
      'reports REVISION ' + rev + ', which is ' + PIN + '\'s minor - failure mode of asserting ' +
      'only the source: a stale service worker or a CDN redirect serves a different build and ' +
      'every other assertion in this file is made against code the importmap did not choose',
      JSON.stringify({ mode: mode, rev: rev, pin: PIN }));
 
-  /* ====================================== 2. THE RINGS ================================= */
-  head('2. the rings');
-  const core = await page.json('__galaxy.presence.core()');
+  /* ====================================== 2. THE DUST ================================== */
+  /* UI MANDATE II PART 3 REMOVED THE CORE, and its orbits, bands, shell, heart and reticle with
+     it. Each of this section's seven assertions is replaced by the dust's counterpart, named
+     beside the one it stands in for:
+       old: TWO ORBITAL BANDS, POINT-BUILT       new: THE DUST IS POINT-BUILT IN THE ONE BUFFER
+       old: DIFFERING INCLINATIONS AND SPEEDS    new: IT TURNS, DRIFTS AND BREATHES, ALL SLOW
+       old: EACH AT ITS DECLARED RADIUS, FLAT     new: IT REACHES ITS DECLARED RADIUS AND NO FURTHER
+       old: EVERYTHING ROUND INSIDE THE RETICLE  new: EVERY OCTANT CARRIES DUST
+       old: THE SEVEN-RADIUS LADDER ASCENDS      new: THE DENSITY FALLS SHELL BY SHELL FROM THE HEART
+       old: THE POINT CAP HOLDS, WHOLE CORE ON   new: THE POINT CAP HOLDS, WHOLE DUST ON
+       old: §32 IS WHERE §32 LEFT IT             new: THE DUST IS WHERE MANDATE II LEFT IT */
+  head('2. the dust');
+  const dust = await page.json('__galaxy.presence.dust()');
   const cine0 = await page.json('__galaxy.presence.cine');
-  const orb = (core && core.orbits) || [];
-  note('orbits: ' + orb.map((o) => 'r' + o.rMean + ' tilt ' + o.tilt + ' spin ' + o.spin).join('  ·  '));
-  ok(orb.length === 2 && orb.every((o) => o.n === 500),
-     'THERE ARE EXACTLY TWO ADDITIONAL ORBITAL BANDS AND THEY ARE POINT-BUILT: 2 x 500 points ' +
-     'in the one buffer, not two new objects - failure mode of two new Points: deck_proof\'s ' +
-     '"the whole hologram is one draw call" assertion goes red and the cap stops meaning anything',
-     JSON.stringify(orb.map((o) => o.n)));
-  ok(orb.length === 2 && orb[0].tilt !== orb[1].tilt &&
-     Math.abs(orb[0].spin) !== Math.abs(orb[1].spin) && orb[0].spin * orb[1].spin < 0,
-     'AT DIFFERING INCLINATIONS AND SPEEDS, AND THEY CROSS: tilts ' + orb.map((o) => o.tilt) +
-     ' rad with speeds ' + orb.map((o) => o.spin) + ' rad/s, opposite in sign so the pair ' +
-     'scissors instead of chasing - failure mode of equal-sign spins: two rings that keep their ' +
-     'relative angle forever and read as one rigid object',
-     JSON.stringify(orb.map((o) => [o.tilt, o.spin])));
-  ok(orb.every((o) => Math.abs(o.rMean - o.wanted) < 0.01 && o.zAbs <= 0.009),
-     'EACH SITS AT THE RADIUS IT DECLARES AND IS STORED FLAT: means ' +
-     orb.map((o) => o.rMean) + ' against wanted ' + orb.map((o) => o.wanted) + ', |z| <= 0.009 ' +
-     'in the stored frame because the tilt is the shader\'s - failure mode of baking the tilt ' +
-     'into the buffer: the precession has nothing left to rotate and the rings stand still',
-     JSON.stringify(orb));
-  const ringMax = Math.max(...orb.map((o) => o.rMax), ...core.bands.map((b) => b.rMax));
-  ok(core.box.h > ringMax,
-     'AND EVERYTHING ROUND IS INSIDE THE RETICLE: the brackets sit at ' + core.box.h +
-     ' and the widest ring reaches ' + ringMax.toFixed(4) + ' - failure mode if an orbit were ' +
-     'outside: the reticle stops reading as a frame and starts reading as a ring of its own',
-     JSON.stringify({ box: core.box.h, ringMax: ringMax }));
-  /* EVERY RUNG READ FROM THE READOUT AND NOT ONE OF THEM TYPED HERE, including the shell at
-     core.shell.r - failure mode of typing 0.78 for the shell: the ladder keeps passing on the
-     day somebody moves the filament radius into a neighbour, because the harness is comparing
-     the other six rungs against a number that no longer exists in the viewer. */
-  const radii = [core.heart.r, orb[1] && orb[1].wanted, core.shell.r, orb[0] && orb[0].wanted,
-                 core.bands[1].wanted, core.bands[0].wanted, core.box.h];
-  const rising = radii.every((r, i) => i === 0 || r > radii[i - 1] + 0.02);
-  ok(rising,
-     'THE SEVEN-RADIUS LADDER IS STRICTLY ASCENDING WITH NOTHING NESTED: ' +
-     LADDER.map((nm, i) => nm + ' ' + radii[i]).join(' < ') +
-     ' - failure mode of two rungs within 0.02: the eye reads one thick ' +
-     'band and the second ring is paid for and invisible',
-     JSON.stringify(radii));
-  ok(cine0.points === 13740 && cine0.points <= cine0.pointCap,
-     'AND THE DECLARED POINT CAP HOLDS WITH THE WHOLE CORE ON: ' + cine0.points + ' of ' +
-     cine0.pointCap + ', which is ' + (cine0.pointCap - cine0.points) + ' points of headroom - ' +
-     'failure mode of a cap exceeded: presence.fill() silently truncates the last arm, and the ' +
-     'arm it truncates is whichever is written last rather than whichever matters least',
+  const geo = (dust && dust.geo) || null;
+  const life = await page.json('__galaxy.presence.life || null');
+  note('shells ' + DUST_SHELLS.join(' / ') + ': ' + (geo ? geo.bins.join(' / ') : '-') +
+       ' points, density ' + (geo ? geo.density.join(' / ') : '-') + ' · life ' + JSON.stringify(life));
+  ok(!!geo && geo.roles.length === 1 && geo.mesh === 0 && dust.points === cine0.points,
+     'THE DUST IS POINT-BUILT IN THE ONE BUFFER: ' + (dust && dust.points) + ' points of one ' +
+     'role in the presence\'s single Points object, no second object - failure mode of a cloud ' +
+     'built as many Points: deck_proof\'s "one object, one material" goes red and the cap stops ' +
+     'meaning anything',
+     JSON.stringify(geo && { roles: geo.roles, mesh: geo.mesh, points: dust && dust.points }));
+  ok(!!life && life.spin > 0 && life.spin < 0.3 && life.drift > 0 && life.drift < 0.2 &&
+     life.breath > 0 && life.breath < 0.05,
+     'IT TURNS, DRIFTS AND BREATHES, AND ALL OF IT SLOWLY: spin ' + (life && life.spin) +
+     ' rad/s, noise drift ' + (life && life.drift) + ', breath ' + (life && life.breath) + ' at ' +
+     (life && life.breathHz) + 'Hz - failure mode of a still cloud: a photograph of smoke, and of a ' +
+     'fast one: a cloud that fidgets when the house is doing nothing',
+     JSON.stringify(life));
+  ok(!!geo && geo.rMax <= 1.0001 && geo.rMax >= 0.95,
+     'IT REACHES ITS DECLARED RADIUS AND NO FURTHER: the farthest point is at ' +
+     (geo && geo.rMax) + ' of the written radius ' + (geo && geo.radius) + ' - failure mode of a ' +
+     'rejection sampler gone wrong: a ball that stops short (a smaller presence than the governor ' +
+     'sized for) or points flung outside the window that masks the canvas',
+     JSON.stringify(geo && { rMax: geo.rMax, radius: geo.radius }));
+  const octLo = geo ? Math.min(...geo.octants) : 0, octHi = geo ? Math.max(...geo.octants) : 1;
+  ok(!!geo && octLo >= 0.6 * octHi,
+     'EVERY OCTANT CARRIES DUST: ' + (geo && geo.octants.join('/')) + ', the least ' +
+     (octLo / octHi).toFixed(2) + ' of the most - failure mode of a seeded noise field that ' +
+     'happens to empty one side: a lopsided cloud that reads as a crescent from half the yaws',
+     JSON.stringify(geo && geo.octants));
+  const falls = !!geo && geo.density.every((d, i) => i === 0 || d < geo.density[i - 1]);
+  ok(falls,
+     'THE DENSITY FALLS SHELL BY SHELL FROM THE HEART: ' +
+     (geo ? DUST_SHELLS.map((s, i) => s + ' ' + geo.density[i]).join(' > ') : '-') +
+     ' points per unit volume - failure mode of a flat fill: an even fog with no heart, which is ' +
+     'the thing the mandate\'s "dense" rules out',
+     JSON.stringify(geo && geo.density));
+  ok(cine0.points === 13800 && cine0.points <= cine0.pointCap,
+     'AND THE DECLARED POINT CAP HOLDS WITH THE WHOLE DUST ON: ' + cine0.points + ' of ' +
+     cine0.pointCap + ' - the dust is the whole allocation by one constant, so the headroom is ' +
+     'zero by design and a fill that asked for more would be truncated, not grown',
      JSON.stringify({ points: cine0.points, cap: cine0.pointCap }));
-  ok(core.bands.length === 2 && Math.abs(core.bands[0].rMean - 1.03) < 0.01 &&
-     Math.abs(core.bands[1].rMean - 0.92) < 0.01 && Math.abs(core.heart.rMax - 0.30) < 0.001 &&
-     core.box.h === 1.06 && Math.abs(core.frame.fill - 0.5935) < 0.002,
-     'AND §32 IS WHERE §32 LEFT IT: two bands at 1.03/0.92, a 0.30 heart, a 1.06 reticle and ' +
-     core.frame.fill + ' of the frame height - failure mode of a changed fill: the §32 plates ' +
-     'stop being a valid comparison and the boss is asked to judge a silhouette against a ' +
-     'photograph of a different one',
-     JSON.stringify(core.frame));
+  ok(!!geo && geo.radius === 1 && geo.scale === 0.86 && Math.abs(geo.frameFill - 0.6687) < 0.002,
+     'AND THE DUST IS WHERE MANDATE II LEFT IT: radius ' + (geo && geo.radius) + ' worn at ' +
+     (geo && geo.scale) + ', ' + (geo && geo.frameFill) + ' of the frame half-height - failure mode ' +
+     'of a changed fill: the lookbook\'s four state plates stop being a valid comparison',
+     JSON.stringify(geo));
 
   /* ====================================== 3. THE SMOKE ================================= */
   head('3. the smoke');
@@ -1304,10 +1310,16 @@ async function main() {
   head('§34 — the window at the border, and the presence sized from the viewport');
   await page.send('Emulation.setDeviceMetricsOverride',
     { width: 1366, height: 696, deviceScaleFactor: 1, mobile: false });
-  await page.evaluate("String(__galaxy.presence.set('core'))");
+  await page.evaluate("String(__galaxy.presence.set('dust'))");
   await sleep(1800);
   const door = await page.json('__galaxy.presence.edge()');
-  const retReach = Math.SQRT2 * 1.06 * 0.72 / 1.2859;     // the reticle's own corner, in half-extents
+  /* UI MANDATE II: the reticle went with the core. What the picture owns now is the dust's own
+     reach at its widest moment - frame fill x (1 + breath + full level swell + full pulse swell),
+     every term read off PRES rather than typed. Old: the reticle's corner, 0.8398. */
+  const reachK = await page.json('(function(){var P=__galaxy.presence.PRES;' +
+    'return {fill:__galaxy.presence.dust().geo.frameFill,b:P.DUST_BREATH,l:P.DUST_LEVEL_SWELL,' +
+    'p:P.DUST_PULSE_SWELL};})()');
+  const retReach = reachK.fill * (1 + reachK.b + reachK.l + reachK.p);
   note('edge() reports inner ' + (door && door.inner) + ', pad ' + (door && door.pad) +
        ', max ' + (door && door.max) + ', applied ' + (door && door.applied));
   ok(!!door && door.applied === true && door.radial === true && door.closestSide === true &&
@@ -1315,9 +1327,9 @@ async function main() {
      'THE EDGE WINDOW IS IN FORCE AND IT STARTS OUTSIDE EVERYTHING THE PICTURE OWNS: a ' +
      'closest-side radial gradient read back off getComputedStyle - not off the stylesheet this ' +
      'harness could have been written against - with an inner radius of ' + (door && door.inner) +
-     ' of the half-extent, which is outside the reticle\'s own corner at ' + retReach.toFixed(4) +
-     ' and far outside the core, whose points reach ' + (0.5935).toFixed(4) + '; so the window ' +
-     'cannot dim the sphere or the brackets by arithmetic and not by hope. Failure mode this ' +
+     ' of the half-extent, which is outside the dust at its widest - ' + retReach.toFixed(4) +
+     ', its ' + reachK.fill + ' fill at full breath, level and pulse; so the window ' +
+     'cannot dim the cloud by arithmetic and not by hope. Failure mode this ' +
      'catches: the exact §33 one - a correction written, shipped, and never applied by the ' +
      'browser at all, measured as "doing nothing" and retired as a wrong hypothesis',
      JSON.stringify(door));
@@ -1521,19 +1533,25 @@ async function main() {
       await sleep(1500);
       const r = await page.json(
         '(function(){var L=__galaxy.layout.LAYOUT;var W=__galaxy.presence.well;' +
-        'var c=__galaxy.presence.core();' +
+        'var c=__galaxy.presence.dust();var G=__galaxy.layout.last;' +
         'var b=document.querySelector("#presence").getBoundingClientRect();' +
         'var pb=document.querySelector("#presence .pb");' +
-        'return {side:+b.width.toFixed(1),fill:c.frame.fill,presFill:L.PRES_FILL,' +
-        'frac:L.PRES_CORE_FRAC,cap:L.PRES_CAP,why:String(W.why),' +
+        'return {side:+b.width.toFixed(1),fill:c.geo.frameFill,ratio:L.PRES_RATIO,edge:L.EDGE,' +
+        'pane:G.pane,band:G.wellBox&&G.wellBox.pane?G.wellBox.pane.band:null,' +
+        'govAsk:G.wellBox?G.wellBox.ask:null,cap:L.PRES_CAP,why:String(W.why),' +
         'pb:pb?+pb.getBoundingClientRect().width.toFixed(1):null,' +
         'inner:__galaxy.presence.edge().inner,vw:innerWidth,vh:innerHeight};})()');
       const mn = Math.min(r.vw, r.vh);
-      const ask = Math.round(Math.min(r.cap, mn * r.frac / r.presFill));
-      srows.push({ sw, mode, vh: r.vh, mn, side: r.side, ask,
+      /* UI MANDATE II PART 2: the ask is PRES_RATIO x min(the pane's width less its edges, the
+         pane's free band), capped - recomputed here from the LAYOUT constants and the governor's
+         published pane, so the second assertion below is two computations of one number. Old:
+         min(PRES_CAP, min(vw,vh) x PRES_CORE_FRAC / PRES_FILL). */
+      const ask = Math.round(Math.min(r.cap, r.ratio *
+        Math.min(r.pane.right - r.pane.left - 2 * r.edge, r.band)));
+      srows.push({ sw, mode, vh: r.vh, mn, side: r.side, ask, govAsk: r.govAsk,
                    core: +((r.side * r.fill) / mn).toFixed(4),
                    bandBound: /the band/.test(r.why), askBound: /the ask/.test(r.why),
-                   pb: r.pb, inner: r.inner, fill: r.fill, presFill: r.presFill, why: r.why });
+                   pb: r.pb, inner: r.inner, fill: r.fill, why: r.why });
     }
   }
   /* windowed is MODELLED as the fullscreen height minus 72px of browser chrome: two emulated
@@ -1541,7 +1559,7 @@ async function main() {
      claim about. It is named as a model and is not a real document.fullscreenElement - that one
      belongs to layout_proof, which drives it with Ctrl+A. */
   srows.forEach((r) => note(r.sw + 'x' + r.vh + ' (' + r.mode + '): well ' + r.side +
-    'px, asked ' + r.ask + 'px, core/min(vw,vh) ' + r.core.toFixed(4) +
+    'px, asked ' + r.ask + 'px, dust/min(vw,vh) ' + r.core.toFixed(4) +
     ', bracket ' + r.pb + 'px — ' + r.why.slice(-46)));
   const gaps = SCR.map(([sw]) => {
     const a = srows.find((r) => r.sw === sw && r.mode === 'windowed');
@@ -1553,7 +1571,7 @@ async function main() {
   ok(asksVary && gaps.every((g) => g.grew) && gaps.every((g) => g.gap <= T.SCALE_GAP),
      'PART 3 - THE PRESENCE IS SIZED FROM THE VIEWPORT AND NO LONGER FROM A FIXED RECT: all six ' +
      'states ask for a different number of pixels (' + srows.map((r) => r.ask).join('/') +
-     '), the core now GROWS when the room grows at every width (' +
+     '), the dust GROWS when the room grows at every width (' +
      gaps.map((g) => g.sw + ': ' + g.w.toFixed(4) + '->' + g.f.toFixed(4)).join(', ') +
      '), and windowed sits within ' + (100 * Math.max(...gaps.map((g) => g.gap))).toFixed(1) +
      '% of fullscreen on the same screen, inside the named ' + (100 * T.SCALE_GAP) + '%. ' +
@@ -1562,30 +1580,35 @@ async function main() {
      'the same 420px on 1366x768, so the sphere shrank as the display got better',
      JSON.stringify({ asks: srows.map((r) => r.ask), gaps: gaps }));
 
-  const fillAgrees = srows.every((r) => r.presFill === r.fill);
+  /* UI MANDATE II: PRES_FILL and PRES_CORE_FRAC are gone - the governor no longer sizes the well
+     from a copy of the renderer's fill, it sizes it from the PANE. So the duplicated number this
+     checks is the ask itself: the harness's recomputation against the governor's published one.
+     Old: LAYOUT.PRES_FILL === core().frame.fill. New: recomputed ask === wellBox.ask (+-1px for
+     the band's rounding). The other two halves are unchanged. */
+  const fillAgrees = srows.every((r) => r.govAsk !== null && Math.abs(r.govAsk - r.ask) <= 1);
   const oneInner = new Set(srows.map((r) => r.inner)).size === 1;
   const pbScales = srows.every((r) => r.pb >= T.BRACKET_PX) &&
                    Math.max(...srows.map((r) => r.pb)) > Math.min(...srows.map((r) => r.pb));
   ok(fillAgrees && oneInner && pbScales,
      'AND THE THREE NUMBERS THIS ROUND DUPLICATED STILL AGREE WITH THEIR ORIGINALS: the ' +
-     'governor\'s LAYOUT.PRES_FILL reads ' + srows[0].presFill + ' against the renderer\'s own ' +
-     'core().frame.fill of ' + srows[0].fill + ' in all six states - a governor sizing the well ' +
-     'from a stale copy of the fill fraction would be off by exactly the drift and nothing would ' +
-     'throw; the window\'s inner radius is ONE scale-invariant number (' + srows[0].inner +
+     'governor\'s published ask (' + srows.map((r) => r.govAsk).join('/') + ') against this ' +
+     'file\'s own PRES_RATIO x the pane (' + srows.map((r) => r.ask).join('/') + ') in all six ' +
+     'states - a governor sizing the well from anything but the pane would part from it and ' +
+     'nothing would throw; the window\'s inner radius is ONE scale-invariant number (' + srows[0].inner +
      ') at every well size, which is what makes it a property of the frame rather than of a ' +
      'pixel count; and the Eyes brackets scale with the presence (' +
      srows.map((r) => r.pb).join('/') + 'px, floor ' + T.BRACKET_PX + 'px) instead of staying ' +
      'at the 15px they were drawn for at 420, which is the mandate\'s "the reticle brackets ' +
      'scale with it" and the reason a bigger sphere does not acquire a smaller reticle',
-     JSON.stringify({ fill: srows.map((r) => [r.presFill, r.fill]),
+     JSON.stringify({ ask: srows.map((r) => [r.govAsk, r.ask]),
                       inner: srows.map((r) => r.inner), pb: srows.map((r) => r.pb) }));
   /* THE LIMIT, PRINTED RATHER THAN BURIED: what the band costs the mandate's 0.42. */
-  note('PART 3 limit — the deck band (vh-387) binds in ' +
-       srows.filter((r) => r.bandBound).length + ' of 6 states, so the core fraction lands at ' +
+  note('PART 3 limit — the band binds in ' +
+       srows.filter((r) => r.bandBound).length + ' of 6 states, so the dust fraction lands at ' +
        Math.min(...srows.map((r) => r.core)).toFixed(4) + '..' +
-       Math.max(...srows.map((r) => r.core)).toFixed(4) + ' against the mandate\'s ~0.42 target; ' +
-       'reaching 0.42 at these heights needs either the deck\'s "presence yields to content" law ' +
-       'or the 0.5935 fill fraction to move, and both are DO-NOT-ALTER');
+       Math.max(...srows.map((r) => r.core)).toFixed(4) + ' of min(vw,vh) (the well itself is ' +
+       srows.map((r) => r.side).join('/') + 'px, PRES_RATIO of the pane)');
+  await page.evaluate('__galaxy.stage.set("galaxy", "cine_proof")');
 
   note('page exceptions during the run: ' + (page.logs.length ? page.logs.join(' | ') : 'none'));
   try { page.ws.close(); } catch { /* ignore */ }
