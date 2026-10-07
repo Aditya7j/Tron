@@ -4812,7 +4812,7 @@ ENGINE_LOG_MAX = 40
 
 
 def turn_engine(capability, served, outcome, reason="", provider="", trigger_ms=None,
-                spoken="", model="", queued=None):
+                spoken="", model="", queued=None, ms=None, groq_ms=None):
     """One row in the engine ledger: who served this capability, and how it went.
 
     §41 ADDED FOUR COLUMNS AND ALL FOUR ARE THE SAME ADMISSION: a fallback is invisible by
@@ -4855,6 +4855,19 @@ def turn_engine(capability, served, outcome, reason="", provider="", trigger_ms=
     if trigger_ms is not None:
         row["triggerMs"] = round(float(trigger_ms), 1)
         row["withinBudget"] = row["triggerMs"] <= FALLBACK_TRIGGER_BUDGET_MS
+    # B1 - HOW LONG THE ANSWER ITSELF TOOK, which triggerMs above deliberately is not:
+    # that one measures the HANDOVER, the gap between Groq failing and the local request
+    # leaving, and it is tens of milliseconds. `ms` is what the employer actually waits
+    # for. Without it the ledger can say WHICH engine answered but not that one of them
+    # answers in half a second and the other in forty - which is the entire question
+    # behind "sometimes fast, sometimes very slow, the brain feels confused".
+    # `groqMs` is the time SPENT ON GROQ BEFORE GIVING UP, so a slow turn can be read as
+    # either "the local engine is slow" or "we waited on a cloud that was never going to
+    # answer and THEN ran locally", which are different faults with different fixes.
+    if ms is not None:
+        row["ms"] = round(float(ms), 1)
+    if groq_ms is not None:
+        row["groqMs"] = round(float(groq_ms), 1)
     if spoken:
         row["spoken"] = str(spoken)[:120]
     if model:
@@ -7193,7 +7206,14 @@ OLLAMA_FALLBACK_NUM_CTX = 8192
 # it does here - which is the honest cost of a local window and is paid in HISTORY, never in
 # the system block. See _ollama_fallback_messages().
 OLLAMA_PROMPT_BUDGET_CHARS = 24000
-OLLAMA_FALLBACK_PREDICT = 48
+# HOW MANY TOKENS THE LOCAL ENGINE MAY SPEND ON AN ANSWER. This was 48, and 48 is a
+# number that truncates a real reply mid-clause: measured at 226 chars / 40 words ending
+# on the word 'My'. The voice then spoke that faithfully and stopped, which is why a
+# truncated ANSWER was reported as a broken VOICE - the mouth was accurate and the
+# sentence was not. 512 holds a few spoken sentences whole. It also lets a HANDS-OFFER
+# turn finish: a complete [[tool: ...]] tag with a recipient, a subject and a body does
+# not fit in 48 tokens. The cost is latency, and it is paid only on the fallback path.
+OLLAMA_FALLBACK_PREDICT = 512
 OLLAMA_KEEP_ALIVE = -1
 OLLAMA_TIMEOUT_LINE = "Local engine timed out"
 # AND LONGER FOR THE BOOT WARM-UP THAN FOR A QUESTION, which is the point of having two
@@ -7571,12 +7591,16 @@ def call_groq_then_local(cfg, worn, image, capability):
     status = {}
     model = (str(cfg.get("groq_vision_model") or DEFAULT_CONFIG["groq_vision_model"])
              if capability == "vision" else None)
+    _t_groq = time.monotonic()
     answer, error = call_groq(cfg, worn, image, model=model, status=status)
+    groq_ms = (time.monotonic() - _t_groq) * 1000.0
     if not error:
-        turn_engine(capability, "groq", "ok", provider="groq")
+        turn_engine(capability, "groq", "ok", provider="groq",
+                    ms=groq_ms, groq_ms=groq_ms)
         return answer, None
     if not status.get("transient"):
-        turn_engine(capability, "groq", "failed", error, provider="groq")
+        turn_engine(capability, "groq", "failed", error, provider="groq",
+                    ms=groq_ms, groq_ms=groq_ms)
         return None, error
     handover = time.monotonic()
     if image is not None:
@@ -7596,23 +7620,58 @@ def call_groq_then_local(cfg, worn, image, capability):
     sys.stderr.write("FALLBACK: DIRECT CALL TO OLLAMA\n")
     sys.stderr.write("  §41 fallback: groq %s -> local %s in %.1fms (%s)\n"
                      % (capability, ollama_chat_model(cfg), trigger_ms, error[:100]))
+    _t_local = time.monotonic()
     answer, local_error = call_ollama(cfg, worn, image, status=local_status)
+    local_ms = (time.monotonic() - _t_local) * 1000.0
     if answer:
         turn_engine(capability, "ollama", "fallback", error, provider="ollama",
                     trigger_ms=trigger_ms, spoken=LOCAL_FALLBACK_LINE,
+                    ms=local_ms, groq_ms=groq_ms,
                     model=local_status.get("model") or ollama_chat_model(cfg))
         return answer, None
     # Ollama answered the socket: its failure (timeout, HTTP error, empty body)
     # is the reply. It is NEVER queued.
     if local_status.get("reached") or local_status.get("slow"):
         turn_engine(capability, "ollama", "failed", local_error, provider="ollama",
-                    trigger_ms=trigger_ms)
+                    trigger_ms=trigger_ms, ms=local_ms, groq_ms=groq_ms)
         return None, local_error or OLLAMA_TIMEOUT_LINE
     # The daemon could not be reached at all: both roads are shut. The only queue.
     depth = queue_for_retry(worn, "%s | %s" % (error, local_error))
     turn_engine(capability, "queue", "failed", local_error, provider="retry",
                 trigger_ms=trigger_ms, spoken=QUEUED_LINE, queued=depth)
     return QUEUED_LINE, None
+
+
+def hands_offer_locally(cfg, messages):
+    """The hands-offer asked again, on this machine own engine. The answer, or "".
+
+    NOT call_model() and NOT call_groq_then_local(): both of those go to Groq first, and
+    Groq is precisely the engine that just declined. This is the only place in the file
+    that reaches for the local engine WITHOUT a Groq failure in front of it, and it is
+    deliberate - the fallback law is about an engine being unreachable, and this is about
+    an engine being unhelpful. See the A3 comment at the hands-offer for the measurement.
+
+    It is quiet about its own failures: no Ollama, a timeout, an empty body - every one of
+    them returns "" and the turn carries on to compose exactly as it did before. A second
+    opinion that cannot be had is not an error, it is simply no second opinion.
+    """
+    if not ollama_fallback_enabled(cfg):
+        return ""
+    status = {}
+    started = time.monotonic()
+    try:
+        answer, error = call_ollama(cfg, wear_persona(cfg, messages), None, status=status)
+    except Exception as exc:                                   # noqa: BLE001
+        sys.stderr.write("  tool: the second ask could not be made (%s)\n"
+                         % str(exc)[:120])
+        return ""
+    ms = (time.monotonic() - started) * 1000.0
+    turn_engine("chat", "ollama", "ok" if answer else "failed",
+                "the hands-offer asked again locally", provider="ollama",
+                model=status.get("model") or ollama_chat_model(cfg))
+    sys.stderr.write("  tool: the second ask ran locally in %.0fms (%s)\n"
+                     % (ms, "answered" if answer else (error or "nothing")[:80]))
+    return answer or ""
 
 
 def call_model(cfg, messages, image=None):
@@ -9324,6 +9383,44 @@ def answer_question(question, session, guest=False):
                 # nothing, and then to prose - never to a lookup dressed up as an answer.
                 sys.stderr.write("  tool: a chain tag was refused before proposing - %s\n" % why)
             wanted, params, _prose = hands.tool_tag(said)
+            # ---- A3: THE SECOND ASK, ON THE OTHER ENGINE ----
+            # MEASURED, 2026-10-07, ten hands-offer calls over two send-email sentences:
+            # the EIGHT served by the local engine emitted a correct [[tool: send_email
+            # ...]] tag, eight times out of eight. The TWO served by Groq emitted none -
+            # one asked for a date it had just been given, one promised to draft the note
+            # - and both fell through to the compose branch below, which carries NO
+            # MANIFEST and therefore cannot know the hand exists. What the employer heard
+            # was "I do not have a hand for sending email on this machine", which is
+            # false: send_email is in the registry, in the manifest handed to that very
+            # call, and worked two minutes either side of it.
+            #
+            # That is the whole of the "mail is not working" report, and it is not the
+            # funnel: task_intent(), substantial_question() and hands_wanted() are all
+            # TRUE for every one of these sentences, measured one gate at a time. It is
+            # the cloud model declining to use a tag it was just shown, intermittently -
+            # which is exactly why it reads as random from the chair. A throttled Groq
+            # falls to the local engine and the mail goes; a healthy Groq answers in half
+            # a second and denies the hand.
+            #
+            # So a task the registry HAS a hand for gets a second ask before it is allowed
+            # to become prose. Narrow on purpose: only when the brain already decided this
+            # looked like an instruction (hands_wanted, above), only when task_intent()
+            # agrees it is work rather than a question, and only when the first ask
+            # produced NO TAG AT ALL - a model that proposed something is never
+            # second-guessed. One retry, never two. substantial_question() is untouched:
+            # it gates this block from above and correctly passes every one of these.
+            if wanted is None and plan is None and task_intent(question):
+                said2 = hands_offer_locally(cfg, messages)
+                if said2:
+                    plan2, why2, _p2 = hands.chain_tag(said2)
+                    if plan2 is not None:
+                        sys.stderr.write("  tool: the second ask proposed a chain, %s\n"
+                                         % why2)
+                        return hands.propose_chain(plan2, door="tag", facts=tool_facts)
+                    wanted, params, _prose = hands.tool_tag(said2)
+                    if wanted is not None:
+                        sys.stderr.write("  tool: the second ask found %s where the first \n"
+                                         "found nothing\n" % wanted)
             if wanted is not None:
                 # The prose is DISCARDED and the proposal is composed from the registry
                 # template: see hands.propose(). One voice, and it is not the model's.
@@ -11478,12 +11575,27 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 gone = google_api.disconnect()
                 return self._send_json(200, dict(
                     google_api.status(), ok=True, kind="google", nodes=[],
+                    # A4 - AND IT SAYS WHAT THAT COSTS, in the same breath. The sentence
+                    # used to confirm the deletion and stop there, which is true and not
+                    # enough: this button is the ONLY way the token goes, the house says
+                    # nothing about it ever again, and the next thing that happens is mail
+                    # failing hours later with a message about not being connected. Twice
+                    # now that has been reported as "mail is broken again" and twice the
+                    # cause was this button, pressed and forgotten. Naming the consequence
+                    # at the one moment the employer is certainly listening is the whole
+                    # fix, and it costs a clause. The route, the payload and the page are
+                    # untouched - this is the sentence the panel already speaks.
                     answer=("The token is deleted, sir, and Google has been told to forget "
-                            "it as well." if gone.get("revoked") else
+                            "it as well. Mail and calendar will not work until you "
+                            "connect again from this same row."
+                            if gone.get("revoked") else
                             "The token is deleted, sir. Google could not be reached to "
-                            "revoke it, so do that from your account page if it matters."
+                            "revoke it, so do that from your account page if it matters. "
+                            "Mail and calendar will not work until you connect again "
+                            "from this same row."
                             if gone.get("had") else
-                            "There was nothing to disconnect, sir."),
+                            "There was nothing to disconnect, sir - this machine was "
+                            "not connected to Google in the first place."),
                     forgot=bool(gone.get("had")), revoked=bool(gone.get("revoked")),
                     consent=google_api.pending()))
             return self._send_json(400, {
@@ -11918,11 +12030,61 @@ def _warm_log(line):
     sys.stderr.write("%s\n" % line)
 
 
+def _port_already_answering():
+    """The pid of a server already on PORT, "?" if one is there but will not say, else None.
+
+    A connect, not a bind. /focus/diag is the cheapest reading that names a process: it
+    answers with `pid` and `uptimeS`, so one request tells us WHICH python is holding the
+    port rather than merely that something is. Anything answering at all is enough to
+    refuse on; the pid is a courtesy so the caller has the number for taskkill.
+    """
+    import socket as _socket
+    import http.client as _httpc
+    try:
+        with _socket.create_connection((HOST, PORT), timeout=0.75):
+            pass
+    except OSError:
+        return None                      # nothing there: the port is genuinely ours
+    try:
+        conn = _httpc.HTTPConnection(HOST, PORT, timeout=2.0)
+        conn.request("GET", "/focus/diag")
+        body = conn.getresponse().read().decode("utf-8", "replace")
+        conn.close()
+        return str((json.loads(body).get("diag") or {}).get("pid") or "?")
+    except Exception:                                          # noqa: BLE001
+        return "?"                       # answering, but not about itself - still a refusal
+
+
 def main():
     if not os.path.isdir(VIEWER_DIR):
         sys.exit("server.py: no viewer/ directory next to this file.")
     load_config()
     ensure_index()
+
+    # NOBODY STARTS A SECOND SERVER ON A PORT THAT IS ALREADY ANSWERING.
+    # ThreadingHTTPServer inherits allow_reuse_address = 1, and on Windows SO_REUSEADDR
+    # lets a second socket bind a port the first is still holding: the new process starts
+    # with NO ERROR, prints its whole banner, opens the vector store - and the OLD process
+    # goes on answering every request. The symptom is code you can prove is loaded serving
+    # answers from before your edit, which is an afternoon spent reading a route handler
+    # for a bug that is not there. It happened on this machine on 2026-10-06: two
+    # python.exe on 4700, born fifteen minutes apart, and /health answered cheerfully
+    # throughout. It happened again on 2026-10-07, which is why this is code and not a note.
+    #
+    # The probe is an ACTIVE connect rather than a second bind, because a bind is exactly
+    # the thing that wrongly succeeds here. And it REFUSES rather than killing: the process
+    # already on the port may be the one the employer is using, and taking it out from
+    # under him to start a copy is the worse of the two failures. The message names the
+    # pid, because the next thing anyone needs is the number to pass to taskkill.
+    _live = _port_already_answering()
+    if _live is not None:
+        sys.exit(
+            "server.py: 127.0.0.1:%d is ALREADY being served%s.\n"
+            "  This process would have started anyway - Windows allows the second bind -\n"
+            "  and the OLD server would have gone on answering, so anything you tested\n"
+            "  next would have been the old code. Refusing to be the second server.\n"
+            "  Stop the one that is there first:  taskkill //PID %s //T //F\n"
+            % (PORT, (" by pid %s" % _live) if _live != "?" else "", _live))
 
     handler = partial(GalaxyHandler, directory=VIEWER_DIR)
     httpd = ThreadingHTTPServer((HOST, PORT), handler)
