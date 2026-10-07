@@ -1368,6 +1368,37 @@ DEFAULT_CONFIG = {
     "groq_tts_model": "canopylabs/orpheus-v1-english",
     "groq_tts_voice": "austin",
 
+    # ---- GEMINI, §42'S MIDDLE TIER AND NOTHING ELSE. Google AI Studio, free tier, one
+    # key and one capability: chat. It sits BETWEEN Groq and this machine's Ollama in
+    # call_groq_then_local() and it is reached for only when Groq has already tired.
+    #
+    # EMPTY HERE, ALWAYS, for groq_api_key's reason three blocks up: DEFAULT_CONFIG is
+    # source, source is tracked, and a key in a tracked file is in the history forever.
+    # The real one lives in config.json, which is gitignored, and this process will only
+    # ever say a length and a sha256 prefix about it - see gemini_digest().
+    #
+    # AND AN EMPTY KEY IS THE WHOLE FEATURE SWITCHED OFF, not a refusal: no key means the
+    # chain is Groq -> Ollama exactly as it was before §42 existed. This is the only
+    # engine in this file whose absence is silent, and that is deliberate - it is an
+    # OPTIONAL extra road, not a configured engine, so nothing may depend on it.
+    "gemini_api_key": "",
+    # THE SLUG IS CONFIGURATION, for groq_model's reason, and this one was resolved
+    # against the live catalogue on 2026-10-07 rather than copied out of the docs.
+    # GET /v1beta/models with this account's key answers 45 ids that serve
+    # generateContent. Measured on the REAL 8,659-character prompt this server actually
+    # sends - persona, hands manifest and all - two calls each:
+    #   gemini-3.5-flash-lite    200 in 2061ms and 1923ms, in character, named the hand
+    #   gemini-3.1-flash-lite    200 in 31214ms and 3036ms - the first call is a cold
+    #                             start of half a minute, which is no use as a fallback
+    #   gemini-3.5-flash         read timeout at 60s on a toy prompt; not a fallback
+    #   gemini-2.5-flash-lite    404 "no longer available to new users. Please update
+    #                             your code to use models/gemini-3.5-flash-lite"
+    # So the default is the one Google's own 404 names as the successor and the only one
+    # that answered a real prompt in about two seconds, twice. FLASH-LITE AND NOT FLASH
+    # on purpose: the free tier's daily cap is the binding constraint on a tier that
+    # exists to be available, and Lite's is the higher of the two.
+    "gemini_chat_model": "gemini-3.5-flash-lite",
+
     # ---- THE FOUR ENGINE FLAGS, each defaulting to what this machine already does.
     # "provider" above is the chat one and already exists; these three complete the set.
     # Flipping one changes ONE engine's source and nothing else - not the gate, not the
@@ -1668,6 +1699,17 @@ GROQ_SPEECH_URL = GROQ_BASE + "/audio/speech"
 # lower on purpose, because the thing that arrives here is one spoken utterance and a request
 # to transcribe forty minutes is a mistake, not a feature.
 GROQ_STT_MAX_BYTES = 8 * 1024 * 1024
+
+# GEMINI, ONE BASE AND ONE PATH, because §42 gave it one capability. Google AI Studio does
+# NOT speak OpenAI's dialect - the roles are "user" and "model", the system prompt is a
+# separate `systemInstruction` field rather than a message, and the text comes back under
+# candidates[].content.parts[].text. That is the whole reason call_gemini() exists instead
+# of a fourth call to call_chat_completions(): the shape genuinely differs. What does NOT
+# differ is the prompt it is handed - see call_gemini()'s docstring.
+# The key goes in the x-goog-api-key HEADER and never in the query string, which is the one
+# thing worth being deliberate about here: a key in a URL is a key in every proxy log and
+# stack trace between here and Google.
+GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 MAX_ANSWER_TOKENS = 400   # the butler is brief; this is a ceiling, not a target
 # None means "whatever the model's own default is", and that is deliberate: the
 # newer models reject `temperature` outright ("deprecated for this model"), so
@@ -4817,7 +4859,8 @@ def turn_engine(capability, served, outcome, reason="", provider="", trigger_ms=
 
     §41 ADDED FOUR COLUMNS AND ALL FOUR ARE THE SAME ADMISSION: a fallback is invisible by
     design, so every fact about it that is not written here is a fact nobody has.
-        provider    which road served - "groq", "ollama", or "retry" when nothing did.
+        provider    which road served - "groq", "gemini" (§42's middle tier), "ollama",
+                    or "retry" when nothing did.
                     Separate from `served` on purpose: `served` is the ENGINE word a
                     harness asserts, `provider` is the road, and §41 wanted both named.
         triggerMs   how long the HANDOVER took, not the answer - see
@@ -5707,6 +5750,51 @@ def groq_ready(cfg):
                        "Paste one in and ask again - no restart needed - or leave the flags "
                        "as they are and I shall carry on as I was.")
     return True, ""
+
+
+def gemini_key(cfg):
+    """The key as a string, stripped, or "" - and placeholders count as absent.
+
+    groq_key()'s exact shape, one field over, including the PLACEHOLDER_KEYS check: a
+    config.json still carrying "PUT-YOUR-KEY-HERE" has no key, and the difference between
+    that and a real one must be decided in ONE place or the chain and the health block can
+    disagree about whether this tier exists.
+    """
+    key = str(cfg.get("gemini_api_key") or "").strip()
+    return "" if key.lower() in PLACEHOLDER_KEYS else key
+
+
+def gemini_digest(cfg):
+    """present, length, sha256 prefix. The only three facts this process says about it.
+
+    groq_digest()'s law, applied to the second key the moment there was a second key -
+    because the failure mode it exists for does not care which vendor issued the string.
+    """
+    key = gemini_key(cfg)
+    return {"present": bool(key), "length": len(key),
+            "sha256": hashlib.sha256(key.encode("utf-8")).hexdigest()[:12] if key else ""}
+
+
+def gemini_ready(cfg):
+    """(True, "") when Gemini is callable, else (False, one sentence naming the field).
+
+    AND NOTHING SPEAKS THAT SENTENCE. groq_ready()'s is read aloud, because Groq is the
+    configured engine and a missing key there is the boss's problem to fix. Gemini is an
+    optional middle tier: its absence is not an incident, it is the default. The sentence
+    exists for /health and for a harness to quote, never for the tongue - see
+    call_groq_then_local(), which consults gemini_key() and simply walks on.
+    """
+    if not gemini_key(cfg):
+        return False, ("There is no Gemini key, sir: \"gemini_api_key\" in config.json is "
+                       "empty. The chain is Groq and then this machine, which is what it "
+                       "was before Gemini existed - nothing is broken by its absence.")
+    return True, ""
+
+
+def gemini_chat_model(cfg):
+    """The Gemini slug, from config.json, falling back to the vetted default."""
+    return str(cfg.get("gemini_chat_model")
+               or DEFAULT_CONFIG["gemini_chat_model"]).strip()
 
 
 def display_label(model_id):
@@ -7109,6 +7197,161 @@ def call_groq_speech(text, cfg=None, status=None):
     return data, ""
 
 
+# =============================================================================================
+#  GEMINI - §42'S MIDDLE TIER, ONE CAPABILITY
+# =============================================================================================
+#
+# WHY THIS IS NOT call_chat_completions() WITH A DIFFERENT URL, which is how Groq, OpenAI and
+# OpenRouter all share one client: Google AI Studio does not speak OpenAI's dialect. Three
+# things differ and all three are structural - the assistant role is called "model", the system
+# prompt is a top-level `systemInstruction` field instead of a message in the list, and the
+# answer arrives at candidates[0].content.parts[*].text. A shim that pretended otherwise would
+# be a translation layer with the same amount of code and a worse name.
+#
+# WHAT DOES NOT DIFFER IS THE PROMPT, and that is the single most important property in this
+# section. See the docstring below.
+
+
+def _gemini_payload(messages):
+    """One `worn` message list, in Google's shape. (body dict, system chars).
+
+    SEPARATE FROM THE CALL so that a harness can assert on what Gemini would be handed
+    WITHOUT spending a request on the free tier's daily cap - which is how
+    fallback_proof.mjs proves the no-second-prompt-path claim byte for byte.
+
+    THE TRANSLATION IS A RE-ADDRESSING AND NEVER A REWRITE. Every character of every
+    message arrives: the system blocks are joined with a blank line, in order, into
+    systemInstruction, and the rest keep their text exactly and change only the WORD for
+    who said them. Nothing is summarised, trimmed, re-prompted or dropped. The test of
+    that claim is arithmetic - the sum of the characters in equals the sum out - and it is
+    asserted rather than described.
+    """
+    system = [str(m.get("content") or "") for m in messages if m.get("role") == "system"]
+    contents = [{"role": "model" if m.get("role") == "assistant" else "user",
+                 "parts": [{"text": str(m.get("content") or "")}]}
+                for m in messages if m.get("role") != "system"]
+    body = {"contents": contents,
+            "generationConfig": {"maxOutputTokens": MAX_ANSWER_TOKENS}}
+    if system:
+        body["systemInstruction"] = {"parts": [{"text": "\n\n".join(system)}]}
+    if TEMPERATURE is not None:
+        body["generationConfig"]["temperature"] = TEMPERATURE
+    return body, len("\n\n".join(system))
+
+
+def call_gemini(cfg, messages, image=None, model=None, status=None):
+    """Chat, on Google AI Studio's free tier. (answer, error), and it never raises.
+
+    `messages` IS THE SAME `worn` LIST GROQ IS HANDED, and this function does not build a
+    prompt. It has no system prompt of its own, no persona constant, no manifest of its
+    own and no stripped-down anything - it takes what wear_persona() produced, re-addresses
+    it into Google's field names, and sends it. Compare call_groq(), one page up, which
+    takes the same list and sends it to a different URL.
+
+    THE BUG CLASS THIS DOCSTRING EXISTS TO NAME, because it has already shipped once in
+    this file against the other fallback engine: the original Ollama path built its system
+    prompt from OLLAMA_FALLBACK_SYSTEM, a 343-character constant, instead of the 8,659
+    characters wear_persona() assembles - so the local engine held no hands manifest and
+    NO HAND COULD EVER BE PROPOSED on fallback. The symptom was "please use your preferred
+    ride-hailing app" from a house with eleven working hands. A SECOND prompt-assembly
+    path is the defect; sharing the one path is the fix. There is exactly one way to be
+    sure this never happens here, and it is that the construction is not in this function
+    to diverge - it is in wear_persona(), above the caller.
+
+    `status`, when a caller passes a dict, is filled in with the machine-readable outcome
+    in call_chat_completions()'s own vocabulary - {"code": 429, "transient": True} - so
+    the two clients can be read by one reader. WHAT READS IT IS NOT THE FALLBACK LAW,
+    though: see call_groq_then_local(), where every Gemini failure steps aside regardless
+    of category, and why.
+
+    `image` is accepted and REFUSED, for call_ollama()'s reason: the signature matches its
+    siblings so no call site has to special-case it, and the refusal is the second lock on
+    a door the caller already holds shut. Gemini can read an image; §41 left the eyes one
+    engine, and widening that is not this tier's business.
+    """
+    if status is None:
+        status = {}
+    status.update({"code": 0, "transient": False, "model": gemini_chat_model(cfg)})
+    key = gemini_key(cfg)
+    if not key:
+        return None, gemini_ready(cfg)[1]
+    if image is not None:
+        return None, "Gemini is wired for chat only on this machine; the eyes do not use it."
+    slug = model or gemini_chat_model(cfg)
+    status["model"] = slug
+    body, _system_chars = _gemini_payload(messages)
+    req = urllib.request.Request(
+        "%s/models/%s:generateContent" % (GEMINI_BASE, slug),
+        data=json.dumps(body).encode("utf-8"), method="POST",
+        headers={"Content-Type": "application/json", "User-Agent": USER_AGENT,
+                 # THE HEADER AND NOT ?key=, so the key is not in a URL anybody logs.
+                 "x-goog-api-key": key})
+    try:
+        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as res:
+            payload = json.loads(res.read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = (json.loads(exc.read().decode("utf-8", "replace"))
+                      .get("error") or {}).get("message") or ""
+        except Exception:                                      # noqa: BLE001
+            pass
+        # THE SAME WHITELIST AS call_chat_completions(): only 429 is transient among the
+        # HTTP codes. It is recorded faithfully even though this tier's caller does not
+        # branch on it, because the ledger row is the only place a wrong gemini_api_key
+        # is ever visible - a 403 here is silent at the tongue by design, and a 403 that
+        # is silent in BOTH places is a key nobody finds out is broken.
+        status.update({"code": exc.code, "transient": exc.code == 429})
+        if exc.code in (400, 403):
+            # GOOGLE SAYS 400 OR 403 FOR A BAD KEY where Groq says 401, which is worth
+            # naming: the sentence has to name the field whatever number arrives.
+            return None, ("Gemini rejected the key in config.json (%s). Check that "
+                          "\"gemini_api_key\" is pasted in full and still active. %s"
+                          % (exc.code, detail)).strip()
+        if exc.code == 404:
+            return None, ("Gemini does not serve the model \"%s\" (404). Change "
+                          "\"gemini_chat_model\" in config.json. %s"
+                          % (slug, detail)).strip()
+        if exc.code == 429:
+            return None, ("Gemini is rate limiting - the free tier's daily cap (429). %s"
+                          % detail).strip()
+        return None, ("Gemini returned HTTP %s. %s" % (exc.code, detail)).strip()
+    except urllib.error.URLError as exc:
+        # A timeout, a DNS failure and a refused connection all arrive here and all three
+        # describe a road rather than a decision - call_chat_completions()'s reasoning.
+        status.update({"code": 0, "transient": True})
+        return None, "Could not reach the Gemini API (%s)." % exc.reason
+    except Exception as exc:                                   # noqa: BLE001
+        return None, "Unexpected error talking to Gemini: %s" % exc
+
+    # ---- THE ANSWER, OR A SENTENCE SAYING WHY THERE IS NOT ONE ----
+    # FOUR SHAPES OF NOTHING, each named separately, because "replied in an unexpected
+    # shape" over a response that is perfectly well formed and simply carries no text is
+    # how a refusal gets blamed on a parser.
+    blocked = (payload.get("promptFeedback") or {}).get("blockReason")
+    if blocked:
+        return None, "Gemini declined the prompt itself (%s)." % blocked
+    candidates = payload.get("candidates") or []
+    if not candidates:
+        return None, ("Gemini replied with no candidates: %s"
+                      % json.dumps(payload)[:300])
+    candidate = candidates[0] or {}
+    finish = str(candidate.get("finishReason") or "")
+    answer = "".join(
+        str(part.get("text") or "")
+        for part in ((candidate.get("content") or {}).get("parts") or [])).strip()
+    if not answer:
+        if finish == "MAX_TOKENS":
+            # A thinking model can spend the whole ceiling before its first visible word.
+            return None, ("Gemini spent the %d-token ceiling without answering "
+                          "(MAX_TOKENS)." % MAX_ANSWER_TOKENS)
+        if finish in ("SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT"):
+            return None, "Gemini stopped itself (%s)." % finish
+        return None, "Gemini returned an empty answer%s." % (
+            " (%s)" % finish if finish else "")
+    return answer, None
+
+
 # ---- THE SCHOLAR GETS THE §28 CLIENT, BY REFERENCE, AND NOTHING ELSE ----------------------
 #
 # HERE AND NOT BESIDE focus.ASK_HAND because the four names below do not exist yet at line 214;
@@ -7581,12 +7824,29 @@ def ollama_warm(log=None):
 
 
 def call_groq_then_local(cfg, worn, image, capability):
-    """§41'S ROUTING LAW, IN ONE FUNCTION: Groq, then this machine, then the queue.
+    """§41'S ROUTING LAW, §42'S MIDDLE TIER: Groq, then Gemini, then this machine, then the queue.
 
-    TWO PROVIDERS DEEP AND NEVER THREE. A 401 and a 404 are NOT transient: they are
-    a wrong key and a retired slug, heard as refusals that name the field. The
-    transient test is the status FLAG, never a string match on the spoken sentence.
-    THE EYES HAVE NO SECOND ENGINE: a tired Groq on an image is a refusal, not a hop.
+    A 401 and a 404 from GROQ are NOT transient: they are a wrong key and a retired slug,
+    heard as refusals that name the field. The transient test is the status FLAG, never a
+    string match on the spoken sentence.
+    THE EYES HAVE NO SECOND ENGINE: a tired Groq on an image is a refusal, not a hop - and
+    §42 did not widen that, though Gemini could read one. One mandate, one tier.
+
+    §42 MADE IT THREE PROVIDERS DEEP, AND ONLY WHEN THERE IS A KEY FOR THE THIRD. With
+    "gemini_api_key" empty - which is the default and what every config.json that predates
+    §42 has - gemini_key() is "" , the block below is skipped entirely, and this function
+    is Groq then Ollama then the queue, instruction for instruction, as it was.
+
+    WHY A GEMINI FAILURE IS NEVER A REFUSAL, unlike a Groq one. Groq is the CONFIGURED
+    engine: a wrong key there must be heard, or the boss gets a good answer from the wrong
+    engine and leaves the broken flag in config.json for the next person to find. Gemini is
+    an OPTIONAL road that only exists on turns where the configured engine has already
+    tired transiently. Those turns are served by Ollama today. So a 403 from Gemini that
+    refused the turn would turn a recoverable Groq blip into an outage THAT DID NOT HAPPEN
+    BEFORE THIS TIER WAS ADDED - a new engine making the house less reliable, which is the
+    one outcome a fallback tier may not have. Every Gemini failure therefore steps aside,
+    transient or not, and is recorded in the ledger where a wrong key is visible without
+    being audible.
     """
     status = {}
     model = (str(cfg.get("groq_vision_model") or DEFAULT_CONFIG["groq_vision_model"])
@@ -7611,6 +7871,44 @@ def call_groq_then_local(cfg, worn, image, capability):
                          % error[:120])
         return None, ("%s The eyes have no engine on this machine, sir, so I cannot look "
                       "at that locally." % error)
+    # ---- §42: THE MIDDLE TIER, AND IT IS GATED ON ITS OWN KEY AND NOTHING ELSE ----
+    # NOT on ollama_fallback: that flag is the boss's switch for THIS MACHINE'S engine and
+    # has no authority over a cloud road. A house with the local net down and a Gemini key
+    # in the file should reach Gemini, and if that fails it refuses exactly as it did
+    # before - which is what the untouched branch below does.
+    gem_error = ""
+    if gemini_key(cfg):
+        gem_status = {}
+        gem_trigger_ms = (time.monotonic() - handover) * 1000.0
+        _t_gem = time.monotonic()
+        answer, gem_error = call_gemini(cfg, worn, status=gem_status)
+        gem_ms = (time.monotonic() - _t_gem) * 1000.0
+        if answer:
+            # outcome "fallback" AND NOT "ok", because the vocabulary is about what
+            # happened to the turn and not about who is pleased: the configured engine did
+            # not serve it and something else did, exactly once. `reason` carries GROQ's
+            # error - why the hop happened - which is what a week of these is read for.
+            turn_engine(capability, "gemini", "fallback", error, provider="gemini",
+                        trigger_ms=gem_trigger_ms, ms=gem_ms, groq_ms=groq_ms,
+                        model=gem_status.get("model") or gemini_chat_model(cfg))
+            sys.stderr.write("  §42 fallback: groq %s -> gemini %s in %.1fms (%s)\n"
+                             % (capability, gem_status.get("model") or "", gem_trigger_ms,
+                                error[:100]))
+            return answer, None
+        # IT STEPPED ASIDE. The row says so and the tongue never will - see the docstring.
+        turn_engine(capability, "gemini", "failed", gem_error, provider="gemini",
+                    trigger_ms=gem_trigger_ms, ms=gem_ms, groq_ms=groq_ms,
+                    model=gem_status.get("model") or gemini_chat_model(cfg))
+        sys.stderr.write("  §42: gemini stepped aside after %.0fms (%s)\n"
+                         % (gem_ms, (gem_error or "")[:120]))
+        # AND THE HANDOVER CLOCK IS RE-BASED HERE, which is not bookkeeping. triggerMs
+        # means THE HANDOVER - see turn_engine - and it is judged against
+        # FALLBACK_TRIGGER_BUDGET_MS, 250ms. Left alone, Ollama's row would report the
+        # whole Gemini attempt as its own handover, read two seconds, and turn
+        # withinBudget false on a turn where nothing was slow to hand over at all. Each
+        # row now measures the gap in front of ITS OWN request, which is what the column
+        # has always claimed to be.
+        handover = time.monotonic()
     if not ollama_fallback_enabled(cfg):
         turn_engine(capability, "none", "failed", error, provider="groq",
                     trigger_ms=(time.monotonic() - handover) * 1000.0)
@@ -7636,7 +7934,12 @@ def call_groq_then_local(cfg, worn, image, capability):
                     trigger_ms=trigger_ms, ms=local_ms, groq_ms=groq_ms)
         return None, local_error or OLLAMA_TIMEOUT_LINE
     # The daemon could not be reached at all: both roads are shut. The only queue.
-    depth = queue_for_retry(worn, "%s | %s" % (error, local_error))
+    # The queue's reason names every road that was tried, so a queued turn can be read
+    # back as "two engines and a daemon" rather than as a mystery. Byte-identical to what
+    # it was when there is no Gemini key, which is the zero-drift case.
+    why_queued = ("%s | %s" % (error, local_error) if not gem_error
+                  else "%s | gemini: %s | %s" % (error, gem_error, local_error))
+    depth = queue_for_retry(worn, why_queued)
     turn_engine(capability, "queue", "failed", local_error, provider="retry",
                 trigger_ms=trigger_ms, spoken=QUEUED_LINE, queued=depth)
     return QUEUED_LINE, None
@@ -8244,6 +8547,11 @@ def engines_state(cfg=None):
                              if voice_engine_of(cfg) == "orpheus"
                              else str(cfg.get("voice_model") or DEFAULT_CONFIG["voice_model"]))},
         "groqKey": groq_digest(cfg),
+        # §42: THREE FACTS ABOUT THE SECOND KEY, on groq_digest()'s law and for the reason
+        # the chain is silent about it - a tier whose failures are inaudible needs ONE
+        # surface that says whether it is configured at all, or "Gemini is not helping"
+        # and "Gemini is not installed" look identical from the chair.
+        "geminiKey": gemini_digest(cfg),
         # WHAT HAS BEEN SPENT AND WHAT HAPPENED, both published because two of §28's laws are
         # arithmetic: "one cheap ping, no polling" is calls going up by exactly one, and
         # "zero Groq calls" is a counter that did not move. The ring carries the fallback rows
