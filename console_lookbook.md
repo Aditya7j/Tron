@@ -12734,3 +12734,298 @@ came after it. The dust's branch now comes first, and it has no fresnel or rim f
 The clause now selects the vR assignment that carries the fresnel (`[^;]*fres[^;]*`). A negative
 control (the head's line with `* near` removed) still turns it red. Old: first match. New: the
 fresnel's match. Without the change, 34 failed on a line it was never about.
+
+
+---
+
+# §51 — FINAL POLISH: NO CIRCLE, FREE DUST, ONE TURN, THREADS, EYES
+
+*2026-10-08 · UI enhancement mandate III, the last UI round before lock*
+
+Same boundary as §50: `server.py`, `google_api.py`, `send_email.py` and `send_newsletter.py` were not
+opened; §38, §39 and §41 and every hand contract are as they were. The diff is `viewer/index.html`, three
+proofs (`cine_proof`, `deck_proof`, `ui_enhancement_proof`) and this section. Line citations are to
+`viewer/index.html` at this commit.
+
+---
+
+## PART 1 — The background circle, removed everywhere it appeared
+
+It had **two painters**, and both are gone.
+
+1. **The cinema's smoke** (§33): twelve additive sprites in their own scene, with their own render pass,
+   cut into a clean circle by the canvas's radial window. It sat behind every presence state: the four
+   dust tints and the face. It's deleted as a layer, not turned down: the sprites, their texture, their
+   build and drift functions, their scene and pass, eleven `CINE.SMOKE_*` constants, and the `smoke()`
+   door. CINE's note at `:20986`, the removed functions at `:23612`, and the chain is now one scene pass
+   (`:23836`): **RenderPass → UnrealBloomPass → OutputPass**. `smoke_on` is still published by the frozen
+   server and has nothing left to switch.
+2. **The bloom's blend**, which surfaced once the haze was gone. three r183's `UnrealBloomPass` composites
+   with `AdditiveBlending`, adding its blurred *alpha* along with its colour, and its skirt is wide. So the
+   bloom alone laid a faint lit sheet across the whole well, and the window trimmed it into a disc.
+   **Measured on the screen** (the well shot with the canvas shown, minus hidden, ring by ring): speaking
+   dust added 11–17/255 on a plateau from 0.7 to 0.95 of the radius, then stepped down at the window. The
+   blend now keeps the colour term and leaves destination alpha alone (`CustomBlending`, colour
+   SrcAlpha/One, alpha Zero/One). Out there it now adds 0.00–0.02. At `:23868`, the bloom pass in `presCine`.
+3. **The orbit map's heart** sat on `ob-halo`, a 190-unit gradient disc, over `ob-floor`, a gradient
+   ellipse under the plinth. Both are gone (`:6242`). The heart is its sphere, its latitude rings and its
+   motes.
+
+**Confirmed per surface:**
+
+| surface | canvas with its points off (peak, 0–255) | light added on screen at 0.85–0.95 of the well (0–255) |
+|---|---|---|
+| committed page, haze on (control) | 77–102 in every dust state, 36 round the face | listening 2.7 / speaking 11.8 / face 12.3 |
+| this round before the bloom fix | 0 | listening 3.2 / **speaking 12.4** / face 4.2 |
+| **this round, final** | **0 in all five states** | **listening −0.01, thinking 0, speaking 0, alert −0.01, face 0.07** |
+| orbit core | no gradient-filled circle in the heart wider than the sphere; `ob-halo`/`ob-floor` absent | — |
+
+**A correction to my own instrument.** My first in-page reading (`presence.snap`) weights light by canvas
+alpha. It can't see light added on zero alpha, which is exactly what the bloom does, so it read the
+speaking disc as clean. The plates showed the disc anyway. The proofs now use both readings: the bare
+snapshot proves no layer is drawn behind the presence, and the glass ring proves its own light lays no
+disc.
+
+## PART 1B — The dust has no fixed shape
+
+The buffer still holds a seed ball. Every point now wanders on its own path (`:22497`): three sines at
+frequencies and phases hashed from its own `aRnd`, a second octave so no path closes into a loop, and a
+radial swing of its own. Heart points move a little (0.07) and edge points a lot (0.26). **One in six is a
+stray** that goes 1.25× further (`:20790`). The move is normalised so it can never exceed its amplitude,
+which makes the reach a true bound (`presDustReach`, `:21544`). The seed went from 0.86 to 0.62 so that
+bound (0.915 of the frame) sits inside the canvas window (0.93), so no wandering point is ever cut.
+
+Point count, object and material are unchanged: 13,800 points, one object (preflight 34 passes).
+
+**Measured off the presence's own canvas, the far edge in 24 directions over 8.4s:**
+- **The old ball** (spin and breath only) moved 0.018–0.024 per direction between moments and reached
+  1.04–1.07× its seed edge.
+- **This round's dust** moves 0.049–0.055 per direction and reached 1.07–1.24× across runs.
+- **Pinned clock** (control): exactly 0.
+
+## PART 2 — The turn
+
+**What was wrong with the old motion.**
+
+- **Wrong curve.** It was two halves in *sequence* on `--ease-panel-open` = `cubic-bezier(0.16, 1, 0.3, 1)`,
+  an ease-out. Its starting slope is y1/x1 = 6.25× the mean speed and its ending slope is 0. So the galaxy
+  whipped toward edge-on in the first few dozen milliseconds, then *stopped* at 90°. The presence then
+  restarted at 6.25× from a standstill: a velocity jump of six means at the junction, which reads as a cut.
+- **An empty frame by design.** At the junction both surfaces were edge-on slivers and the pane was empty.
+- **Distortion.** A 90° turn of a ~1000px pane at perspective 1800px swings its near edge hundreds of
+  pixels toward the viewer.
+- **No intermediate frames that showed both surfaces.** There was no opacity at all, so it was a flip, not
+  a reveal.
+
+**The fix.** One motion, both surfaces at once, on a new named curve, **`--ease-stage-turn:
+cubic-bezier(.65,0,.35,1)`** over **`--dur-stage-turn: .9s`** (`:190`). It's symmetric with flat ends:
+zero speed at both ends, fastest at the crossing.
+
+- The galaxy turns 16° away, sinks to 0.92 and fades out.
+- At the same time, the presence turns in from 16° on the other side, settles from 1.08 and fades in
+  (`stageFlip`, `:6629`).
+- A turn already running is cancelled first, so a flickering voice can't stack two.
+
+The trigger is unchanged: `earOpen` → `sealPaint` → `stageVoice`. Transform and opacity only;
+`html.nomove` and reduced motion still cut.
+
+## PART 3 — The orbit map
+
+Every connection is now a **curved glowing thread** (`:3032`). Each is a quadratic curve drawn three
+times: a 7px translucent glow, a 3.4px halo, and a 1.5px line whose gradient runs from one end's family
+colour to the other's. A **bead of light** travels along it (`obThread`, `:6493`).
+
+- **Spokes** bend along the direction their world travels, like a tether.
+- **The cross-folder arc** keeps its §49 route around the heart.
+- **In-folder links** bow away from their world.
+- **Membership threads** (`:6356`) run from each note's star to its own folder's world. They're drawn far
+  fainter, as membership rather than links, so they can't be mistaken for links.
+- **Orbits** are a crisp line over a wide glow copy.
+
+The counts are the corpus's, checked in Node against `graph-data.js`: 4 spokes, 1 cross arc, 0 in-folder
+links, 81 membership threads. No names are written in the source and no counts are invented.
+
+**No SVG filter on anything that moves, and why.** My first cut blurred the threads and beads with
+`feGaussianBlur`. An SVG filter on a path that changes every frame is re-rasterised every frame, and that
+cost the presence its 60fps audition. The glow is layered translucent strokes instead. The folder worlds'
+moving blur discs (a pre-existing cost of the same kind) became radial-gradient glows (`:6334`), and the
+map now carries **zero filters**.
+
+## PART 4 — The eyes, and a fine-tune
+
+Each iris is now built from parts within its unchanged 210 points (`:22246`):
+
+- a **limbal ring**;
+- a **pupil ring**;
+- **14 radial striations**;
+- a **four-point catchlight**;
+- a sparse fill.
+
+Ring and catchlight points carry heat flags. The shader turns them into rim-light heat
+(`vR = max(vR, irisHeat)`, `:22679`), so the rings glow *through* the lid.
+
+The lid stays shut at rest; the Eyes Law and deck's `lid === 0` are untouched. It's now weighted to its
+rim (`:22302`), an outline with the iris showing through rather than a filled plate. Its shut alpha went
+from 0.74 to 0.56.
+
+**Fine-tune:** the head's haze points are dimmer (`0.24 + 0.10·aRnd`, `:22591`), so the wireframe reads
+crisper. With the smoke gone, nothing veils the face any more.
+
+**Measured off the drawn buffer** (`presence.eyes()`, `:29473`): 34% of iris points lie on the limbal ring
+and 14% on the pupil ring. A uniform disc puts 14% and 8% there by area alone.
+
+**What isn't changed: the eyes don't open at rest.** The reference's glowing irises are an open eye, and
+here an open eye is the camera-seal's statement that it is watching.
+
+---
+
+## PART 5 — Proofs
+
+### Assertions changed, one for one
+
+**cine_proof (62 → 63):**
+
+| old | new |
+|---|---|
+| section 3, five smoke claims (12 sprites; one material; no fog; own scene; drift clamped) | no sprites and no door; no second scene pass; no fog (kept); the presence scene is one object; the wander is bounded and the window is sized from the bound |
+| four passes, in order smoke → core → bloom → output | three passes, presence → bloom → output |
+| "the haze never occludes the Eyes' brackets" | nothing on the presence canvas runs on its own clock (pinned, five snapshots over 5.6s: 0 pixels changed) |
+| the smoke's price is bounded | toggling the removed haze's flag moves dispatch by nothing beyond noise (a null control) |
+| want.smoke follows /health | the bloom follows the flag; smoke has nothing to switch |
+| dust "where mandate II left it" (scale 0.86, fill 0.6687) | scale 0.62, seed fill 0.4822, wander bound under 0.92 |
+| "turns, drifts and breathes" | "turns, wanders and breathes", with the wander's own numbers |
+| §34 PART 2's haze-hue assertion | no disc behind the presence, two ways: a bare canvas, and on the glass (+1 assertion) |
+| §34 positive control "the window is what holds the border down" | the border is clean even with the window off |
+| §34 window reach | read from the wander's published bound |
+
+The §34 positive control was this suite's lone red in §50. Its subject, the bloom sheet reaching the
+border, no longer exists: the border gains +0.0000 with the window off.
+
+**deck_proof:**
+
+| old | new |
+|---|---|
+| "the dust fills 60–75% of the frame" | "the seed fills 44–52%, the wander is bounded at 80–93%, and the window opens outside the bound" |
+
+**ui_enhancement_proof (42 → 49):**
+
+| old | new |
+|---|---|
+| mandate II's turn assertion: two halves in sequence on `--ease-panel-open` | both surfaces at once, delay 0, on `--ease-stage-turn`, with fade-out/fade-in keyframes |
+| mandate II's "the galaxy fills the main pane" (read immediately) | now waits for the sidebar test's focus card to retire before measuring; one run read the map at half the pane because the card was still in the lane |
+
+Seven new assertions for this round:
+1. No background circle in any of the five states (bare canvas), and no haze layer in the DOM.
+2. No disc of light on the glass in any of the five states.
+3. Nothing behind the orbit heart.
+4. The dust has no fixed shape, with the pinned control.
+5. The turn's curve is named, declared and correctly shaped.
+6. The threads are curved and glowing, with counts matching the corpus and no filters.
+7. The eyes have rings, measured as radii.
+
+### Before / after
+
+**Before** is this round's before sweep (20:49), on the committed page. Two exceptions, marked †:
+- From 22:02 another session's work moved this checkout to a different branch (GitHub Desktop, open on the
+  repo, flipped it and auto-stashed). The before runs from followup onward therefore tested the wrong page,
+  and their before value is §50's final on the identical page.
+- **The machine:** a harness Chrome I orphaned at 22:26 (I stopped a run by killing its node, not its
+  browser) spun at full CPU until I found and killed it at about 00:00. Five suites that went red inside
+  that window were re-run solo once it was clean.
+
+| suite | before | after (sweep) | solo re-run / final build | verdict |
+|---|---|---|---|---|
+| layout_proof | 174/174 | 174/174 | **174/174** | same |
+| deck_proof | 246/253 | 248/253 | 231/239 | the 5 corpus-size reds as always; the final run also lost the hand gate (3 reds + its 14 dependents) to the Groq cap, which passed in the sweep |
+| desk_proof | 44/44 | 44/44 | **44/44** | same |
+| karaoke_proof | 92/93 | 93/93 | **93/93** | better |
+| voice_proof | 162/169 | 162/169 | **162/169** | same, identical fail list |
+| boot_proof | 21/21 | 21/21 | **21/21** | same |
+| cine_proof | 61/62 | 62/62 | **63/63** | better (+1 assertion) |
+| roll_proof | 114/114 | 114/114 | **114/114** | same |
+| bus_proof | 80/81 | 79/81 | 80/81 | the render's script step is model-written: 93s in the before run, 232s on the local fallback under the Groq cap |
+| clock_proof | 95/95 | 71/72 (leak) | **95/95** | same |
+| census_proof | 36/44 | 36/44 | | same |
+| connectors_proof | 61/61 | 61/61 | | same |
+| console_proof | 30/30 | 8/10 (leak) | 8/10 | Groq cap: the typed answer never reached the speaker inside the harness's wait, so the next case found the type line busy; 30/30 at 21:18, before the cap |
+| lock_proof | 59/73 | crashed (leak) | **78/78** | better |
+| scribe_proof | 59/59 | 36/42 (leak) | **59/59** | same |
+| speaker_proof | 70/70 | 70/70 | | same |
+| salutation_proof | 23/24 | 23/24 | | same |
+| echo_proof | 48/49 | 49/49 | | better |
+| nudge_proof | 21/21 | 21/21 | | same |
+| study_proof | 118/121 | 117/121 | | one red counts conversational turns completed inside a study window: model throughput, Groq cap |
+| broadcaster_proof | 110/110 | 110/110 | | same |
+| groq_proof | 91/106 | 91/106 | | same |
+| memory_proof | 40/40 | 40/40 | | same |
+| routing_proof | 94/96 | 82/86 | | Groq cap: the before ran at 21:38, before the cap |
+| persona_proof | 18/19 | 18/19 | | same red |
+| followup_proof | 3/4 † | 14/15 | | better |
+| chain_proof | 71/75 † | 44/75 | | Groq cap: the first red is "two instructions raise the gate", and 30 follow from it; 57 Groq→local fallbacks are in the server trace, and the local engine drops the hands manifest |
+| conversation_proof | 112/114 † | 110/114 | **111/114**, 0 stalls | the sweep's run logged 20 stalls; the solo re-run on the final build had **0 stalls and 0 missed beats**, sampled while `llama-server` used about 4 cores serving every Groq-capped turn locally. The three reds left (the parting line, "I'll let you work, sir", six turns 3 of 6) are all in its baseline failure list, and all wait on model turns |
+| ui_enhancement_proof | 42/42 † | 48/48 | **49/49** | +7 assertions |
+| voice_sync_proof | 9/9 † | 9/9 | | same |
+| test_brain | 142/142 † | 142/142 | | same |
+| test_eyes | 104/109 † | 104/109 | | same |
+| test_hands_privacy | 7/13 † | 7/13 | | same, pre-existing |
+| test_watch | 73, then crashes † | same | | pre-existing |
+
+**Every suite that renders the presence or reads the layout is at or above its before count on the final
+build.** Every red that's new against before is in a suite that waits on the model. Each was checked
+against the server trace's Groq 429 → local fallback lines, and the before runs of those suites predate
+the cap (about 22:28). None of them touches anything this round changed.
+
+---
+
+## Live acceptance — plates
+
+The real server, a solo machine, full density, bloom on, 0 page exceptions. Plates are in
+`_runs/sweep51/accept/`.
+
+| plate | against | matches | falls short |
+|---|---|---|---|
+| **04 dust × 4, a/b** | the boss's note: no circle, free motion | points and tint only in all four states; nothing behind them; frames a and b of each state scatter differently | it's still a roughly round cloud overall, with a ragged edge, not a wisp with no centre |
+| **04 speaking, full frame** | the circled disc | gone: the glow falls off round the heart and the deck shows through to the window | — |
+| **03 turn 0/25/50/75/100** | "one continuous motion" | at 25/50/75% both surfaces are on screen together, one fading as the other arrives | a turn and fade, not a particle dissolve |
+| **02 galaxy** | the attached reference | curved, glowing, gradient threads with travelling beads; glowing orbit rings; faint membership threads around each world | **sparse**, because the corpus is 4 folders, 81 notes and 1 link, and the map won't invent the reference's dense constellation |
+| **05 face / eyes** | reference 2 | crisp anatomical wireframe, no veil; each eye a lit ring with pupil ring, striations and catchlight | edges are dotted (one point cloud); the eyes are shut-lid irises, not open glowing eyes, by the Eyes Law |
+
+## Left open — and whether each is a future mandate or accept-and-lock
+
+1. **The galaxy's density** follows the corpus. **Accept and lock:** filling it would mean inventing data.
+2. **Eyes open only with a live camera session**, by the Eyes Law. **Accept and lock.**
+3. **The dust is still a roughly round cloud** with a ragged, moving edge. A cloud with no centre at all (a
+   "breath of smoke") would need a different seed distribution. **Accept and lock**, unless you want that
+   look, in which case it's a one-constant future mandate.
+4. **Model-dependent suites are red today under the Groq daily cap** (chain, routing, console, bus's
+   timing, deck's hand gate, study's turn count). **Not this round's to fix:** re-run them on a fresh Groq
+   day.
+
+## Preflight
+
+```
+38 pass, 2 fail, 3 warn   (43 checks, count unchanged)
+```
+
+**Not a clean pass, so I'm not calling it one.** It matches the line the other session reported on this
+machine the same evening.
+
+- **Both fails (7 and 13)** are vision turns, each quoting `HTTP 502: Groq is rate limiting … (429)` for
+  the day's tokens. The eyes have one engine, by §41, so a 429 there is a refusal.
+- **The three warns (10, 11, 12)** are the routine set.
+
+**Every check that reads `viewer/index.html` passes: 32, 33, 34 (one object, one allocation at PRES.CAP
+= 13,800), 35 and 36.** No preflight clause was changed this round.
+
+## A note on the evening, because it shaped the numbers
+
+- **GitHub Desktop**, open on the repo while another Claude session worked a separate mandate
+  (feature-gemini-fallback-tier), flipped this checkout's branch and auto-stashed. That voided part of the
+  before sweep (marked †). The two sessions coordinated, and the other session handed back the checkout
+  and the server. Its parked stash ("UI layout work in progress - parked by gemini-fallback mandate") is
+  still in the stack, unapplied. It holds only harness plates and a graph-data timestamp, and the decision
+  on it is yours. The server on :4700 is this branch's code, restarted 22:37:48.
+- **A harness Chrome I orphaned** by stopping a run's node process spun at full CPU for about 1.5 hours,
+  and I first misread it as the local engine's load. It's now a written lesson (memory:
+  killed-harness-leaves-its-chrome). Every suite that went red inside that window was re-run solo
+  afterwards.
