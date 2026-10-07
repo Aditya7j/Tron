@@ -98,6 +98,7 @@ const T = {
      removed haze's flag may move the chain's paired dispatch: a flag with nothing to switch. */
   STILL: 0, NULL_BOUND: 0.02,
   BARE_MAX: 1,               // the presence canvas with its points off, peak 0-255: nothing behind it
+  GLASS_MAX: 1,              // light the canvas adds on screen at 0.85-0.95 of the well, 0-255
   CORNER_LUM: 0.02,       // how much DARKER than the ground a corner may be - i.e. not at all
   FALLOFF: 4,             // centre contribution / worst corner: a glow falls off, a fill does not
   TEXT_DELTA: 2,          // max per-channel change in a text crop when the bloom comes on
@@ -1423,12 +1424,19 @@ async function main() {
   const worstRise = Math.min(...rise);
   note('window OFF: ' + ENM.slice(0, 4).map((n, i) => n + ' ' + cOff[i].toFixed(5)).join(' · ') +
        ' — rise ' + rise.join(', '));
+  /* REPLACES "AND THE WINDOW IS WHAT IS HOLDING IT DOWN". That control switched the window off and
+     required the rectangle to come BACK (>= EDGE_CTRL) - its subject was the bloom's skirt, a lit
+     sheet that reached the canvas border and that the window existed to hide. UI mandate III removed
+     that sheet (the bloom's blend no longer adds alpha; see presCine), and on this build the border
+     gains +0.0000 with the window off: there is nothing left for the window to hold down. So the
+     claim is now the stronger one - the border is clean WITHOUT the window as well as with it - and
+     the half that guards against §33's trap is kept: the door must still report the window off,
+     then on, read back off getComputedStyle. Old: rise >= EDGE_CTRL. New: |rise| <= EDGE_LUM. */
   ok(off0 && off0.applied === false && back0 && back0.applied === true &&
-     worstRise >= T.EDGE_CTRL && rise.every((r) => r > 0),
-     'AND THE WINDOW IS WHAT IS HOLDING IT DOWN, WHICH IS A SEPARATE CLAIM FROM THE BORDER ' +
-     'BEING CLEAN: switched off at run time the rectangle comes straight back on all four ' +
-     'sides (+' + rise.map((r) => r.toFixed(4)).join(', +') + ', worst +' +
-     worstRise.toFixed(4) + ' over the named ' + T.EDGE_CTRL + '), and the door agrees with ' +
+     rise.every((r) => Math.abs(r) <= T.EDGE_LUM),
+     'AND THE BORDER IS CLEAN EVEN WITH THE WINDOW SWITCHED OFF: off at run time, the border moves by ' +
+     rise.map((r) => r.toFixed(4)).join(', ') + ' (each within the named ' + T.EDGE_LUM + ') - the ' +
+     'bloom no longer lays a sheet out to the edge for the window to hide - and the door agrees with ' +
      'itself either way - applied false with it off, true with it back. Failure mode without ' +
      'this control, and it is not hypothetical: §33\'s fade was measured doing 0.0005 +- 0.0008 ' +
      'and the hypothesis was retired, when what the number actually showed was a correction ' +
@@ -1455,6 +1463,45 @@ async function main() {
     const w = JSON.parse(await page.evaluate('__galaxy.presence.snap(160).then(function(s){return JSON.stringify(s)})'));
     discs[m] = { bareMean: s.mean, bareMax: s.max, bareOver1: s.over1, wholeMax: w.max };
   }
+  /* WHAT THE CANVAS ADDS TO THE SCREEN, RING BY RING: the well screenshotted with the presence
+     canvas shown and again hidden, decoded by the page itself, and differenced per ring of the
+     half-extent - three pairs, medianed - with the presence's clock pinned so the pair differs only
+     in the canvas. This is the instrument that sees a disc of added light: an in-page readback of a
+     premultiplied canvas cannot (light on zero alpha reads back as black). */
+  const GLASS_RINGS = 20;
+  const glassRings = async (box) => {
+    const shot = async () => {
+      const r = await page.send('Page.captureScreenshot', { format: 'png', clip: { x: box.left, y: box.top, width: box.w, height: box.h, scale: 1 } });
+      return JSON.parse(await page.evaluate('(async function(){var im=new Image();await new Promise(function(res){im.onload=res;' +
+        'im.src="data:image/png;base64,' + r.result.data + '";});var c=document.createElement("canvas");c.width=im.width;c.height=im.height;' +
+        'var g=c.getContext("2d",{willReadFrequently:true});g.drawImage(im,0,0);var d=g.getImageData(0,0,c.width,c.height).data,h=c.width/2,' +
+        's=new Array(' + GLASS_RINGS + ').fill(0),n=new Array(' + GLASS_RINGS + ').fill(0);for(var y=0;y<c.height;y++)for(var x=0;x<c.width;x++){' +
+        'var q=Math.hypot(x+0.5-h,y+0.5-h)/h;if(q>=1)continue;var k=Math.floor(q*' + GLASS_RINGS + '),i=(y*c.width+x)*4;' +
+        's[k]+=0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2];n[k]++;}return JSON.stringify(s.map(function(v,k){return v/Math.max(1,n[k]);}));})()'));
+    };
+    await page.evaluate('__galaxy.presence.phase(0.2)');
+    await sleep(500);
+    const diffs = [];
+    for (let p = 0; p < 3; p++) {
+      const on = await shot();
+      await page.evaluate('document.getElementById("presence-cvs").style.visibility="hidden"');
+      await sleep(200);
+      const off = await shot();
+      await page.evaluate('document.getElementById("presence-cvs").style.visibility=""');
+      await sleep(200);
+      diffs.push(on.map((v, i) => v - off[i]));
+    }
+    await page.evaluate('__galaxy.presence.phase(null)');
+    return diffs[0].map((_, i) => { const a = diffs.map((d) => d[i]).sort((x, y) => x - y); return +a[1].toFixed(2); });
+  };
+  /* the ring 0.85-0.95 of the half-extent: outside the cloud and the head, inside the window */
+  const outerAdded = (rings) => +((rings[17] + rings[18]) / 2).toFixed(2);
+  const glassBox = await page.json('__galaxy.layout.rects.presence');
+  for (const m of ['dust', 'face']) {
+    await page.evaluate('__galaxy.presence.set("' + m + '")');
+    await sleep(1800);
+    discs[m].glass = outerAdded(await glassRings(glassBox));
+  }
   await page.evaluate('__galaxy.presence.set("dust")');
   note('the presence canvas with its points off, 0-255: ' + JSON.stringify(discs));
   ok(['dust', 'face'].every((m) => discs[m].bareMax <= T.BARE_MAX && discs[m].bareOver1 === 0 && discs[m].wholeMax > 50),
@@ -1465,6 +1512,12 @@ async function main() {
      'failure mode this catches: the pale circle the boss circled, by any route - a sprite, a ' +
      'backing mesh, a CSS gradient on the canvas',
      JSON.stringify(discs));
+  ok(['dust', 'face'].every((m) => discs[m].glass <= T.GLASS_MAX),
+     'AND NO DISC OF LIGHT ON THE GLASS EITHER: shot on the screen with the canvas shown and hidden, the ' +
+     'presence adds ' + discs.dust.glass + ' (dust) and ' + discs.face.glass + ' (face) out of 255 between 0.85 ' +
+     'and 0.95 of the well\'s radius, ceiling ' + T.GLASS_MAX + ' - the bloom\'s old additive-alpha blend laid ' +
+     '11-17 there round speaking dust once the haze was gone, which this round\'s blend removed',
+     JSON.stringify({ dust: discs.dust.glass, face: discs.face.glass }));
 
   /* ============================== PART 3: THE PRESENCE SCALE ==============================
      THE ARITHMETIC THIS CHECKS, AND THE LIMIT IT REPORTS. The well used to ask for a fixed 420px

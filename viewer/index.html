@@ -23865,6 +23865,27 @@ async function loadLib() {
           if (cine.throws > 2) cineRevert('bloom', 'render threw: ' + ((e && e.message) || 'x'));
         }
       };
+      /* UI MANDATE III PART 1: THE BLOOM ADDS LIGHT, NOT A SHEET. three r183's UnrealBloomPass
+         composites with AdditiveBlending, which adds its blurred ALPHA along with its colour - and its
+         skirt is wide - so once the haze was gone the bloom alone still laid a faint lit circle across
+         the whole well, which the canvas's radial window trimmed into a clean edge. MEASURED ON THE
+         GLASS (the well screenshotted with the canvas shown, minus hidden, ring by ring): speaking dust
+         added 11-17/255 on a plateau from 0.7 to 0.95 of the half-extent and then stepped down at the
+         window - the disc; with this blend, 0.00-0.02 out there, falling smoothly from the heart.
+         The colour term is unchanged (SrcAlpha, One); the destination ALPHA is left as the presence
+         drew it (Zero, One), so the glow is light added round the points and never a sheet behind. */
+      const bm = presBloomPass.blendMaterial;
+      if (bm) {
+        bm.blending = THREE.CustomBlending;
+        bm.blendEquation = THREE.AddEquation;
+        bm.blendSrc = THREE.SrcAlphaFactor;
+        bm.blendDst = THREE.OneFactor;
+        bm.blendEquationAlpha = THREE.AddEquation;
+        bm.blendSrcAlpha = THREE.ZeroFactor;
+        bm.blendDstAlpha = THREE.OneFactor;
+        bm.needsUpdate = true;
+        cine.bloomAlpha = 'kept';
+      }
       presComposer.addPass(presCorePass);
       presComposer.addPass(presBloomPass);
       presComposer.addPass(new OP());
@@ -29551,6 +29572,7 @@ async function loadLib() {
                  side: presCvs ? presCvs.width : 0, scale: CINE.BLOOM_SCALE,
                  rev: pres.revision,
                  sprites: 0, haze: false, fog: !!(presScene && presScene.fog),
+                 bloomAlpha: cine.bloomAlpha || 'added',
                  pointCap: PRES.CAP, points: pres.points,
                  strength: cine.strength, env: +cine.env.toFixed(4),
                  glowPeak: cine.glowPeak,
