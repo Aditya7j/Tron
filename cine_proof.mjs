@@ -22,10 +22,10 @@
  *      build step - and THEN the live REVISION, which is the parity half.
  *   2. THE RINGS. Two orbits that cross rather than nest, inside the reticle, with §32's
  *      geometry byte-for-byte where it was and the point cap asserted as a number.
- *   3. THE SMOKE. A small number of large sprites in their OWN scene, no fog anywhere, one
- *      material, the drift clamped, and the brackets photometrically unoccluded - measured in
- *      pixels with the smoke on and off, not argued from the sprite radius.
- *   4. THE LIGHT. The composer, the four passes IN ORDER BY NAME, the half-resolution decision
+ *   3. THE HAZE IS GONE (UI mandate III PART 1, which removed it as the pale disc behind the
+ *      presence): no door, no sprites, no second scene pass, no fog, one object, and nothing on
+ *      the canvas moving on a clock of its own - measured off the presence's own pixels.
+ *   4. THE LIGHT. The composer, the three passes IN ORDER BY NAME, the half-resolution decision
  *      still in force, and the alpha corners still transparent with bloom at full.
  *   5. THE TEXT. Bloom at full strength against UI text and card edges at all three widths,
  *      asserted as PIXEL IDENTITY rather than as a contrast ratio - see the section header.
@@ -90,12 +90,18 @@ const T = {
   SETTLE_MS: 1000,        // the mandate's "within one second of silence"
   SETTLE_EPS: 0.08,       // how close to idle counts as settled, in strength units
   LUM_RISE: 1.02,         // speaking core luminance / idle, measured in pixels
-  RET_TOL: 0.08,          // the brackets' allowed luminance gain from the haze (CINE.SMOKE_RET_TOL)
+  /* UI MANDATE III: the haze is gone, so the two numbers that bounded it are gone with it. These
+     replace them, and both were set after measuring (see section 3 and PART 2's replacement).
+     STILL is how many lit pixels of the presence's own 160px snapshot may change between two
+     snapshots 1.4s apart with the presence's clock pinned - zero, because with the haze gone
+     nothing on that canvas runs on a clock of its own. NULL_BOUND is how far toggling the
+     removed haze's flag may move the chain's paired dispatch: a flag with nothing to switch. */
+  STILL: 0, NULL_BOUND: 0.02,
+  DISC_P10: 1,               // the band's 10th percentile, 0-255: a disc lifts it off zero everywhere
   CORNER_LUM: 0.02,       // how much DARKER than the ground a corner may be - i.e. not at all
   FALLOFF: 4,             // centre contribution / worst corner: a glow falls off, a fill does not
   TEXT_DELTA: 2,          // max per-channel change in a text crop when the bloom comes on
   STREAM_BOUND: 1.5,      // the stream's frame cost is asserted as a bound, not priced
-  SMOKE_BOUND: 0.25,      // likewise the smoke's DISPATCH - its real price is GPU fill
   SPRING_MIN: 0.005, SPRING_MAX: 0.04,  // the overshoot must be visible and must not be a bounce
   /* §34. EVERY ONE OF THESE FOUR IS A MEASURED NUMBER AND NOT A PREFERENCE, and the measurement
      is named beside it so a later round can see what it would be loosening.
@@ -441,10 +447,16 @@ async function main() {
      'built as many Points: deck_proof\'s "one object, one material" goes red and the cap stops ' +
      'meaning anything',
      JSON.stringify(geo && { roles: geo.roles, mesh: geo.mesh, points: dust && dust.points }));
-  ok(!!life && life.spin > 0 && life.spin < 0.3 && life.drift > 0 && life.drift < 0.2 &&
-     life.breath > 0 && life.breath < 0.05,
-     'IT TURNS, DRIFTS AND BREATHES, AND ALL OF IT SLOWLY: spin ' + (life && life.spin) +
-     ' rad/s, noise drift ' + (life && life.drift) + ', breath ' + (life && life.breath) + ' at ' +
+  /* UI MANDATE III PART 1B: the 0.05 drift became a per-point WANDER - heart points a little,
+     edge points a lot, one in ten a stray - so the claim names the wander's own numbers.
+     Old: life.drift in (0, 0.2). New: wander edge > heart > 0, a stray multiplier > 1, all slow. */
+  const wd = (life && life.wander) || {};
+  ok(!!life && life.spin > 0 && life.spin < 0.3 && wd.edge > wd.heart && wd.heart > 0 &&
+     wd.edge < 0.5 && wd.stray > 1 && wd.hz && wd.hz[1] < 0.5 && life.breath > 0 && life.breath < 0.05,
+     'IT TURNS, WANDERS AND BREATHES, AND ALL OF IT SLOWLY: spin ' + (life && life.spin) +
+     ' rad/s, each point on its own path - ' + wd.heart + ' at the heart to ' + wd.edge + ' at the edge, ' +
+     wd.stray + 'x for one in ' + Math.round(1 / (wd.strayShare || 0.1)) + ', at ' + JSON.stringify(wd.hz) +
+     ' Hz - and a breath of ' + (life && life.breath) + ' at ' +
      (life && life.breathHz) + 'Hz - failure mode of a still cloud: a photograph of smoke, and of a ' +
      'fast one: a cloud that fidgets when the house is doing nothing',
      JSON.stringify(life));
@@ -472,69 +484,74 @@ async function main() {
      cine0.pointCap + ' - the dust is the whole allocation by one constant, so the headroom is ' +
      'zero by design and a fill that asked for more would be truncated, not grown',
      JSON.stringify({ points: cine0.points, cap: cine0.pointCap }));
-  ok(!!geo && geo.radius === 1 && geo.scale === 0.86 && Math.abs(geo.frameFill - 0.6687) < 0.002,
-     'AND THE DUST IS WHERE MANDATE II LEFT IT: radius ' + (geo && geo.radius) + ' worn at ' +
-     (geo && geo.scale) + ', ' + (geo && geo.frameFill) + ' of the frame half-height - failure mode ' +
+  /* UI MANDATE III PART 1B: the seed ball is worn smaller (0.86 -> 0.62) so that the bound on the
+     furthest wandering stray - reachFill - lands inside the canvas's window. Old: scale 0.86,
+     frameFill 0.6687. New: scale 0.62, frameFill 0.4822 (the seed), reachFill under 0.92. */
+  ok(!!geo && geo.radius === 1 && geo.scale === 0.62 && Math.abs(geo.frameFill - 0.4822) < 0.002 &&
+     geo.reachFill > geo.frameFill && geo.reachFill < 0.92,
+     'AND THE DUST IS WHERE MANDATE III LEFT IT: a seed of radius ' + (geo && geo.radius) + ' worn at ' +
+     (geo && geo.scale) + ', ' + (geo && geo.frameFill) + ' of the frame half-height, and its wander ' +
+     'BOUNDED at ' + (geo && geo.reachFill) + ' - outside the seed, inside the window - failure mode ' +
      'of a changed fill: the lookbook\'s four state plates stop being a valid comparison',
      JSON.stringify(geo));
 
-  /* ====================================== 3. THE SMOKE ================================= */
-  head('3. the smoke');
-  const smoke = await page.json('__galaxy.presence.smoke()');
-  note('sprites: ' + (smoke && smoke.n) + ', half-widths ' +
-       (smoke ? smoke.at.map((a) => a.half).join('/') : '-'));
-  ok(smoke && smoke.n === 12 && smoke.n <= cine0.spriteCap,
-     'THE HAZE IS A SMALL NUMBER OF LARGE ADDITIVE SPRITES AND NOT THOUSANDS OF POINTS: ' +
-     (smoke && smoke.n) + ' of a declared ceiling of ' + cine0.spriteCap + ' - failure mode of ' +
-     'the points approach the mandate rules out: the haze competes with the core for the same ' +
-     'capped buffer and the thing that loses points is the hologram',
-     JSON.stringify({ n: smoke && smoke.n, cap: cine0.spriteCap }));
-  ok(smoke && smoke.materials === 1,
-     'SHARING ONE MATERIAL: twelve sprites, one SpriteMaterial, one texture - failure mode of ' +
-     'twelve materials: twelve programs and twelve texture binds for an effect whose entire ' +
-     'budget argument is that it is cheap',
-     JSON.stringify({ materials: smoke && smoke.materials }));
-  const scenes = await page.json(
-     '({pres: __galaxy.presence.cine.composer, children: __galaxy.presence.smoke().scene})');
-  ok(smoke && smoke.fog === false,
-     'AND NO FOG ANYWHERE, WHICH IS §31\'S LAW MADE STRUCTURAL: neither the presence scene nor ' +
-     'the smoke scene carries a fog, because the smoke is sprite-local around the core and ' +
-     'never scene fog - failure mode of scene fog: it tints by DEPTH, so it would wash the far ' +
-     'half of every ring and the reticle with it, which is the exact look §31 forbade',
-     JSON.stringify({ fog: smoke && smoke.fog }));
-  ok(smoke && smoke.scene === 1,
-     'IT LIVES IN ITS OWN SCENE WITH ONE GROUP IN IT: ' + (smoke && smoke.scene) + ' child - ' +
-     'failure mode of adding it to the presence scene: deck_proof\'s "one Points object, one ' +
-     'draw call" assertion goes red, and the per-effect frame-time table loses the only clean ' +
-     'way it has to price the smoke, which is to render the chain without that scene',
-     JSON.stringify(scenes));
-  const drift = [];
-  for (let i = 0; i < 6; i++) {
-    const s = await page.json('__galaxy.presence.smoke().at.map(function(a){return a.r})');
-    drift.push(Math.max(...s));
-    await sleep(900);
-  }
-  ok(Math.max(...drift) <= smoke.rOut + 0.0001,
-     'AND THE DRIFT IS CLAMPED RATHER THAN MERELY UNLIKELY: over six seconds the furthest ' +
-     'centre reached ' + Math.max(...drift).toFixed(4) + ' against a ceiling of ' + smoke.rOut +
-     ' - failure mode without the clamp: three incommensurate sines that only RARELY add up, ' +
-     'so the sprite leaves the core on a timescale no test window covers',
-     JSON.stringify(drift));
+  /* ================================ 3. THE HAZE IS GONE ================================ */
+  /* UI MANDATE III PART 1 REMOVED THE SMOKE: twelve additive sprites that were the pale disc
+     behind the presence, cut into a clean circle by the canvas's window. Each of this section's
+     five assertions is replaced by the absence it now has to prove:
+       old: A SMALL NUMBER OF LARGE SPRITES (12)     new: NO SPRITES, NO DOOR
+       old: SHARING ONE MATERIAL                    new: NO SECOND SCENE PASS IN THE CHAIN
+       old: AND NO FOG ANYWHERE                     new: AND NO FOG ANYWHERE (kept)
+       old: IN ITS OWN SCENE, ONE GROUP             new: THE PRESENCE SCENE IS ONE OBJECT
+       old: THE DRIFT IS CLAMPED                    new: THE WANDER IS BOUNDED, AND THE WINDOW
+                                                         IS SIZED FROM THE BOUND */
+  head('3. the haze is gone');
+  const hz0 = await page.json('({door: typeof __galaxy.presence.smoke, sprites: __galaxy.presence.cine.sprites,' +
+    ' haze: __galaxy.presence.cine.haze, fog: __galaxy.presence.cine.fog, objects: __galaxy.presence.objects,' +
+    ' chain: __galaxy.presence.cine.chain, inner: __galaxy.presence.edge().inner,' +
+    ' reach: __galaxy.presence.dust().geo.reachFill, pad: __galaxy.presence.cine.CINE.EDGE_PAD,' +
+    ' max: __galaxy.presence.cine.CINE.EDGE_MAX})');
+  note('the haze: ' + JSON.stringify(hz0));
+  ok(hz0.door === 'undefined' && hz0.sprites === 0 && hz0.haze === false,
+     'THERE ARE NO SPRITES AND NO DOOR TO THEM: presence.smoke is ' + hz0.door + ', the cinema counts ' +
+     hz0.sprites + ' sprites and reports haze ' + hz0.haze + ' - failure mode of a haze turned down ' +
+     'rather than removed: a layer at zero opacity that a config flag or a later round turns back on',
+     JSON.stringify(hz0));
+  ok((hz0.chain || []).filter((n) => n === 'RenderPass').length === 1,
+     'AND NO SECOND SCENE PASS: the chain renders one scene, the presence\'s own (' +
+     (hz0.chain || []).join(' -> ') + ') - failure mode: an empty haze pass still clearing and ' +
+     'compositing a full-size target every frame for nothing',
+     JSON.stringify(hz0.chain));
+  ok(hz0.fog === false,
+     'AND NO FOG ANYWHERE, WHICH IS §31\'S LAW: the presence scene carries none - failure mode of ' +
+     'scene fog: it tints by depth, and the far half of the cloud would wear it as a veil',
+     JSON.stringify({ fog: hz0.fog }));
+  ok(hz0.objects === 1,
+     'THE PRESENCE SCENE IS ONE OBJECT, the Points cloud, and nothing behind it - counted off the ' +
+     'scene graph: ' + hz0.objects + ' - failure mode: a backing disc or glow mesh added to the ' +
+     'scene, which is the background circle by another route',
+     JSON.stringify({ objects: hz0.objects }));
+  ok(hz0.reach > 0 && hz0.inner >= Math.min(hz0.max, hz0.reach + hz0.pad) - 0.0001 && hz0.reach < hz0.max,
+     'THE WANDER IS BOUNDED, AND THE WINDOW IS SIZED FROM THE BOUND: the furthest a wandering point ' +
+     'can be drawn is ' + hz0.reach + ' of the half-extent, and the window opens at ' + hz0.inner +
+     ' - outside it, under the ' + hz0.max + ' cap - so no point is ever cut by the edge; failure ' +
+     'mode of a wander with no bound: strays flung into the window\'s ramp and dimmed for being free',
+     JSON.stringify(hz0));
 
   /* ====================================== 4. THE LIGHT ================================= */
   head('4. the light');
   note('chain: ' + (cine0.chain || []).join(' -> '));
-  ok(cine0.composer === true && cine0.passes === 4,
-     'THE POST CHAIN IS UP WITH FOUR PASSES: failure mode of three: the OutputPass is the one ' +
+  /* UI MANDATE III: the haze's pass is gone, so the chain is three. Old: 4. New: 3. */
+  ok(cine0.composer === true && cine0.passes === 3,
+     'THE POST CHAIN IS UP WITH THREE PASSES: failure mode of two: the OutputPass is the one ' +
      'missing, the tone mapping and colour space conversion never happen, and the whole deck ' +
      'reads as a washed-out bug nobody attributes to a missing pass',
      JSON.stringify({ composer: cine0.composer, passes: cine0.passes }));
   ok(JSON.stringify(cine0.chain) ===
-       JSON.stringify(['RenderPass', 'RenderPass', 'UnrealBloomPass', 'OutputPass']),
-     'IN THE ORDER smoke -> core -> bloom -> output, BY CLASS NAME AND NOT BY COUNT: ' +
-     (cine0.chain || []).join(' -> ') + ' - failure mode of the two RenderPasses swapped: the ' +
-     'core clears the smoke away before the bloom ever sees it, which looks exactly like "the ' +
-     'smoke did not build" and is not',
+       JSON.stringify(['RenderPass', 'UnrealBloomPass', 'OutputPass']),
+     'IN THE ORDER presence -> bloom -> output, BY CLASS NAME AND NOT BY COUNT: ' +
+     (cine0.chain || []).join(' -> ') + ' - failure mode of the bloom ahead of the render: it ' +
+     'blooms last frame\'s buffer and the glow trails the cloud by a frame',
      JSON.stringify(cine0.chain));
   ok(cine0.bloomRes && cine0.side &&
      Math.abs(cine0.bloomRes[0] - cine0.side * cine0.scale) <= 1,
@@ -588,7 +605,7 @@ async function main() {
   const box = await page.json(
     '(function(){var r=document.getElementById("presence-cvs").getBoundingClientRect();' +
     'return {x:r.left,y:r.top,w:r.width,h:r.height};})()');
-  await page.evaluate('__galaxy.presence.cine.set({bloom:true,smoke:false})');
+  await page.evaluate('__galaxy.presence.cine.set({bloom:true})');
   await page.evaluate('__galaxy.face.pose("speaking")');
   await sleep(700);
   /* THE CORE'S CLOCK IS PINNED HERE TOO, for the reason the bracket assertion below spells out
@@ -619,7 +636,6 @@ async function main() {
     pairs.push({ on: on, off: off, d: on.map((v, i) => +(v - off[i]).toFixed(5)) });
   }
   await page.evaluate('__galaxy.presence.phase(null)');
-  await page.evaluate('__galaxy.presence.cine.set({smoke:true})');
   await page.evaluate('__galaxy.face.pose("idle")');
   await sleep(400);
   const med = (a) => { const s = a.slice().sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
@@ -636,7 +652,7 @@ async function main() {
        midContrib + ' · falloff ' + falloff + 'x');
   ok(contrib.every((d) => d >= -T.CORNER_LUM) && falloff >= T.FALLOFF,
      'THE PRESENCE CANVAS STILL COMPOSITES OVER THE DECK RATHER THAN REPLACING IT, WITH THE ' +
-     'BLOOM AT FULL AND THE HAZE OFF SO THAT ALPHA IS THE ONLY VARIABLE: no corner is darker ' +
+     'BLOOM AT FULL AND NO HAZE (UI mandate III removed it) SO ALPHA IS THE ONLY VARIABLE: no corner is darker ' +
      'than the ground beneath it (median contributions over three tightly-paired shots ' +
      contrib.join('/') + ', none below -' + T.CORNER_LUM + '), and what the canvas does add ' +
      'FALLS OFF - the centre contributes ' + midContrib + ' against a worst corner of ' +
@@ -668,34 +684,34 @@ async function main() {
      becomes "at no sampled moment did the haze add more than 0.08 at the brackets", which is
      what "never occluding the Eyes brackets" actually means. The pin does not stop the drift -
      presSmokeFrame has its own clock - and that is exactly why it is safe to sample over it. */
-  const retClip = { x: box.x + box.w * 0.5, y: box.y + box.h * 0.06, w: box.w * 0.44,
-                    h: box.h * 0.22 };
-  await page.evaluate('__galaxy.presence.phase(0)');
-  await page.evaluate('__galaxy.presence.cine.set({smoke:false})');
+  /* REPLACES "AND THE HAZE NEVER OCCLUDES THE EYES' BRACKETS". The haze had its own clock - the
+     sprites drifted while the presence's clock was pinned - which is why that assertion sampled
+     five seconds of drift. With the haze gone, NOTHING on the presence canvas runs on a clock of
+     its own: pin the presence's clock and the canvas must hold still, pixel for pixel. Read off
+     the presence's own canvas (presence.snap), so the deck's moving sky behind it is not in the
+     reading. Old: haze gain at the brackets <= 0.08. New: lit pixels changed across five
+     snapshots over 5.6s with the clock pinned <= STILL (zero). */
+  await page.evaluate('__galaxy.presence.set("dust")');
+  await page.evaluate('__galaxy.presence.phase(0.3)');
   await sleep(700);
-  const noSmoke = await page.pixels(retClip);
-  await page.evaluate('__galaxy.presence.cine.set({smoke:true})');
-  const gains = [];
+  const stills = [];
   for (let i = 0; i < 5; i++) {
-    await sleep(1000);
-    gains.push(+((await page.pixels(retClip)).mean - noSmoke.mean).toFixed(5));
+    stills.push(JSON.parse(await page.evaluate('__galaxy.presence.snap(160).then(function(s){return JSON.stringify(s)})')));
+    await sleep(1400);
   }
   await page.evaluate('__galaxy.presence.phase(null)');
-  const worstGain = gains.reduce((a, b) => (Math.abs(b) > Math.abs(a) ? b : a), 0);
-  note('bracket crop: ' + noSmoke.mean + ' with the clock pinned and the haze off; the haze ' +
-       'then added ' + gains.join(', ') + ' over five seconds');
-  ok(gains.every((g) => g >= -0.004) && Math.abs(worstGain) <= T.RET_TOL,
-     'AND THE HAZE NEVER OCCLUDES THE EYES\' BRACKETS: with the core\'s clock pinned so the ' +
-     'breath cannot move the reading, the haze added at most ' + worstGain + ' normalised ' +
-     'luminance to the top-right bracket crop across five samples over five seconds of drift, ' +
-     'inside the declared tolerance of ' + T.RET_TOL + ' - and every sample is non-negative, ' +
-     'which is the sanity check that says the instrument is seeing the haze at all: twelve ' +
-     'ADDITIVE sprites can only add, so a negative reading would mean the measurement was ' +
-     'picking up the breath instead, which is exactly what the unpinned version of this ' +
-     'assertion did; failure mode of trusting the sprite radius rather than the pixels: the ' +
-     'gaussian\'s reach is 1.44 against a 1.06 reticle, so the geometry says it DOES overlap and ' +
-     'only photometry can say the overlap is invisible',
-     JSON.stringify({ without: noSmoke.mean, gains: gains, worst: worstGain }));
+  const bitsDiff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i++) { let x = parseInt(a[i], 16) ^ parseInt(b[i], 16); while (x) { n += x & 1; x >>= 1; } } return n; };
+  const changed = stills.slice(1).map((s) => bitsDiff(stills[0].mask, s.mask));
+  const litPx = (stills[0].mask.match(/[1-9a-f]/g) || []).length;
+  note('pinned presence, lit pixels changed vs the first snapshot: ' + changed.join(', ') +
+       ' (of a mask with ~' + litPx + ' lit nibbles)');
+  ok(stills.every((s) => !s.error && s.mask) && changed.every((c) => c <= T.STILL) && litPx > 50,
+     'AND NOTHING ON THE PRESENCE CANVAS RUNS ON A CLOCK OF ITS OWN: with the presence\'s clock ' +
+     'pinned, five snapshots of its own canvas over 5.6 seconds differ by ' + changed.join('/') +
+     ' lit pixels - the haze it replaces drifted on its own clock under the same pin, which is what ' +
+     'this section used to have to sample; failure mode: a second layer animating behind the ' +
+     'presence, which is a background by another name',
+     JSON.stringify({ changed: changed, lit: litPx }));
 
   /* ======================================= 5. THE TEXT ================================= */
   head('5. the text and the card edges, with bloom at full');
@@ -807,7 +823,7 @@ async function main() {
      the breath, and neither is the subject. Failure mode of the
      single pair: a flaky red on correct code, which is worse than a flaky green, because the next
      person to see it spends an hour inside the glow looking for a defect that is not there. */
-  await page.evaluate('__galaxy.presence.cine.set({bloom:true,smoke:true})');
+  await page.evaluate('__galaxy.presence.cine.set({bloom:true})');
   await sleep(1200);
   const clocks = await page.json(
     '({breathHz: __galaxy.presence.life.breathHz, beat: __galaxy.face.beat})');
@@ -1198,18 +1214,16 @@ async function main() {
      'single-pair floor that read 0.028, 0.145 and 0.148, so the assertion\'s verdict was decided ' +
      'by which of those two numbers a run happened to draw',
      JSON.stringify(table.map((r) => ({ w: r.w, bloom: r.pb }))));
-  ok(table.every((r) => r.ps.mean >= -r.ps.se && r.ps.mean < T.SMOKE_BOUND),
-     'AND THE SMOKE IS BOUNDED AND LABELLED, WHICH IS AN HONEST ROW AND NOT A BUDGET LINE: ' +
+  /* REPLACES "AND THE SMOKE IS BOUNDED AND LABELLED". The haze is gone, so its row becomes a null
+     control: the same paired on/off toggles of its flag must move the chain's dispatch by nothing
+     beyond noise, because the flag has nothing left to switch. */
+  ok(table.every((r) => Math.abs(r.ps.mean) <= Math.max(2 * r.ps.se, T.NULL_BOUND)),
+     'AND THE REMOVED HAZE COSTS NOTHING BECAUSE IT IS NOT THERE: toggling its flag in ' + PAIRS +
+     ' interleaved pairs moved the chain\'s dispatch by ' +
      table.map((r) => r.ps.mean.toFixed(3) + ' +- ' + r.ps.se.toFixed(3)).join(' / ') +
-     ' ms at ' + WIDTHS.map((x) => x[0]).join('/') + ', paired the same way, every mean ' +
-     'non-negative and under the declared ' + T.SMOKE_BOUND + ' ms - and it is reported as ' +
-     '"under ' + T.SMOKE_BOUND + ' ms of DISPATCH, fill not separable" rather than as the haze\'s ' +
-     'price: twelve large blended quads cost GPU FILL, and the cost door times main-thread ' +
-     'dispatch, which the driver returns from long before the GPU has drawn them. The haze\'s ' +
-     'real price is therefore carried by the whole-frame containment rows above, where fill IS ' +
-     'visible; failure mode of publishing this number as the cost: the next person to read the ' +
-     'budget concludes the haze is nearly free and turns it on for a machine that is fill-bound, ' +
-     'where it is the most expensive thing in the chain',
+     ' ms at ' + WIDTHS.map((x) => x[0]).join('/') + ' - inside twice its own standard error or ' +
+     T.NULL_BOUND + ' ms everywhere, the reading of a switch wired to nothing; failure mode: a ' +
+     'haze still built and still drawn behind a flag that says it is off',
      JSON.stringify(table.map((r) => ({ w: r.w, smoke: r.ps }))));
 
   /* ====================================== 9. THE GUARDS ============================== */
@@ -1223,11 +1237,15 @@ async function main() {
      'that answers a browser with its own settings file is one typo away from answering with a ' +
      'key, which is why only booleans ever cross this line',
      JSON.stringify(health.cine));
-  ok(want.bloom === health.cine.bloom && want.smoke === health.cine.smoke,
-     'AND THE PAGE WANTS WHAT THE SERVER SAYS: want ' + JSON.stringify(want) + ' against ' +
-     'health ' + JSON.stringify(health.cine) + ' - failure mode of a page that ignores them: ' +
-     'the flags become decoration and the mandate\'s "any containment failure flips the ' +
-     'offending flag off" has nothing to flip',
+  /* UI MANDATE III: server.py is frozen and still publishes smoke_on; the page has no haze for it
+     to switch. Old: want.smoke === health.cine.smoke. New: want.bloom follows the server, and the
+     page's own record of the haze stays off whatever the server publishes. */
+  ok(want.bloom === health.cine.bloom && !want.smoke,
+     'AND THE PAGE WANTS WHAT THE SERVER SAYS FOR THE ONE EFFECT IT STILL HAS: want ' +
+     JSON.stringify(want) + ' against health ' + JSON.stringify(health.cine) + ' - the bloom ' +
+     'follows the flag, and smoke_on, still published by a server this round may not touch, has ' +
+     'nothing left to switch; failure mode of a page that ignores the bloom flag: the mandate\'s ' +
+     '"any containment failure flips the offending flag off" has nothing to flip',
      JSON.stringify({ want: want, health: health.cine }));
   const flagSrc = /"bloom_on": True/.test(readFileSync('server.py', 'utf8')) &&
                   /"smoke_on": True/.test(readFileSync('server.py', 'utf8'));
@@ -1246,7 +1264,7 @@ async function main() {
      'of something that is not running',
      JSON.stringify({ reverts: cineEnd.reverts, throws: cineEnd.throws, frames: cineEnd.frames }));
   const retried = await page.json('__galaxy.presence.cine.retry()');
-  ok(retried && retried.bloom === want.bloom && retried.smoke === want.smoke,
+  ok(retried && retried.bloom === want.bloom && !retried.smoke,
      'AND THERE IS A WAY BACK FROM A REVERT THAT IS A DECISION RATHER THAN A POLL: retry() ' +
      'restores ' + JSON.stringify(retried) + ' - failure mode of letting the /health poll ' +
      'restore it: the containment guard fires, the next poll undoes it, and the ladder becomes ' +
@@ -1316,10 +1334,11 @@ async function main() {
   /* UI MANDATE II: the reticle went with the core. What the picture owns now is the dust's own
      reach at its widest moment - frame fill x (1 + breath + full level swell + full pulse swell),
      every term read off PRES rather than typed. Old: the reticle's corner, 0.8398. */
-  const reachK = await page.json('(function(){var P=__galaxy.presence.PRES;' +
-    'return {fill:__galaxy.presence.dust().geo.frameFill,b:P.DUST_BREATH,l:P.DUST_LEVEL_SWELL,' +
-    'p:P.DUST_PULSE_SWELL};})()');
-  const retReach = reachK.fill * (1 + reachK.b + reachK.l + reachK.p);
+  /* UI MANDATE III: the dust wanders now, so what the picture owns is the BOUND on that wander,
+     published by the page as reachFill (presDustReach: seed x wander x radial x swells, every term
+     at its peak). Old: frameFill x (1 + breath + level + pulse). */
+  const reachK = await page.json('({fill: __galaxy.presence.dust().geo.reachFill})');
+  const retReach = reachK.fill;
   note('edge() reports inner ' + (door && door.inner) + ', pad ' + (door && door.pad) +
        ', max ' + (door && door.max) + ', applied ' + (door && door.applied));
   ok(!!door && door.applied === true && door.radial === true && door.closestSide === true &&
@@ -1328,7 +1347,7 @@ async function main() {
      'closest-side radial gradient read back off getComputedStyle - not off the stylesheet this ' +
      'harness could have been written against - with an inner radius of ' + (door && door.inner) +
      ' of the half-extent, which is outside the dust at its widest - ' + retReach.toFixed(4) +
-     ', its ' + reachK.fill + ' fill at full breath, level and pulse; so the window ' +
+     ' - the bound on its furthest wandering stray at full breath, level and pulse; so the window ' +
      'cannot dim the cloud by arithmetic and not by hope. Failure mode this ' +
      'catches: the exact §33 one - a correction written, shipped, and never applied by the ' +
      'browser at all, measured as "doing nothing" and retired as a wrong hypothesis',
@@ -1416,63 +1435,36 @@ async function main() {
      'that the browser had never put in force',
      JSON.stringify({ off: off0, back: back0, on: cOn.slice(0, 4), offv: cOff.slice(0, 4) }));
 
-  /* =============================== PART 2: THE HUE, IN TWO FORMS ===============================
-     THE BOSS'S WORD IS RECORDED AS "blue shade, amber heart", and it is proved twice because the
-     two proofs fail in different ways. The RELATION is read off the live material: the haze's
-     colour must BE the filament shell's own cold blue (PRES.TINT / uTint2), so the fix introduced
-     no new colour to the house, and it must NOT be the bands' amber. A harness that read
-     CINE.SMOKE_TINT instead would prove only that a constant exists - between the constant and the
-     glass sit a Color conversion, any second assignment and whatever a later round does to
-     presSmokeMat.
-     THE PIXELS are the other half, and they are the half that answers what the boss actually
-     wrote: "brown tint". Brown is red-dominant. So the haze's OWN contribution is isolated - the
-     same pinned frame with the smoke on and off, bloom off so the shade is not being read through
-     a glow - and its blue channel must exceed its red. The old 0xffb23c would put red ahead of
-     blue by about 2:1 here; this is the one assertion in the file that would have gone red on the
-     build the boss photographed. Measured over the whole well crop rather than one small box,
-     because the haze is spread across twelve drifting sprites and a 24px box is a bet on where
-     they are this second. The core cancels: the clock is pinned, so it is identical in both shots. */
+  /* ============================ PART 2, REPLACED: NO DISC IN THE WELL ===========================
+     §34 PART 2 proved the haze's hue (the shell's blue, not amber) off its material and its pixels.
+     UI mandate III removed the haze, so the claim that replaces it is the one the boss's new note
+     asks for: there is no disc behind the presence at all. Read off the presence's OWN canvas
+     (presence.snap), in the band 0.45-0.85 of the half-extent: a disc - solid or gradient - lifts
+     the band's 10th percentile off zero everywhere inside it, while points with dark between them
+     leave it at zero. In both modes, with the bloom on. Old: tint === shell blue and B > R. New:
+     band p10 <= DISC_P10 in dust and in face. */
   await page.send('Emulation.setDeviceMetricsOverride',
     { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false });
   await sleep(1600);
-  const sm = await page.json('__galaxy.presence.smoke()');
-  note('smoke() hue: tint ' + (sm && sm.tint) + ', wanted ' + (sm && sm.want) + ', shell ' +
-       (sm && sm.shell) + ', bands ' + (sm && sm.band) + ', nucleus ' + (sm && sm.hot));
-  const hueBox = await page.json(
-    '(function(){var b=document.querySelector("#presence").getBoundingClientRect();' +
-    'return {x:b.x,y:b.y,w:b.width,h:b.height};})()');
-  await page.evaluate('__galaxy.presence.phase(0)');
-  await page.evaluate('__galaxy.presence.cine.set({bloom:false,smoke:true})');
-  await sleep(800);
-  const hz = [];
-  for (let p = 0; p < 3; p++) {
-    await page.evaluate('__galaxy.presence.cine.set({smoke:true})');
-    await sleep(500);
-    const on = await page.pixels(hueBox);
-    await page.evaluate('__galaxy.presence.cine.set({smoke:false})');
-    await sleep(500);
-    const off = await page.pixels(hueBox);
-    hz.push([on.rgb[0] - off.rgb[0], on.rgb[1] - off.rgb[1], on.rgb[2] - off.rgb[2]]
-      .map((v) => +v.toFixed(3)));
+  await page.evaluate('__galaxy.presence.cine.set({bloom:true})');
+  const discs = {};
+  for (const m of ['dust', 'face']) {
+    await page.evaluate('__galaxy.presence.set("' + m + '")');
+    await sleep(1800);
+    const s = JSON.parse(await page.evaluate('__galaxy.presence.snap(160).then(function(s){return JSON.stringify(s)})'));
+    discs[m] = { band: s.band, coverage: s.coverage, rings: s.rings };
   }
-  await page.evaluate('__galaxy.presence.cine.set({bloom:true,smoke:true})');
-  await page.evaluate('__galaxy.presence.phase(null)');
-  const dR = med(hz.map((h) => h[0])), dG = med(hz.map((h) => h[1])), dB = med(hz.map((h) => h[2]));
-  note('the haze\'s own contribution over the well, in 0-255 channels: R ' + dR + ' G ' + dG +
-       ' B ' + dB + ' (three pairs: ' + hz.map((h) => h.join('/')).join('  ') + ')');
-  ok(!!sm && sm.tint === sm.want && sm.tint === sm.shell && sm.tint !== sm.band && dB > dR,
-     'PART 2 - THE SHADE AROUND THE SPHERE IS THE SPHERE\'S OWN BLUE AND NOT AMBER, PROVED OFF ' +
-     'THE MATERIAL AND OFF THE GLASS: the live SpriteMaterial carries ' + (sm && sm.tint) +
-     ', which is the filament shell\'s own cold end (' + (sm && sm.shell) + ') rather than a new ' +
-     'colour invented for the haze, and it is NOT the orbital bands\' amber (' + (sm && sm.band) +
-     '), which Appendix A keeps and this round did not touch - nor the nucleus\'s white-hot ' +
-     (sm && sm.hot) + '. In pixels, the haze\'s own contribution to the well is R ' + dR + ' G ' +
-     dG + ' B ' + dB + ', blue ahead of red, where the 0xffb23c this replaces would put red ' +
-     'ahead of blue by about two to one. Failure mode this catches, and it is the defect the ' +
-     'boss circled: an amber haze around a blue sphere reads as a brown tint and gets blamed on ' +
-     'the bloom or on the monitor, because the two hues are each correct on their own',
-     JSON.stringify({ tint: sm && sm.tint, want: sm && sm.want, shell: sm && sm.shell,
-                      band: sm && sm.band, rgb: [dR, dG, dB], pairs: hz }));
+  await page.evaluate('__galaxy.presence.set("dust")');
+  note('the band 0.45-0.85 of the well, 0-255: dust ' + JSON.stringify(discs.dust.band) + ' cover ' +
+       discs.dust.coverage + ' · face ' + JSON.stringify(discs.face.band) + ' cover ' + discs.face.coverage);
+  ok(discs.dust.band.p10 <= T.DISC_P10 && discs.face.band.p10 <= T.DISC_P10,
+     'PART 2, REPLACED - THERE IS NO DISC BEHIND THE PRESENCE, IN EITHER MODE: off the presence\'s ' +
+     'own canvas, the band between its heart and its window has a 10th-percentile light of ' +
+     discs.dust.band.p10 + ' (dust) and ' + discs.face.band.p10 + ' (face) out of 255, at or under ' +
+     T.DISC_P10 + ' - dark between the points, which no solid or gradient fill behind them allows; ' +
+     'failure mode this catches: the pale circle the boss circled, by any route - a sprite, a ' +
+     'backing mesh, a CSS gradient on the canvas',
+     JSON.stringify(discs));
 
   /* ============================== PART 3: THE PRESENCE SCALE ==============================
      THE ARITHMETIC THIS CHECKS, AND THE LIMIT IT REPORTS. The well used to ask for a fixed 420px

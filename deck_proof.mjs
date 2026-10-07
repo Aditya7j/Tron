@@ -2136,6 +2136,7 @@ async function main() {
    *    old: THE RETICLE FRAMES EVERYTHING           new: THE CLOUD STAYS INSIDE ITS WINDOW
    *    old: THE §33 ORBITS CROSS                    new: A STATE CHANGE EASES, IT DOES NOT CUT
    *    old: THE CORE FILLS 59% OF THE FRAME         new: THE DUST FILLS A STATED SHARE OF THE FRAME
+   *    (UI mandate III: the stated share is now the seed's AND the wander's bound - see the claim)
    *    old: inside the mandate's ceiling            new: inside the mandate's ceiling  (kept)
    * Every threshold below was set AFTER measuring the shipped cloud (_runs/sweep50/dustgeo.mjs:
    * density 12,235 at the heart against 2,257 at the edge, clumping 3.41x the Poisson figure,
@@ -2247,10 +2248,20 @@ async function main() {
        ' passed through ' + between.length + ' intermediate colours in 14 frames (' +
        between.slice(0, 4).join(', ') + ' …) and arrived at ' + eased.end,
        JSON.stringify(eased));
-    ok(g.frameFill > 0.60 && g.frameFill < 0.75,
-       'AND THE DUST FILLS ' + Math.round(g.frameFill * 100) + '% OF THE FRAME\'S HALF-HEIGHT - ' +
-       'the stated band 60-75%, so the cloud reads as the presence and not as a speck or a wall',
-       JSON.stringify({ frameFill: g.frameFill }));
+    /* UI MANDATE III PART 1B: THE DUST HAS NO FIXED SHAPE. Its buffer still holds a seed ball, but
+       every point wanders on its own path, so the drawn cloud is bigger and ragged-edged; the seed
+       was made smaller (0.86 -> 0.62) so the BOUND on the furthest stray stays inside the canvas's
+       window. Old: frameFill (the ball) in 60-75%. New: the seed in 44-52% AND the wander's bound
+       in 80-93%, with the window opening outside that bound - so the cloud as drawn spans the
+       stated share and no point is cut. */
+    const win = await page.json('__galaxy.presence.edge()');
+    ok(g.frameFill > 0.44 && g.frameFill < 0.52 && g.reachFill > 0.80 && g.reachFill < 0.93 &&
+       win && win.inner >= g.reachFill,
+       'AND THE DUST\'S SEED FILLS ' + Math.round(g.frameFill * 100) + '% OF THE FRAME\'S HALF-HEIGHT ' +
+       'and its wandering points are bounded at ' + Math.round(g.reachFill * 100) + '% - the stated ' +
+       'bands 44-52% and 80-93% - with the canvas\'s window opening at ' + (win && win.inner) +
+       ', outside the bound, so the cloud reads as the presence, wanders, and is never cut',
+       JSON.stringify({ frameFill: g.frameFill, reachFill: g.reachFill, window: win && win.inner }));
     ok(dg.points <= 14000,
        'all of it inside the mandate\'s ceiling: ' + dg.points + ' points, cap 14000',
        JSON.stringify({ points: dg.points }));

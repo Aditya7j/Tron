@@ -156,6 +156,7 @@
          sphere-pulse      a breathing sphere: the orbit map's heart
          node-orbit-drift  a world going round its orbit: constant angular speed, so linear
          glide             a light that eases into place: the sun's streak, the mind's lens
+         stage-turn        the main pane changing what it shows: galaxy <-> presence
        THE SCRIPT READS THESE BACK rather than holding copies - see EASE in the orbit map -
        so a curve retuned here moves the canvas and the stylesheet together. */
     --ease-panel-open:var(--spring);
@@ -180,9 +181,14 @@
     /* THE ROOM'S FOUR WALLS, written by layout() on every run and read by the surfaces that
        are drawn in the pane rather than governed: the orbit map and the summoned dim. */
     --side-w:184px;--dock-w:420px;--pane-l:184px;--pane-r:420px;--pane-t:58px;--pane-b:150px;
-    /* THE STAGE'S FLIP: the whole turn, out and in; each half is half of it. A duration, not a
-       curve - the flip rides --ease-panel-open, the house's settle, as PART 4 asks. */
-    --dur-stage-flip:.8s;
+    /* THE STAGE'S TURN (UI mandate III PART 2). A NEW NAME BECAUSE IT IS A NEW SHAPE: a
+       symmetric ease-in-out, zero speed at both ends and fastest at the middle, so two surfaces
+       that move TOGETHER - one leaving while the other arrives - share one velocity profile and
+       cross at the moment they are both moving fastest. --ease-panel-open (the spring, an
+       ease-out) was the wrong shape for that: it ends at rest, so a turn built from two of it in
+       sequence stopped dead at the middle and then started again at full speed. */
+    --ease-stage-turn:cubic-bezier(.65,0,.35,1);
+    --dur-stage-turn:.9s;
     /* TWO TYPEFACES, NAMED AND NOT FETCHED. Inter for prose and JetBrains Mono for
        parameters, used when the machine has them and quietly substituted when it does
        not. There is deliberately no <link> to a font host: this page holds a PII shield
@@ -3014,15 +3020,31 @@
   #orbit .s-gc{stop-color:var(--gold-core)}
   #orbit .s-bs{stop-color:var(--blue-structure)}
   #orbit .s-bd{stop-color:var(--blue-deep)}
-  #orbit .ob-orbit{fill:none;stroke:var(--blue-structure);stroke-opacity:.22;stroke-width:1.1}
-  #orbit .ob-orbit.gold{stroke:var(--gold-core);stroke-opacity:.2}
+  /* UI MANDATE III PART 3: AN ORBIT IS A CRISP LINE OVER ITS OWN GLOW, as on the reference - the
+     glow is a wider, blurred copy of the same ellipse, so the ring reads as light, not as ink. */
+  #orbit .ob-orbit{fill:none;stroke:var(--blue-structure);stroke-opacity:.34;stroke-width:1}
+  #orbit .ob-orbit.gold{stroke:var(--gold-core);stroke-opacity:.32}
+  #orbit .ob-orbit-glow{fill:none;stroke:var(--blue-structure);stroke-opacity:.16;stroke-width:5;
+    filter:url(#ob-tglow)}
+  #orbit .ob-orbit-glow.gold{stroke:var(--gold-core);stroke-opacity:.14}
   #orbit .ob-lat{fill:none;stroke:var(--blue-structure);stroke-opacity:.34;stroke-width:1}
   #orbit .ob-pl{fill:none;stroke:var(--blue-structure);stroke-width:1.2}
   #orbit .ob-pl.gold{stroke:var(--gold-core)}
-  #orbit .ob-spoke{stroke-width:1;stroke-dasharray:2 7;stroke-opacity:.42}
-  #orbit .ob-spoke.gold{stroke:var(--gold-core)}
-  #orbit .ob-spoke.blue{stroke:var(--blue-structure)}
-  #orbit .ob-cross{fill:none;stroke:var(--gold-core);stroke-opacity:.5;stroke-width:1.4}
+  /* THE THREADS (UI mandate III PART 3). Every connection the map draws is a CURVE in two
+     layers: a thin bright line whose colour runs from one end's family to the other's, laid over
+     a wide blurred copy of itself - and a bead of light travelling along it, so a connection
+     reads as something flowing rather than a ruled line. Three kinds, and only these, each read
+     from the corpus: the heart to each folder (ob-spoke), a link between two folders
+     (ob-cross, from the corpus's own links), and a link between two notes of one folder
+     (ob-inlink). A note's faint thread to its own folder (ob-member) is MEMBERSHIP - the note is
+     in that folder on disk - and is drawn far fainter, so it can never be mistaken for a link. */
+  #orbit .ob-thread{fill:none;stroke-width:1.5;stroke-linecap:round}
+  #orbit .ob-thread-glow{fill:none;stroke-width:6;stroke-opacity:.30;stroke-linecap:round;
+    filter:url(#ob-tglow)}
+  #orbit .ob-spoke.ob-thread{stroke-opacity:.78}
+  #orbit .ob-cross.ob-thread{stroke-width:1.8;stroke-opacity:.95}
+  #orbit .ob-bead{fill:var(--gold-hot);filter:url(#ob-tglow)}
+  #orbit .ob-member{fill:none;stroke-width:.7;stroke-opacity:.24;stroke-linecap:round}
   #orbit .ob-cross-n{fill:var(--gold-hot);font:11px var(--mono);text-anchor:middle}
   #orbit .ob-ring.gold{stroke:var(--gold-core)}
   #orbit .ob-ring.blue{stroke:var(--blue-structure)}
@@ -3185,7 +3207,8 @@
   #orbit .ob-h .ob-live,#orbit #ob-name,#orbit #ob-close{display:none}
   #orbit .ob-h{justify-content:flex-end}
   #orbit .ob-star{opacity:.82}
-  #orbit .ob-inlink{stroke:var(--gold-core);stroke-opacity:.6;stroke-width:1}
+  #orbit .ob-inlink{fill:none;stroke:var(--gold-hot);stroke-opacity:.8;stroke-width:1.2;
+    stroke-linecap:round}
   #orbit .ob-card{fill:rgba(var(--void-rgb),.74);stroke:var(--line);stroke-width:1}
   #orbit .ob-fold{fill:none;stroke-width:1.4}
   #orbit .ob-fold.gold{stroke:var(--gold-core)}
@@ -6103,7 +6126,8 @@ async function loadLib() {
        as two flat hoops. `k` is how much longer the outer one takes to go round. */
     RINGS: [{ rx: 330, ry: 110, tilt: -0.105, k: 1.0 },
             { rx: 478, ry: 168, tilt: 0.072, k: 1.42 }],
-    CORE_R: 64, NODE_MIN: 16, NODE_MAX: 36, PLINTH_Y: 172, MOTES: 54
+    CORE_R: 64, NODE_MIN: 16, NODE_MAX: 36, PLINTH_Y: 172, MOTES: 54,
+    BEAD_MS: 3200               // one bead's journey along its thread
   };
   /* THE MOTION VOCABULARY, READ BACK OUT OF THE CASCADE. Not a second copy of the curves -
      the stylesheet's :root is the one place they are said, and this asks it. A curve retuned
@@ -6212,23 +6236,20 @@ async function loadLib() {
      ['100%', 's-bs', 0]].forEach(function (s) {
       obEl('stop', { offset: s[0], class: s[1], 'stop-opacity': s[2] }, sphere);
     });
-    const halo = obEl('radialGradient', { id: 'ob-halo', cx: '50%', cy: '50%', r: '50%' }, defs);
-    [['0%', 's-bs', 0.30], ['45%', 's-bd', 0.32], ['100%', 's-bd', 0]].forEach(function (s) {
-      obEl('stop', { offset: s[0], class: s[1], 'stop-opacity': s[2] }, halo);
-    });
-    const floor = obEl('radialGradient', { id: 'ob-floor', cx: '50%', cy: '50%', r: '50%' }, defs);
-    [['0%', 's-gc', 0.30], ['22%', 's-bs', 0.20], ['100%', 's-bd', 0]].forEach(function (s) {
-      obEl('stop', { offset: s[0], class: s[1], 'stop-opacity': s[2] }, floor);
-    });
+    /* UI MANDATE III PART 1: ob-halo (a 190-unit gradient disc behind the heart) and ob-floor (a
+       gradient ellipse under the plinth) stood here. Both were background circles; both are gone.
+       The heart is its sphere, its latitude rings and its motes; the plinth is its rings. */
     const gloss = obEl('radialGradient', { id: 'ob-gloss', cx: '36%', cy: '30%', r: '70%' }, defs);
     obEl('stop', { offset: '0%', 'stop-color': '#ffffff', 'stop-opacity': 0.55 }, gloss);
     obEl('stop', { offset: '60%', 'stop-color': '#ffffff', 'stop-opacity': 0 }, gloss);
     const soft = obEl('filter', { id: 'ob-soft', x: '-80%', y: '-80%', width: '260%', height: '260%' }, defs);
     obEl('feGaussianBlur', { stdDeviation: 9 }, soft);
+    /* THE THREADS' GLOW: a soft blur, kept small so a thread stays a line with light round it. */
+    const tglow = obEl('filter', { id: 'ob-tglow', x: '-30%', y: '-30%', width: '160%', height: '160%' }, defs);
+    obEl('feGaussianBlur', { stdDeviation: 2.2 }, tglow);
 
     /* THE PLINTH: the rings the reference plates stand their sphere on. */
     const pl = obEl('g', { id: 'ob-plinth', transform: 'translate(0,' + OB.PLINTH_Y + ')' }, svg);
-    obEl('ellipse', { rx: 330, ry: 48, fill: 'url(#ob-floor)' }, pl);
     [[318, 44, 0.10, ''], [252, 35, 0.16, ''], [188, 26, 0.24, ''], [126, 17, 0.36, ''],
      [70, 9, 0.62, 'gold'], [30, 4, 0.9, 'gold']].forEach(function (r) {
       obEl('ellipse', { rx: r[0], ry: r[1], class: 'ob-pl ' + r[3], 'stroke-opacity': r[2] }, pl);
@@ -6236,15 +6257,15 @@ async function loadLib() {
     /* THE ORBITS, one ellipse each, tilted the way their worlds will travel. */
     const orbits = obEl('g', { id: 'ob-orbits' }, svg);
     OB.RINGS.forEach(function (R, i) {
-      obEl('ellipse', { rx: R.rx, ry: R.ry, class: 'ob-orbit' + (i ? '' : ' gold'),
-                        transform: 'rotate(' + (R.tilt * 180 / Math.PI).toFixed(2) + ')' }, orbits);
+      const tf = 'rotate(' + (R.tilt * 180 / Math.PI).toFixed(2) + ')';
+      obEl('ellipse', { rx: R.rx, ry: R.ry, class: 'ob-orbit-glow' + (i ? '' : ' gold'), transform: tf }, orbits);
+      obEl('ellipse', { rx: R.rx, ry: R.ry, class: 'ob-orbit' + (i ? '' : ' gold'), transform: tf }, orbits);
     });
     obEl('g', { id: 'ob-back' }, svg);
     obEl('g', { id: 'ob-links' }, svg);
-    /* THE HEART: a blue halo, three latitude rings, a sphere that is gold at the centre and
+    /* THE HEART: three latitude rings, a sphere that is gold at the centre and
        blue at the limb - the presence's own "blue shade, amber heart" - and a pulse. */
     const core = obEl('g', { id: 'ob-core' }, svg);
-    obEl('circle', { r: 190, fill: 'url(#ob-halo)' }, core);
     [[-14, 1.0], [8, 0.78], [-3, 0.56]].forEach(function (l) {
       obEl('ellipse', { rx: OB.CORE_R * 1.55 * l[1], ry: OB.CORE_R * 0.42 * l[1], class: 'ob-lat',
                         transform: 'rotate(' + l[0] + ')' }, core);
@@ -6280,6 +6301,22 @@ async function loadLib() {
     const back = $('ob-back'), front = $('ob-front'), links = $('ob-links');
     if (!back || !front || !links) return;
     back.textContent = ''; front.textContent = ''; links.textContent = '';
+    /* THE GRADIENTS ARE PER THREAD and rebuilt with the threads, so a mute or a new folder can
+       never leave a stale gradient pointing at the wrong colours. */
+    const defs = $('ob-svg').querySelector('defs');
+    Array.prototype.slice.call(defs.querySelectorAll('.ob-grad')).forEach(function (g) { g.remove(); });
+    let gradN = 0;
+    const thread = function (cls, from, to, parent) {
+      const id = 'ob-g' + (gradN++);
+      const grad = obEl('linearGradient', { id: id, class: 'ob-grad', gradientUnits: 'userSpaceOnUse' }, defs);
+      obEl('stop', { offset: '0%', style: 'stop-color:' + from }, grad);
+      obEl('stop', { offset: '100%', style: 'stop-color:' + to }, grad);
+      const glow = obEl('path', { class: 'ob-thread-glow ' + cls, stroke: 'url(#' + id + ')' }, parent);
+      const path = obEl('path', { class: 'ob-thread ' + cls, stroke: 'url(#' + id + ')' }, parent);
+      const bead = obEl('circle', { r: 2.3, class: 'ob-bead' }, parent);
+      return { grad: grad, glow: glow, path: path, bead: bead, seed: (gradN * 0.6180339) % 1 };
+    };
+    const famVar = function (f) { return f === 'gold' ? 'var(--gold-core)' : 'var(--blue-structure)'; };
     const words = String(d.name || 'Knowledge Galaxy').trim().split(/\s+/);
     orbitState.coreName.textContent = (words.length > 1 ? words.slice(0, -1).join(' ') : words[0]).toUpperCase();
     orbitState.coreName2.textContent = (words.length > 1 ? words[words.length - 1] : '').toUpperCase();
@@ -6309,14 +6346,29 @@ async function loadLib() {
           const ang = h1 * Math.PI * 2, rad = R * (1.35 + 1.9 * Math.sqrt(h2));
           const sx = Math.cos(ang) * rad, sy = Math.sin(ang) * rad * 0.62;
           at[n.id] = [sx, sy];
+          /* MEMBERSHIP: a faint curved thread from the note to the edge of its own world - the
+             note IS in this folder; this is not a link and is styled so it cannot pass for one. */
+          const ml = Math.hypot(sx, sy) || 1, ux = sx / ml, uy = sy / ml;
+          const ex = ux * R * 1.04, ey = uy * R * 1.04;
+          const bend = 0.22 * (ml - R) * (h1 < 0.5 ? 1 : -1);
+          obEl('path', { class: 'ob-member', stroke: c.colour, 'data-note': n.id,
+                         d: 'M' + sx.toFixed(1) + ',' + sy.toFixed(1) + ' Q' +
+                            ((sx + ex) / 2 - uy * bend).toFixed(1) + ',' + ((sy + ey) / 2 + ux * bend).toFixed(1) +
+                            ' ' + ex.toFixed(1) + ',' + ey.toFixed(1) }, g);
           obEl('circle', { cx: sx.toFixed(1), cy: sy.toFixed(1), r: (1.2 + 1.6 * h2).toFixed(2),
                            fill: c.colour, class: 'ob-star', 'data-note': n.id }, g);
         });
         allLinks.forEach(function (l) {
           const a = at[idOf(l.source)], b = at[idOf(l.target)];
           if (!a || !b) return;
-          obEl('line', { x1: a[0].toFixed(1), y1: a[1].toFixed(1), x2: b[0].toFixed(1),
-                         y2: b[1].toFixed(1), class: 'ob-inlink' }, g);
+          /* A LINK BETWEEN TWO NOTES OF THIS FOLDER, from the corpus's own links, as a curve that
+             bows away from the world rather than a chord across it. */
+          const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, ml = Math.hypot(mx, my) || 1;
+          const lift = 0.35 * Math.hypot(b[0] - a[0], b[1] - a[1]);
+          obEl('path', { class: 'ob-inlink',
+                         d: 'M' + a[0].toFixed(1) + ',' + a[1].toFixed(1) + ' Q' +
+                            (mx + mx / ml * lift).toFixed(1) + ',' + (my + my / ml * lift).toFixed(1) +
+                            ' ' + b[0].toFixed(1) + ',' + b[1].toFixed(1) }, g);
         });
         obEl('circle', { r: R.toFixed(1), fill: c.colour }, g);
         obEl('circle', { r: R.toFixed(1), fill: 'url(#ob-gloss)' }, g);
@@ -6337,7 +6389,7 @@ async function loadLib() {
            off a colour would be a claim the corpus never made. */
         sub.textContent = c.count + (c.count === 1 ? ' note' : ' notes') +
                           (c.muted ? ' · muted' : '');
-        const spoke = obEl('line', { class: 'ob-spoke ' + c.family }, links);
+        const spoke = thread('ob-spoke ' + c.family, 'var(--gold-core)', famVar(c.family), links);
         orbitState.nodes.push({
           group: c.name, count: c.count, family: c.family, ring: ri, r: R, el: g, spoke: spoke,
           phase: (j / list.length) * Math.PI * 2 + ri * 0.62 + 0.38, side: 1, x: 0, y: 0
@@ -6351,10 +6403,12 @@ async function loadLib() {
     orbitState.cross = [];
     Object.keys(d.crossed).forEach(function (k) {
       const ends = k.split('|');
-      const path = obEl('path', { class: 'ob-cross' }, links);
+      const fa = (d.clusters.find(function (c) { return c.name === ends[0]; }) || {}).family;
+      const fb = (d.clusters.find(function (c) { return c.name === ends[1]; }) || {}).family;
+      const th = thread('ob-cross', famVar(fa), famVar(fb), links);
       const lab = obEl('text', { class: 'ob-cross-n' }, links);
       lab.textContent = d.crossed[k];
-      orbitState.cross.push({ a: ends[0], b: ends[1], path: path, lab: lab });
+      orbitState.cross.push({ a: ends[0], b: ends[1], th: th, lab: lab });
     });
     const of = function (live, all, word) {
       return (live === all ? String(all) : live + ' of ' + all) + ' ' + word;
@@ -6397,10 +6451,13 @@ async function loadLib() {
       const side = depth < 0 ? -1 : 1;
       if (side !== n.side) { (side < 0 ? back : front).appendChild(n.el); n.side = side; }
       const len = Math.hypot(x, y) || 1;
-      n.spoke.setAttribute('x1', (x / len * OB.CORE_R * 1.08).toFixed(1));
-      n.spoke.setAttribute('y1', (y / len * OB.CORE_R * 1.08).toFixed(1));
-      n.spoke.setAttribute('x2', (x - x / len * (n.r + 8) * s).toFixed(1));
-      n.spoke.setAttribute('y2', (y - y / len * (n.r + 8) * s).toFixed(1));
+      const sx0 = x / len * OB.CORE_R * 1.08, sy0 = y / len * OB.CORE_R * 1.08;
+      const ex0 = x - x / len * (n.r + 8) * s, ey0 = y - y / len * (n.r + 8) * s;
+      /* THE SPOKE BENDS WITH THE ORBIT: the control point leans along the direction the world
+         travels, so the thread trails it like a tether rather than standing as a radius. */
+      const lean = 0.18 * Math.hypot(ex0 - sx0, ey0 - sy0);
+      obThread(n.spoke, sx0, sy0, (sx0 + ex0) / 2 - y / len * lean, (sy0 + ey0) / 2 + x / len * lean,
+               ex0, ey0, now);
       n.x = x; n.y = y;
       at[n.group] = n;
     });
@@ -6418,12 +6475,27 @@ async function loadLib() {
       if (nx * cx0 + ny * cy0 < 0) { nx = -nx; ny = -ny; }
       const push = OB.CORE_R * 2.4 + Math.max(0, OB.CORE_R * 1.6 - Math.hypot(cx0, cy0));
       const mx = cx0 + nx * push, my = cy0 + ny * push;
-      c.path.setAttribute('d', 'M' + a.x.toFixed(1) + ',' + a.y.toFixed(1) + ' Q' + mx.toFixed(1) + ',' +
-                          my.toFixed(1) + ' ' + b.x.toFixed(1) + ',' + b.y.toFixed(1));
+      obThread(c.th, a.x, a.y, mx, my, b.x, b.y, now);
       c.lab.setAttribute('x', ((a.x + 2 * mx + b.x) / 4).toFixed(1));
       c.lab.setAttribute('y', ((a.y + 2 * my + b.y) / 4 - 6).toFixed(1));
     });
     orbitState.frames++;
+  }
+  /* ONE THREAD, ONE FRAME: the curve on both layers, the gradient laid along it, and the bead
+     at its place on the curve - a quadratic Bezier evaluated here, since it is the same curve. */
+  function obThread(th, ax, ay, cx, cy, bx, by, now) {
+    const d = 'M' + ax.toFixed(1) + ',' + ay.toFixed(1) + ' Q' + cx.toFixed(1) + ',' + cy.toFixed(1) +
+              ' ' + bx.toFixed(1) + ',' + by.toFixed(1);
+    th.glow.setAttribute('d', d);
+    th.path.setAttribute('d', d);
+    th.grad.setAttribute('x1', ax.toFixed(1)); th.grad.setAttribute('y1', ay.toFixed(1));
+    th.grad.setAttribute('x2', bx.toFixed(1)); th.grad.setAttribute('y2', by.toFixed(1));
+    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const u = still ? 0.5 : ((now / OB.BEAD_MS + th.seed) % 1);
+    const v = 1 - u;
+    const px = v * v * ax + 2 * v * u * cx + u * u * bx, py = v * v * ay + 2 * v * u * cy + u * u * by;
+    th.bead.setAttribute('transform', 'translate(' + px.toFixed(1) + ',' + py.toFixed(1) + ')');
+    th.bead.style.opacity = (Math.sin(Math.PI * u) * 0.9).toFixed(3);
   }
   function orbitLoop() {
     if (!orbitState || !orbitState.open || orbitState.raf) return;
@@ -6529,33 +6601,51 @@ async function loadLib() {
     navPaint();
     return want;
   }
-  /* THE TURN. ONE FLIP IN TWO HALVES: the leaving surface turns edge-on about Y over the first
-     half, the arriving one turns in from edge-on over the second, so at the midpoint the pane is
-     empty for an instant and never shows both. Transform only, per the motion law, played as a
-     Web Animation so it leaves nothing behind when it ends - the rest state is the stylesheet's.
-     THE CURVE IS --ease-panel-open and the length --dur-stage-flip, both read back out of the
-     cascade through EASE: PART 4 asks for PR #4's named curves, and a turn that decelerates into
-     place is a panel arriving. A held-still page (html.nomove, reduced motion) just cuts. */
+  /* THE TURN (UI mandate III PART 2), AND WHAT WAS WRONG WITH THE ONE BEFORE IT.
+     The old turn was two halves in SEQUENCE on --ease-panel-open: the galaxy rotated to edge-on
+     (0 -> 90 deg) over 400ms, then the presence rotated in from edge-on over the next 400ms. Three
+     faults, all measurable: (1) the curve is an ease-out, so the leaving half started at ~6x its
+     mean angular speed and STOPPED at edge-on, and the arriving half restarted at ~6x from a
+     standstill - a velocity jump of six means at the junction, which reads as a cut; (2) at the
+     junction the pane held two edge-on slivers and nothing else - an empty frame, by design;
+     (3) 90 degrees about a ~1000px-wide pane at perspective 1800px swings its near edge hundreds
+     of pixels toward the viewer, so the in-between frames were distortion, not depth.
+     THE TURN NOW: ONE MOTION, BOTH SURFACES AT ONCE. They start together and end together on
+     --ease-stage-turn over --dur-stage-turn: the leaving surface turns 16 degrees away, sinks
+     to 0.92 and fades out while the arriving one turns in from 16 degrees on the other side,
+     settles from 1.08 and fades in. So every frame between the ends has both surfaces on the
+     glass, crossing - there is no empty frame and no stop - and the eye reads one surface
+     turning into the other. Transform and opacity only, per the motion law; a Web Animation, so
+     the rest state is still the stylesheet's. A turn already running is cancelled first, so a
+     voice that flickers on and off cannot stack two. html.nomove and reduced motion cut. */
   function stageFlip(want) {
     const s = stageState();
     const outEl = $(want === 'presence' ? 'orbit' : 'presence');
     const inEl = $(want === 'presence' ? 'presence' : 'orbit');
     if (!outEl || !inEl || !inEl.animate) return false;
+    (s.anims || []).forEach(function (a) { try { a.cancel(); } catch (e) { /* gone */ } });
+    s.anims = [];
     if (matchMedia('(prefers-reduced-motion: reduce)').matches ||
         document.documentElement.classList.contains('nomove')) return false;
-    const half = Math.max(1, EASE.ms('--dur-stage-flip') / 2);
-    const ease = EASE.read('--ease-panel-open') || 'ease-out';
+    const dur = Math.max(1, EASE.ms('--dur-stage-turn'));
+    const ease = EASE.read('--ease-stage-turn') || 'ease-in-out';
     const dir = want === 'presence' ? 1 : -1;
-    const turn = function (deg) { return 'perspective(1800px) rotateY(' + deg + 'deg)'; };
+    const pose = function (deg, sc) {
+      return 'perspective(2400px) rotateY(' + deg + 'deg) scale(' + sc + ')';
+    };
     outEl.style.visibility = 'visible';
-    const a = outEl.animate([{ transform: turn(0) }, { transform: turn(-90 * dir) }],
-                            { duration: half, easing: ease });
+    const a = outEl.animate([{ transform: pose(0, 1), opacity: 1 },
+                             { transform: pose(-16 * dir, 0.92), opacity: 0 }],
+                            { duration: dur, easing: ease });
     const done = function () { outEl.style.visibility = ''; };
     a.onfinish = done; a.oncancel = done;
-    inEl.animate([{ transform: turn(90 * dir) }, { transform: turn(0) }],
-                 { duration: half, delay: half, easing: ease, fill: 'backwards' });
+    const b = inEl.animate([{ transform: pose(16 * dir, 1.08), opacity: 0 },
+                            { transform: pose(0, 1), opacity: 1 }],
+                           { duration: dur, easing: ease, fill: 'backwards' });
+    s.anims = [a, b];
     s.turns = (s.turns || 0) + 1;
-    s.turnMs = half * 2;
+    s.turnMs = dur;
+    s.turnEase = ease;
     return true;
   }
   /* THE TRIGGER: the ear open OR the voice speaking brings the presence in; when both are off
@@ -20614,6 +20704,8 @@ async function loadLib() {
        but it is also small, and a thousand points on an ear would make a head wearing two
        lamps. */
     NOSE_PTS: 420, LIP_PTS: 300, IRIS_PTS: 210, LID_PTS: 200, NECK_PTS: 600,
+    /* UI MANDATE III PART 4: the iris's two rings (radius, in face units) and its striations. */
+    EYE_IRIS_R: 0.055, EYE_PUPIL_R: 0.019, EYE_SPOKES: 14,
     EAR_PTS: 260,
     /* ---- UI MANDATE II PART 2: THE MESH FOLLOWS THE FACE ----
        WHAT §49 BUILT AND WHY IT WAS NOT ENOUGH. A share of the shell's budget was laid along an
@@ -20687,9 +20779,20 @@ async function loadLib() {
        LEVEL_SWELL and PULSE_SWELL are how much the voice and a syllable open it.
        DUST_S is the scale it is worn at: the cloud plus its drift fills 0.75 of the frame's
        half-height, the same proportion of the well the core used to occupy. */
-    DUST_PTS: 13800, DUST_R: 1.0, DUST_S: 0.86,
+    /* UI MANDATE III PART 1B: NO FIXED SHAPE. The buffer still holds a ball (the seed each point
+       starts from), but the drawn cloud is that ball with every point on its OWN wandering path:
+       three sines per point at frequencies and phases hashed from its own aRnd, a second octave so
+       no path is a clean loop, and a radial swing of its own. Heart points wander a little
+       (WANDER_HEART), edge points a lot (WANDER_EDGE), and one point in ten is a stray that goes
+       STRAY times further - so the outline is a different, ragged edge every second, and no two
+       directions breathe together. DUST_S came down from 0.86 to 0.62 so that even the bound on
+       the furthest stray (presDustReach) lands inside the canvas's window, never cut by it.
+       Same 13,800 points, same one object; this is motion only. */
+    DUST_PTS: 13800, DUST_R: 1.0, DUST_S: 0.62,
     DUST_FALLOFF: 1.5, DUST_FREQ: 1.9, DUST_FLOOR: 0.05, DUST_CONTRAST: 2.6,
-    DUST_DRIFT: 0.05, DUST_SPIN: 0.105, DUST_BREATH: 0.018, DUST_BREATH_HZ: 0.11,
+    DUST_WANDER_HEART: 0.07, DUST_WANDER_EDGE: 0.26, DUST_STRAY: 1.25, DUST_STRAY_SHARE: 0.10,
+    DUST_WANDER_HZ_LO: 0.05, DUST_WANDER_HZ_HI: 0.21, DUST_RADIAL: 0.14,
+    DUST_SPIN: 0.105, DUST_BREATH: 0.018, DUST_BREATH_HZ: 0.11,
     DUST_LEVEL_SWELL: 0.10, DUST_PULSE_SWELL: 0.06,
     /* THE FOUR STATES' LIGHT, and where it comes from. Each state is a family colour READ OUT
        OF THE STYLESHEET at boot - see presDustPalette() - so the hologram and the chrome are
@@ -20845,28 +20948,8 @@ async function loadLib() {
      budget nobody can read off the file, and the first thing the auto-revert has to do is name
      the thing it turned off.
 
-     ---- THE SMOKE: A SMALL NUMBER OF LARGE SPRITES, AND THE MANDATE SAYS SO ----
-     "soft drifting haze around the core as a small number of large additive sprites (not
-     thousands of points)". TWELVE. A dozen sprites at 1.5 natural units across, additive, each
-     on its own slow lissajous - and the reason the number is small is not only cost. Haze made
-     of many small sprites is a PARTICLE SYSTEM, and a particle system reads as weather; haze
-     made of a dozen large overlapping ones reads as volume, because no individual sprite can be
-     picked out by the eye. Failure mode if SMOKE_N climbed past ~24 at this size: the overlap
-     saturates to a flat wash, the core sits in milk, and the fill cost goes up linearly for a
-     picture that is strictly worse.
-
-     SMOKE_R_IN / SMOKE_R_OUT ARE THE OCCLUSION LAW, ARITHMETICALLY. The mandate: "never
-     occluding the reticle or the Eyes brackets." The reticle brackets stand at the CORNERS of a
-     square of half-side CORE_RET_H = 1.06, so the nearest point of a bracket is 1.06 from the
-     centre along an axis and 1.50 at the diagonal. Every sprite CENTRE is held inside 0.92, and
-     a sprite's own half-width is 0.75, so the farthest a sprite's edge can reach is 1.67 - which
-     WOULD cross a bracket, and is why the radial falloff in the sprite's own texture matters: the
-     texture is a gaussian that is already under a twentieth of its peak by 0.62 of its half-width.
-     That is an argument and not a proof, so cine_proof does not take it: it MEASURES the bracket
-     pixels with the smoke on and with it off and asserts the brackets stay the brightest local
-     feature and gain less than SMOKE_RET_TOL of luminance. ADDITIVE BLENDING CANNOT HIDE
-     ANYTHING - it can only wash it out - so "occlude" is read as "wash out", which is the only
-     meaning it can have for light added over light, and that is the number the assertion names.
+     ---- THE SMOKE (§33-§50) IS GONE: UI mandate III PART 1 removed the haze layer, which
+     was the pale disc behind the presence. What follows is the light that remains. ----
 
      ---- THE BLOOM: ITS PIN IS THE HOUSE'S PIN, AND ITS STRENGTH IS THE VOICE ----
      BLOOM_SCALE 0.5 is the deck's own trick for the deck's own reason - see deckBloom, where the
@@ -20876,8 +20959,8 @@ async function loadLib() {
      waiting for a resize.
      BLOOM_THRESHOLD 0.62 IS THE TEXT-CONTRAST GUARD, and it is the one number in this block that
      a mandate clause turns on: "Bloom strength tuned so UI text and card edges never bloom - a
-     text-contrast assertion proves it." The presence's composer renders presScene and the smoke
-     scene and NOTHING ELSE - the deck, the cards, the bar and the palette are not in it and
+     text-contrast assertion proves it." The presence's composer renders presScene and
+     NOTHING ELSE - the deck, the cards, the bar and the palette are not in it and
      cannot be, because they are DOM over a canvas and not geometry inside it. So UI text cannot
      bloom by construction, and the threshold is doing a second job: holding the shell's dim
      points out of the glow so that only the heart, the arcs and the flares bloom. The assertion
@@ -20892,37 +20975,13 @@ async function loadLib() {
      being photographed, which is the actual test the mandate sets - "visible across the room
      without a single word of audio". */
   const CINE = {
-    SMOKE_N: 12, SMOKE_SIZE: 1.5, SMOKE_TEX: 128,
-    SMOKE_R_IN: 0.46, SMOKE_R_OUT: 0.92,
-    /* UI MANDATE II: THE HAZE PULLS IN FOR THE DUST. The ring of sprites at 0.46-0.92 was laid
-       round the core's shell and the head; round a ball whose density falls from its centre it
-       reads as four petals with a hole in the middle. In dust mode every centre's radius is
-       scaled by this, so the twelve overlap into one glow where the cloud is densest. Same
-       sprites, same material, same clamp to SMOKE_R_OUT; the face keeps the ring. */
-    SMOKE_DUST_K: 0.40,
-    SMOKE_OP: 0.085,          // per-sprite peak opacity; twelve of these overlap into the haze
-    SMOKE_DRIFT: 0.021,       // radians/s of the slowest curl - a sprite crosses the core in ~2min
-    SMOKE_CURL: 0.37,         // how far off a circle the lissajous wanders, as a fraction of r
-    /* §34 PART 2 - THE SHADE IS BLUE, AND IT IS THE SHELL'S OWN BLUE RATHER THAN A NEW ONE.
-       The boss's word is recorded verbatim because it is the decision this constant implements:
-       "blue shade, amber heart." The circled screenshot says the shade around the sphere read
-       amber-brown, and that was this line: 0xffb23c is CORE_TINT, which was the right reading of
-       "the haze is the core's own light" while the core's own light WAS amber - and Appendix A
-       moved 6,460 of the 13,740 points, the whole filament shell, to the house blue (see the
-       vC = 1.0 note in PRES_VERT). So the haze went on wearing the hue of a heart it no longer
-       wraps, and a blue sphere sat in an amber cloud.
-       0x7cc4ff IS PRES.TINT, i.e. uTint2 - THE SAME CONSTANT THE SHELL'S COLD END ALREADY READS,
-       not a second blue chosen to look like it. So the original intent of this line survives
-       intact: the haze is still the core's own light and still not a new colour in the house; it
-       is now the light of the part of the core that actually surrounds it.
-       WHAT DELIBERATELY DOES NOT MOVE: the nucleus keeps its white-hot centre (that is the heat
-       axis, uRimTint/CORE_HOT, untouched), the two orbital bands keep their amber (vC = 0.15,
-       "a hair off the amber", which Appendix A draws in amber), and the chrome stays house blue.
-       Failure mode of this change being wrong: it is one hex constant on one line and it reverts
-       by restoring 0xffb23c - and the plate pair is shot both ways so the revert is a choice made
-       against two pictures rather than against a memory of one. */
-    SMOKE_TINT: 0x7cc4ff,     // PRES.TINT / uTint2 - the filament shell's own blue
-    SMOKE_RET_TOL: 0.08,      // the brackets may gain this much normalised luminance and no more
+    /* UI MANDATE III PART 1: THE HAZE IS GONE, AND SO ARE ITS NUMBERS. Twelve additive sprites
+       round the presence were the pale disc behind it - in the speaking tint most of all, but in
+       every state and round the face too - and the canvas's radial window then cut that haze
+       into a clean circle, which is what made a volume read as a flat plate. The sprites, their
+       scene, their pass and their eleven constants are deleted rather than turned down: the
+       presence is its points and its tint and nothing is drawn behind them. config.json's
+       smoke_on is still published by the server (a frozen file) and has nothing left to switch. */
     /* §34 PART 1 - THE EDGE WINDOW'S TWO NUMBERS. EDGE_PAD is how far outside the reticle's own
        radial reach the window starts, as a fraction of the frame's half-extent: the reticle's
        corners sit at sqrt(2) * CORE_RET_H * CORE_S / frameHalf = 0.839, so the window is opaque
@@ -20935,7 +20994,6 @@ async function loadLib() {
        at 0.11-0.13 from r=0.5 outward, so the ramp has ~0.13 of luminance to retire over 15% of
        the half-extent - about 23px at a 309px well and more at every larger one. */
     EDGE_PAD: 0.015, EDGE_MAX: 0.94,
-    SMOKE_CAP: 16,            // the DECLARED sprite ceiling for the whole presence system
     BLOOM_SCALE: 0.5, BLOOM_RADIUS: 0.62, BLOOM_THRESHOLD: 0.62,
     BLOOM_STRENGTH_IDLE: 0.55, BLOOM_STRENGTH_SPEAK: 1.40,
     BLOOM_SETTLE_MS: 900,     // the mandate's "settles back within one second of silence"
@@ -21469,6 +21527,17 @@ async function loadLib() {
      is the point's own phase on the flow field. See PRES.DUST_*. The cap on tries is the
      same guard the face's shell carries: a weight that came back tiny everywhere degrades
      into a sparser cloud rather than a hung tab. */
+  /* THE FURTHEST A DUST POINT CAN BE DRAWN, in natural units, as a BOUND: an edge point (r = 1)
+     moved by a stray's whole wander (wv's three axes are each at most 1.5, so |wv| <= 2.598, and
+     the shader scales it by 1/2.598 - the move is never more than amp), swung out by its full
+     radial term, with the breath, the voice's swell and the syllable's pulse on top: every term
+     at its peak at once, which no real frame reaches. The edge window is sized from this, and
+     DUST_S is chosen so the bound is inside the window - so no point is ever cut by it. */
+  function presDustReach() {
+    const wander = (PRES.DUST_WANDER_HEART + PRES.DUST_WANDER_EDGE) * PRES.DUST_STRAY;
+    return PRES.DUST_R * PRES.DUST_S * (1 + wander) * (1 + PRES.DUST_RADIAL) *
+           (1 + PRES.DUST_BREATH + PRES.DUST_LEVEL_SWELL + PRES.DUST_PULSE_SWELL);
+  }
   function presDustFill(pen, rnd) {
     const N = presN(PRES.DUST_PTS), R = PRES.DUST_R, F = PRES.DUST_FREQ;
     let placed = 0, tries = 0;
@@ -22166,14 +22235,52 @@ async function loadLib() {
     /* THE IRISES, inside the sockets. They no longer collapse onto a line when the eye
        shuts - the LID does the closing now, which is why they can stay where an eye is
        and be measured against the thing in front of them. */
+    /* UI MANDATE III PART 4: AN IRIS WITH PARTS, in the same IRIS_PTS a side. It was a uniformly
+       filled disc, which behind a uniformly filled lid read as a flat patch. Now, by share of the
+       eye's points: the LIMBAL RING (the iris's dark-edged rim, here its brightest line), the
+       PUPIL RING, fourteen radial STRIATIONS between them, a four-point CATCHLIGHT up and to the
+       side, and a sparse fill. aRnd carries the light: >= 1 is a ring point (hot), >= 1.24 the
+       catchlight (hottest) - the same flag convention the face's mesh already uses - and the
+       shader turns that into heat, so the rings glow through the lid. */
+    const IRIS_R = PRES.EYE_IRIS_R, PUPIL_R = PRES.EYE_PUPIL_R;
+    pres.eyeParts = { limbal: 0, pupil: 0, striae: 0, catch: 0, fill: 0, spokes: PRES.EYE_SPOKES };
     [-1, 1].forEach(function (sx, k) {
-      for (let i = 0; i < IRIS_PTS; i++) {
-        const th = rnd() * Math.PI * 2;
-        const r = 0.055 * Math.sqrt(rnd());
+      const role = k ? PRES_ROLE.IRIS_R : PRES_ROLE.IRIS_L;
+      const nLimb = Math.round(IRIS_PTS * 0.34), nPup = Math.round(IRIS_PTS * 0.14);
+      const nCat = Math.max(2, Math.round(IRIS_PTS * 0.04));
+      const perSpoke = Math.max(1, Math.floor(IRIS_PTS * 0.40 / PRES.EYE_SPOKES));
+      const nFill = Math.max(0, IRIS_PTS - nLimb - nPup - nCat - perSpoke * PRES.EYE_SPOKES);
+      const at = function (r, th, flag) {
         const x = sx * PRES_EYE.x + Math.cos(th) * r;
         const y = PRES_EYE.y + Math.sin(th) * r * 0.88;
-        pen.put(x, y, presFrontZ(x, y) - 0.022,
-                k ? PRES_ROLE.IRIS_R : PRES_ROLE.IRIS_L, rnd(), PRES_CELL.IRIS);
+        pen.put(x, y, presFrontZ(x, y) - 0.022, role, flag, PRES_CELL.IRIS);
+      };
+      for (let i = 0; i < nLimb; i++) {
+        at(IRIS_R + (rnd() - 0.5) * 0.003, (i + 0.3 * rnd()) / nLimb * Math.PI * 2, 1.0 + 0.2 * rnd());
+        pres.eyeParts.limbal++;
+      }
+      for (let i = 0; i < nPup; i++) {
+        at(PUPIL_R + (rnd() - 0.5) * 0.002, (i + 0.3 * rnd()) / nPup * Math.PI * 2, 1.0 + 0.2 * rnd());
+        pres.eyeParts.pupil++;
+      }
+      for (let s = 0; s < PRES.EYE_SPOKES; s++) {
+        const th0 = (s + 0.5) / PRES.EYE_SPOKES * Math.PI * 2;
+        for (let j = 0; j < perSpoke; j++) {
+          const u = (j + 0.5) / perSpoke;
+          at(PUPIL_R * 1.25 + (IRIS_R * 0.92 - PUPIL_R * 1.25) * u, th0 + 0.18 * u, 0.55 + 0.4 * rnd());
+          pres.eyeParts.striae++;
+        }
+      }
+      for (let i = 0; i < nCat; i++) {
+        const a = rnd() * Math.PI * 2, r = 0.005 * Math.sqrt(rnd());
+        const x = sx * PRES_EYE.x + IRIS_R * 0.32 + Math.cos(a) * r;
+        const y = PRES_EYE.y + IRIS_R * 0.34 + Math.sin(a) * r;
+        pen.put(x, y, presFrontZ(x, y) - 0.018, role, 1.30 + 0.1 * rnd(), PRES_CELL.IRIS);
+        pres.eyeParts.catch++;
+      }
+      for (let i = 0; i < nFill; i++) {
+        at(IRIS_R * Math.sqrt(rnd()), rnd() * Math.PI * 2, rnd() * 0.5);
+        pres.eyeParts.fill++;
       }
     });
     /* THE LIDS, as REAL SURFACE PATCHES and stored SHUT. Storing the closed position is
@@ -22184,7 +22291,10 @@ async function loadLib() {
     [-1, 1].forEach(function (sx, k) {
       for (let i = 0; i < LID_PTS; i++) {
         const th = rnd() * Math.PI * 2;
-        const rr = Math.sqrt(rnd());
+        /* UI MANDATE III PART 4: WEIGHTED TO THE RIM. sqrt(rnd) laid the lid as an even plate,
+           which is what hid the eye behind it; rnd^0.3 puts the points at the lid's margin and
+           leaves its middle thin, so a shut eye is a lid's outline with the iris glowing through. */
+        const rr = Math.pow(rnd(), 0.3);
         const x = sx * PRES_EYE.x + Math.cos(th) * PRES_EYE.rx * rr;
         const y = PRES_EYE.y + Math.sin(th) * PRES_EYE.ry * rr;
         pen.put(x, y, presFrontZ(x, y) + 0.038,
@@ -22376,10 +22486,23 @@ async function loadLib() {
     '    float bt = uYawHold > 0.5 ? uPhase : t;',
     '    float rr = clamp(aCell, 0.0, 1.0);',
     '    float heart = pow(1.0 - rr, 1.6);',
-    '    vec3 fl = vec3(sin(p.y * 2.3 + bt * 0.37 + aRnd * 6.2832),',
-    '                   sin(p.z * 2.3 + bt * 0.29 + aRnd * 4.10),',
-    '                   sin(p.x * 2.3 + bt * 0.43 + aRnd * 2.70));',
-    '    p += ' + PRES.DUST_DRIFT.toFixed(4) + ' * fl * (0.55 + 0.45 * rr);',
+    /* EACH POINT'S OWN PATH. h1..h3 are three independent hashes of the point's aRnd, so its
+       frequencies and phases are its own; the second octave runs at an unrelated rate so a path
+       never closes into a loop the eye can learn. amp grows toward the edge, and a stray (one in
+       ten, by h1) goes STRAY times further - which is what makes the outline ragged. */
+    '    float h1 = fract(aRnd * 43.1731), h2 = fract(aRnd * 71.3127), h3 = fract(aRnd * 19.7303);',
+    '    float wlo = ' + PRES.DUST_WANDER_HZ_LO.toFixed(4) + ', wsp = ' +
+      (PRES.DUST_WANDER_HZ_HI - PRES.DUST_WANDER_HZ_LO).toFixed(4) + ';',
+    '    vec3 wv = vec3(sin(bt * (wlo + wsp * h1) + h2 * 6.2832 + p.y * 1.7),',
+    '                   sin(bt * (wlo + wsp * h2) + h3 * 6.2832 + p.z * 1.7),',
+    '                   sin(bt * (wlo + wsp * h3) + h1 * 6.2832 + p.x * 1.7));',
+    '    wv += 0.5 * vec3(sin(bt * (0.31 + 0.47 * h3) + h1 * 11.0),',
+    '                     sin(bt * (0.29 + 0.43 * h1) + h2 * 13.0),',
+    '                     sin(bt * (0.37 + 0.41 * h2) + h3 * 17.0));',
+    '    float amp = (' + PRES.DUST_WANDER_HEART.toFixed(4) + ' + ' + PRES.DUST_WANDER_EDGE.toFixed(4) +
+      ' * pow(rr, 1.5)) * (h1 < ' + PRES.DUST_STRAY_SHARE.toFixed(3) + ' ? ' + PRES.DUST_STRAY.toFixed(3) + ' : 1.0);',
+    '    p += amp * wv * 0.3849;',
+    '    p *= 1.0 + ' + PRES.DUST_RADIAL.toFixed(4) + ' * rr * sin(bt * (0.04 + 0.12 * h2) + h3 * 6.2832);',
     '    p = rotY(bt * ' + PRES.DUST_SPIN.toFixed(4) + ') * rotX(0.22 * sin(bt * 0.07)) * p;',
     '    p *= 1.0 + ' + PRES.DUST_BREATH.toFixed(4) + ' * sin(bt * ' +
       (PRES.DUST_BREATH_HZ * Math.PI * 2).toFixed(4) + ') * (1.0 - clamp(uLevel * 2.2, 0.0, 1.0))' +
@@ -22420,6 +22543,7 @@ async function loadLib() {
        which is why it can be added under a DO-NOT-ALTER on the Eyes brackets at all. */
     '    float eyeOpen = uEye * (1.0 - uWink);',
     '    float shut = 1.0 - eyeOpen;',
+    '    float irisHeat = 0.0;',
     '    if (aRole > 0.5 && aRole < 2.5) {',
     '      float rip = sin(p.x * 9.0 + t * 7.5);',
     '      if (aRole < 1.5) p.y += uLevel * 0.010;',
@@ -22431,12 +22555,15 @@ async function loadLib() {
        a dark iris behind a shut lid that is nonetheless darting about is a tell that the
        geometry is animating something nobody can see. */
     '      p.xy += uGaze * eyeOpen;',
-    '      a = mix(0.20, 1.0, eyeOpen);',
+    '      float ih = step(1.0, aRnd), icl = step(1.24, aRnd);',
+    '      a = mix(0.30 + 0.34 * ih + 0.30 * icl, 1.0, eyeOpen);',
+    '      sz *= 1.0 + 0.25 * ih + 0.55 * icl;',
+    '      irisHeat = (0.34 * ih + 0.56 * icl) * (0.70 + 0.30 * eyeOpen);',
     '      sz *= mix(0.90, 1.18, eyeOpen);',
     '    } else if (aRole > 6.5 && aRole < 8.5) {',
     '      p.y = mix(uLidY, p.y, shut);',
     '      p.z -= 0.012 * (1.0 - shut);',
-    '      a = mix(0.10, 0.74, shut);',
+    '      a = mix(0.10, 0.56, shut);',
     '      sz *= mix(0.82, 1.06, shut);',
     '    } else if (aRole > 9.5) {',
     /* The neck fades out at its base rather than ending: a cut-off neck is a trophy.
@@ -22453,7 +22580,7 @@ async function loadLib() {
        a point cloud and leaves the brow, the cheek and the far jaw free to differ from each
        other by more than their own speckle does. */
     '      float fMesh = step(1.0, aRnd), fVert = step(1.24, aRnd);',
-    '      a = mix(0.30 + 0.12 * aRnd, 0.95 + 0.05 * fVert, fMesh) * (1.0 + ' + PRES.FACE_SPEAK_GLOW.toFixed(3) + ' * uLevel);',
+    '      a = mix(0.24 + 0.10 * aRnd, 0.95 + 0.05 * fVert, fMesh) * (1.0 + ' + PRES.FACE_SPEAK_GLOW.toFixed(3) + ' * uLevel);',
     '      sz *= 1.0 + 0.10 * fMesh + 0.24 * fVert;',
     '      if (aRnd < ' + PRES.FACE_DRIFT_SHARE.toFixed(3) + ') p += ' + PRES.FACE_DRIFT.toFixed(4) +
     ' * vec3(sin(t * 0.71 + aRnd * 61.0), cos(t * 0.57 + aRnd * 47.0), sin(t * 0.43 + aRnd * 29.0));',
@@ -22541,6 +22668,7 @@ async function loadLib() {
       (PRES.LAM_SZ_HI - PRES.LAM_SZ_LO).toFixed(3) + ' * lam;',
     '    float fres = pow(1.0 - abs(nrm.z), uFresK);',
     '    vR = clamp((uFresGain * fres + uRimGain * fres * lam) * near, 0.0, 1.0);',
+    '    vR = max(vR, irisHeat);',
     /* And the rim is a little fatter as well as a little whiter, because a one-pixel line
        of brighter cyan at dpr 1 is a line that aliases into a dotted one the moment the
        head leans. */
@@ -23013,7 +23141,6 @@ async function loadLib() {
        AND THE DIRECT PATH IS KEPT. If the composer never built - no addons, no WebGL2, both
        flags off - this is presR.render(presScene, presCam), byte for byte the §32 line. A
        machine that cannot have the cinema still has the core. */
-    presSmokeFrame(now);
     const glow = cineStrength(now, lvl);
     if (presComposer) {
       if (presBloomPass && cine.bloom) presBloomPass.strength = glow;
@@ -23022,7 +23149,6 @@ async function loadLib() {
         cine.throws++;
         if (cine.throws > 2) {
           cineRevert('bloom', 'composer threw: ' + ((e && e.message) || 'x'));
-          cineRevert('smoke', 'composer threw: ' + ((e && e.message) || 'x'));
           presComposer = null;
         }
         presR.render(presScene, presCam);
@@ -23031,6 +23157,7 @@ async function loadLib() {
     } else {
       presR.render(presScene, presCam);
     }
+    if (presSnapQ.length) presSnapTake();
     pres.frames++;
     if (!presHost.classList.contains('lit')) presHost.classList.add('lit');
     if (pres.frames % PRES.MIRROR_EVERY === 0) { presMirror(); convoMirror(); }
@@ -23057,14 +23184,13 @@ async function loadLib() {
        version: a throttled tab came back, spent one streak, and arrived at the ring mode with
        no bloom - two steps for one offence. */
     if (presComposer && presRich(pres.mode) && pres.fps &&
-        document.visibilityState === 'visible' && (cine.bloom || cine.smoke)) {
+        document.visibilityState === 'visible' && cine.bloom) {
       if (pres.fps < PRES.FPS_FLOOR) {
         if (!cine.lowSince) cine.lowSince = now;
         else if (now - cine.lowSince >= PRES.GRACE_MS) {
           const held = 'held ' + pres.fps + 'fps for ' +
                        Math.round(PRES.GRACE_MS / 1000) + 's with the cinema on';
-          if (cine.bloom) cineRevert('bloom', held);
-          else cineRevert('smoke', held);
+          cineRevert('bloom', held);
           cine.lowSince = 0;
           pres.lowSince = 0;      // the mode gets a fresh streak to judge the cheaper frame on
         }
@@ -23271,7 +23397,6 @@ async function loadLib() {
       presMat.uniforms.uTint.value.setHex(PRES.TINT);
       presMat.uniforms.uTint2.value.setHex(PRES.TINT);
       presMat.uniforms.uRimTint.value.setHex(PRES.RIM_TINT);
-      if (presSmokeMat) presSmokeMat.color.setHex(CINE.SMOKE_TINT);
     } else {
       presDustTick(0, true);
     }
@@ -23321,21 +23446,77 @@ async function loadLib() {
       pres.dust.palette[st] = { heart: hex(c), edge: hex(edge), heat: hex(heat),
                                 token: PRES.DUST_TOKENS[st], rgb: c };
     });
-    /* THE HAZE IS EQUALLY BRIGHT IN EVERY STATE; ONLY ITS HUE MOVES. Twelve additive sprites
-       in the speaking tint (#fff2d2, a third brighter than the listening blue) lit the well
-       until the edge window's circle read as a pale disc. So each state's haze is its heart
-       scaled down to the listening token's luma, never up: the blue is the reference because
-       it is the state the presence spends most of its life in. */
-    const luma = function (c) { return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]; };
-    const ref = luma(pres.dust.palette.listening.rgb) || 1;
-    PRES.DUST_STATES.forEach(function (st) {
-      const p = pres.dust.palette[st];
-      const k = Math.min(1, ref / (luma(p.rgb) || 1));
-      p.haze = hex(p.rgb.map(function (v) { return v * k; }));
-    });
   }
   /* One frame of the state: decide it, count the changes, ease the three uniforms toward the
      state's colours. `now` true writes them outright (the way in from the face). */
+  /* ---- THE SNAPSHOT DOOR (UI mandate III) ----
+     WHAT THE PRESENCE ITSELF DREW, and nothing behind it. A screenshot of the well is the canvas
+     composited over the deck, so it carries the 3D sky's own drift; this reads the presence's
+     canvas inside the frame that drew it, right after the render call, while its drawing buffer is
+     still the frame just made. Asked for by a harness through presence.snap(); never on its own.
+     The reading is alpha-weighted luminance (0-255) on an N x N copy:
+       rings     the mean in twelve radial rings, centre outward, to the canvas's inscribed circle
+       band      the 10th / 50th / 90th percentile in the band 0.45-0.85 of the half-extent - a disc
+                 behind the presence lifts the 10th percentile off zero everywhere in it; points
+                 with dark between them leave it at zero
+       coverage  the share of that band brighter than 8/255
+       sectors   for 24 directions, the radius out to which 98% of that direction's light lies -
+                 the outline, read as a number per direction
+       outer     for the same 24, the third-farthest lit pixel's radius - the cloud's far edge in
+                 that direction, robust to one stray pixel
+       mask      which pixels are lit (> 12/255), as hex, so two snapshots can be compared */
+  const presSnapQ = [];
+  function presSnapTake() {
+    const q = presSnapQ.splice(0);
+    q.forEach(function (req) {
+      try {
+        const N = req.n;
+        const cv = document.createElement('canvas');
+        cv.width = cv.height = N;
+        const g = cv.getContext('2d', { willReadFrequently: true });
+        g.drawImage(presCvs, 0, 0, N, N);
+        const d = g.getImageData(0, 0, N, N).data, h = N / 2;
+        const rings = new Array(12).fill(0), rn = new Array(12).fill(0);
+        const band = [], sec = [];
+        for (let k = 0; k < 24; k++) sec.push([]);
+        let lit = 0, all = 0, bits = '', nib = 0, nb = 0;
+        for (let y = 0; y < N; y++) {
+          for (let x = 0; x < N; x++) {
+            const i = (y * N + x) * 4;
+            const L = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) * d[i + 3] / 255;
+            const dx = x + 0.5 - h, dy = y + 0.5 - h, r = Math.hypot(dx, dy) / h;
+            if (r < 1) { const k = Math.min(11, Math.floor(r * 12)); rings[k] += L; rn[k]++; }
+            if (r >= 0.45 && r <= 0.85) { band.push(L); all++; if (L > 8) lit++; }
+            if (L > 12 && r < 1) {
+              let a = Math.atan2(dy, dx); if (a < 0) a += Math.PI * 2;
+              sec[Math.min(23, Math.floor(a / (Math.PI * 2) * 24))].push([r, L]);
+            }
+            nib = (nib << 1) | (L > 12 ? 1 : 0); nb++;
+            if (nb === 4) { bits += nib.toString(16); nib = 0; nb = 0; }
+          }
+        }
+        band.sort(function (a, b) { return a - b; });
+        const pct = function (p) { return band.length ? +band[Math.floor(p * (band.length - 1))].toFixed(2) : 0; };
+        const outer = sec.map(function (s) {
+          if (s.length < 3) return 0;
+          const rs = s.map(function (v) { return v[0]; }).sort(function (a, b) { return b - a; });
+          return +rs[2].toFixed(3);
+        });
+        const sectors = sec.map(function (s) {
+          if (!s.length) return 0;
+          s.sort(function (a, b) { return a[0] - b[0]; });
+          const tot = s.reduce(function (z, v) { return z + v[1]; }, 0);
+          let acc = 0;
+          for (let j = 0; j < s.length; j++) { acc += s[j][1]; if (acc >= 0.98 * tot) return +s[j][0].toFixed(3); }
+          return +s[s.length - 1][0].toFixed(3);
+        });
+        req.resolve({ n: N, mode: pres.mode, frame: pres.frames,
+                      rings: rings.map(function (v, k) { return +(v / Math.max(1, rn[k])).toFixed(2); }),
+                      band: { p10: pct(0.10), p50: pct(0.50), p90: pct(0.90) },
+                      coverage: +(lit / Math.max(1, all)).toFixed(3), sectors: sectors, outer: outer, mask: bits });
+      } catch (e) { req.resolve({ error: String((e && e.message) || e) }); }
+    });
+  }
   function presDustTick(dt, now) {
     if (!presMat || !presTHREE || !pres.dust.palette) return;
     const st = presLiveState();
@@ -23347,9 +23528,8 @@ async function loadLib() {
     const pal = pres.dust.palette[st];
     if (!presDustAim) {
       presDustAim = { heart: new presTHREE.Color(), edge: new presTHREE.Color(),
-                      heat: new presTHREE.Color(), haze: new presTHREE.Color() };
+                      heat: new presTHREE.Color() };
     }
-    presDustAim.haze.setHex(pal.haze);
     presDustAim.heart.setHex(pal.heart);
     presDustAim.edge.setHex(pal.edge);
     presDustAim.heat.setHex(pal.heat);
@@ -23358,11 +23538,6 @@ async function loadLib() {
     u.uTint.value.lerp(presDustAim.heart, k);
     u.uTint2.value.lerp(presDustAim.edge, k);
     u.uRimTint.value.lerp(presDustAim.heat, k);
-    /* AND THE HAZE GOES WITH IT. The cinema's smoke was built in the shell's blue and never
-       recoloured, which is right for one colour and wrong for four: an amber or red cloud
-       inside a blue haze reads as a brown tint - the defect cine_proof was written against.
-       So the smoke eases to the state's heart on the same clock. */
-    if (presSmokeMat) presSmokeMat.color.lerp(presDustAim.haze, k);
   }
 
   /* ======================= §33: THE CINEMA ROUND THE CORE =======================
@@ -23388,14 +23563,10 @@ async function loadLib() {
            subtracting two guesses. The same trick gives the bloom's cost (pass disabled) and
            the orbits' (role culled). Three costs, three omissions, one method.
 
-     ---- THE PASS ORDER, AND WHY THE SMOKE PASS IS THE ONE THAT CLEARS ----
-     smoke -> core -> bloom -> output. The haze is behind the object because haze in front of a
-     light source is a lens flare and not an atmosphere. The FIRST pass clears and it is always
-     the smoke pass, even when the smoke group is hidden: a scene with nothing visible in it
-     still clears to (0,0,0,0), so the clearing responsibility never moves when a flag flips.
-     Failure mode of the alternative - making whichever pass is enabled do the clearing - is a
-     frame of the previous frame's bloom left in the buffer the instant smoke_on goes false,
-     which reads as the presence smearing and would be blamed on the bloom.
+     ---- THE PASS ORDER ----
+     core -> bloom -> output since UI mandate III removed the haze. The presence's own pass is
+     first and it clears, at alpha 0, every frame - so a bloom flag flipping can never leave the
+     previous frame's light in the buffer.
 
      ---- THE ALPHA, WHICH IS THE WHOLE REASON THIS CANVAS WORKS AT ALL ----
      The presence canvas is alpha:true over the deck's own WebGL and the deck's DOM. Every
@@ -23407,160 +23578,19 @@ async function loadLib() {
      ===================================================================== */
   let presTHREE = null;
   let presDustAim = null;
-  let presSmokeScene = null, presSmokeGrp = null, presSmokeTex = null, presSmokeMat = null;
-  const presSmoke = [];
-  let presComposer = null, presBloomPass = null, presSmokePass = null, presCorePass = null;
+  let presComposer = null, presBloomPass = null, presCorePass = null;
 
   /* cine IS THE PRICE LIST AT RUNTIME, and `want` is kept apart from `on` on purpose: `want` is
      what config.json asked for and `on` is what this machine is actually affording right now.
      One field for both would make an auto-revert indistinguishable from a flag that was never
      set, and the mandate requires the report to name what was turned off. */
-  const cine = { want: { bloom: true, smoke: true }, bloom: false, smoke: false,
+  const cine = { want: { bloom: true, smoke: false }, bloom: false, smoke: false,
                  composer: false, sprites: 0, strength: 0, env: 0, glowPeak: 0,
                  why: '', reverts: [], throws: 0, lowSince: 0, frames: 0 };
 
-  /* THE SPRITE'S TEXTURE, DRAWN RATHER THAN FETCHED - no new vendor, no asset, no request.
-     exp(-7.8 r^2) ACROSS THE RADIUS, and 7.8 is not a taste: it is the constant for which the
-     gaussian is at one twentieth of its peak at 0.62 of the half-width, which is the number the
-     occlusion argument in CINE is written against. Sixteen stops rather than a per-pixel loop
-     because a canvas gradient is interpolated by the compositor in the same space either way and
-     128x128 pixels of JavaScript on the boot path is 16,384 iterations nobody needs.
-     A HARD ZERO AT 1.0. A gradient that stops at a non-zero value draws a visible disc edge, and
-     twelve visible disc edges is not haze - it is bokeh. */
-  function presSmokeTexture(THREE) {
-    const n = CINE.SMOKE_TEX;
-    const cv = document.createElement('canvas');
-    cv.width = cv.height = n;
-    const g = cv.getContext('2d');
-    const grd = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
-    for (let i = 0; i <= 16; i++) {
-      const r = i / 16;
-      const v = i === 16 ? 0 : Math.exp(-7.8 * r * r);
-      grd.addColorStop(r, 'rgba(255,255,255,' + v.toFixed(4) + ')');
-    }
-    g.fillStyle = grd;
-    g.fillRect(0, 0, n, n);
-    const tex = new THREE.CanvasTexture(cv);
-    tex.colorSpace = THREE.SRGBColorSpace || tex.colorSpace;
-    /* §34 PART 1(a) - "NO EDGE EXISTS AT ANY SIZE OR ZOOM", AND THE SIZE CLAUSE IS THE ONE THIS
-       TEXTURE COULD STILL HAVE FAILED. Measured before any of this was written
-       (_runs/_rectprobe.log, section D): at mip 0 this canvas is alpha 254 at the centre, 0 at the
-       border midpoint and 0 at all four corners, and a SMOKE_SIZE quad covers 180 device pixels
-       against 128 texels - MAGNIFIED - so mip 0 is the mip in use and the sprite's own quad edge
-       is NOT what the boss circled. That hypothesis is recorded as disconfirmed rather than
-       quietly dropped, because it was the one I was carrying into this round.
-       WHAT IS STILL WORTH FIXING IS THE "ANY SIZE" PART. CanvasTexture defaults to
-       generateMipmaps = true with LinearMipmapLinearFilter, and the mean alpha of this gaussian
-       over the whole square is 25.7/255 (0.1008, also measured) - so a MINIFIED sprite samples a
-       coarse mip that has averaged the circle into a near-uniform value across the entire quad,
-       which is an axis-aligned square of haze with hard edges. Nothing in the product minifies it
-       today; a smaller well, a lower DPR cap or a larger SMOKE_SIZE each would. Turning the mips
-       off makes the claim true by construction instead of true by a coincidence of three
-       constants, and costs one mip chain on one 128px texture.
-       LinearFilter for BOTH filters: minFilter must not name a mipmap mode once there are no
-       mipmaps, or the texture samples incomplete and draws black on some drivers. */
-    tex.generateMipmaps = false;
-    tex.minFilter = THREE.LinearFilter;
-    tex.magFilter = THREE.LinearFilter;
-    return tex;
-  }
-
-  /* TWELVE SPRITES, ONE MATERIAL, ONE TEXTURE. The variation is in position, size and phase and
-     never in material state, because twelve materials is twelve shader programs' worth of
-     bookkeeping for a difference the eye cannot see at 8.5% opacity.
-     THE RADII ARE SPREAD DETERMINISTICALLY across SMOKE_R_IN..SMOKE_R_OUT and the phases come
-     off the golden angle, for the reason the filament axes do: a random spread occasionally
-     clumps all twelve on one side, and a presence that is lopsided on some page loads is a
-     presence nobody can photograph twice.
-     EVERY SIZE IS AT OR UNDER SMOKE_SIZE - 0.72..1.0 of it - so the half-width 0.75 that the
-     occlusion arithmetic in CINE is written against is a CEILING and not an average. */
-  function presSmokeBuild(THREE) {
-    presSmokeScene = new THREE.Scene();
-    presSmokeGrp = new THREE.Group();
-    presSmokeScene.add(presSmokeGrp);
-    presSmokeTex = presSmokeTexture(THREE);
-    presSmokeMat = new THREE.SpriteMaterial({
-      map: presSmokeTex, color: new THREE.Color(CINE.SMOKE_TINT),
-      blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false,
-      transparent: true, opacity: CINE.SMOKE_OP
-    });
-    const GOLD = Math.PI * (3 - Math.sqrt(5));
-    const n = Math.min(CINE.SMOKE_N, CINE.SMOKE_CAP);
-    for (let i = 0; i < n; i++) {
-      const f = (i + 0.5) / n;
-      const s = new THREE.Sprite(presSmokeMat);
-      const size = CINE.SMOKE_SIZE * (0.72 + 0.28 * ((i * 7) % n) / n);
-      s.scale.set(size, size, 1);
-      s.frustumCulled = false;
-      presSmokeGrp.add(s);
-      /* THREE CLOCKS PER SPRITE AND NONE OF THEM COMMENSURATE. wa/wb/wz are deliberately
-         irrational-ish multiples of SMOKE_DRIFT, so the twelve never return to a formation.
-         A single clock would make the haze a slowly rotating pattern, which reads as a
-         turntable - the one motion a volume must not have. */
-      presSmoke.push({
-        s: s, r: CINE.SMOKE_R_IN + (CINE.SMOKE_R_OUT - CINE.SMOKE_R_IN) * f,
-        a0: i * GOLD, b0: i * 2.399 + 0.7, c0: i * 1.114 + 1.9,
-        wa: CINE.SMOKE_DRIFT * (1 + 0.63 * f) * (i % 2 ? -1 : 1),
-        wb: CINE.SMOKE_DRIFT * (0.41 + 0.37 * f),
-        wz: CINE.SMOKE_DRIFT * (0.29 + 0.53 * f)
-      });
-    }
-    cine.sprites = presSmoke.length;
-    return presSmoke.length;
-  }
-
-  /* THE DRIFT, AND THE CONTAINMENT IS A CLAMP AND NOT A HOPE.
-     A lissajous in the plane with a slow Z wander, then - and this is the load-bearing line -
-     every centre is CLAMPED to SMOKE_R_OUT. The occlusion law in CINE is arithmetic that starts
-     "every sprite CENTRE is held inside 0.92", and a law that depends on three sines never
-     adding up is not held, it is merely unlikely. cine_proof reads the centres back and asserts
-     the radius, so the clamp is measured rather than trusted.
-     Y IS SQUASHED TO 0.78 because the haze belongs to an object that is wider than it is tall
-     on the glass - the reticle box is square but the frame it sits in is not - and a circular
-     haze round a squarish object leaves two bright corners of nothing. */
-  function presSmokeFrame(now) {
-    if (!presSmokeGrp || !presSmokeGrp.visible) return;
-    const t = now / 1000;
-    for (let i = 0; i < presSmoke.length; i++) {
-      const q = presSmoke[i];
-      const ang = q.a0 + t * q.wa;
-      const rr = q.r * (pres.mode === 'dust' ? CINE.SMOKE_DUST_K : 1) *
-                 (1 + CINE.SMOKE_CURL * 0.5 * Math.sin(q.b0 + t * q.wb));
-      let x = Math.cos(ang) * rr;
-      let y = Math.sin(ang) * rr * 0.78;
-      let z = Math.sin(q.c0 + t * q.wz) * q.r * 0.5;
-      const L = Math.sqrt(x * x + y * y + z * z);
-      if (L > CINE.SMOKE_R_OUT) {
-        const k = CINE.SMOKE_R_OUT / L;
-        x *= k; y *= k; z *= k;
-      }
-      q.s.position.set(x, y, z);
-    }
-  }
-
-  /* THE CANVAS RECT AND THE SPRITE'S REACH: MEASURED, AND LEFT ALONE. A sprite centre is
-     clamped to SMOKE_R_OUT 0.92 while its half-width runs to 0.75, so the disc reaches 1.60
-     natural units against a frame half-height of tan(21 deg)*CAM_Z = 1.2859 - the gaussian IS
-     cut by the canvas rect, and the first reading of the set-2 plates was that the presence sat
-     in a faintly luminous box. It does not, and the claim was retired by measurement rather than
-     by argument: _runs/_hazeedge.mjs put a screen-space window behind a live uniform and read
-     the four corners and four edge strips with it on and off in interleaved pairs. The window
-     removed between -0.0008 and +0.0012 at the eight regions, every standard error as large as
-     its own mean, sign counts of 0/6, 2/6, 3/6, 1/6, 3/6, 4/6, 4/6 and 5/6 - coin flips - while
-     the paired null's spread (sd 0.011..0.020) was an order of magnitude larger than anything
-     the window did. Centre-to-worst-edge falloff was 5.70x with it off and 5.72x with it on.
-     AND THE WORST DRIFT PHASE IS ARITHMETIC, not luck, which is why no fade is needed for the
-     phase this happened not to catch. The innermost pixel of an 18px corner crop sits at 1.663
-     natural units, so the nearest a clamped centre can come is 0.743 against a half-width of
-     0.75: exp(-7.8*0.99^2) = 0.0005 of peak, at ANY phase. The worst case is an edge midpoint,
-     where a centre reaches 0.850 in y (the 0.78 squash) or 0.920 in x, leaving 0.411 to the
-     strip - 0.548 of a half-width, so exp(-7.8*0.548^2) = 0.095 of peak times SMOKE_OP 0.085 =
-     0.006 normalised luminance, about 1.5 of 255 on a dark field.
-     WHAT THE BOX ACTUALLY WAS: the corners read 0.046..0.060 absolute with the haze entirely
-     off, which is the DECK showing through the canvas's alpha - the same confound that made the
-     corner assertion measure by difference in the first place. A reading of a plate is a
-     hypothesis; this one was wrong, and the sixty lines of shader patch written to fix it were
-     reverted rather than kept as a containment nothing can show working. */
+  /* UI MANDATE III PART 1: presSmokeTexture, presSmokeBuild and presSmokeFrame stood here - the
+     drawn sprite texture, the twelve-sprite build and their lissajous drift. Deleted with the
+     layer; see CINE. */
 
   /* ---- THE SPEAKING GLOW, AND IT IS THE SAME ENVELOPE §32 ALREADY BUILT ----
      THE PRESERVED LAW, in the mandate's words: "the existing speech->luminance modulation
@@ -23615,14 +23645,10 @@ async function loadLib() {
      cine.reverts, which is what cine_proof asserts and what PART 4 prints. The report names this
      reading rather than claiming a ledger row that does not exist. */
   function cineRevert(flag, why) {
-    const was = flag === 'bloom' ? cine.bloom : cine.smoke;
-    if (flag === 'bloom') {
-      cine.bloom = false;
-      if (presBloomPass) presBloomPass.enabled = false;
-    } else {
-      cine.smoke = false;
-      if (presSmokeGrp) presSmokeGrp.visible = false;
-    }
+    if (flag !== 'bloom') return false;      // the bloom is the one effect left to revert
+    const was = cine.bloom;
+    cine.bloom = false;
+    if (presBloomPass) presBloomPass.enabled = false;
     if (!was) return false;                  // already off: one revert, one line, no spam
     const line = flag + '_on OFF by auto-revert: ' + why;
     cine.reverts.push(line);
@@ -23645,15 +23671,13 @@ async function loadLib() {
      claim a guard fired when the boss simply said no. */
   function cineFlags(c, force) {
     const wantB = !(c && c.bloom === false);
-    const wantS = !(c && c.smoke === false);
-    const changed = wantB !== cine.want.bloom || wantS !== cine.want.smoke;
+    const changed = wantB !== cine.want.bloom;
     cine.want.bloom = wantB;
-    cine.want.smoke = wantS;
     if (!presComposer) {
       /* NOTHING TO APPLY TO YET. If both are now wanted and the chain was never built because
          both were off at boot, this is the one place that can start it - and it is deliberately
          not awaited: refreshBrain is a poll, not a boot, and a poll must not hold on an import. */
-      if ((wantB || wantS) && pres.built && !cine.composer && !cine.why) {
+      if (wantB && pres.built && !cine.composer && !cine.why) {
         try { presCine(presTHREE); } catch (e) { /* a poll never costs the presence */ }
       }
       return cine.want;
@@ -23664,14 +23688,8 @@ async function loadLib() {
       cine.bloom = allow;
       presBloomPass.enabled = allow;
     }
-    if (presSmokeGrp) {
-      const allow = wantS && !cine.reverts.some(function (l) { return l.indexOf('smoke') === 0; });
-      cine.smoke = allow;
-      presSmokeGrp.visible = allow;
-    }
-    presNote('config.json says bloom ' + (wantB ? 'on' : 'off') + ', smoke ' +
-             (wantS ? 'on' : 'off') + ' — running bloom ' + (cine.bloom ? 'on' : 'off') +
-             ', smoke ' + (cine.smoke ? 'on' : 'off'));
+    presNote('config.json says bloom ' + (wantB ? 'on' : 'off') +
+             ' — running bloom ' + (cine.bloom ? 'on' : 'off'));
     return cine.want;
   }
 
@@ -23711,10 +23729,6 @@ async function loadLib() {
       cine.bloom = f.bloom;
       presBloomPass.enabled = f.bloom;
     }
-    if (presSmokeGrp && typeof f.smoke === 'boolean') {
-      cine.smoke = f.smoke;
-      presSmokeGrp.visible = f.smoke;
-    }
     cine.lowSince = 0;             // a by-hand change starts the containment clock over
     return { bloom: cine.bloom, smoke: cine.smoke };
   }
@@ -23728,7 +23742,7 @@ async function loadLib() {
     cine.reverts.length = 0;
     cine.throws = 0;
     cine.lowSince = 0;
-    return cineFlags({ bloom: cine.want.bloom, smoke: cine.want.smoke }, true);
+    return cineFlags({ bloom: cine.want.bloom }, true);
   }
 
   /* THE PRICE, IN MILLISECONDS, AND WHY fps COULD NOT PROVIDE IT.
@@ -23775,7 +23789,7 @@ async function loadLib() {
 
   async function presCine(THREE) {
     if (!presR || !presScene || !presCam) { cine.why = 'no renderer'; return false; }
-    if (!cine.want.bloom && !cine.want.smoke) { cine.why = 'both flags off'; return false; }
+    if (!cine.want.bloom) { cine.why = 'bloom flag off'; return false; }
     let EC = null, RP = null, UB = null, OP = null;
     try {
       const mods = await Promise.all([
@@ -23792,14 +23806,13 @@ async function loadLib() {
       return false;
     }
     try {
-      presSmokeBuild(THREE);
       const side = Math.max(1, pres.side || LAYOUT.PRES_W);
       presComposer = new EC(presR);
       presComposer.setPixelRatio(presR.getPixelRatio());
       presComposer.setSize(side, side);
-      presSmokePass = new RP(presSmokeScene, presCam);
+      /* UI MANDATE III: THE PRESENCE IS THE FIRST PASS NOW, and it clears - there is no haze
+         pass underneath it to preserve. Chain: RenderPass -> UnrealBloomPass -> OutputPass. */
       presCorePass = new RP(presScene, presCam);
-      presCorePass.clear = false;            // see THE PASS ORDER above
       const bw = Math.max(1, Math.round(side * CINE.BLOOM_SCALE));
       presBloomPass = new UB(new THREE.Vector2(bw, bw), CINE.BLOOM_STRENGTH_IDLE,
                              CINE.BLOOM_RADIUS, CINE.BLOOM_THRESHOLD);
@@ -23831,21 +23844,18 @@ async function loadLib() {
           if (cine.throws > 2) cineRevert('bloom', 'render threw: ' + ((e && e.message) || 'x'));
         }
       };
-      presComposer.addPass(presSmokePass);
       presComposer.addPass(presCorePass);
       presComposer.addPass(presBloomPass);
       presComposer.addPass(new OP());
       cine.composer = true;
       cine.bloom = !!cine.want.bloom;
-      cine.smoke = !!cine.want.smoke;
+      cine.smoke = false;
       presBloomPass.enabled = cine.bloom;
-      presSmokeGrp.visible = cine.smoke;
       cine.why = '';
-      presNote('the cinema is up: ' + presSmoke.length + ' sprites, bloom ' +
-               (cine.bloom ? 'on' : 'off') + ', smoke ' + (cine.smoke ? 'on' : 'off'));
+      presNote('the cinema is up: bloom ' + (cine.bloom ? 'on' : 'off') + ', no haze layer');
       return true;
     } catch (e) {
-      presComposer = null; presBloomPass = null; presSmokePass = null; presCorePass = null;
+      presComposer = null; presBloomPass = null; presCorePass = null;
       cine.composer = false; cine.bloom = false; cine.smoke = false;
       cine.why = 'build: ' + ((e && e.message) || 'refused');
       presNote('the cinema did not build: ' + cine.why);
@@ -23993,9 +24003,7 @@ async function loadLib() {
         const fh = presCam ? Math.tan(presCam.fov * Math.PI / 360) * presCam.position.z : 1.2859;
         /* THE FARTHEST DRAWN POINT OF EITHER MODE: the dust at full swell and drift, or the
            face's neck. One window serves both, so a mode switch never needs a resize. */
-        const reach = Math.max(PRES.DUST_R * PRES.DUST_S * (1 + PRES.DUST_LEVEL_SWELL +
-                                 PRES.DUST_PULSE_SWELL + PRES.DUST_DRIFT),
-                               PRES.FACE_EXT * PRES.HEAD_S);
+        const reach = Math.max(presDustReach(), PRES.FACE_EXT * PRES.HEAD_S);
         const ret = reach / (fh || 1.2859);
         pres.mask = +Math.min(CINE.EDGE_MAX, ret + CINE.EDGE_PAD).toFixed(4);
         presCvs.style.setProperty('--pmask', (pres.mask * 100).toFixed(2) + '%');
@@ -29309,6 +29317,7 @@ async function loadLib() {
       get voice() { return !!stageState().voice; },
       get turns() { return stageState().turns || 0; },
       get turnMs() { return stageState().turnMs || 0; },
+      get turnEase() { return stageState().turnEase || ''; },
       HOLD_MS: STAGE_HOLD_MS,
       get history() { return stageState().history.slice(); },
       get mirrors() { return stageState().mirrors || 0; },
@@ -29330,6 +29339,29 @@ async function loadLib() {
       get frames() { return orbitState ? orbitState.frames : 0; },
       get opens() { return orbitState ? orbitState.opens : 0; },
       get data() { return orbitState && orbitState.data ? JSON.parse(JSON.stringify(orbitState.data)) : null; },
+      get threads() {
+        const svg = document.getElementById('ob-svg');
+        if (!svg) return null;
+        const all = function (sel) { return Array.prototype.slice.call(svg.querySelectorAll(sel)); };
+        const curved = function (els) { return els.filter(function (e) { return / Q/.test(e.getAttribute('d') || ''); }).length; };
+        const sp = all('path.ob-thread.ob-spoke'), cr = all('path.ob-thread.ob-cross');
+        const il = all('path.ob-inlink'), mb = all('path.ob-member');
+        const one = sp[0] || cr[0];
+        const cs = one ? getComputedStyle(one) : null;
+        const gl = all('path.ob-thread-glow');
+        return { spokes: sp.length, cross: cr.length, inlinks: il.length, members: mb.length,
+                 curved: { spokes: curved(sp), cross: curved(cr), inlinks: curved(il), members: curved(mb) },
+                 glows: gl.length, glowFilter: gl[0] ? getComputedStyle(gl[0]).filter : null,
+                 stroke: one ? one.getAttribute('stroke') : null,
+                 width: cs ? parseFloat(cs.strokeWidth) : 0,
+                 gradients: all('linearGradient.ob-grad').length,
+                 beads: all('circle.ob-bead').length,
+                 data: orbitState && orbitState.data ? { within: orbitState.data.within,
+                   across: Object.keys(orbitState.data.crossed).length,
+                   clusters: orbitState.data.clusterCount, notes: orbitState.data.notes } : null,
+                 haloGone: !svg.querySelector('#ob-halo') && !svg.querySelector('[fill="url(#ob-halo)"]'),
+                 floorGone: !svg.querySelector('#ob-floor') };
+      },
       get drawn() {
         return Array.prototype.map.call(document.querySelectorAll('#orbit .ob-node'), function (g) {
           const lbl = g.querySelector('.ob-lbl'), sub = g.querySelector('.ob-sub');
@@ -29411,6 +29443,27 @@ async function loadLib() {
       /* The face's mesh as laid: points, edges, landmark vertices, the mean points per edge,
          and the anatomy - landmarks by kind and whether the eye and mouth loops CLOSE. Zero
          until the face has been built once. */
+      /* THE EYES, WALKED OFF THE DRAWN BUFFER: every IRIS_L/IRIS_R point's distance from its eye's
+         centre (y unsquashed by the 0.88 the fill applies), binned, plus how many carry the ring
+         and catchlight flags. A ring is a claim about radii, so it is measured as radii. */
+      eyes: function () {
+        if (pres.mode !== 'face' || !pxPos) return null;
+        const out = { points: 0, onLimbal: 0, onPupil: 0, hot: 0, catch: 0, parts: pres.eyeParts || null,
+                      irisR: PRES.EYE_IRIS_R, pupilR: PRES.EYE_PUPIL_R, spokes: PRES.EYE_SPOKES };
+        for (let i = 0; i < pres.points; i++) {
+          const role = pxRole[i];
+          if (role !== PRES_ROLE.IRIS_L && role !== PRES_ROLE.IRIS_R) continue;
+          const sx = role === PRES_ROLE.IRIS_R ? 1 : -1;
+          const dx = pxPos[i * 3] - sx * PRES_EYE.x, dy = (pxPos[i * 3 + 1] - PRES_EYE.y) / 0.88;
+          const r = Math.hypot(dx, dy);
+          out.points++;
+          if (Math.abs(r - PRES.EYE_IRIS_R) < 0.004) out.onLimbal++;
+          if (Math.abs(r - PRES.EYE_PUPIL_R) < 0.003) out.onPupil++;
+          if (pxRnd[i] >= 1) out.hot++;
+          if (pxRnd[i] >= 1.24) out.catch++;
+        }
+        return out;
+      },
       get mesh() { return { points: pres.meshPts || 0, edges: pres.meshEdges || 0,
                             verts: pres.meshVerts || 0, perEdge: pres.meshPer || 0,
                             tris: pres.meshTris || 0,
@@ -29456,7 +29509,7 @@ async function loadLib() {
          cineFlags for why a by-hand enable is not allowed to look like a guard that un-fired,
          and the one at cineSetByHand for why they are not on the presence door. */
       get cine() {
-        return { want: { bloom: cine.want.bloom, smoke: cine.want.smoke },
+        return { want: { bloom: cine.want.bloom },
                  bloom: cine.bloom, smoke: cine.smoke, composer: cine.composer,
                  passes: presComposer && presComposer.passes ? presComposer.passes.length : 0,
                  /* THE CHAIN BY NAME, not by count. Four passes in the wrong order is the same
@@ -29473,7 +29526,7 @@ async function loadLib() {
                    ? [presBloomPass.resolution.x, presBloomPass.resolution.y] : null,
                  side: presCvs ? presCvs.width : 0, scale: CINE.BLOOM_SCALE,
                  rev: pres.revision,
-                 sprites: cine.sprites, spriteCap: CINE.SMOKE_CAP,
+                 sprites: 0, haze: false, fog: !!(presScene && presScene.fog),
                  pointCap: PRES.CAP, points: pres.points,
                  strength: cine.strength, env: +cine.env.toFixed(4),
                  glowPeak: cine.glowPeak,
@@ -29488,11 +29541,8 @@ async function loadLib() {
                     cineSetByHand for the duplicate-key bug that cost. */
                  set: cineSetByHand, retry: cineRetryByHand, cost: cineCostByHand };
       },
-      /* THE HAZE'S CENTRES, in natural units, so "never occluding the reticle" has a geometric
-         half as well as a photometric one. r is the centre's distance from the origin and the
-         clamp in presSmokeFrame is what holds it under SMOKE_R_OUT; `reach` is that plus the
-         sprite's own half-width, which is the number the occlusion argument in CINE is about and
-         the reason cine_proof measures bracket pixels instead of trusting it. */
+      /* UI MANDATE III PART 1: smoke() - the haze's centres and tint - is gone with the haze.
+         Asking for it is a TypeError, which is the honest answer. */
       /* §34 PART 1: THE EDGE WINDOW'S DOOR, AND IT REPORTS WHETHER THE WINDOW TOOK RATHER THAN
          THAT IT WAS ASKED FOR. This is the lesson of §33's retired fade written into an API: that
          change was measured as a null result and retired, and the measurement could not tell "the
@@ -29522,57 +29572,6 @@ async function loadLib() {
                  radial: m.indexOf('radial-gradient') >= 0,
                  closestSide: m.indexOf('closest-side') >= 0,
                  computed: m.slice(0, 180) };
-      },
-      smoke: function () {
-        if (!presSmoke.length) return null;
-        return { n: presSmoke.length, rOut: CINE.SMOKE_R_OUT, size: CINE.SMOKE_SIZE,
-                 visible: !!(presSmokeGrp && presSmokeGrp.visible),
-                 /* THE FRAME'S HALF-HEIGHT BESIDE THE REACH, so that `reach` below can be
-                    compared against the canvas rect without the reader redoing
-                    tan(fov/2)*CAM_Z - which is the arithmetic that retired the "the presence is
-                    in a box" reading of the §33 plates. Read off the live camera and not off
-                    PRES, so a CAM_Z or fov change cannot leave this claiming the old frame. */
-                 frameHalf: presCam ? +(Math.tan(presCam.fov * Math.PI / 360) *
-                                        presCam.position.z).toFixed(4) : null,
-                 materials: presSmokeMat ? 1 : 0,
-                 /* §34 PART 2: THE HAZE'S HUE, READ OFF THE LIVE MATERIAL AND NOT OFF THE
-                    CONSTANT. A door that published CINE.SMOKE_TINT would prove only that a
-                    constant exists; what the boss circled is the colour on the glass, and
-                    between the constant and the glass there is a Color conversion, a possible
-                    second assignment and whatever a later round does to presSmokeMat. So
-                    `tint` is the material's own colour and `want` is the constant put through
-                    the same conversion - if those two ever disagree, the haze is not the
-                    colour this file says it is.
-                    `shell` and `band` are published beside them because PART 2's claim is a
-                    RELATION, not a hex: the shade must be the same blue the filament shell's
-                    cold end already uses (PRES.TINT / uTint2, so no new colour enters the
-                    house), while the two orbital bands keep their amber per Appendix A. One
-                    assertion can then say "the shade matches the shell AND differs from the
-                    bands", which is what "blue shade, amber heart" means in numbers. */
-                 /* THE CONSTANTS ARE FORMATTED BY HAND AND NOT THROUGH new THREE.Color(). THREE
-                    is bound in the renderer's script block and this API object is in a different
-                    one, so a THREE reference here throws a ReferenceError at call time - which is
-                    exactly how this comment came to be written. The material's own colour needs
-                    no import: getHexString() is a method on the Color it already holds, and it
-                    returns sRGB, which is the space the constants are written in. */
-                 tint: presSmokeMat ? '#' + presSmokeMat.color.getHexString() : null,
-                 want: pres.mode === 'dust' && pres.dust.palette && pres.dust.state
-                       ? '#' + ('000000' + pres.dust.palette[pres.dust.state].haze.toString(16)).slice(-6)
-                       : '#' + CINE.SMOKE_TINT.toString(16).padStart(6, '0'),
-                 shell: '#' + PRES.TINT.toString(16).padStart(6, '0'),
-                 band: '#' + PRES.GOLD_TINT.toString(16).padStart(6, '0'),
-                 hot: '#' + PRES.GOLD_HOT.toString(16).padStart(6, '0'),
-                 scene: presSmokeScene ? presSmokeScene.children.length : 0,
-                 fog: !!(presSmokeScene && presSmokeScene.fog) ||
-                      !!(presScene && presScene.fog),
-                 at: presSmoke.map(function (q) {
-                   const p = q.s.position;
-                   const r = Math.sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
-                   const half = q.s.scale.x / 2;
-                   return { x: +p.x.toFixed(4), y: +p.y.toFixed(4), z: +p.z.toFixed(4),
-                            r: +r.toFixed(4), half: +half.toFixed(4),
-                            reach: +(r + half).toFixed(4) };
-                 }) };
       },
       /* THE STREAM'S READOUT, AND ITS ONE TEST DOOR. Everything here is a count the hooks
          kept: `flown` is deliveries completed, `dropped` is sends refused by the queue's
@@ -29679,7 +29678,11 @@ async function loadLib() {
       get life() {
         return { rise: PRES.PULSE_RISE, gap: PRES.PULSE_GAP_MS, pulseMs: PRES.PULSE_MS,
                  breath: PRES.DUST_BREATH, breathHz: PRES.DUST_BREATH_HZ,
-                 spin: PRES.DUST_SPIN, drift: PRES.DUST_DRIFT };
+                 spin: PRES.DUST_SPIN,
+                 wander: { heart: PRES.DUST_WANDER_HEART, edge: PRES.DUST_WANDER_EDGE,
+                           stray: PRES.DUST_STRAY, strayShare: PRES.DUST_STRAY_SHARE,
+                           hz: [PRES.DUST_WANDER_HZ_LO, PRES.DUST_WANDER_HZ_HI],
+                           radial: PRES.DUST_RADIAL } };
       },
       /* THE GAZE. `signal` names the exact field of focus's public_state this reads, spelled
          out rather than summarised, because "it reads the state" is the claim a harness has
@@ -29907,6 +29910,7 @@ async function loadLib() {
                   voxels: counts.length, voxelMean: +mean.toFixed(2), cv: +cv.toFixed(4),
                   poissonCv: +pcv.toFixed(4), structure: pcv > 0 ? +(cv / pcv).toFixed(3) : 0,
                   frameFill: +(rMax * PRES.DUST_R * PRES.DUST_S / fh).toFixed(4),
+                  reachFill: +(presDustReach() / fh).toFixed(4),
                   scale: PRES.DUST_S, radius: PRES.DUST_R };
         }
         return {
@@ -29925,6 +29929,12 @@ async function loadLib() {
       },
       /* A PLATE'S PIN: hold the dust in a named state (or null to hand it back to the house).
          For photographs of each state; nothing in the house calls it. */
+      snap: function (n) {
+        return new Promise(function (res) {
+          presSnapQ.push({ n: Math.max(32, Math.min(320, Number(n) || 160)), resolve: res });
+          setTimeout(function () { res({ error: 'no frame drew within 3s' }); }, 3000);
+        });
+      },
       dustState: function (s) {
         pres.dust.pin = PRES.DUST_STATES.indexOf(s) >= 0 ? s : '';
         if (presMat && pres.mode === 'dust') presDustTick(0, true);

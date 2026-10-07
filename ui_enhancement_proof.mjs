@@ -29,6 +29,12 @@
  *      core are gone; the face's topology is measured against PR #4's lattice; the presence is
  *      centred at a stated ratio of the pane; and the galaxy-to-presence turn fires off the
  *      real ear, opened by a real click on the real microphone button.
+ *   7. UI MANDATE III - THE FINAL POLISH. No background circle behind the presence in any of its
+ *      five states (four dust tints and the face), read off the presence's own canvas, and none
+ *      behind the orbit map's heart; the dust's points wander - its far edge moves per direction
+ *      and per moment, and stops dead when its clock is pinned; the turn is one motion on a named
+ *      curve; the orbit map's connections are curved, glowing threads, exactly as many as the
+ *      corpus has; and the face's eyes have rings, measured as radii off the drawn buffer.
  *
  * BASE_REV is the commit this mandate started from. It is named rather than read as HEAD
  * because once this round is committed HEAD IS the new stylesheet, and "no new hue since HEAD"
@@ -45,6 +51,8 @@ const GALAXY = 'http://127.0.0.1:4700';
 const PORT = 9246;
 const CDP = 'http://127.0.0.1:' + PORT;
 const BASE_REV = 'e08ed4f';
+/* UI mandate III's two measured floors - see section 7, and the report for the readings. */
+const DISC_P10 = 1, MOTION_TSTD = 0.015;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let pass = 0, fail = 0;
@@ -736,22 +744,31 @@ else {
       (x.effect.target.id === 'presence' || x.effect.target.id === 'orbit'); });
     return a.map(function (x) { var k = x.effect.getKeyframes(); var t = x.effect.getTiming();
       return { id: x.effect.target.id, from: k[0].transform, to: k[k.length - 1].transform,
-               easing: t.easing, duration: t.duration }; }); })()`);
+               o0: k[0].opacity, o1: k[k.length - 1].opacity,
+               easing: t.easing, duration: t.duration, delay: t.delay }; }); })()`);
   const st1 = await page.json(`({now: __galaxy.stage.now, why: __galaxy.stage.why, turns: __galaxy.stage.turns,
     turnMs: __galaxy.stage.turnMs, micEar: document.getElementById('mic').classList.contains('ear'),
-    ease: getComputedStyle(document.documentElement).getPropertyValue('--ease-panel-open').trim(),
-    dur: getComputedStyle(document.documentElement).getPropertyValue('--dur-stage-flip').trim()})`);
+    ease: getComputedStyle(document.documentElement).getPropertyValue('--ease-stage-turn').trim(),
+    dur: getComputedStyle(document.documentElement).getPropertyValue('--dur-stage-turn').trim()})`);
   note('the turn: ' + JSON.stringify(flipping));
   const norm = (s) => String(s).replace(/\s+/g, '');
+  /* UI MANDATE III PART 2 CHANGED THE TURN, so this assertion follows it. Old: two rotateY halves
+     in sequence on --ease-panel-open, each half of the turn. New: both surfaces at once (delay 0,
+     each the whole turn), on --ease-stage-turn, the leaving one fading out as the arriving one
+     fades in. The trigger half of the claim - the real click on the real ear - is unchanged. */
+  const durMs = parseFloat(st1.dur) * (/ms$/.test(st1.dur) ? 1 : 1000);
   ok(earUp && st1.micEar && st1.now === 'presence' && st1.why === 'the ear opened' &&
      st1.turns === st0.turns + 1 && flipping.length === 2 &&
-     flipping.every((f) => /rotateY/.test(f.from) && norm(f.easing) === norm(st1.ease)) &&
-     Math.abs(flipping[0].duration * 2 - st1.turnMs) <= 1,
-     'THE ORBIT-TO-PRESENCE TURN FIRES ON THE REAL VOICE TRIGGER: a real click on the microphone ' +
-     'opened the ear (#mic.ear), sealPaint() handed it to the stage ("' + st1.why + '"), and two ' +
-     'rotateY halves of ' + flipping.map((f) => f.duration + 'ms').join(' + ') + ' ran on ' +
-     flipping.map((f) => '#' + f.id).join(' and ') + ' on --ease-panel-open (' + st1.ease + '), the ' +
-     'turn PR #4 named for a surface arriving', JSON.stringify({ st0, st1, flipping }));
+     flipping.every((f) => /rotateY/.test(f.from) && norm(f.easing) === norm(st1.ease) &&
+                           f.delay === 0 && Math.abs(f.duration - durMs) <= 1) &&
+     Math.abs(st1.turnMs - durMs) <= 1 &&
+     flipping.some((f) => f.id === 'orbit' && +f.o0 === 1 && +f.o1 === 0) &&
+     flipping.some((f) => f.id === 'presence' && +f.o0 === 0 && +f.o1 === 1),
+     'THE ORBIT-TO-PRESENCE TURN FIRES ON THE REAL VOICE TRIGGER, AS ONE MOTION: a real click on the ' +
+     'microphone opened the ear (#mic.ear), sealPaint() handed it to the stage ("' + st1.why + '"), ' +
+     'and the galaxy turned away and faded while the presence turned in and appeared, together - ' +
+     flipping.map((f) => '#' + f.id + ' ' + f.duration + 'ms from ' + f.delay + 'ms').join(', ') +
+     ' - on --ease-stage-turn (' + st1.ease + ')', JSON.stringify({ st0, st1, flipping }));
   await click('#mic');
   const earDown = await waitFor(page, '__galaxy.ear.open === false', 8000);
   /* TIMED FROM THE MOMENT THE VOICE IS OFF - ear shut and nothing speaking - so the claim is the
@@ -768,6 +785,159 @@ else {
      'and when the ear closes the pane turns back to the galaxy ' + backMs + 'ms after the voice went ' +
      'quiet - the ' + st2.hold + 'ms hold, within a second ("' + st2.why + '")',
      JSON.stringify(Object.assign({ backMs: backMs }, st2)));
+
+  /* ============================ 7. UI MANDATE III ============================ */
+  step('7 · UI mandate III - the final polish');
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
+  await sleep(500);
+  await page.evaluate('document.documentElement.classList.add("nomove"); __galaxy.stage.set("presence", "ui_enhancement_proof 7")');
+  await sleep(600);
+  const snapOf = async () => JSON.parse(await page.evaluate('__galaxy.presence.snap(160).then(function(s){return JSON.stringify(s)})'));
+
+  /* NO BACKGROUND CIRCLE, IN ANY OF THE FIVE STATES. Read off the presence's OWN canvas inside the
+     frame that drew it (presence.snap), so the deck's sky behind it is not in the reading: in the
+     band 0.45-0.85 of the half-extent, a disc - solid or gradient - lifts the 10th percentile off
+     zero everywhere; points with dark between them leave it at zero. And the DOM half: no haze door,
+     no sprites, and no background painted on the well or its canvas. */
+  await page.evaluate('__galaxy.presence.set("dust")');
+  await sleep(1200);
+  const circ = {};
+  for (const s of ['listening', 'thinking', 'speaking', 'alert']) {
+    await page.evaluate('__galaxy.presence.dustState("' + s + '")');
+    await sleep(1100);
+    const sn = await snapOf();
+    circ[s] = { p10: sn.band.p10, p50: sn.band.p50, cover: sn.coverage, heart: sn.rings[0] };
+  }
+  await page.evaluate('__galaxy.presence.dustState(null)');
+  await page.evaluate('__galaxy.presence.set("face")');
+  await waitFor(page, '__galaxy.presence.mode === "face"', 15000);
+  await sleep(1500);
+  { const sn = await snapOf(); circ.face = { p10: sn.band.p10, p50: sn.band.p50, cover: sn.coverage, heart: sn.rings[0] }; }
+  const domCirc = await page.json(`(function(){
+    var w = getComputedStyle(document.getElementById('presence')), c = getComputedStyle(document.getElementById('presence-cvs'));
+    return { door: typeof __galaxy.presence.smoke, sprites: __galaxy.presence.cine.sprites,
+             haze: __galaxy.presence.cine.haze, chain: __galaxy.presence.cine.chain,
+             wellBg: w.backgroundImage + ' ' + w.backgroundColor, cvsBg: c.backgroundImage + ' ' + c.backgroundColor }; })()`);
+  note('the band 0.45-0.85, 0-255 (p10 / p50 / cover): ' + Object.keys(circ).map((k) =>
+       k + ' ' + circ[k].p10 + '/' + circ[k].p50 + '/' + circ[k].cover).join(' · '));
+  const transparent = (s) => /^none (rgba\(0, 0, 0, 0\)|transparent)$/.test(s);
+  ok(Object.keys(circ).length === 5 && Object.values(circ).every((c) => c.p10 <= DISC_P10 && c.heart > 0) &&
+     domCirc.door === 'undefined' && domCirc.sprites === 0 && domCirc.haze === false &&
+     domCirc.chain.filter((n) => n === 'RenderPass').length === 1 &&
+     transparent(domCirc.wellBg) && transparent(domCirc.cvsBg),
+     'NO BACKGROUND CIRCLE IN ANY PRESENCE STATE: the band between the heart and the window has a ' +
+     '10th-percentile light of ' + Object.keys(circ).map((k) => k + ' ' + circ[k].p10).join(', ') +
+     ' out of 255 (ceiling ' + DISC_P10 + ') - dark between the points in all four dust states and ' +
+     'the face, with the heart lit in each - and the haze that drew the disc is gone: no door, ' +
+     domCirc.sprites + ' sprites, one scene pass, nothing painted on the well or its canvas',
+     JSON.stringify({ circ, domCirc }));
+  const core = await page.json(`(function(){
+    var g = document.getElementById('ob-core'); if (!g) return null;
+    var big = Array.prototype.filter.call(g.querySelectorAll('circle,ellipse'), function (e) {
+      var r = +(e.getAttribute('r') || e.getAttribute('rx') || 0); var f = e.getAttribute('fill') || '';
+      return r > 64 && /url\\(/.test(f); });
+    var th = __galaxy.orbit.threads;
+    return { big: big.length, haloGone: th.haloGone, floorGone: th.floorGone,
+             grads: Array.prototype.map.call(document.querySelectorAll('#ob-svg radialGradient'), function (r) { return r.id; }) }; })()`);
+  ok(core && core.big === 0 && core.haloGone && core.floorGone,
+     'AND NONE BEHIND THE ORBIT MAP\'S HEART: no gradient-filled circle or ellipse in the heart wider ' +
+     'than the sphere itself, the halo disc and the floor wash are gone (radial gradients left: ' +
+     (core && core.grads.join(', ')) + ' - the sphere\'s own shading and the worlds\' gloss)',
+     JSON.stringify(core));
+
+  /* THE DUST HAS NO FIXED SHAPE. Its seed is a ball, so a cloud that only spun and breathed would
+     keep one far edge - the same radius in every direction, at every moment. Every point wanders
+     on its own path instead, so the far edge (the third-farthest lit pixel in each of 24
+     directions) moves by different amounts in different directions from moment to moment, and
+     the strays reach past the seed's radius. CONTROL: pin the presence's clock and the same
+     reading must not move at all - which is what makes the motion the points' and not noise. */
+  await page.evaluate('__galaxy.presence.set("dust")');
+  await sleep(1500);
+  const edgeStats = (snaps) => {
+    const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+    const sd = (a) => { const m = mean(a); return Math.sqrt(mean(a.map((v) => (v - m) * (v - m)))); };
+    const per = snaps[0].outer.map((_, k) => snaps.map((x) => x.outer[k]));
+    return { tStd: +mean(per.map(sd)).toFixed(4),
+             maxOuter: +Math.max(...snaps.map((x) => Math.max(...x.outer))).toFixed(3),
+             spread: +mean(snaps.map((x) => Math.max(...x.outer) - Math.min(...x.outer.filter((v) => v > 0)))).toFixed(3) };
+  };
+  const free = [];
+  for (let i = 0; i < 5; i++) { free.push(await snapOf()); await sleep(1400); }
+  await page.evaluate('__galaxy.presence.phase(0.3)');
+  await sleep(500);
+  const pinned = [];
+  for (let i = 0; i < 5; i++) { pinned.push(await snapOf()); await sleep(1400); }
+  await page.evaluate('__galaxy.presence.phase(null)');
+  const fs = edgeStats(free), ps = edgeStats(pinned);
+  const seed = await page.json('__galaxy.presence.dust().geo');
+  note('far edge, free: ' + JSON.stringify(fs) + ' · pinned: ' + JSON.stringify(ps) +
+       ' · seed edge ' + seed.frameFill + ', bound ' + seed.reachFill);
+  ok(fs.tStd >= MOTION_TSTD && ps.tStd === 0 && fs.maxOuter > seed.frameFill * 1.10 && fs.maxOuter <= seed.reachFill + 0.02,
+     'THE DUST HAS NO FIXED SHAPE: its far edge, read in 24 directions off its own canvas, moved by ' +
+     fs.tStd + ' of the half-extent on average from moment to moment over 5.6 seconds (floor ' +
+     MOTION_TSTD + ') and reached ' + fs.maxOuter + ' - past the seed ball\'s own edge at ' +
+     seed.frameFill + ', inside the published bound ' + seed.reachFill + '; with the clock pinned the ' +
+     'same reading moved by ' + ps.tStd + ', so the motion is the points\' own and not noise',
+     JSON.stringify({ free: fs, pinned: ps, seed: { frameFill: seed.frameFill, reachFill: seed.reachFill } }));
+
+  /* THE TURN'S CURVE IS NAMED, DECLARED WITH THE OTHERS, AND THE RIGHT SHAPE: a symmetric ease-in-out
+     - zero speed at both ends - so two surfaces moving together never stop or jump mid-turn. */
+  const root = splitRoot(cssNow).root;
+  const tokEase = (/--ease-stage-turn:\s*cubic-bezier\(([^)]*)\)/.exec(root) || [])[1];
+  const tokDur = (/--dur-stage-turn:\s*([0-9.]+m?s)/.exec(root) || [])[1];
+  const cb = (tokEase || '').split(',').map(Number);
+  ok(!!tokEase && !!tokDur && cb.length === 4 && cb[1] === 0 && cb[3] === 1 &&
+     Math.abs(cb[0] + cb[2] - 1) < 1e-9 && /stage-turn/.test(NOW.slice(NOW.indexOf('function stageFlip'), NOW.indexOf('function stageFlip') + 4000)),
+     'THE TURN\'S TIMING IS REAL AND NAMED: --ease-stage-turn cubic-bezier(' + tokEase + ') over ' +
+     '--dur-stage-turn ' + tokDur + ', declared in :root with the house\'s other curves and read by ' +
+     'stageFlip - symmetric (x1 + x2 = 1) with flat ends (y1 = 0, y2 = 1), so the speed is zero at ' +
+     'both ends and greatest at the crossing; the old turn sequenced two ease-outs and stopped dead ' +
+     'at its midpoint', JSON.stringify({ tokEase, tokDur }));
+
+  /* THE THREADS. Every connection the map draws is a curve with a glow layer, a gradient stroke and
+     a bead; and there are exactly as many as the corpus says - one spoke per folder, one arc per
+     pair of folders the corpus links, one in-folder curve per in-folder link, one membership thread
+     per note - counted here in Node from graph-data.js, not from the page. */
+  await page.evaluate('__galaxy.presence.set("dust"); __galaxy.stage.set("galaxy", "ui_enhancement_proof 7")');
+  await sleep(800);
+  const th = await page.json('__galaxy.orbit.threads');
+  const byId = {}; GRAPH.nodes.forEach((n) => { byId[n.id] = n.group; });
+  const endG = (e) => byId[typeof e === 'object' ? e.id : e];
+  const pairs = new Set(); let withinDisk = 0;
+  GRAPH.links.forEach((l) => { const a = endG(l.source), b = endG(l.target); if (!a || !b) return;
+    if (a === b) withinDisk++; else pairs.add([a, b].sort().join('|')); });
+  note('threads: ' + JSON.stringify(th));
+  ok(th && th.spokes === groupsOnDisk.length && th.cross === pairs.size && th.inlinks === withinDisk &&
+     th.members === GRAPH.nodes.length &&
+     th.curved.spokes === th.spokes && th.curved.cross === th.cross && th.curved.inlinks === th.inlinks &&
+     th.curved.members === th.members && th.glows === th.spokes + th.cross && th.beads === th.glows &&
+     th.gradients === th.glows && /url\(/.test(th.stroke) && /url\(.*ob-tglow/.test(th.glowFilter || '') && th.width >= 1.2,
+     'THE CONNECTIONS RENDER AS CURVED, GLOWING THREADS, AND ONLY THE CORPUS\'S: ' + th.spokes +
+     ' spokes (one per folder), ' + th.cross + ' arc between folders and ' + th.inlinks +
+     ' in-folder curves (both counted from graph-data.js\'s own links), ' + th.members +
+     ' faint membership threads (one per note) - every one a quadratic curve; each spoke and arc a ' +
+     th.width + 'px gradient stroke over a blurred glow copy with a travelling bead',
+     JSON.stringify({ th, disk: { folders: groupsOnDisk.length, pairs: pairs.size, within: withinDisk, notes: GRAPH.nodes.length } }));
+
+  /* THE EYES HAVE RINGS, MEASURED AS RADII. presence.eyes() walks the drawn buffer: the share of
+     iris points within 0.004 of the limbal ring's radius and within 0.003 of the pupil's, against
+     what a uniformly filled disc - the old iris - would put there by area alone. */
+  await page.evaluate('__galaxy.stage.set("presence", "ui_enhancement_proof 7"); __galaxy.presence.set("face")');
+  await waitFor(page, '__galaxy.presence.mode === "face"', 15000);
+  await sleep(1200);
+  const eyes = await page.json('__galaxy.presence.eyes()');
+  const uniLimb = (Math.pow(eyes.irisR, 2) - Math.pow(eyes.irisR - 0.004, 2)) / Math.pow(eyes.irisR, 2);
+  const uniPup = (Math.pow(eyes.pupilR + 0.003, 2) - Math.pow(eyes.pupilR - 0.003, 2)) / Math.pow(eyes.irisR, 2);
+  const limbShare = eyes.onLimbal / eyes.points, pupShare = eyes.onPupil / eyes.points;
+  ok(eyes && eyes.points > 0 && limbShare >= 2 * uniLimb && pupShare >= 2 * uniPup &&
+     eyes.catch >= 2 && eyes.hot >= eyes.onLimbal && eyes.parts && eyes.parts.striae > 0 && eyes.spokes >= 8,
+     'THE EYES HAVE DETAIL IN THE GEOMETRY: of ' + eyes.points + ' iris points, ' +
+     Math.round(limbShare * 100) + '% sit on the limbal ring and ' + Math.round(pupShare * 100) +
+     '% on the pupil ring - against ' + Math.round(uniLimb * 100) + '% and ' + Math.round(uniPup * 100) +
+     '% for the uniformly filled disc it replaces - with ' + eyes.spokes + ' radial striations, ' +
+     eyes.catch + ' catchlight points and ' + eyes.hot + ' points flagged to glow through the lid',
+     JSON.stringify({ eyes, uniLimb, uniPup }));
+  await page.evaluate('__galaxy.presence.set("dust"); __galaxy.stage.set("galaxy", "ui_enhancement_proof 7"); document.documentElement.classList.remove("nomove")');
   await page.send('Emulation.clearDeviceMetricsOverride');
 }
 
