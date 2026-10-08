@@ -52,7 +52,7 @@ const PORT = 9246;
 const CDP = 'http://127.0.0.1:' + PORT;
 const BASE_REV = 'e08ed4f';
 /* UI mandate III's two measured floors - see section 7, and the report for the readings. */
-const BARE_MAX = 1, EDGE_RATIO = 1.08, TSTD_MIN = 0.035, GLASS_MAX = 1;
+const BARE_MAX = 1, EDGE_RATIO = 1.08, TSTD_MIN = 0.030, GLASS_MAX = 1;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let pass = 0, fail = 0;
@@ -948,8 +948,10 @@ else {
   note('far edge, free: ' + JSON.stringify(fs) + ' · pinned: ' + JSON.stringify(ps) +
        ' · seed edge ' + seed.frameFill + ', bound ' + seed.reachFill);
   /* MEASURED ON THE COMMITTED PAGE FIRST (the ball that only turns and breathes): its far edge moved
-     0.018-0.024 per direction between moments and reached 1.04-1.07x its seed's edge. Here, with each
-     point wandering: 0.052-0.055 and 1.12x. The floors sit between: TSTD_MIN 0.035, EDGE_RATIO 1.08.
+     0.018-0.024 per direction between moments and reached 1.04-1.07x its seed's edge. §51's dust:
+     0.052-0.055. UI mandate IV's membrane is dense, so a point's own wander is averaged out of its far
+     edge; its lobes swell and recede as a whole (DUST_MORPH) instead: 0.034-0.037. TSTD_MIN 0.030 sits
+     between that and the ball that only turns.
      The pinned control must not move at all. */
   /* THE RATIO IS REPORTED, NOT ASSERTED: how far the third-farthest LIT pixel reaches depends on how
      bright the outermost strays are, so it moved 1.07-1.24x across runs as the bloom was retuned. The
@@ -1027,6 +1029,106 @@ else {
      eyes.catch + ' catchlight points and ' + eyes.hot + ' points flagged to glow through the lid',
      JSON.stringify({ eyes, uniLimb, uniPup }));
   await page.evaluate('__galaxy.presence.set("dust"); __galaxy.stage.set("galaxy", "ui_enhancement_proof 7"); document.documentElement.classList.remove("nomove")');
+
+  /* ============================ 8. UI MANDATE IV ============================ */
+  step('8 · UI mandate IV - the dust as a ridged membrane, and no corner marks');
+  await page.evaluate('document.documentElement.classList.add("nomove"); __galaxy.stage.set("presence", "ui_enhancement_proof 8")');
+  await page.evaluate('__galaxy.presence.set("face")');
+  await sleep(1200);
+  await page.evaluate('__galaxy.presence.set("dust")');
+  await sleep(1500);
+  const g4 = await page.json('__galaxy.presence.dust().geo');
+  const P4 = await page.json('(function(P){return {pts:P.DUST_PTS,primary:P.DUST_PRIMARY,core:P.DUST_CORE,fine:P.DUST_FINE,' +
+    'fineSize:P.DUST_FINE_SIZE,fineAlpha:P.DUST_FINE_ALPHA,rmax:P.DUST_RMAX,s:P.DUST_S};})(__galaxy.presence.PRES)');
+  note('dust geometry: profile ' + JSON.stringify(g4.profile) + ' · tail ' + g4.tail + ' · cliff ' + g4.cliff +
+       ' · reach by direction ' + g4.dirMin + '..' + g4.dirMax + ' (cv ' + g4.dirCv + ') · pop ' + JSON.stringify(g4.pop));
+
+  /* NO HARD OR IMPLIED BOUNDARY. Twelve equal radius shells from the heart to the furthest point: a
+     filled ball - the §51 dust, or any envelope - puts its MOST points in the outer quarter (a uniform
+     ball 58%) and then stops; this membrane peaks INSIDE (shells 7-8) and falls away shell by shell
+     past it, no step below 0.20x while a shell still holds 2% of the cloud. Measured: tail 0.16,
+     steepest step 0.249, outermost shell 1.2%. */
+  ok(g4.tail < 0.25 && g4.cliff >= 0.20 && g4.profile[11] < 0.02 * g4.pop.total,
+     'THE DUST HAS NO BOUNDARY, HARD OR IMPLIED: counting points in twelve shells out to the furthest, ' +
+     JSON.stringify(g4.profile) + ' - the outer quarter holds ' + (g4.tail * 100).toFixed(1) + '% of them ' +
+     '(a filled ball holds 58% there), no shell falls below ' + g4.cliff + 'x the one inside it while ' +
+     'that one still holds 2% of the cloud (a rim would be a fall to nothing), and the outermost shell ' +
+     'holds ' + g4.profile[11] + ' points - the density dissolves', JSON.stringify(g4.profile));
+
+  /* AND IT IS NOT A SMOOTH RADIAL FALL-OFF EITHER: the reach in 64 directions (the 95th-percentile radius
+     inside a 28-degree cone) varies, because every direction has its own rim. CONTROL, computed here:
+     the same measure on a gaussian ball of the same point count - which has a smooth fall-off and no
+     edge, the case this assertion must tell apart from a lumpy membrane. Measured: dust 0.082 against
+     0.033. ON SCREEN the claim is on the MEAN of three snapshots: the cloud turns, and from some yaws a
+     lumpy shape projects rounder for a moment (one snapshot read 0.064 in the sweep, beside 0.209 and
+     0.123), so a per-snapshot floor would be measuring the yaw. Mean floor 0.075, about twice a ball. */
+  const ctrlCv = (() => {
+    let s = 0x2545F491;
+    const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+    const g = () => (rnd() + rnd() + rnd() - 1.5) * 1.15;
+    const pts = []; for (let i = 0; i < g4.pop.total; i++) pts.push([g(), g(), g()]);
+    const rs = pts.map((p) => Math.hypot(p[0], p[1], p[2])), cosC = Math.cos(28 * Math.PI / 180), dirs = [];
+    for (let j = 0; j < 64; j++) {
+      const yj = 1 - 2 * (j + 0.5) / 64, q = Math.sqrt(1 - yj * yj), ph = j * Math.PI * (3 - Math.sqrt(5));
+      const d = [q * Math.cos(ph), yj, q * Math.sin(ph)], inC = [];
+      pts.forEach((p, i) => { if (rs[i] > 1e-6 && (p[0] * d[0] + p[1] * d[1] + p[2] * d[2]) / rs[i] >= cosC) inC.push(rs[i]); });
+      inC.sort((a, b) => a - b); dirs.push(inC[Math.floor(0.95 * (inC.length - 1))]);
+    }
+    const m = dirs.reduce((a, b) => a + b, 0) / dirs.length;
+    return +(Math.sqrt(dirs.reduce((a, b) => a + (b - m) * (b - m), 0) / dirs.length) / m).toFixed(3);
+  })();
+  const snapOuter = [];
+  for (let i = 0; i < 3; i++) {
+    const sn = JSON.parse(await page.evaluate('__galaxy.presence.snap(160).then(function(s){return JSON.stringify(s)})'));
+    const o = sn.outer.filter((v) => v > 0), m = o.reduce((a, b) => a + b, 0) / o.length;
+    snapOuter.push(+(Math.sqrt(o.reduce((a, b) => a + (b - m) * (b - m), 0) / o.length) / m).toFixed(3));
+    await sleep(900);
+  }
+  note('reach CV by direction: dust ' + g4.dirCv + ' against a gaussian ball of the same count ' + ctrlCv +
+       ' · on screen, the far edge in 24 directions: CV ' + snapOuter.join('/'));
+  const snapMean = +(snapOuter.reduce((a, b) => a + b, 0) / snapOuter.length).toFixed(3);
+  ok(g4.dirCv >= 2 * ctrlCv && g4.dirCv >= 0.06 && snapMean >= 0.075,
+     'AND IT IS NOT A SMOOTH RADIAL FALL-OFF: the cloud\'s reach in 64 directions runs ' + g4.dirMin + ' to ' +
+     g4.dirMax + ' of its bound, a variation of ' + g4.dirCv + ' - against ' + ctrlCv + ' for a gaussian ball of ' +
+     'the same ' + g4.pop.total + ' points measured the same way - and on screen its far edge in 24 directions ' +
+     'varies by ' + snapOuter.join('/') + ', mean ' + snapMean + ' (a ball reads near 0.04; floor 0.075): ' +
+     'a lumpy membrane, not a sphere',
+     JSON.stringify({ dirs: g4.dirs, ctrlCv, snapOuter, snapMean }));
+
+  /* THE POINT BUDGET, SPLIT AND DOCUMENTED. */
+  ok(g4.pop.total === P4.pts && g4.pop.primary === P4.primary && g4.pop.fine === P4.fine &&
+     P4.primary + P4.fine === P4.pts && P4.fine > P4.primary && P4.fineSize < 1 && P4.fineAlpha < 1,
+     'THE POINT BUDGET IS SPLIT AND STAYS AT ' + P4.pts + ': ' + P4.primary + ' primary points (' + P4.core +
+     ' in the dim core glow, the rest on the membrane\'s ridges) and ' + P4.fine + ' fine ' +
+     'points on the same ridges, drawn at ' + P4.fineSize + ' of the size and ' + P4.fineAlpha + ' of the light ' +
+     '- counted off the drawn buffer\'s own flags: ' + JSON.stringify(g4.pop), JSON.stringify({ pop: g4.pop, P4 }));
+
+  /* THE CORNER MARKS ARE GONE, IN EVERY VIEW: the galaxy stage, the dust, the face, mid-turn, and with
+     the command panel open. They were four <i class="pb"> L-brackets at the corners of the square round
+     the core - DOM, not canvas pixels - so the DOM is where their absence is read. */
+  const marks = {};
+  const readMarks = () => page.json(`(function(){
+    var w = document.getElementById('presence');
+    return { pb: document.querySelectorAll('.pb, #presence i').length, kids: w ? w.children.length : -1,
+             css: Array.prototype.some.call(document.styleSheets, function (s) { try { return Array.prototype.some.call(s.cssRules,
+               function (r) { return r.selectorText && /\\.pb\\b/.test(r.selectorText); }); } catch (e) { return false; } }) }; })()`);
+  marks.dust = await readMarks();
+  await page.evaluate('__galaxy.presence.set("face")');
+  await sleep(1000);
+  marks.face = await readMarks();
+  await page.evaluate('__galaxy.presence.set("dust"); document.documentElement.classList.remove("nomove"); __galaxy.stage.set("galaxy", "ui_enhancement_proof 8")');
+  await sleep(300);
+  marks.turn = await readMarks();
+  await sleep(1200);
+  marks.galaxy = await readMarks();
+  await page.evaluate('__galaxy.cmd.open_(true)');
+  await sleep(600);
+  marks.command = await readMarks();
+  await page.evaluate('__galaxy.cmd.open_(false)');
+  ok(Object.values(marks).every((m) => m.pb === 0 && m.kids === 2 && m.css === false),
+     'THE FOUR CORNER MARKS ARE GONE FROM EVERY VIEW: no .pb element and no rule for one in the dust, the ' +
+     'face, mid-turn, the galaxy and with the command panel open - the well holds only its canvas and its tag',
+     JSON.stringify(marks));
   await page.send('Emulation.clearDeviceMetricsOverride');
 }
 

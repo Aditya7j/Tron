@@ -2495,25 +2495,11 @@
       rgba(0,0,0,.5)   calc(var(--pmask) + (100% - var(--pmask)) * .5),
       rgba(0,0,0,.104) calc(var(--pmask) + (100% - var(--pmask)) * .75),
       rgba(0,0,0,0) 100%)}
-  /* THE BRACKETS ARE OUTSIDE THE MASK ON PURPOSE. They are DOM siblings of the canvas, not
-     pixels in it, so the window cannot touch them - which matters, because the corner residual
-     the first probe found (0.0244-0.0270, all four corners, surviving both flags off) was
-     measured to be ENTIRELY these four marks: hiding .pb removed exactly as much as hiding the
-     whole well, to five decimal places, with a top-strip control at 0.00000. The Eyes reticle is
-     a feature and PART 1's assertion is written to exclude these squares rather than to demand
-     that they match the sky.
-     §34 PART 3: THE SIZE IS A FRACTION OF THE WELL AND NO LONGER 15px. 0.036 is 15/420, i.e. the
-     proportion these were drawn at against the old fixed rect, so nothing changes at the size
-     they were designed for and they grow with the presence everywhere else; the floor keeps them
-     from vanishing in the compact tier. */
-  #presence .pb{position:absolute;opacity:.5;
-    width:max(10px, calc(var(--pw) * .036));
-    height:max(10px, calc(var(--pw) * .036));
-    border:0 solid rgba(var(--blue-structure-rgb),.5)}
-  #presence .pb.b1{left:0;top:0;border-left-width:1px;border-top-width:1px}
-  #presence .pb.b2{right:0;top:0;border-right-width:1px;border-top-width:1px}
-  #presence .pb.b3{right:0;bottom:0;border-right-width:1px;border-bottom-width:1px}
-  #presence .pb.b4{left:0;bottom:0;border-left-width:1px;border-bottom-width:1px}
+  /* UI MANDATE IV PART 2: THE FOUR CORNER MARKS ARE GONE. #presence carried four L-shaped .pb
+     brackets at the corners of the square round the core (the 'Eyes reticle' of §34); they showed
+     over the main pane wherever the presence did - its stage, the turn, the face - and read as a
+     crosshair frame on the galaxy. The markup, these rules and their size law are deleted; nothing
+     in the house read them. */
   /* THE ONE DECORATIVE THING §27's SELF-CRITIQUE CUT. This printed FACE - or RING, or CUBE -
      in small caps under the well. It was useful while the three modes were being built and it
      is instrumentation now: the boss can see that it is a face, and a caption under his
@@ -3248,11 +3234,10 @@
      numbers written into the same buffers rather than three objects taking turns. Where the
      well sits is the layout governor's decision and nobody else's - see layout() - and
      nothing in here is ever a click target. Empty until presBoot() has a THREE to build
-     with, which is why a machine with no WebGL shows four faint brackets and no hologram
+     with, which is why a machine with no WebGL shows an empty well and no hologram
      instead of a broken one. -->
 <div id="presence" aria-hidden="true">
   <canvas id="presence-cvs"></canvas>
-  <i class="pb b1"></i><i class="pb b2"></i><i class="pb b3"></i><i class="pb b4"></i>
   <div id="presence-tag">ring</div>
 </div>
 <!-- The hover annotation. Empty and invisible until a world is under the pointer;
@@ -20796,12 +20781,37 @@ async function loadLib() {
        directions breathe together. DUST_S came down from 0.86 to 0.62 so that even the bound on
        the furthest stray (presDustReach) lands inside the canvas's window, never cut by it.
        Same 13,800 points, same one object; this is motion only. */
-    DUST_PTS: 13800, DUST_R: 1.0, DUST_S: 0.62,
-    DUST_FALLOFF: 1.5, DUST_FREQ: 1.9, DUST_FLOOR: 0.05, DUST_CONTRAST: 2.6,
-    DUST_WANDER_HEART: 0.07, DUST_WANDER_EDGE: 0.26, DUST_STRAY: 1.25, DUST_STRAY_SHARE: 0.16,
-    DUST_WANDER_HZ_LO: 0.05, DUST_WANDER_HZ_HI: 0.21, DUST_RADIAL: 0.14,
-    DUST_SPIN: 0.105, DUST_BREATH: 0.018, DUST_BREATH_HZ: 0.11,
-    DUST_LEVEL_SWELL: 0.10, DUST_PULSE_SWELL: 0.06,
+    /* UI MANDATE IV, MATCHED TO THE REFERENCE (the frames supplied with the mandate, 'Orb No 004 - Dust').
+       What the frames show, and what each constant is for:
+         - a LARGE cloud with a LUMPY outline: each direction has its own radius, 1 +/- LUMP times a
+           smooth noise on the sphere (LUMP_FREQ), so the outline is uneven - not round, not a starburst;
+         - the light in a NETWORK OF THIN RIDGES across a crumpled membrane: points are accepted in
+           proportion to RIDGE noise (1 - |n|, sharpened by RIDGE_POW) read through a domain WARP, so the
+           grains gather into veins with dark gaps between them;
+         - a THICK SHELL, not a filled ball: radii are drawn toward the direction's own rim (SHELL_IN to 1),
+           so the interior is sparse and darker;
+         - a SOFT EDGE: a TAIL share of points dissolves outward past the rim (TAIL_LEN), so there is no
+           line where the cloud stops;
+         - a DIM TINTED CORE: CORE points, large, faint and gaussian, a haze at the heart in the state's colour;
+         - FINE GRAIN: most points are FINE - smaller and dimmer - on the same ridges.
+       Split: PRIMARY 4,400 (core 1,400 + ridge grains 3,000), FINE 9,400; total DUST_PTS, unchanged.
+       SIZE: the seed's rim sits at radius 1 (lumps to 1 + LUMP, the tail to RMAX 1.45), worn at DUST_S
+       0.545, so its furthest point stands at 0.61 of the frame's half-height (the §51 ball: 0.48). DUST_S
+       is the largest value whose BOUND (presDustReach: RMAX + the whole wander, every swell and the lobes'
+       MORPH at once) stays inside the canvas's window - 0.914 against EDGE_MAX 0.94.
+       MOTION: a dense membrane averages each point's own wander out of its outline, so the lobes also
+       swell and recede as a whole (MORPH, three travelling waves of position) - the shape changes. */
+    DUST_PTS: 13800, DUST_R: 1.0, DUST_S: 0.545,
+    DUST_PRIMARY: 4400, DUST_CORE: 1400, DUST_FINE: 9400,
+    DUST_LUMP: 0.55, DUST_LUMP_FREQ: 1.05, DUST_SHELL_IN: 0.80, DUST_SHELL_POW: 4.0,
+    DUST_RIDGE_FREQ: 3.3, DUST_RIDGE_POW: 7.0, DUST_RIDGE_FLOOR: 0.015, DUST_WARP: 0.70,
+    DUST_TAIL: 0.10, DUST_TAIL_LEN: 0.10, DUST_RMAX: 1.45, DUST_GRAIN: 0.55,
+    DUST_CORE_SIGMA: 0.15, DUST_CORE_SIZE: 14.0, DUST_CORE_ALPHA: 0.013,
+    DUST_FINE_SIZE: 0.55, DUST_FINE_ALPHA: 0.70, DUST_EDGE_PALE: 0.50,
+    DUST_WANDER_HEART: 0.035, DUST_WANDER_EDGE: 0.12, DUST_STRAY: 1.25, DUST_STRAY_SHARE: 0.16,
+    DUST_WANDER_HZ_LO: 0.05, DUST_WANDER_HZ_HI: 0.21, DUST_RADIAL: 0.05, DUST_MORPH: 0.20,
+    DUST_SPIN: 0.105, DUST_BREATH: 0.010, DUST_BREATH_HZ: 0.11,
+    DUST_LEVEL_SWELL: 0.025, DUST_PULSE_SWELL: 0.015,
     /* THE FOUR STATES' LIGHT, and where it comes from. Each state is a family colour READ OUT
        OF THE STYLESHEET at boot - see presDustPalette() - so the hologram and the chrome are
        lit by one set of tokens and the state of the house is the same colour wherever it is
@@ -21530,38 +21540,72 @@ async function loadLib() {
             0.35 * Math.sin(-3.9 * x + 4.7 * y + 2.9 * z + 1.3)) / 1.85;
   }
   const PRES_DUST_ROLE = 20;
-  /* THE DUST. Rejection-sampled in the unit ball against fall-off x noise; aCell carries the
-     point's radius (0 at the heart, 1 at the edge) because the shader shades by it, and aRnd
-     is the point's own phase on the flow field. See PRES.DUST_*. The cap on tries is the
-     same guard the face's shell carries: a weight that came back tiny everywhere degrades
-     into a sparser cloud rather than a hung tab. */
-  /* THE FURTHEST A DUST POINT CAN BE DRAWN, in natural units, as a BOUND: an edge point (r = 1)
-     moved by a stray's whole wander (wv's three axes are each at most 1.5, so |wv| <= 2.598, and
-     the shader scales it by 1/2.598 - the move is never more than amp), swung out by its full
-     radial term, with the breath, the voice's swell and the syllable's pulse on top: every term
-     at its peak at once, which no real frame reaches. The edge window is sized from this, and
-     DUST_S is chosen so the bound is inside the window - so no point is ever cut by it. */
+  /* THE DUST (UI mandate IV, matched to the reference). OLD (§51): rejection-sampled in the unit
+     ball (d^2 > 1 rejected - a hard radius) against a gaussian fall-off x sine noise: a filled sphere
+     whose outline, however the wander roughened it, was a ball's. NEW: A RIDGED MEMBRANE.
+       direction u  uniform on the sphere;
+       rim(u)       1 + LUMP * n(u * LUMP_FREQ) - every direction its own radius, so the outline is lumpy;
+       radius       rim(u) * (SHELL_IN + (1 - SHELL_IN) * v^(1/SHELL_POW)) - drawn toward the rim, so the
+                    inside is sparse; or, for a TAIL share, rim(u) * (1 + TAIL_LEN * e) with e exponential -
+                    the edge dissolves instead of stopping;
+       ridge        1 - |n(warp(p) * RIDGE_FREQ)|, to the RIDGE_POW - the point is KEPT with that
+                    probability (floor RIDGE_FLOOR), so grains gather into a network of thin veins;
+       warp(p)      p + WARP * (n(p+a), n(p+b), n(p+c)) - the domain warp that crumples the veins.
+     aCell is radius / RMAX (0 at the heart); aRnd is the point's phase, + 2 for a FINE grain, + 4 for a
+     CORE glow point. Deterministic: the same rnd, the same cloud. */
+  function presDustRim(x, y, z) {
+    const f = PRES.DUST_LUMP_FREQ;
+    return 1 + PRES.DUST_LUMP * (0.65 * presNoise3(x * f + 1.3, y * f - 0.7, z * f + 2.9) +
+                                 0.35 * presNoise3(x * 2.3 * f - 3.1, y * 2.3 * f + 0.4, z * 2.3 * f - 1.7));
+  }
+  function presDustRidge(x, y, z) {
+    const w = PRES.DUST_WARP, f = PRES.DUST_RIDGE_FREQ;
+    const wx = x + w * presNoise3(x * 1.7 + 5.2, y * 1.7 - 1.3, z * 1.7 + 0.8);
+    const wy = y + w * presNoise3(x * 1.7 - 2.6, y * 1.7 + 4.4, z * 1.7 - 3.3);
+    const wz = z + w * presNoise3(x * 1.7 + 0.9, y * 1.7 + 2.1, z * 1.7 + 6.0);
+    const a = 1 - Math.abs(presNoise3(wx * f, wy * f, wz * f));
+    const b = 1 - Math.abs(presNoise3(wx * 2.1 * f + 7.7, wy * 2.1 * f - 4.2, wz * 2.1 * f + 1.5));
+    return Math.pow(Math.max(0, 0.62 * a + 0.38 * b), PRES.DUST_RIDGE_POW);
+  }
+  /* THE FURTHEST A DUST POINT CAN BE DRAWN, in natural units, as a BOUND: a point at RMAX (the rim's
+     highest lump plus the tail, clamped in the fill) moved by a stray's whole wander, swung out by its
+     full radial term, at full breath, voice and pulse - every term at its peak at once, which no real
+     frame reaches. The window is sized from this and DUST_S keeps it inside: no point is ever cut. */
   function presDustReach() {
     const wander = (PRES.DUST_WANDER_HEART + PRES.DUST_WANDER_EDGE) * PRES.DUST_STRAY;
-    return PRES.DUST_R * PRES.DUST_S * (1 + wander) * (1 + PRES.DUST_RADIAL) *
+    return PRES.DUST_R * PRES.DUST_S * (PRES.DUST_RMAX + wander) * (1 + PRES.DUST_RADIAL + PRES.DUST_MORPH) *
            (1 + PRES.DUST_BREATH + PRES.DUST_LEVEL_SWELL + PRES.DUST_PULSE_SWELL);
   }
   function presDustFill(pen, rnd) {
-    const N = presN(PRES.DUST_PTS), R = PRES.DUST_R, F = PRES.DUST_FREQ;
-    let placed = 0, tries = 0;
-    while (placed < N && tries < N * 40) {
-      tries++;
-      const x = rnd() * 2 - 1, y = rnd() * 2 - 1, z = rnd() * 2 - 1;
-      const d2 = x * x + y * y + z * z;
-      if (d2 > 1) continue;
-      const radial = Math.exp(-d2 * PRES.DUST_FALLOFF);
-      const n = 0.5 + 0.5 * presNoise3(x * F, y * F, z * F);
-      const w = radial * (PRES.DUST_FLOOR + (1 - PRES.DUST_FLOOR) *
-                          Math.pow(Math.max(0, n), PRES.DUST_CONTRAST));
-      if (rnd() > w) continue;
-      pen.put(x * R, y * R, z * R, PRES_DUST_ROLE, rnd(), Math.sqrt(d2));
-      placed++;
+    const R = PRES.DUST_R, RM = PRES.DUST_RMAX;
+    const grains = function (n, flag) {
+      let placed = 0, tries = 0;
+      while (placed < n && tries < n * 60) {
+        tries++;
+        const u = rnd() * 2 - 1, a = rnd() * Math.PI * 2, q = Math.sqrt(1 - u * u);
+        const dx = q * Math.cos(a), dy = q * Math.sin(a), dz = u;
+        const rim = presDustRim(dx, dy, dz);
+        let r;
+        if (rnd() < PRES.DUST_TAIL) r = rim * (1 + PRES.DUST_TAIL_LEN * -Math.log(1 - rnd() * 0.98));
+        else r = rim * (PRES.DUST_SHELL_IN + (1 - PRES.DUST_SHELL_IN) * Math.pow(rnd(), 1 / PRES.DUST_SHELL_POW));
+        r = Math.min(r, RM * 0.999);
+        const x = dx * r, y = dy * r, z = dz * r;
+        const keep = PRES.DUST_RIDGE_FLOOR + (1 - PRES.DUST_RIDGE_FLOOR) * presDustRidge(x, y, z);
+        if (rnd() > keep) continue;
+        pen.put(x * R, y * R, z * R, PRES_DUST_ROLE, flag + rnd(), Math.min(1, r / RM));
+        placed++;
+      }
+    };
+    /* THE CORE GLOW: a few larger, faint points at the heart, in the state's colour */
+    const nCore = presN(PRES.DUST_CORE);
+    for (let i = 0; i < nCore; i++) {
+      /* a true gaussian (Box-Muller), unbounded, so the glow has no edge of its own */
+      const g = function () { return PRES.DUST_CORE_SIGMA * Math.sqrt(-2 * Math.log(1 - rnd() * 0.999)) * Math.cos(6.2832 * rnd()); };
+      const x = g(), y = g(), z = g();
+      pen.put(x * R, y * R, z * R, PRES_DUST_ROLE, 4 + rnd(), Math.min(1, Math.hypot(x, y, z) / RM));
     }
+    grains(presN(PRES.DUST_PRIMARY - PRES.DUST_CORE), 0);
+    grains(presN(PRES.DUST_FINE), 2);
     return pen.count();
   }
 
@@ -22465,6 +22509,8 @@ async function loadLib() {
        0.0, which is amber, which is a VISIBLE wrong colour rather than a crash - so every one
        of the five rungs below assigns it, and none of them inherits. */
     'varying float vC;',
+    /* UI MANDATE IV: vG is 1 on a core glow point and 0 on every other point of every mode */
+    'varying float vG;',
     'mat3 rotX(float a){ float s=sin(a),c=cos(a); return mat3(1.,0.,0., 0.,c,-s, 0.,s,c); }',
     'mat3 rotY(float a){ float s=sin(a),c=cos(a); return mat3(c,0.,s, 0.,1.,0., -s,0.,c); }',
     'float organAt(float c){',
@@ -22481,6 +22527,7 @@ async function loadLib() {
     '  float sz = uSize;',
     '  vR = 0.0;',
     '  vC = 0.0;',
+    '  vG = 0.0;',
     /* ---- THE DUST'S ARM ----
        ONE CLOCK, PINNABLE: bt is uTime except while the plate door holds uYawHold up, when it is
        uPhase, so two plates of the same phase are the same picture.
@@ -22511,15 +22558,33 @@ async function loadLib() {
       ' * pow(rr, 1.5)) * (h1 < ' + PRES.DUST_STRAY_SHARE.toFixed(3) + ' ? ' + PRES.DUST_STRAY.toFixed(3) + ' : 1.0);',
     '    p += amp * wv * 0.3849;',
     '    p *= 1.0 + ' + PRES.DUST_RADIAL.toFixed(4) + ' * rr * sin(bt * (0.04 + 0.12 * h2) + h3 * 6.2832);',
+    /* UI MANDATE IV: THE SHAPE MOVES AS A SHAPE. A point's own wander is averaged away on a dense
+       membrane - the far edge is set by many points at once - so the outline is also moved as a
+       whole: three travelling waves of position swell some lobes and draw others in, MORPH at
+       most, coherent across neighbours, so the folds keep their fine structure while they move. */
+    '    float morph = (sin(1.3 * p.x + 0.83 * bt) + sin(1.1 * p.y - 0.67 * bt + 2.0) + sin(1.7 * p.z + 0.71 * bt + 4.0)) / 3.0;',
+    '    p *= 1.0 + ' + PRES.DUST_MORPH.toFixed(4) + ' * smoothstep(0.10, 0.55, rr) * morph;',
     '    p = rotY(bt * ' + PRES.DUST_SPIN.toFixed(4) + ') * rotX(0.22 * sin(bt * 0.07)) * p;',
     '    p *= 1.0 + ' + PRES.DUST_BREATH.toFixed(4) + ' * sin(bt * ' +
       (PRES.DUST_BREATH_HZ * Math.PI * 2).toFixed(4) + ') * (1.0 - clamp(uLevel * 2.2, 0.0, 1.0))' +
       ' + ' + PRES.DUST_LEVEL_SWELL.toFixed(4) + ' * uLevel + ' +
       PRES.DUST_PULSE_SWELL.toFixed(4) + ' * uPulse * heart;',
-    '    a = 0.28 + 0.52 * heart + 0.20 * uLevel + 0.40 * uPulse * heart;',
-    '    sz *= 1.30 + 1.10 * heart + 0.30 * uLevel;',
-    '    vC = rr;',
-    '    vR = clamp(heart * heart * (0.45 + 0.55 * uPulse) + 0.25 * uLevel * heart, 0.0, 1.0);',
+    '    sz *= 1.15 + 0.20 * uLevel;',
+    /* AS THE REFERENCE LIGHTS IT: the grains are brightest out on the membrane and the rim and faint
+       inside it, nearly white with the state's tint (vC toward 1 = the pale edge colour); the heart is a
+       few large, faint points in the state's own colour (vC 0) - the dim tinted core. */
+    "    float fine = step(1.5, aRnd) * (1.0 - step(3.5, aRnd));",
+    "    float coreGlow = step(3.5, aRnd);",
+    "    float shell = smoothstep(0.18, 0.62, rr);",
+    '    a = (0.12 + 0.80 * shell) * (1.0 + 0.30 * uLevel + 0.25 * uPulse);',
+    '    a *= mix(1.0, ' + PRES.DUST_FINE_ALPHA.toFixed(3) + ', fine);',
+    '    a = mix(a, ' + PRES.DUST_CORE_ALPHA.toFixed(3) + ' * (1.0 + 0.6 * uLevel + 0.6 * uPulse), coreGlow);',
+    '    sz *= mix(' + PRES.DUST_GRAIN.toFixed(3) + ', ' + PRES.DUST_GRAIN.toFixed(3) + ' * ' + PRES.DUST_FINE_SIZE.toFixed(3) + ', fine);',
+    '    sz *= mix(1.0, ' + PRES.DUST_CORE_SIZE.toFixed(3) + ', coreGlow);',
+    '    vC = mix(shell, 0.0, coreGlow);',
+    '    vG = coreGlow;',
+    '    vR = clamp(0.10 * shell * uPulse, 0.0, 1.0);',
+
     '    float nearD = clamp((p.z + 1.10) / 2.20, 0.0, 1.0);',
     '    a *= 0.40 + 0.60 * nearD;',
     '    sz *= 0.80 + 0.36 * nearD;',
@@ -22702,11 +22767,15 @@ async function loadLib() {
     'varying float vA;',
     'varying float vR;',
     'varying float vC;',
+    'varying float vG;',
     'void main(){',
     '  vec2 d = gl_PointCoord - vec2(0.5);',
     '  float r = length(d);',
     '  if (r > 0.5) discard;',
     '  float f = smoothstep(0.5, 0.06, r);',
+    /* UI MANDATE IV: a core glow point is a gaussian haze, so the heart reads as one glow and
+       not as overlapping discs; vG is 0.0 everywhere else, so f is unchanged there */
+    '  f = mix(f, exp(-9.0 * r * r) * smoothstep(0.5, 0.32, r), vG);',
     /* THE HUE MOVES AT THE EDGE AND NOWHERE ELSE. vR is zero through the whole of RING and
        CUBE and through the middle of the face, so mix() returns uTint unchanged there and
        those two modes are byte-for-byte what they were. Where the rim catches, the colour
@@ -23454,7 +23523,8 @@ async function loadLib() {
     pres.dust.palette = {};
     PRES.DUST_STATES.forEach(function (st) {
       const c = rgbOf(cs.getPropertyValue(PRES.DUST_TOKENS[st]));
-      const edge = c.map(function (v) { return v * (1 - PRES.DUST_EDGE); });
+      /* UI MANDATE IV: the grains are near-white with the state's tint, as on the reference */
+      const edge = c.map(function (v) { return v + (255 - v) * PRES.DUST_EDGE_PALE; });
       const heat = c.map(function (v) { return v + (255 - v) * PRES.DUST_HEAT; });
       pres.dust.palette[st] = { heart: hex(c), edge: hex(edge), heat: hex(heat),
                                 token: PRES.DUST_TOKENS[st], rgb: c };
@@ -29917,30 +29987,65 @@ async function loadLib() {
            the Poisson figure; a plain fog sits on it. Also: which roles are present (the dust has
            exactly one), how many points carry the face's mesh flag (none), and the share of the
            frame the worn cloud fills. */
+        /* UI MANDATE IV: THE GEOMETRY OF A SHAPE WITH NO EDGE, walked off the buffer. Radii are in
+           units of the furthest POSSIBLE point (RMAX), so 1.0 is the bound and not a drawn rim.
+             profile  counts in twelve equal radius shells, heart outward - an edge is a cliff in it
+             tail     the share of points in the outer quarter of the occupied radius
+             dirs     for 64 directions (a Fibonacci sphere), the 95th-percentile radius of the points
+                      within 28 degrees of it - the reach of the cloud in that direction
+             dirCv    their coefficient of variation: a gaussian ball of the same count reads 0.033; a
+                      lumpy membrane, every direction with its own rim, reads 0.08
+             pop      the budget split, counted off the flags (core glow aRnd >= 4, fine [2, 4)) */
         let geo = null;
         if (pres.mode === 'dust' && pxPos) {
-          const n = pres.points, bins = [0, 0, 0, 0, 0], oct = [0, 0, 0, 0, 0, 0, 0, 0];
-          const G = 10, vox = new Map(), roles = {};
-          let rMax = 0, mesh = 0;
+          const n = pres.points, RM = PRES.DUST_RMAX, bins = [0, 0, 0, 0, 0], oct = [0, 0, 0, 0, 0, 0, 0, 0];
+          const G = 10, vox = new Map(), roles = {}, prof = new Array(12).fill(0);
+          let rMax = 0, mesh = 0, fine = 0, core = 0;
+          const rs = new Float32Array(n);
           for (let i = 0; i < n; i++) {
             const x = pxPos[i * 3], y = pxPos[i * 3 + 1], z = pxPos[i * 3 + 2];
-            const r = Math.sqrt(x * x + y * y + z * z) / PRES.DUST_R;
+            const r = Math.sqrt(x * x + y * y + z * z) / (PRES.DUST_R * RM);
+            rs[i] = r;
             if (r > rMax) rMax = r;
-            bins[Math.min(4, Math.floor(r * 5))]++;
             oct[(x > 0 ? 1 : 0) + (y > 0 ? 2 : 0) + (z > 0 ? 4 : 0)]++;
             roles[pxRole[i]] = true;
-            if (pxRnd[i] >= 1) mesh++;
-            const gx = Math.min(G - 1, Math.floor((x + 1) / 2 * G));
-            const gy = Math.min(G - 1, Math.floor((y + 1) / 2 * G));
-            const gz = Math.min(G - 1, Math.floor((z + 1) / 2 * G));
+            if (pxRnd[i] >= 4) core++; else if (pxRnd[i] >= 2) fine++; else if (pxRnd[i] >= 1) mesh++;
+            const gx = Math.min(G - 1, Math.max(0, Math.floor((x / RM + 1) / 2 * G)));
+            const gy = Math.min(G - 1, Math.max(0, Math.floor((y / RM + 1) / 2 * G)));
+            const gz = Math.min(G - 1, Math.max(0, Math.floor((z / RM + 1) / 2 * G)));
             const k = gx + G * (gy + G * gz);
             vox.set(k, (vox.get(k) || 0) + 1);
           }
+          for (let i = 0; i < n; i++) {
+            bins[Math.min(4, Math.floor(rs[i] / Math.max(1e-6, rMax) * 5))]++;
+            prof[Math.min(11, Math.floor(rs[i] / Math.max(1e-6, rMax) * 12))]++;
+          }
+          const tail = prof.slice(9).reduce(function (a, b) { return a + b; }, 0) / Math.max(1, n);
+          /* the cliff: the steepest shell-to-shell fall where the inner shell still holds >= 2% */
+          let cliff = 1;
+          for (let k = 0; k < 11; k++) {
+            if (prof[k] >= 0.02 * n) cliff = Math.min(cliff, prof[k + 1] / prof[k]);
+          }
+          /* the reach in 64 directions */
+          const dirs = [], cosC = Math.cos(28 * Math.PI / 180);
+          for (let j = 0; j < 64; j++) {
+            const yj = 1 - 2 * (j + 0.5) / 64, q = Math.sqrt(1 - yj * yj), ph = j * Math.PI * (3 - Math.sqrt(5));
+            const dx = q * Math.cos(ph), dy = yj, dz = q * Math.sin(ph), inCone = [];
+            for (let i = 0; i < n; i++) {
+              const x = pxPos[i * 3], y = pxPos[i * 3 + 1], z = pxPos[i * 3 + 2];
+              const l = Math.sqrt(x * x + y * y + z * z);
+              if (l > 1e-6 && (x * dx + y * dy + z * dz) / l >= cosC) inCone.push(rs[i]);
+            }
+            inCone.sort(function (a, b) { return a - b; });
+            dirs.push(inCone.length ? +inCone[Math.floor(0.95 * (inCone.length - 1))].toFixed(3) : 0);
+          }
+          const dm = dirs.reduce(function (a, b) { return a + b; }, 0) / dirs.length;
+          const dsd = Math.sqrt(dirs.reduce(function (a, b) { return a + (b - dm) * (b - dm); }, 0) / dirs.length);
           const counts = [];
           for (let a = 0; a < G; a++) for (let b = 0; b < G; b++) for (let c = 0; c < G; c++) {
             const cx = -1 + (a + 0.5) * 2 / G, cy = -1 + (b + 0.5) * 2 / G, cz = -1 + (c + 0.5) * 2 / G;
             const rc = Math.sqrt(cx * cx + cy * cy + cz * cz);
-            if (rc > 0.33 && rc < 0.57) counts.push(vox.get(a + G * (b + G * c)) || 0);
+            if (rc > 0.10 && rc < 0.45) counts.push(vox.get(a + G * (b + G * c)) || 0);
           }
           const mean = counts.reduce(function (s, v) { return s + v; }, 0) / Math.max(1, counts.length);
           const sd = Math.sqrt(counts.reduce(function (s, v) { return s + (v - mean) * (v - mean); }, 0) /
@@ -29952,12 +30057,17 @@ async function loadLib() {
           });
           const fh = presCam ? Math.tan(presCam.fov * Math.PI / 360) * presCam.position.z : 1.2859;
           geo = { bins: bins, density: density, octants: oct, rMax: +rMax.toFixed(4),
+                  profile: prof, tail: +tail.toFixed(4), cliff: +cliff.toFixed(3),
+                  dirs: dirs, dirMean: +dm.toFixed(3), dirCv: +(dm > 0 ? dsd / dm : 0).toFixed(3),
+                  dirMin: Math.min.apply(null, dirs), dirMax: Math.max.apply(null, dirs),
+                  pop: { primary: n - fine, fine: fine, core: core, total: n,
+                         declared: { primary: PRES.DUST_PRIMARY, fine: PRES.DUST_FINE, total: PRES.DUST_PTS } },
                   roles: Object.keys(roles).map(Number), mesh: mesh,
                   voxels: counts.length, voxelMean: +mean.toFixed(2), cv: +cv.toFixed(4),
                   poissonCv: +pcv.toFixed(4), structure: pcv > 0 ? +(cv / pcv).toFixed(3) : 0,
-                  frameFill: +(rMax * PRES.DUST_R * PRES.DUST_S / fh).toFixed(4),
+                  frameFill: +(rMax * RM * PRES.DUST_R * PRES.DUST_S / fh).toFixed(4),
                   reachFill: +(presDustReach() / fh).toFixed(4),
-                  scale: PRES.DUST_S, radius: PRES.DUST_R };
+                  scale: PRES.DUST_S, radius: RM };
         }
         return {
           geo: geo,

@@ -433,6 +433,7 @@ async function main() {
        old: EACH AT ITS DECLARED RADIUS, FLAT     new: IT REACHES ITS DECLARED RADIUS AND NO FURTHER
        old: EVERYTHING ROUND INSIDE THE RETICLE  new: EVERY OCTANT CARRIES DUST
        old: THE SEVEN-RADIUS LADDER ASCENDS      new: THE DENSITY FALLS SHELL BY SHELL FROM THE HEART
+                                                 (UI mandate IV: THE HEART IS THE DENSEST SHELL)
        old: THE POINT CAP HOLDS, WHOLE CORE ON   new: THE POINT CAP HOLDS, WHOLE DUST ON
        old: §32 IS WHERE §32 LEFT IT             new: THE DUST IS WHERE MANDATE II LEFT IT */
   head('2. the dust');
@@ -473,12 +474,20 @@ async function main() {
      (octLo / octHi).toFixed(2) + ' of the most - failure mode of a seeded noise field that ' +
      'happens to empty one side: a lopsided cloud that reads as a crescent from half the yaws',
      JSON.stringify(geo && geo.octants));
-  const falls = !!geo && geo.density.every((d, i) => i === 0 || d < geo.density[i - 1]);
+  /* UI MANDATE IV: the dust is a membrane round a dim core glow, so its density is NOT monotone - it
+     dips inside the membrane and peaks on it, and a smooth radial fall-off is what the mandate removed.
+     The failure mode this assertion guards - an even fog with no heart - is claimed directly instead.
+     Old: density falls at every shell. New: the heart is the densest shell, the outermost is thinner
+     than the one inside it (the edge dissolves), and the densest is at least 5x the thinnest
+     (measured 52x) - not a flat fill. */
+  const dmax = geo ? Math.max(...geo.density) : 0, dmin = geo ? Math.min(...geo.density) : 1;
+  const falls = !!geo && geo.density[0] === dmax && geo.density[4] < geo.density[3] && dmax >= 5 * dmin;
   ok(falls,
-     'THE DENSITY FALLS SHELL BY SHELL FROM THE HEART: ' +
-     (geo ? DUST_SHELLS.map((s, i) => s + ' ' + geo.density[i]).join(' > ') : '-') +
-     ' points per unit volume - failure mode of a flat fill: an even fog with no heart, which is ' +
-     'the thing the mandate\'s "dense" rules out',
+     'THE HEART IS THE DENSEST SHELL AND THE FILL IS NOT FLAT: ' +
+     (geo ? DUST_SHELLS.map((s, i) => s + ' ' + geo.density[i]).join(' / ') : '-') +
+     ' points per unit volume - the heart the most, the outermost shell thinner than the membrane ' +
+     'inside it, the densest ' + (dmax / dmin).toFixed(0) + 'x the thinnest - failure mode of a flat ' +
+     'fill: an even fog with no heart, which is the thing the mandate\'s "dense" rules out',
      JSON.stringify(geo && geo.density));
   ok(cine0.points === 13800 && cine0.points <= cine0.pointCap,
      'AND THE DECLARED POINT CAP HOLDS WITH THE WHOLE DUST ON: ' + cine0.points + ' of ' +
@@ -488,11 +497,13 @@ async function main() {
   /* UI MANDATE III PART 1B: the seed ball is worn smaller (0.86 -> 0.62) so that the bound on the
      furthest wandering stray - reachFill - lands inside the canvas's window. Old: scale 0.86,
      frameFill 0.6687. New: scale 0.62, frameFill 0.4822 (the seed), reachFill under 0.92. */
-  ok(!!geo && geo.radius === 1 && geo.scale === 0.62 && Math.abs(geo.frameFill - 0.4822) < 0.002 &&
+  /* UI MANDATE IV: a membrane to RMAX 1.45, worn at 0.545. Old (III): seed radius 1 at 0.62, fill
+     0.4822. New: radius 1.45, scale 0.545, the furthest point 0.58-0.68 of the frame, the bound under 0.92. */
+  ok(!!geo && geo.radius === 1.45 && geo.scale === 0.545 && geo.frameFill > 0.58 && geo.frameFill < 0.68 &&
      geo.reachFill > geo.frameFill && geo.reachFill < 0.92,
-     'AND THE DUST IS WHERE MANDATE III LEFT IT: a seed of radius ' + (geo && geo.radius) + ' worn at ' +
-     (geo && geo.scale) + ', ' + (geo && geo.frameFill) + ' of the frame half-height, and its wander ' +
-     'BOUNDED at ' + (geo && geo.reachFill) + ' - outside the seed, inside the window - failure mode ' +
+     'AND THE DUST IS WHERE MANDATE IV LEFT IT: a membrane to a radius of ' + (geo && geo.radius) + ' worn at ' +
+     (geo && geo.scale) + ', its furthest point at ' + (geo && geo.frameFill) + ' of the frame half-height, every ' +
+     'point BOUNDED at ' + (geo && geo.reachFill) + ' - inside the window - failure mode ' +
      'of a changed fill: the lookbook\'s four state plates stop being a valid comparison',
      JSON.stringify(geo));
 
@@ -1580,11 +1591,11 @@ async function main() {
         '(function(){var L=__galaxy.layout.LAYOUT;var W=__galaxy.presence.well;' +
         'var c=__galaxy.presence.dust();var G=__galaxy.layout.last;' +
         'var b=document.querySelector("#presence").getBoundingClientRect();' +
-        'var pb=document.querySelector("#presence .pb");' +
+        'var pb=document.querySelectorAll("#presence .pb").length;' +
         'return {side:+b.width.toFixed(1),fill:c.geo.frameFill,ratio:L.PRES_RATIO,edge:L.EDGE,' +
         'pane:G.pane,band:G.wellBox&&G.wellBox.pane?G.wellBox.pane.band:null,' +
         'govAsk:G.wellBox?G.wellBox.ask:null,cap:L.PRES_CAP,why:String(W.why),' +
-        'pb:pb?+pb.getBoundingClientRect().width.toFixed(1):null,' +
+        'pb:pb,kids:document.getElementById("presence").children.length,' +
         'inner:__galaxy.presence.edge().inner,vw:innerWidth,vh:innerHeight};})()');
       const mn = Math.min(r.vw, r.vh);
       /* UI MANDATE II PART 2: the ask is PRES_RATIO x min(the pane's width less its edges, the
@@ -1596,7 +1607,7 @@ async function main() {
       srows.push({ sw, mode, vh: r.vh, mn, side: r.side, ask, govAsk: r.govAsk,
                    core: +((r.side * r.fill) / mn).toFixed(4),
                    bandBound: /the band/.test(r.why), askBound: /the ask/.test(r.why),
-                   pb: r.pb, inner: r.inner, fill: r.fill, why: r.why });
+                   pb: r.pb, kids: r.kids, inner: r.inner, fill: r.fill, why: r.why });
     }
   }
   /* windowed is MODELLED as the fullscreen height minus 72px of browser chrome: two emulated
@@ -1632,8 +1643,10 @@ async function main() {
      the band's rounding). The other two halves are unchanged. */
   const fillAgrees = srows.every((r) => r.govAsk !== null && Math.abs(r.govAsk - r.ask) <= 1);
   const oneInner = new Set(srows.map((r) => r.inner)).size === 1;
-  const pbScales = srows.every((r) => r.pb >= T.BRACKET_PX) &&
-                   Math.max(...srows.map((r) => r.pb)) > Math.min(...srows.map((r) => r.pb));
+  /* UI MANDATE IV PART 2 REMOVED THE FOUR CORNER MARKS (#presence .pb), so this third half follows:
+     old - the brackets scale with the well, floor BRACKET_PX; new - there are none at any well size,
+     and the well holds only its canvas and its tag. */
+  const pbScales = srows.every((r) => r.pb === 0 && r.kids === 2);
   ok(fillAgrees && oneInner && pbScales,
      'AND THE THREE NUMBERS THIS ROUND DUPLICATED STILL AGREE WITH THEIR ORIGINALS: the ' +
      'governor\'s published ask (' + srows.map((r) => r.govAsk).join('/') + ') against this ' +
@@ -1641,10 +1654,9 @@ async function main() {
      'states - a governor sizing the well from anything but the pane would part from it and ' +
      'nothing would throw; the window\'s inner radius is ONE scale-invariant number (' + srows[0].inner +
      ') at every well size, which is what makes it a property of the frame rather than of a ' +
-     'pixel count; and the Eyes brackets scale with the presence (' +
-     srows.map((r) => r.pb).join('/') + 'px, floor ' + T.BRACKET_PX + 'px) instead of staying ' +
-     'at the 15px they were drawn for at 420, which is the mandate\'s "the reticle brackets ' +
-     'scale with it" and the reason a bigger sphere does not acquire a smaller reticle',
+     'pixel count; and at every one of the six well sizes there are no corner marks round the ' +
+     'core (' + srows.map((r) => r.pb).join('/') + ' .pb, the well holding only its canvas and tag) - ' +
+     'UI mandate IV removed the four brackets that framed it',
      JSON.stringify({ ask: srows.map((r) => [r.govAsk, r.ask]),
                       inner: srows.map((r) => r.inner), pb: srows.map((r) => r.pb) }));
   /* THE LIMIT, PRINTED RATHER THAN BURIED: what the band costs the mandate's 0.42. */

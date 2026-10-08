@@ -2255,11 +2255,13 @@ async function main() {
        in 80-93%, with the window opening outside that bound - so the cloud as drawn spans the
        stated share and no point is cut. */
     const win = await page.json('__galaxy.presence.edge()');
-    ok(g.frameFill > 0.44 && g.frameFill < 0.52 && g.reachFill > 0.80 && g.reachFill < 0.93 &&
+    /* UI MANDATE IV: the seed is a lumpy membrane out to RMAX 1.45, so frameFill is its furthest drawn
+       point, not a unit ball's rim. Old: seed 44-52%. New: furthest point 58-68%, bound 80-93%. */
+    ok(g.frameFill > 0.58 && g.frameFill < 0.68 && g.reachFill > 0.80 && g.reachFill < 0.93 &&
        win && win.inner >= g.reachFill,
-       'AND THE DUST\'S SEED FILLS ' + Math.round(g.frameFill * 100) + '% OF THE FRAME\'S HALF-HEIGHT ' +
-       'and its wandering points are bounded at ' + Math.round(g.reachFill * 100) + '% - the stated ' +
-       'bands 44-52% and 80-93% - with the canvas\'s window opening at ' + (win && win.inner) +
+       'AND THE DUST\'S FURTHEST POINT REACHES ' + Math.round(g.frameFill * 100) + '% OF THE FRAME\'S HALF-HEIGHT ' +
+       'and every point is bounded at ' + Math.round(g.reachFill * 100) + '% - the stated ' +
+       'bands 58-68% and 80-93% - with the canvas\'s window opening at ' + (win && win.inner) +
        ', outside the bound, so the cloud reads as the presence, wanders, and is never cut',
        JSON.stringify({ frameFill: g.frameFill, reachFill: g.reachFill, window: win && win.inner }));
     ok(dg.points <= 14000,
