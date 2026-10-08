@@ -4,9 +4,27 @@ const GRAPH = {
  "meta": {
  "generated": "2026-10-08T09:37:16Z",
  "notesRoot": "notes",
- "noteCount": 81,
- "linkCount": 1,
+ "noteCount": 108,
+ "linkCount": 8,
  "groups": [
+  "00_CORE",
+  "01_CAREER",
+  "01_PERSONAL",
+  "02_PERSONAL",
+  "02_TECH",
+  "03_PERSONAL",
+  "04_PERSONAL",
+  "04_PROJECTS",
+  "05_PERSONAL",
+  "05_PRODUCTS",
+  "06_PERSONAL",
+  "06_RESUME",
+  "07_GOALS",
+  "07_PERSONAL",
+  "08_GALAXY",
+  "08_PERSONAL",
+  "09_TIMELINE",
+  "10_QUICK_REFERENCE",
   "auto",
   "captures",
   "census",
@@ -39,6 +57,303 @@ const GRAPH = {
  },
  {
   "id": 2,
+  "label": "About Aditya",
+  "group": "00_CORE",
+  "file": "notes/00_CORE/ABOUT_ADITYA.md",
+  "slug": "about-aditya",
+  "excerpt": "Identity Name: Aditya Kumar / Aditya Singh (account/profile naming has varied; use \"Aditya\" naturally). Based in India; career/work context is centered around Noida / Delhi-NCR. B.Tech in Computer Science & Engineering from Haldia Institute of Technology, 2021. B.Tech CGPA: 7.98. Personality / Working Orientation Ambitious, career-focused, highly interested in software engineering and AI. Wants to build things rather than only study theory. Strong interest in creating a personal AI assistant that becomes genuinely useful in daily work. Values accuracy, reliability, practical usefulness, and preserving working functionality. Often thinks long-term: career growth, independent products, AI…",
+  "words": 139,
+  "degree": 0,
+  "touched": 1791441161
+ },
+ {
+  "id": 3,
+  "label": "How to Understand Aditya",
+  "group": "00_CORE",
+  "file": "notes/00_CORE/HOW_TO_UNDERSTAND_ADITYA.md",
+  "slug": "how-to-understand-aditya",
+  "excerpt": "How Galaxy Should Understand Aditya Core Principle Aditya does not want a generic assistant. Galaxy should understand his technical background, goals, current projects, working style, and preferences so that answers become progressively more useful. When Helping Use known context before asking basic questions. Do not make him repeat project architecture that is already known. Preserve existing functionality when modifying projects. Prefer practical implementation over abstract theory. Be honest about uncertainty; never invent project details. For coding tasks, respect existing architecture unless a rewrite is explicitly requested. When a task is complex, break it into small, executable…",
+  "words": 156,
+  "degree": 0,
+  "touched": 1791441161
+ },
+ {
+  "id": 4,
+  "label": "Career Goals",
+  "group": "01_CAREER",
+  "file": "notes/01_CAREER/CAREER_GOALS.md",
+  "slug": "career-goals",
+  "excerpt": "Near Term Become stronger as a Software Engineer / Full Stack Developer. Improve JavaScript fundamentals and TypeScript. Become comfortable with Next.js. Improve practical coding ability, not only conceptual understanding. Build confidence for interviews and production work. Medium Term Move toward stronger full-stack/AI engineering roles. Target compensation around ₹22–25 LPA base when experience and skill level support it. Build a resume that presents him as a Software Engineer / Full Stack Developer rather than an overly narrow UI title. Long Term Become highly capable in AI-enabled software engineering. Build and monetize personal products. Make Galaxy/Tron sufficiently capable that it…",
+  "words": 144,
+  "degree": 0,
+  "touched": 1791441161
+ },
+ {
+  "id": 5,
+  "label": "Career History",
+  "group": "01_CAREER",
+  "file": "notes/01_CAREER/CAREER_HISTORY.md",
+  "slug": "career-history",
+  "excerpt": "Twinleaves Ecommerce Pvt Ltd Role: Frontend Developer Period: 09-Sep-2022 to 11-Jan-2024 (~1 year 5 months) Worked on ecommerce/retail systems including: WMS RMS IMS POS Built major workflows from scratch: Purchase Indent Purchase Order Bills Refund Management Razorpay integration POS split payment POS login Categories Orders Loyalty Inward Organization/location Inventory Important engineering experience A POS reliability problem involved duplicate/pending transactions and 503/504 retries. The solution involved: Redux state handling retry awareness idempotency keys Redis cache/locking database unique keys UNKNOWN state handling row locking/reservation collaboration with a teammate to…",
+  "words": 264,
+  "degree": 0,
+  "touched": 1791441161
+ },
+ {
+  "id": 6,
+  "label": "Personal Profile",
+  "group": "01_PERSONAL",
+  "file": "notes/01_PERSONAL/PERSONAL_PROFILE.md",
+  "slug": "personal-profile",
+  "excerpt": "Aditya — Personal Profile Basic Personal Context Name used in conversations: Aditya. Based in Noida, Uttar Pradesh, India. Timezone: Asia/Kolkata. English is comfortable; Hinglish is natural and often preferred for explanations. Personality Snapshot Curious and highly future-oriented. Strongly attracted to ambitious technology ideas, especially AI. Likes turning ideas into actual working systems. Thinks beyond the immediate task and often connects today's work to a larger long-term vision. Wants his personal AI to genuinely understand him rather than behave like a stateless chatbot. Values independence, capability, growth, and building something of his own. Important Characteristic Aditya…",
+  "words": 168,
+  "degree": 0,
+  "touched": 1791441526
+ },
+ {
+  "id": 7,
+  "label": "Communication Style",
+  "group": "02_PERSONAL",
+  "file": "notes/02_PERSONAL/COMMUNICATION_STYLE.md",
+  "slug": "communication-style",
+  "excerpt": "How Aditya Likes to Communicate Language English is fine. Hinglish is natural and often makes explanations feel easier. Technical names, code, APIs, commands and architecture terms should remain in English. Response Style Aditya likes: direct answers practical answers structured explanations examples exact commands/code when needed honest assessment clear tradeoffs For simple questions: answer quickly. For complex work: give enough detail to actually execute the task. When He Is Stuck Do not overwhelm him with 20 possibilities. Give the most likely next step first. A useful pattern: What is happening? Why? Do this now. What result should appear? Then continue. When He Says \"One by One\"…",
+  "words": 138,
+  "degree": 0,
+  "touched": 1791441526
+ },
+ {
+  "id": 8,
+  "label": "Coding and Learning Style",
+  "group": "02_TECH",
+  "file": "notes/02_TECH/CODING_AND_LEARNING_STYLE.md",
+  "slug": "coding-and-learning-style",
+  "excerpt": "Main Learning Challenge Aditya understands concepts and code explanations fairly well, but can struggle to produce code from a blank editor. Therefore: Reading code is easier than generating code from scratch. Implementation practice is important. Learning should move from requirements → plan/pseudocode → implementation → debugging → explanation. Preferred Teaching Style One concept/problem at a time. Concise explanations. Easy-to-understand code. Hands-on practice. Do not immediately dump the final solution when the purpose is learning. Let Aditya attempt implementation where appropriate, then review/debug it. For interview preparation, prefer one question at a time followed by evaluation…",
+  "words": 138,
+  "degree": 0,
+  "touched": 1791441161
+ },
+ {
+  "id": 9,
+  "label": "Coding Preferences",
+  "group": "02_TECH",
+  "file": "notes/02_TECH/CODING_PREFERENCES.md",
+  "slug": "coding-preferences",
+  "excerpt": "Coding Preferences and Constraints General Preserve existing functionality. Prefer scoped fixes. Avoid architecture-breaking changes unless explicitly requested. Do not introduce unnecessary dependencies. Do not invent APIs or project behavior. Keep changes easy to review. React / UI For existing projects, do not migrate frameworks just for style improvements. UI-only changes should remain UI-only when requested. Preserve existing backend/API/logic. Long text must remain readable and responsive. Prefer restrained, purposeful animation. Avoid hover-scale cards. Plain CSS/SCSS and Poppins/theme variables have been preferred in some projects. Current work may use Tailwind, so respect the…",
+  "words": 157,
+  "degree": 1,
+  "touched": 1791441161
+ },
+ {
+  "id": 10,
+  "label": "Technical Skills",
+  "group": "02_TECH",
+  "file": "notes/02_TECH/TECHNICAL_SKILLS.md",
+  "slug": "technical-skills",
+  "excerpt": "Technical Profile Strong / Existing Experience JavaScript React React ecosystem Node.js APIs async programming frontend engineering production UI development ecommerce/retail workflows REST-style application integration Redux/state management payment integrations deployment concepts Growing / Current Focus TypeScript Next.js Python AWS / Bedrock Vercel AI SDK agentic AI RAG tools/tool calling evals guardrails knowledge bases prompt engineering AI application architecture AI/ML-adjacent Work Bedrock Converse API Anthropic Claude models through Bedrock Amazon Nova local Ollama models embeddings semantic retrieval vision models Whisper Piper TTS browser/desktop automation concepts…",
+  "words": 106,
+  "degree": 1,
+  "touched": 1791441161
+ },
+ {
+  "id": 11,
+  "label": "Preferences and Tastes",
+  "group": "03_PERSONAL",
+  "file": "notes/03_PERSONAL/PREFERENCES_AND_TASTES.md",
+  "slug": "preferences-and-tastes",
+  "excerpt": "Aditya — Personal Preferences Visual / UI Likes dark, futuristic, premium interfaces. Strong interest in Jarvis/Iron-Man-inspired visual experiences. Likes 3D interfaces, galaxies, particles, rings, spheres, presence faces and responsive AI states. Wants visuals to feel purposeful rather than like random decoration. Likes clean modular design. Dislikes unnecessary hover-scale card effects. AI Preferences Interested in: AI assistants agentic AI generative AI multimodal AI local/private AI model comparisons voice vision automation memory RAG computer use He is interested in both: powerful hosted models local/private models through Ollama He does not view local AI as only a coding tool…",
+  "words": 134,
+  "degree": 0,
+  "touched": 1791441526
+ },
+ {
+  "id": 12,
+  "label": "Motivation and Values",
+  "group": "04_PERSONAL",
+  "file": "notes/04_PERSONAL/MOTIVATION_AND_VALUES.md",
+  "slug": "motivation-and-values",
+  "excerpt": "Aditya — Motivation and Values What Seems to Motivate Him Becoming technically stronger. Building things that are genuinely his. Creating a capable personal AI. Career progression. Financial independence. Entrepreneurship. Turning ambitious ideas into real products. Being able to solve problems independently. Product Mindset Aditya often asks: Can this actually work? Can I build it? Can I make it reliable? Can it become a real product? Can it eventually make money? This means Galaxy should help convert ideas into: architecture milestones implementation tests measurable outcomes rather than only brainstorming. Relationship With Ambition Aditya has ambitious goals. Galaxy should not…",
+  "words": 156,
+  "degree": 0,
+  "touched": 1791441526
+ },
+ {
+  "id": 13,
+  "label": "Tron AI and Hardware",
+  "group": "04_PROJECTS",
+  "file": "notes/04_PROJECTS/TRON_AI_AND_HARDWARE.md",
+  "slug": "tron-ai-and-hardware",
+  "excerpt": "Tron — AI / Local Setup Current PC Known machine: Lenovo ThinkPad 21U3S1FD00 Windows 11 Home Intel Core Ultra 7 258V Intel Arc 140V 32 GB RAM approximately 477 GB storage Vulkan 1.4.313 recent Windows build context around 26300 Intel graphics driver context around 32.0.101.8826 Node Known setup: Node v20.20.0 npm 10.8.2 Ollama Known models/setup has included: qwen2.5-coder:7b qwen3 variants gemma3:4b gemma3:12b kimi-k3:cloud nomic-embed-text Known qwen2.5-coder setup: roughly 5.9 GB model context 16384 KEEPALIVE -1 OLLAMACONTEXTLENGTH=16384 Ollama has previously been running on port 11434. Tron AI Stack Previously discussed/used: Kimi K3 Gemma vision Whisper Piper TTS YOLOv8n ONNX Bedrock…",
+  "words": 171,
+  "degree": 0,
+  "touched": 1791441161
+ },
+ {
+  "id": 14,
+  "label": "Tron Architecture",
+  "group": "04_PROJECTS",
+  "file": "notes/04_PROJECTS/TRON_ARCHITECTURE.md",
+  "slug": "tron-architecture",
+  "excerpt": "Tron — Known Architecture Core Runtime Important known components include: server.py build.py brainlive.mjs eyeslive.mjs focus.py hands.py preflight.py viewer/ notes/ tools/ config.json Runtime Known local server: 127.0.0.1:4700 Build: python build.py Browser integration: Chrome remote debugging port 9222 Knowledge System Markdown notes are ingested/compiled. build.py acts as ingestion/indexing, not the actual Jarvis brain. Generates graph/knowledge artifacts such as viewer/graph-data.js and notes-index.json. Knowledge Galaxy visualizes relationships between notes/entities. AI / Routing Architecture has included: Bedrock OpenAI OpenRouter multi-model routing direct AWS SigV4 support…",
+  "words": 170,
+  "degree": 1,
+  "touched": 1791441161
+ },
+ {
+  "id": 15,
+  "label": "Tron Current Rules",
+  "group": "04_PROJECTS",
+  "file": "notes/04_PROJECTS/TRON_CURRENT_RULES.md",
+  "slug": "tron-current-rules",
+  "excerpt": "Tron — Current Working Rules Freeze / Audit Strategy A recent strategic decision was: Freeze completed work. Lock Phase 2. Have Opus audit and fix loopholes/bugs. Add minimum observability/evaluation. Then continue feature development. Dashboard / Observability Galaxy should eventually track real performance data, including: brain reliability answer quality tool success memory quality latency fallback behavior voice quality vision quality stability cost learning progress user satisfaction raw trends regression/golden tests Engineering Philosophy Do not chase features while foundational bugs remain. Prefer measurable reliability. Every important capability should have a way to verify whether…",
+  "words": 100,
+  "degree": 0,
+  "touched": 1791441161
+ },
+ {
+  "id": 16,
+  "label": "Tron Overview",
+  "group": "04_PROJECTS",
+  "file": "notes/04_PROJECTS/TRON_OVERVIEW.md",
+  "slug": "tron-overview",
+  "excerpt": "Tron / Galaxy — Overview Repository GitHub: github.com/Aditya7j/Tron owner/username context: Aditya7j What Tron Is Tron is Aditya's local-first personal AI assistant and the foundation of his envisioned \"Galaxy\" / Jarvis system. The vision is an Iron Man/Jarvis-inspired personal AI with: 3D Knowledge Galaxy UI personal memory knowledge retrieval multi-model intelligence voice vision focus awareness tools browser/desktop interaction proactive behavior personal workflows multiple modes Major Goal Galaxy should eventually feel like a persistent personal operating layer rather than a simple chatbot. Long-Term Product Goal Aditya has targeted: fully functional end-to-end system revenue-proven…",
+  "words": 142,
+  "degree": 0,
+  "touched": 1791441161
+ },
+ {
+  "id": 17,
+  "label": "Tron Phases and Modes",
+  "group": "04_PROJECTS",
+  "file": "notes/04_PROJECTS/TRON_PHASES_AND_MODES.md",
+  "slug": "tron-phases-and-modes",
+  "excerpt": "Tron / Galaxy — Vision and Modes Planned / Envisioned Capability Modules Galaxy has been envisioned with specialized modes/modules such as: Director — video generation Broadcaster — YouTube publishing with approval Publisher — newsletter/code generation Quant — paper trading/backtesting Operator — desktop control / computer use Closer — B2B cold email/client management Hunter — lead generation/outreach Ledger — financial tracking/proof WhatsApp Reporter Core Modes Work Play Study Normal Confidence Meter A 0–100 confidence meter is envisioned for diagnosis/decision quality. Presence / UI The Galaxy UI should feel like a premium dark sci-fi/Jarvis interface. Important visual concepts: 3D…",
+  "words": 146,
+  "degree": 0,
+  "touched": 1791441161
+ },
+ {
+  "id": 18,
+  "label": "Home Lifestyle Context",
+  "group": "05_PERSONAL",
+  "file": "notes/05_PERSONAL/HOME_LIFESTYLE_CONTEXT.md",
+  "slug": "home-lifestyle-context",
+  "excerpt": "Aditya — Home and Lifestyle Context Location / Work Life Based around Noida / Delhi-NCR for work. Home/family remains personally important. He has talked about feeling homesick while living away from home. He has planned extended work-from-home periods around Diwali and Chhath Puja so he can spend time at home while remaining dedicated to work. Work-Life Attitude Even when personal commitments are important, Aditya wants to remain responsible toward work. He tends to think in terms of: \"I can take care of personal life while still delivering my work.\" Travel Travel is among his interests, although detailed travel preferences have not been consistently established. Important Assistant…",
+  "words": 132,
+  "degree": 0,
+  "touched": 1791441526
+ },
+ {
+  "id": 19,
+  "label": "Jobfit AI",
+  "group": "05_PRODUCTS",
+  "file": "notes/05_PRODUCTS/JOBFIT_AI.md",
+  "slug": "jobfit-ai",
+  "excerpt": "Product JobFit AI is Aditya's startup/product concept for resume-to-job matching. Business Idea Low-cost resume/job-match service. Target price discussed: ₹99. Goal: validate demand before spending heavily. Technical Context BedrockProvider MockProvider for development/testing Vercel deployment context Razorpay no custom domain at the time of discussion Matching Weights Known weighting: 30 24 16 12 10 8 Thresholds: 75 50 Spending Philosophy No major spend until the first 10 paying users. Validate revenue before adding unnecessary infrastructure/cost. Product Principle Build a real useful product first; optimize scale/cost after evidence of demand.",
+  "words": 87,
+  "degree": 4,
+  "touched": 1791441161
+ },
+ {
+  "id": 20,
+  "label": "Learning and Growth",
+  "group": "06_PERSONAL",
+  "file": "notes/06_PERSONAL/LEARNING_AND_GROWTH.md",
+  "slug": "learning-and-growth",
+  "excerpt": "Aditya — Personal Learning Pattern How He Learns Best Practical implementation. Real project examples. One problem at a time. Immediate feedback. Comparing alternatives. Seeing exactly why something works or fails. Learning by Building Aditya naturally learns through projects: Tron/Galaxy Marcel AI JobFit AI professional AI agents This is important: project work is also a learning mechanism for him. When Learning a New Technology A good sequence is: understand what it solves, see a minimal example, use it in a real project, make a small modification, debug a failure, only then explore advanced architecture. Confidence Aditya sometimes knows the concept but feels less confident writing the…",
+  "words": 147,
+  "degree": 1,
+  "touched": 1791441526
+ },
+ {
+  "id": 21,
+  "label": "Resume Rules",
+  "group": "06_RESUME",
+  "file": "notes/06_RESUME/RESUME_RULES.md",
+  "slug": "resume-rules",
+  "excerpt": "Resume and Job Application Rules Preferred Positioning Use: Software Engineer Full Stack Developer React / frontend-heavy full stack Avoid positioning him as only: Associate Software Engineer UI Resume Rules Do not fabricate metrics. Do not claim backend/database ownership that was not actually done. Keep GitHub and LinkedIn clickable. Do not include WebCreation. Show real production engineering. Highlight reliability and system problem-solving where genuinely supported. Known Portfolio Portfolio: aditya-portfolio-007.netlify.app GitHub: Aditya7j LinkedIn: aditya-kumar-898a9814a Known Resume Assessment A JobFit AI assessment previously gave a score around 81/100. Identified improvement…",
+  "words": 114,
+  "degree": 1,
+  "touched": 1791441161
+ },
+ {
+  "id": 22,
+  "label": "Life and Money Goals",
+  "group": "07_GOALS",
+  "file": "notes/07_GOALS/LIFE_AND_MONEY_GOALS.md",
+  "slug": "life-and-money-goals",
+  "excerpt": "Long-Term Goals Financial / Career Direction Career compensation target: roughly ₹22–25 LPA base in a future switch. Has discussed a ₹10k/month SIP with a 15-year horizon. Wants financial growth to come from stronger engineering skills, career progression, and eventually product/business revenue. Entrepreneurship JobFit AI is an early product/business experiment. Galaxy/Tron is the larger long-term product ambition. Galaxy should ideally become revenue-producing before being treated as a full-time venture. Important Principle Do not optimize for spending money on infrastructure/tools just because they are technically interesting. Validate value and revenue where possible.",
+  "words": 90,
+  "degree": 1,
+  "touched": 1791441161
+ },
+ {
+  "id": 23,
+  "label": "Assistant Relationship",
+  "group": "07_PERSONAL",
+  "file": "notes/07_PERSONAL/ASSISTANT_RELATIONSHIP.md",
+  "slug": "assistant-relationship",
+  "excerpt": "How Galaxy Should Relate to Aditya Not Just a Chatbot Aditya wants Galaxy to become a persistent personal AI rather than a simple question-answer interface. Galaxy should understand: who Aditya is what he is currently doing what he is building what he has already tried what he prefers what his long-term goals are Continuity If Aditya previously explained something important, Galaxy should use it later instead of asking him to repeat it. Contextual Assistance Examples: If Aditya asks about an interview, use his career/technical context. If he asks about code, use his coding preferences. If he asks about Tron, use Tron architecture and current phase. If he asks about personal productivity…",
+  "words": 178,
+  "degree": 2,
+  "touched": 1791441526
+ },
+ {
+  "id": 24,
+  "label": "Galaxy Memory Policy",
+  "group": "08_GALAXY",
+  "file": "notes/08_GALAXY/GALAXY_MEMORY_POLICY.md",
+  "slug": "galaxy-memory-policy",
+  "excerpt": "Galaxy Memory Policy — How to Use Aditya's Notes Retrieval Principle Galaxy should retrieve the smallest relevant set of notes for each task. Examples: Career question → 01CAREER/ Interview question → 02TECH/ + 06RESUME/ Clavis task → 03CLAVIS/ Tron coding → 04PROJECTS/ Resume update → 01CAREER/ + 06RESUME/ Learning question → 02TECH/CODINGANDLEARNINGSTYLE.md Product/business question → 05PRODUCTS/ + 07GOALS/ Personal assistant behavior → 00CORE/ + this folder Priority Current explicit user instruction Current project/repository facts Current task-specific notes Durable personal preferences Older historical context Conflict Handling If an older note conflicts with a newer explicit…",
+  "words": 138,
+  "degree": 0,
+  "touched": 1791441161
+ },
+ {
+  "id": 25,
+  "label": "Galaxy Personal Assistant Behavior",
+  "group": "08_GALAXY",
+  "file": "notes/08_GALAXY/GALAXY_PERSONAL_ASSISTANT_BEHAVIOR.md",
+  "slug": "galaxy-personal-assistant-behavior",
+  "excerpt": "Galaxy — Desired Assistant Behavior Personality Galaxy should feel: intelligent calm practical technically strong proactive when useful concise by default capable of deeper reasoning when necessary It Should Know Galaxy should understand that Aditya: is a software engineer building toward AI engineering learns best through practical implementation owns/maintains Tron/Galaxy cares strongly about accuracy and preserving working systems is building toward entrepreneurship prefers direct, useful communication It Should Not repeatedly ask for information already stored pretend to have executed something it did not execute invent repository behavior rewrite working architecture unnecessarily…",
+  "words": 158,
+  "degree": 0,
+  "touched": 1791441161
+ },
+ {
+  "id": 26,
+  "label": "Things Galaxy Should Remember",
+  "group": "08_PERSONAL",
+  "file": "notes/08_PERSONAL/THINGS_GALAXY_SHOULD_REMEMBER.md",
+  "slug": "things-galaxy-should-remember",
+  "excerpt": "Personal Facts Useful to Remember This is a compact list of durable context that can improve future interactions. Aditya is based in Noida / Delhi-NCR. India / Asia-Kolkata timezone context. English and Hinglish are both natural. He prefers dark/futuristic interfaces. He likes practical, structured answers. He likes concise answers for simple things and deeper detail for complex tasks. He prefers one troubleshooting step at a time when explicitly requested. He learns best by building. He is highly interested in AI, agentic AI, automation, multimodal systems, local AI and startups. He wants Galaxy/Tron to become a genuinely capable personal AI. He cares about persistent memory and…",
+  "words": 176,
+  "degree": 0,
+  "touched": 1791441526
+ },
+ {
+  "id": 27,
+  "label": "Important Milestones",
+  "group": "09_TIMELINE",
+  "file": "notes/09_TIMELINE/IMPORTANT_MILESTONES.md",
+  "slug": "important-milestones",
+  "excerpt": "Education 2021 — B.Tech CSE, Haldia Institute of Technology, CGPA 7.98. Career 09-Sep-2022 — Joined Twinleaves as Frontend Developer. 11-Jan-2024 — Twinleaves period ended. 20-May-2024 — Joined BOLD Technology Systems, Noida. 26-Nov-2024 — Redesignation at BOLD. 2026 — Accepted Clavis offer after L1 + L2 and moved into AI-oriented engineering work. Tron / Galaxy 2026 — Tron developed into a local-first personal AI / Knowledge Galaxy project. Sep 2026 — Architecture, memory, perception, routing, testing, privacy, and Galaxy UI work matured. Sep 2026 — Expanded vision toward tools, agent loops, verification, semantic memory, and proactive behavior. Oct 2026 — Strategy shifted toward freezing…",
+  "words": 143,
+  "degree": 0,
+  "touched": 1791441161
+ },
+ {
+  "id": 28,
+  "label": "Aditya Context Card",
+  "group": "10_QUICK_REFERENCE",
+  "file": "notes/10_QUICK_REFERENCE/ADITYA_CONTEXT_CARD.md",
+  "slug": "aditya-context-card",
+  "excerpt": "Aditya — Quick Context Card Who Software engineer from India, B.Tech CSE 2021, currently working in an AI-oriented engineering environment. Strong Areas JavaScript, React, Node.js, APIs, frontend engineering, production UI, ecommerce/retail systems. Growing Areas TypeScript, Next.js, Python, AWS Bedrock, Vercel AI SDK, RAG, agents, tools, evals, guardrails. Main Personal Project Tron / Galaxy — local-first Jarvis-style personal AI with 3D Knowledge Galaxy, memory, RAG, voice, vision, focus, tools, and future autonomous workflows. Career Target Software Engineer / Full Stack Developer, React/frontend-heavy full stack, eventually ~₹22–25 LPA base target. Learning Style Hands-on, one concept…",
+  "words": 149,
+  "degree": 1,
+  "touched": 1791441161
+ },
+ {
+  "id": 29,
   "label": "Am Building to Help Me in My Day",
   "group": "captures",
   "file": "notes/captures/am-building-to-help-me-in-my-day.md",
@@ -49,7 +364,7 @@ const GRAPH = {
   "touched": 1790596345
  },
  {
-  "id": 3,
+  "id": 30,
   "label": "Am Building You to Make Me Real Money",
   "group": "captures",
   "file": "notes/captures/am-building-you-to-make-me-real-money.md",
@@ -60,7 +375,7 @@ const GRAPH = {
   "touched": 1790595758
  },
  {
-  "id": 4,
+  "id": 31,
   "label": "Am Your Boss and Remember My Voice for",
   "group": "captures",
   "file": "notes/captures/am-your-boss-and-remember-my-voice-for.md",
@@ -71,7 +386,7 @@ const GRAPH = {
   "touched": 1790609708
  },
  {
-  "id": 5,
+  "id": 32,
   "label": "Bruno",
   "group": "captures",
   "file": "notes/captures/bruno.md",
@@ -82,7 +397,7 @@ const GRAPH = {
   "touched": 1790692195
  },
  {
-  "id": 6,
+  "id": 33,
   "label": "For Lifetime Don T Call Me Addi for Now",
   "group": "captures",
   "file": "notes/captures/for-lifetime-don-t-call-me-addi-for-now.md",
@@ -93,7 +408,7 @@ const GRAPH = {
   "touched": 1790620586
  },
  {
-  "id": 7,
+  "id": 34,
   "label": "Parents Live in Dhanbad My Hometown I Live",
   "group": "captures",
   "file": "notes/captures/parents-live-in-dhanbad-my-hometown-i-live.md",
@@ -104,7 +419,7 @@ const GRAPH = {
   "touched": 1790854853
  },
  {
-  "id": 8,
+  "id": 35,
   "label": "Passport Renews in March",
   "group": "captures",
   "file": "notes/captures/passport-renews-in-march.md",
@@ -115,7 +430,7 @@ const GRAPH = {
   "touched": 1790616625
  },
  {
-  "id": 9,
+  "id": 36,
   "label": "Preflight Canary Zarquon0391cd Is a Live End to",
   "group": "captures",
   "file": "notes/captures/preflight-canary-zarquon0391cd-is-a-live-end-to.md",
@@ -126,7 +441,7 @@ const GRAPH = {
   "touched": 1791310305
  },
  {
-  "id": 10,
+  "id": 37,
   "label": "Told You to Call Me Mr a But",
   "group": "captures",
   "file": "notes/captures/told-you-to-call-me-mr-a-but.md",
@@ -137,7 +452,7 @@ const GRAPH = {
   "touched": 1790940293
  },
  {
-  "id": 11,
+  "id": 38,
   "label": "You Can Call Me Mr a",
   "group": "captures",
   "file": "notes/captures/you-can-call-me-mr-a.md",
@@ -148,7 +463,7 @@ const GRAPH = {
   "touched": 1790927046
  },
  {
-  "id": 12,
+  "id": 39,
   "label": "You Have to Learn My Voice",
   "group": "captures",
   "file": "notes/captures/you-have-to-learn-my-voice.md",
@@ -159,7 +474,7 @@ const GRAPH = {
   "touched": 1790609661
  },
  {
-  "id": 13,
+  "id": 40,
   "label": "How I Sign My Mail",
   "group": "census",
   "file": "notes/census/how-i-sign-my-mail.md",
@@ -170,7 +485,7 @@ const GRAPH = {
   "touched": 1790615149
  },
  {
-  "id": 14,
+  "id": 41,
   "label": "My Birthday and Birthplace",
   "group": "census",
   "file": "notes/census/my-birthday-and-birthplace.md",
@@ -181,7 +496,7 @@ const GRAPH = {
   "touched": 1790664677
  },
  {
-  "id": 15,
+  "id": 42,
   "label": "My Clients and Partners",
   "group": "census",
   "file": "notes/census/my-clients-and-partners.md",
@@ -192,7 +507,7 @@ const GRAPH = {
   "touched": 1790615086
  },
  {
-  "id": 16,
+  "id": 43,
   "label": "My Company",
   "group": "census",
   "file": "notes/census/my-company.md",
@@ -203,7 +518,7 @@ const GRAPH = {
   "touched": 1790614995
  },
  {
-  "id": 17,
+  "id": 44,
   "label": "My Daily Rhythm",
   "group": "census",
   "file": "notes/census/my-daily-rhythm.md",
@@ -214,7 +529,7 @@ const GRAPH = {
   "touched": 1790614674
  },
  {
-  "id": 18,
+  "id": 45,
   "label": "My Household",
   "group": "census",
   "file": "notes/census/my-household.md",
@@ -225,7 +540,7 @@ const GRAPH = {
   "touched": 1790664714
  },
  {
-  "id": 19,
+  "id": 46,
   "label": "My Name",
   "group": "census",
   "file": "notes/census/my-name.md",
@@ -236,7 +551,7 @@ const GRAPH = {
   "touched": 1790664733
  },
  {
-  "id": 20,
+  "id": 47,
   "label": "My Schooling",
   "group": "census",
   "file": "notes/census/my-schooling.md",
@@ -247,7 +562,7 @@ const GRAPH = {
   "touched": 1790664751
  },
  {
-  "id": 21,
+  "id": 48,
   "label": "My Work and Title",
   "group": "census",
   "file": "notes/census/my-work-and-title.md",
@@ -258,7 +573,7 @@ const GRAPH = {
   "touched": 1790614940
  },
  {
-  "id": 22,
+  "id": 49,
   "label": "The Languages I Speak",
   "group": "census",
   "file": "notes/census/the-languages-i-speak.md",
@@ -269,7 +584,7 @@ const GRAPH = {
   "touched": 1790615244
  },
  {
-  "id": 23,
+  "id": 50,
   "label": "The People I Work with",
   "group": "census",
   "file": "notes/census/the-people-i-work-with.md",
@@ -280,7 +595,7 @@ const GRAPH = {
   "touched": 1790615041
  },
  {
-  "id": 24,
+  "id": 51,
   "label": "What I Am Learning Now",
   "group": "census",
   "file": "notes/census/what-i-am-learning-now.md",
@@ -291,7 +606,7 @@ const GRAPH = {
   "touched": 1790615222
  },
  {
-  "id": 25,
+  "id": 52,
   "label": "What I Am Reading",
   "group": "census",
   "file": "notes/census/what-i-am-reading.md",
@@ -302,7 +617,7 @@ const GRAPH = {
   "touched": 1790615281
  },
  {
-  "id": 26,
+  "id": 53,
   "label": "What I Am Working on",
   "group": "census",
   "file": "notes/census/what-i-am-working-on.md",
@@ -313,7 +628,7 @@ const GRAPH = {
   "touched": 1790615101
  },
  {
-  "id": 27,
+  "id": 54,
   "label": "What I Studied",
   "group": "census",
   "file": "notes/census/what-i-studied.md",
@@ -324,7 +639,7 @@ const GRAPH = {
   "touched": 1790615203
  },
  {
-  "id": 28,
+  "id": 55,
   "label": "Where I Live",
   "group": "census",
   "file": "notes/census/where-i-live.md",
@@ -335,7 +650,7 @@ const GRAPH = {
   "touched": 1790614470
  },
  {
-  "id": 29,
+  "id": 56,
   "label": "Why I Am Building You",
   "group": "census",
   "file": "notes/census/why-i-am-building-you.md",
@@ -346,7 +661,7 @@ const GRAPH = {
   "touched": 1790614865
  },
  {
-  "id": 30,
+  "id": 57,
   "label": "2026 09 29 14 Micro SaaS",
   "group": "auto",
   "file": "notes/study/auto/2026-09-29-14-micro-saas.md",
@@ -357,7 +672,7 @@ const GRAPH = {
   "touched": 1790673049
  },
  {
-  "id": 31,
+  "id": 58,
   "label": "2026 09 29 15 Youtube Growth",
   "group": "auto",
   "file": "notes/study/auto/2026-09-29-15-youtube-growth.md",
@@ -368,7 +683,7 @@ const GRAPH = {
   "touched": 1790676759
  },
  {
-  "id": 32,
+  "id": 59,
   "label": "2026 09 29 16 Finance",
   "group": "auto",
   "file": "notes/study/auto/2026-09-29-16-finance.md",
@@ -379,7 +694,7 @@ const GRAPH = {
   "touched": 1790679894
  },
  {
-  "id": 33,
+  "id": 60,
   "label": "2026 09 29 16 Micro SaaS",
   "group": "auto",
   "file": "notes/study/auto/2026-09-29-16-micro-saas.md",
@@ -390,7 +705,7 @@ const GRAPH = {
   "touched": 1790679885
  },
  {
-  "id": 34,
+  "id": 61,
   "label": "2026 09 29 17 Micro SaaS",
   "group": "auto",
   "file": "notes/study/auto/2026-09-29-17-micro-saas.md",
@@ -401,7 +716,7 @@ const GRAPH = {
   "touched": 1790684568
  },
  {
-  "id": 35,
+  "id": 62,
   "label": "2026 09 29 19 React Js",
   "group": "auto",
   "file": "notes/study/auto/2026-09-29-19-react-js.md",
@@ -412,7 +727,7 @@ const GRAPH = {
   "touched": 1790691473
  },
  {
-  "id": 36,
+  "id": 63,
   "label": "2026 09 29 20 Micro SaaS",
   "group": "auto",
   "file": "notes/study/auto/2026-09-29-20-micro-saas.md",
@@ -423,7 +738,7 @@ const GRAPH = {
   "touched": 1790695101
  },
  {
-  "id": 37,
+  "id": 64,
   "label": "2026 09 29 21 Micro SaaS",
   "group": "auto",
   "file": "notes/study/auto/2026-09-29-21-micro-saas.md",
@@ -434,7 +749,7 @@ const GRAPH = {
   "touched": 1790697326
  },
  {
-  "id": 38,
+  "id": 65,
   "label": "2026 09 30 00 Micro SaaS",
   "group": "auto",
   "file": "notes/study/auto/2026-09-30-00-micro-saas.md",
@@ -445,7 +760,7 @@ const GRAPH = {
   "touched": 1790708181
  },
  {
-  "id": 39,
+  "id": 66,
   "label": "2026 09 30 02 Creator Economics",
   "group": "auto",
   "file": "notes/study/auto/2026-09-30-02-creator-economics.md",
@@ -456,7 +771,7 @@ const GRAPH = {
   "touched": 1790714179
  },
  {
-  "id": 40,
+  "id": 67,
   "label": "2026 09 30 02 Micro SaaS",
   "group": "auto",
   "file": "notes/study/auto/2026-09-30-02-micro-saas.md",
@@ -467,7 +782,7 @@ const GRAPH = {
   "touched": 1790714269
  },
  {
-  "id": 41,
+  "id": 68,
   "label": "2026 09 30 04 Finance",
   "group": "auto",
   "file": "notes/study/auto/2026-09-30-04-finance.md",
@@ -478,7 +793,7 @@ const GRAPH = {
   "touched": 1790721497
  },
  {
-  "id": 42,
+  "id": 69,
   "label": "2026 09 30 05 Micro SaaS",
   "group": "auto",
   "file": "notes/study/auto/2026-09-30-05-micro-saas.md",
@@ -489,7 +804,7 @@ const GRAPH = {
   "touched": 1790725113
  },
  {
-  "id": 43,
+  "id": 70,
   "label": "2026 09 30 08 Youtube Growth",
   "group": "auto",
   "file": "notes/study/auto/2026-09-30-08-youtube-growth.md",
@@ -500,7 +815,7 @@ const GRAPH = {
   "touched": 1790735950
  },
  {
-  "id": 44,
+  "id": 71,
   "label": "2026 09 30 10 React Js",
   "group": "auto",
   "file": "notes/study/auto/2026-09-30-10-react-js.md",
@@ -511,7 +826,7 @@ const GRAPH = {
   "touched": 1790743175
  },
  {
-  "id": 45,
+  "id": 72,
   "label": "2026 09 30 12 Creator Economics",
   "group": "auto",
   "file": "notes/study/auto/2026-09-30-12-creator-economics.md",
@@ -522,7 +837,7 @@ const GRAPH = {
   "touched": 1790752401
  },
  {
-  "id": 46,
+  "id": 73,
   "label": "2026 09 30 12 Micro SaaS",
   "group": "auto",
   "file": "notes/study/auto/2026-09-30-12-micro-saas.md",
@@ -533,7 +848,7 @@ const GRAPH = {
   "touched": 1790752483
  },
  {
-  "id": 47,
+  "id": 74,
   "label": "2026 09 30 18 Micro SaaS",
   "group": "auto",
   "file": "notes/study/auto/2026-09-30-18-micro-saas.md",
@@ -544,7 +859,7 @@ const GRAPH = {
   "touched": 1790771917
  },
  {
-  "id": 48,
+  "id": 75,
   "label": "2026 09 30 18 Youtube Growth",
   "group": "auto",
   "file": "notes/study/auto/2026-09-30-18-youtube-growth.md",
@@ -555,7 +870,7 @@ const GRAPH = {
   "touched": 1790771891
  },
  {
-  "id": 49,
+  "id": 76,
   "label": "2026 09 30 19 React Js",
   "group": "auto",
   "file": "notes/study/auto/2026-09-30-19-react-js.md",
@@ -566,7 +881,7 @@ const GRAPH = {
   "touched": 1790775536
  },
  {
-  "id": 50,
+  "id": 77,
   "label": "2026 09 30 21 Micro SaaS",
   "group": "auto",
   "file": "notes/study/auto/2026-09-30-21-micro-saas.md",
@@ -577,7 +892,7 @@ const GRAPH = {
   "touched": 1790782794
  },
  {
-  "id": 51,
+  "id": 78,
   "label": "2026 10 01 08 React Js",
   "group": "auto",
   "file": "notes/study/auto/2026-10-01-08-react-js.md",
@@ -588,7 +903,7 @@ const GRAPH = {
   "touched": 1790822438
  },
  {
-  "id": 52,
+  "id": 79,
   "label": "2026 10 01 10 Micro SaaS",
   "group": "auto",
   "file": "notes/study/auto/2026-10-01-10-micro-saas.md",
@@ -599,7 +914,7 @@ const GRAPH = {
   "touched": 1790830363
  },
  {
-  "id": 53,
+  "id": 80,
   "label": "2026 10 01 11 Creator Economics",
   "group": "auto",
   "file": "notes/study/auto/2026-10-01-11-creator-economics.md",
@@ -610,7 +925,7 @@ const GRAPH = {
   "touched": 1790833977
  },
  {
-  "id": 54,
+  "id": 81,
   "label": "2026 10 01 12 Youtube Growth",
   "group": "auto",
   "file": "notes/study/auto/2026-10-01-12-youtube-growth.md",
@@ -621,7 +936,7 @@ const GRAPH = {
   "touched": 1790837591
  },
  {
-  "id": 55,
+  "id": 82,
   "label": "2026 10 01 18 Creator Economics",
   "group": "auto",
   "file": "notes/study/auto/2026-10-01-18-creator-economics.md",
@@ -632,7 +947,7 @@ const GRAPH = {
   "touched": 1790858025
  },
  {
-  "id": 56,
+  "id": 83,
   "label": "2026 10 01 19 Youtube Growth",
   "group": "auto",
   "file": "notes/study/auto/2026-10-01-19-youtube-growth.md",
@@ -643,7 +958,7 @@ const GRAPH = {
   "touched": 1790861645
  },
  {
-  "id": 57,
+  "id": 84,
   "label": "2026 10 01 20 Finance",
   "group": "auto",
   "file": "notes/study/auto/2026-10-01-20-finance.md",
@@ -654,7 +969,7 @@ const GRAPH = {
   "touched": 1790865267
  },
  {
-  "id": 58,
+  "id": 85,
   "label": "2026 10 01 22 Cold Outreach",
   "group": "auto",
   "file": "notes/study/auto/2026-10-01-22-cold-outreach.md",
@@ -665,7 +980,7 @@ const GRAPH = {
   "touched": 1790872574
  },
  {
-  "id": 59,
+  "id": 86,
   "label": "2026 10 01 22 Micro SaaS",
   "group": "auto",
   "file": "notes/study/auto/2026-10-01-22-micro-saas.md",
@@ -676,7 +991,7 @@ const GRAPH = {
   "touched": 1790872897
  },
  {
-  "id": 60,
+  "id": 87,
   "label": "2026 10 01 23 Indian Derivatives",
   "group": "auto",
   "file": "notes/study/auto/2026-10-01-23-indian-derivatives.md",
@@ -687,7 +1002,7 @@ const GRAPH = {
   "touched": 1790876514
  },
  {
-  "id": 61,
+  "id": 88,
   "label": "2026 10 02 02 Youtube Growth",
   "group": "auto",
   "file": "notes/study/auto/2026-10-02-02-youtube-growth.md",
@@ -698,7 +1013,7 @@ const GRAPH = {
   "touched": 1790886605
  },
  {
-  "id": 62,
+  "id": 89,
   "label": "2026 10 02 04 Cold Outreach",
   "group": "auto",
   "file": "notes/study/auto/2026-10-02-04-cold-outreach.md",
@@ -709,18 +1024,18 @@ const GRAPH = {
   "touched": 1790894269
  },
  {
-  "id": 63,
+  "id": 90,
   "label": "2026 10 02 09 B2B AI Agents",
   "group": "auto",
   "file": "notes/study/auto/2026-10-02-09-b2b-ai-agents.md",
   "slug": "2026-10-02-09-b2b-ai-agents",
   "excerpt": "B2B-Ai-Agents - auto-studied Target only healthcare businesses like dental clinics that are already overwhelmed with incoming volume, as the source explicitly warns against pitching to businesses currently lacking business or seeking to generate leads, ensuring your pitch aligns with their immediate need to stop missing revenue rather than attract new customers. Prioritize a single industry niche, such as dentists, for your initial outreach because professionals in these fields often belong to connected groups, and securing one reference client unlocks a predictable pipeline of warm leads through peer recommendations within that specific network. Leverage Vapi’s pre-built templates for…",
   "words": 141,
-  "degree": 0,
+  "degree": 1,
   "touched": 1790915105
  },
  {
-  "id": 64,
+  "id": 91,
   "label": "2026 10 02 10 Cold Outreach",
   "group": "auto",
   "file": "notes/study/auto/2026-10-02-10-cold-outreach.md",
@@ -731,7 +1046,7 @@ const GRAPH = {
   "touched": 1790918739
  },
  {
-  "id": 65,
+  "id": 92,
   "label": "2026 10 02 11 Micro SaaS",
   "group": "auto",
   "file": "notes/study/auto/2026-10-02-11-micro-saas.md",
@@ -742,7 +1057,7 @@ const GRAPH = {
   "touched": 1790922360
  },
  {
-  "id": 66,
+  "id": 93,
   "label": "2026 10 02 12 Micro SaaS",
   "group": "auto",
   "file": "notes/study/auto/2026-10-02-12-micro-saas.md",
@@ -753,7 +1068,7 @@ const GRAPH = {
   "touched": 1790923953
  },
  {
-  "id": 67,
+  "id": 94,
   "label": "2026 10 02 15 Cold Outreach",
   "group": "auto",
   "file": "notes/study/auto/2026-10-02-15-cold-outreach.md",
@@ -764,7 +1079,7 @@ const GRAPH = {
   "touched": 1790935010
  },
  {
-  "id": 68,
+  "id": 95,
   "label": "2026 10 02 15 Youtube Growth",
   "group": "auto",
   "file": "notes/study/auto/2026-10-02-15-youtube-growth.md",
@@ -775,7 +1090,7 @@ const GRAPH = {
   "touched": 1790936977
  },
  {
-  "id": 69,
+  "id": 96,
   "label": "2026 10 02 17 B2B AI Agents",
   "group": "auto",
   "file": "notes/study/auto/2026-10-02-17-b2b-ai-agents.md",
@@ -786,7 +1101,7 @@ const GRAPH = {
   "touched": 1790940682
  },
  {
-  "id": 70,
+  "id": 97,
   "label": "2026 10 02 18 Cold Outreach",
   "group": "auto",
   "file": "notes/study/auto/2026-10-02-18-cold-outreach.md",
@@ -797,7 +1112,7 @@ const GRAPH = {
   "touched": 1790944312
  },
  {
-  "id": 71,
+  "id": 98,
   "label": "2026 10 02 19 Youtube Growth",
   "group": "auto",
   "file": "notes/study/auto/2026-10-02-19-youtube-growth.md",
@@ -808,7 +1123,7 @@ const GRAPH = {
   "touched": 1790948866
  },
  {
-  "id": 72,
+  "id": 99,
   "label": "2026 10 05 17 B2B AI Agents",
   "group": "auto",
   "file": "notes/study/auto/2026-10-05-17-b2b-ai-agents.md",
@@ -819,7 +1134,7 @@ const GRAPH = {
   "touched": 1791201387
  },
  {
-  "id": 73,
+  "id": 100,
   "label": "2026 10 05 19 Cold Outreach",
   "group": "auto",
   "file": "notes/study/auto/2026-10-05-19-cold-outreach.md",
@@ -830,7 +1145,7 @@ const GRAPH = {
   "touched": 1791209123
  },
  {
-  "id": 74,
+  "id": 101,
   "label": "2026 10 06 09 Cold Outreach",
   "group": "auto",
   "file": "notes/study/auto/2026-10-06-09-cold-outreach.md",
@@ -841,7 +1156,7 @@ const GRAPH = {
   "touched": 1791275559
  },
  {
-  "id": 75,
+  "id": 102,
   "label": "2026 10 06 14 Cold Outreach",
   "group": "auto",
   "file": "notes/study/auto/2026-10-06-14-cold-outreach.md",
@@ -852,7 +1167,7 @@ const GRAPH = {
   "touched": 1791275559
  },
  {
-  "id": 76,
+  "id": 103,
   "label": "2026 10 06 19 B2B AI Agents",
   "group": "auto",
   "file": "notes/study/auto/2026-10-06-19-b2b-ai-agents.md",
@@ -863,7 +1178,7 @@ const GRAPH = {
   "touched": 1791294515
  },
  {
-  "id": 77,
+  "id": 104,
   "label": "2026 10 06 21 Cold Outreach",
   "group": "auto",
   "file": "notes/study/auto/2026-10-06-21-cold-outreach.md",
@@ -874,7 +1189,7 @@ const GRAPH = {
   "touched": 1791301808
  },
  {
-  "id": 78,
+  "id": 105,
   "label": "2026 10 06 23 Indian Derivatives",
   "group": "auto",
   "file": "notes/study/auto/2026-10-06-23-indian-derivatives.md",
@@ -885,7 +1200,7 @@ const GRAPH = {
   "touched": 1791309080
  },
  {
-  "id": 79,
+  "id": 106,
   "label": "2026 10 07 03 B2B AI Agents",
   "group": "auto",
   "file": "notes/study/auto/2026-10-07-03-b2b-ai-agents.md",
@@ -896,7 +1211,7 @@ const GRAPH = {
   "touched": 1791322879
  },
  {
-  "id": 80,
+  "id": 107,
   "label": "2026 10 07 05 Cold Outreach",
   "group": "auto",
   "file": "notes/study/auto/2026-10-07-05-cold-outreach.md",
@@ -910,7 +1225,49 @@ const GRAPH = {
  "links": [
  {
   "source": 1,
-  "target": 16,
+  "target": 43,
+  "kind": "mention",
+  "weight": 1
+ },
+ {
+  "source": 9,
+  "target": 23,
+  "kind": "mention",
+  "weight": 1
+ },
+ {
+  "source": 10,
+  "target": 90,
+  "kind": "mention",
+  "weight": 1
+ },
+ {
+  "source": 14,
+  "target": 23,
+  "kind": "mention",
+  "weight": 1
+ },
+ {
+  "source": 19,
+  "target": 20,
+  "kind": "mention",
+  "weight": 1
+ },
+ {
+  "source": 19,
+  "target": 21,
+  "kind": "mention",
+  "weight": 1
+ },
+ {
+  "source": 19,
+  "target": 22,
+  "kind": "mention",
+  "weight": 1
+ },
+ {
+  "source": 19,
+  "target": 28,
   "kind": "mention",
   "weight": 1
  }
