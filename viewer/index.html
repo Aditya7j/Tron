@@ -522,6 +522,12 @@
     box-shadow:0 0 9px currentColor;background:currentColor;flex:0 0 auto}
   #legend .lg b{font-weight:500;font-variant-numeric:tabular-nums;
     color:rgba(143,160,192,.5);min-width:2ch}
+  /* THE CLUSTER LIST IS NOT SHOWN (UI fix after §52). With a real corpus it ran down the whole
+     right column, one row per folder, and read as clutter. It is hidden, not deleted: paintLegend
+     still builds it, so the folder colours and the mute set keep their one source, but nothing
+     draws it - and because the lane governor skips any element that is not shown (layoutShown),
+     the focus and face cards rise into the space it held. The stat bar is untouched. */
+  #legend{display:none}
 
   /* ================= THE TELEMETRY TOP RAIL =================================
      Four facts about the machine, across the top of the window, in mono, always:
