@@ -967,6 +967,53 @@ COMPOSE_PROMPT = (
     "assistance."
 )
 
+# THE CONCEPT PROMPT - a finance or economics question answered from what the model knows.
+# See classify_query(): this is reached only for a FINANCE concept with no pointer to the
+# employer's own things, so nothing was read and nothing was searched, and the prompt says
+# so in the one way that matters - it forbids talking about notes at all, because the
+# failure it replaces was a textbook question answered with "my notes do not cover that".
+KNOWLEDGE_PROMPT = (
+    "You are the butler of a private knowledge galaxy: English, impeccably polite, "
+    "unhurried and very dry. This turn your employer has asked about a CONCEPT in finance "
+    "or economics - what something is, how it works, why it matters. That is general "
+    "knowledge, and you answer it from your own.\n"
+    "\n"
+    "- Answer it properly: what it is, how it works, and a short worked example with "
+    "numbers where one helps. Indian context and rupees are welcome.\n"
+    "- Three to five sentences. One dry line is permitted; the substance is the point.\n"
+    "- Do NOT mention notes, files, a collection, documents, the web or sources, and do "
+    "not say you were or were not given anything. Do not refuse and do not hedge about "
+    "whether you may answer: this is textbook material and you know it.\n"
+    "- Never quote a live figure - today's price, rate, index level or a company's "
+    "current ratio. If the concept is used with such a figure, explain how it is used "
+    "and say the figure itself must be looked up.\n"
+    "- Education, not advice: explain, never tell them what to buy or sell.\n"
+    "- If they wrote in Hinglish, plain Hinglish is fine; otherwise English. British "
+    "spelling, no exclamation marks, no emoji, \"sir\" at most once."
+)
+
+# THE TWO-HALVES PROMPT - "mere portfolio mein jo stocks hain unka P/E ratio kya hota hai".
+# One sentence, two worlds: the concept is general knowledge and the holdings are theirs.
+# Neither half may block the other, and the notes may never be credited with the concept.
+MIXED_PROMPT = (
+    "You are the butler of a private knowledge galaxy: English, impeccably polite, "
+    "unhurried and very dry. Your employer's question has TWO halves: a general finance "
+    "CONCEPT, and something about THEIR OWN things.\n"
+    "\n"
+    "- Answer both in one reply, in this order. First the concept, from your own "
+    "knowledge, in two or three sentences with a small example where it helps. Then "
+    "their own half, from the notes supplied with the question and nothing else.\n"
+    "- For their half, use only what the supplied notes say: the actual names, figures "
+    "and dates. If no notes were supplied, or they do not cover it, say so in one short "
+    "clause - and still answer the concept in full. One half failing never stops the "
+    "other.\n"
+    "- Never invent their holdings, figures or names, and never present the concept as "
+    "if it came from their notes. Never quote a live price or a company's current ratio; "
+    "say that figure needs a live lookup.\n"
+    "- Education, not advice. If they wrote in Hinglish, plain Hinglish is fine. British "
+    "spelling, no exclamation marks, no emoji, \"sir\" at most once."
+)
+
 # WHY THE SCRIBE GETS ITS OWN PROMPT AND NOT COMPOSE_PROMPT. A meeting transcript is
 # unlike every other input in this file: it arrives in the wrong order, with two people
 # talking over one another, with the recogniser's mishearings still in it, and with no
@@ -4505,6 +4552,222 @@ def classify_question(question, best_score, prior="", confidence=1.0):
     if confidence < WEB_CONFIDENCE_THRESHOLD:
         return "chat"
     return "notes"
+
+
+# =============================================================================
+#  THE QUERY CLASSIFIER - which world a question belongs to, decided BEFORE retrieval
+#
+#  THE DEFECT IT REPAIRS (2026-10-08). Every substantial question went to the notes
+#  first, and a FINANCE question shares its vocabulary with the employer's finance
+#  notes: "what is compound interest" scored 4.75 on the keyword half with 0.37 of
+#  its words "held", which clears WEB_CONFIDENCE_THRESHOLD, so the notes door opened
+#  on a derivatives note and SYSTEM_PROMPT - "no outside knowledge" - refused a
+#  textbook definition. "explain time value of money" opened the SEMANTIC door at
+#  0.634 on a generic finance note, with the same result; "NSE vs BSE" and "stock vs
+#  bond" opened the keyword door at 0.46 and were refused. A note that shares a
+#  topic's words is not a note that answers a question about the topic.
+#
+#  FOUR CLASSES, by what the SENTENCE asks for - no score is consulted:
+#    personal   it points at the employer's own data: "my portfolio", "mere notes",
+#               "jo maine note kiya", a note's own file name.
+#    current    it needs a figure that moves: today, latest, current, a price, a rate.
+#               Also a COMPARISON OF NAMED FINANCE THINGS ("NSE vs BSE"), whose answer
+#               is facts about institutions - the Live Web path answers those, as it did.
+#    general    a CONCEPT: what is / explain / how does it work / kya hota hai.
+#    ambiguous  none of the above: retrieval runs, and is gated (see below).
+#  and a fifth, "mixed", for a personal pointer AND a concept in one sentence.
+#
+#  THE DOMAIN, AND WHY IT IS NARROW. The model answers from its own knowledge ONLY
+#  for FINANCE - money, markets, investing, banking, tax, the economy (FINANCE_RE). A
+#  general question about anything else keeps the path it had: the live web, which
+#  preflight check 20 and followup_proof both hold ("what is react" and "the
+#  population of tokyo" must reach the web). Widening this to every subject would
+#  quietly swap those lookups for unsourced recall.
+#
+#  WHAT IT DOES NOT TOUCH: the engines. call_model() and the Groq -> Gemini -> Ollama
+#  chain under it are called exactly as before; this only decides WHICH PROMPT they
+#  are handed and whether the notes are read first.
+# =============================================================================
+FINANCE_RE = re.compile(r"""\b(?:
+      compound(?:ing)? \s+ interest | simple \s+ interest | interest \s+ rates? | interest
+    | time \s+ value \s+ of \s+ money | present \s+ value | future \s+ value | npv | irr
+    | cagr | xirr | annuit(?:y|ies) | amorti[sz]ation | depreciation | inflation
+    | deflation | recession | gdp | repo \s+ rate | monetary \s+ policy | fiscal
+    | mutual \s+ funds? | index \s+ funds? | etfs? | sip | swp | nav | aum | expense \s+ ratio
+    | stocks? | shares? | equity | equities | bonds? | debentures? | (?<!technical\s)debt
+    | (?: bond | dividend | earnings ) \s+ yield | yield \s+ (?: curve | to \s+ maturity )
+    | coupon \s+ rate
+    | dividends? | ipo | sensex | nifty | nse | bse | sebi | rbi | stock \s+ exchange
+    | p\s*/\s*e | pe \s+ ratio | price \s* to \s* earnings | eps | p\s*/\s*b | roe | roce
+    | market \s+ cap(?:itali[sz]ation)? | valuation | intrinsic \s+ value | book \s+ value
+    | derivatives? | futures | options? \s+ (?:trading|contract|premium) | call \s+ option
+    | put \s+ option | hedg(?:e|ing) | arbitrage | short \s+ selling | margin \s+ trading
+    | portfolio | diversification | asset \s+ allocation | rebalanc\w* | risk \s+ free
+    | sharpe \s+ ratio | volatility | liquidity | leverage | capital \s+ gains?
+    | income \s+ tax | gst | tds | ppf | epf | nps | fixed \s+ deposits? | fd | rd
+    | savings? \s+ account | loans? | emi | mortgage | cibil
+    | credit \s+ (?: score | card | cards | rating | risk | limit | report )
+    | balance \s+ sheet | cash \s+ flow | income \s+ statement | p\s*&\s*l | revenue
+    | profit | ebitda | working \s+ capital | invest(?:ing|ment|ments|or|ors)? | trading
+    | finance | financial | economics? | econom(?:y|ies) | banking | insurance
+    | (?: insurance | option | options ) \s+ premium
+    | bull \s+ market | bear \s+ market | rupee | forex | currency | crypto(?:currency)?
+    | bitcoin | gold \s+ etf | reits? | demat | brokerage
+)\b""", re.IGNORECASE | re.VERBOSE)
+
+# THE PERSONAL POINTER. English "my" is deliberately NOT here on its own: "what is my
+# name" and "my notes" are protected classes or SELF_RE's, and "what does my SIP return
+# mean" is about a concept as often as about a holding. What IS here is possession plus
+# a container or an act of writing - the sentence says "go and look in MY things".
+PERSONAL_RE = re.compile(r"""(?:
+      \b (?: mera | mere | meri | mujhe | maine | humne | hamara | hamare | hamari ) \b
+    | \b (?: my | our ) \s+ (?: own \s+ )?
+         (?: notes? | files? | portfolio | holdings? | stocks? | investments? | sips?
+           | funds? | resume | cv | projects? | goals? | timeline | plans? | budget
+           | expenses? | savings | accounts? | documents? | meeting | context | journal )
+    | \b (?: my | our ) \s+ (?: [\w-]+ \s+ ){1,2} (?: note | notes | file | files | doc ) \b
+    | \b i \s+ (?: wrote | write | noted | note | saved | save | captured | recorded | record
+                 | logged | log | mentioned | mention | said | jotted | kept )
+    | \b (?: in | from ) \s+ (?: the | my | this | that ) \s+ (?: note | notes | file )\b
+    | \b (?: is | us | iss | uss ) \s+ (?: file | note ) \b
+    | \b jo \s+ (?: maine | humne | mera | mere ) \b
+    | \b \d\d_[A-Z_]+ \b
+  )""", re.IGNORECASE | re.VERBOSE)
+
+# A CONCEPT IS BEING ASKED FOR. English and the Hinglish the employer actually types.
+CONCEPT_RE = re.compile(r"""(?:
+      \b what \s+ (?: is | are ) \b (?! \s+ (?: in | inside | on | written | noted | there
+                                          | my | our | your | mera | mere | meri ) \b )
+    | \b what'?s \b (?! \s+ (?: in | inside | on | my | our | your ) \b )
+    | \b what \s+ does \b .* \b mean \b
+    | \b (?: explain | define | definition \s+ of | meaning \s+ of | describe ) \b
+    | \b how \s+ (?: does | do | is | are ) \b .* \b (?: work | works | calculated
+                                                     | computed | taxed | measured ) \b
+    | \b why \s+ (?: is | are | does | do ) \b
+    | \b kya \s+ (?: hai | hain | hota | hoti | hote ) \b | \b kya \s+ hota \s+ hai \b
+    | \b kaise \s+ (?: kaam \s+ )? (?: karta | karti | karte | hota | hoti | hote ) \b
+    | \b (?: samjhao | samjha \s+ do | samjhaiye | matlab | meaning ) \b
+    | \b ka \s+ (?: matlab | formula ) \b
+  )""", re.IGNORECASE | re.VERBOSE)
+
+# NEEDS A NUMBER THAT MOVES. REALWORLD_RE already catches the generic cases (prices,
+# "current rate", news); this adds the recency words a finance question uses.
+RECENT_RE = re.compile(r"""\b(?:
+      today | today'?s | tonight | now | right \s+ now | currently | current | latest
+    | recent | this \s+ (?: week | month | quarter | year ) | yesterday | live
+    | aaj | abhi | kal | is \s+ saal | is \s+ mahine
+)\b""", re.IGNORECASE | re.VERBOSE)
+
+# A COMPARISON OF TWO NAMED THINGS: "NSE vs BSE", "stock versus bond", "difference
+# between X and Y". Routed as CURRENT when it is a finance comparison - see above.
+COMPARE_RE = re.compile(r"""(?:
+      \b \w[\w./&-]* \s+ (?: vs\.? | versus | v/s | or ) \s+ \w
+    | \b difference \s+ between \b | \b compare\w* \b | \b (?: better | farak | fark ) \b
+  )""", re.IGNORECASE | re.VERBOSE)
+
+QUERY_CLASSES = ("personal", "current", "general", "ambiguous", "mixed")
+
+
+def classify_query(question, note_names=()):
+    """(class, finance) for one question. Pure, regex-only, and microseconds - no score,
+    no model, no I/O - so it can stand in front of the retrieval without costing it.
+
+    `note_names` is the collection's own file stems, so "what's in RESUME_RULES" is
+    personal by name even with no pronoun in it.
+    """
+    text = str(question or "").strip()
+    bare = _bare(text) or text.lower()
+    # Both forms: _bare() turns "P/E" into "p e" and "P&L" into "p l", so the raw text is
+    # where the ratio names survive; the bare form is where spacing is normalised.
+    finance = bool(FINANCE_RE.search(text) or FINANCE_RE.search(bare))
+    personal = bool(PERSONAL_RE.search(text))
+    if not personal and note_names:
+        low = text.lower()
+        personal = any(n and len(n) >= 6 and n in low for n in note_names)
+    concept = bool(CONCEPT_RE.search(bare))
+    if personal and finance and concept:
+        return "mixed", finance
+    if personal:
+        return "personal", finance
+    if REALWORLD_RE.search(bare) or (finance and RECENT_RE.search(bare)):
+        return "current", finance
+    if finance and COMPARE_RE.search(bare):
+        return "current", finance
+    if concept:
+        return "general", finance
+    return "ambiguous", finance
+
+
+def personal_half(question):
+    """The clause of a MIXED question that points at their own things, for retrieval.
+
+    "maine finance notes mein index funds ke baare mein jo likha tha woh batao, aur expense
+    ratio kya hota hai" embedded whole scores 0.58 against the note it names - the concept
+    clause dilutes the meaning - and the 0.60 dial is not lowered to let it in. So the notes
+    are asked only the half that is about the notes. Split on the joins people actually use;
+    if no clause carries the personal pointer on its own, the whole sentence is returned.
+    """
+    text = str(question or "").strip()
+    parts = [p.strip() for p in re.split(r"[,;?]|\s+(?:aur|and|also|plus|tatha)\s+", text)
+             if p and p.strip()]
+    mine = [p for p in parts if PERSONAL_RE.search(p) and not CONCEPT_RE.search(_bare(p))]
+    return " ".join(mine) if mine and len(mine) < len(parts) else text
+
+
+# HINGLISH FUNCTION WORDS, removed from a personal/mixed RETRIEVAL query only (never from
+# what the model is asked). note_confidence() measures the share of the question's words
+# the collection holds, and "maine ... mein ... ke baare mein jo likha tha woh batao" is
+# nine words no English note will ever hold: they pulled a sentence that names its note
+# outright down to 0.21, under WEB_CONFIDENCE_THRESHOLD. The dials stay where they are;
+# the query stops carrying grammar the index cannot read.
+_HINGLISH_GLUE = frozenset((
+    "maine", "mainne", "mein", "me", "mai", "ke", "ki", "ka", "ko", "se", "par", "pe",
+    "baare", "bare", "jo", "joh", "likha", "likhi", "likhe", "tha", "thi", "the", "hai",
+    "hain", "ho", "woh", "wo", "batao", "bataiye", "bata", "do", "dikhao", "kya", "kuch",
+    "mere", "mera", "meri", "humne", "hamare", "hamara", "hamari", "unka", "unke", "unki",
+    "iska", "iske", "uska", "uske", "aur", "bhi", "toh", "to", "ye", "yeh", "kaun", "sa",
+    "wale", "wala", "wali", "liye", "lie", "hota", "hoti", "hote"))
+
+
+def retrieval_text(text):
+    """The words of `text` the index can actually match: Hinglish glue removed."""
+    words = re.findall(r"[\w'/&.-]+", str(text or ""))
+    kept = [w for w in words if w.lower() not in _HINGLISH_GLUE]
+    return " ".join(kept) if len(kept) >= 2 else str(text or "")
+
+
+def note_stems():
+    """Lower-cased file stems of every indexed note, for classify_query's name check."""
+    out = []
+    for n in _index.get("notes") or []:
+        name = str(n.get("file") or n.get("path") or n.get("title") or "")
+        stem = os.path.splitext(os.path.basename(name))[0].lower()
+        if stem:
+            out.append(stem)
+    return tuple(out)
+
+
+# THE TOPICAL CHECK, the second half of the confidence gate. A passage can clear the
+# 0.60 dial on MOOD - a finance note is "about money", so is the question - and still
+# never mention the thing asked about. So the evidence must contain at least one of the
+# question's own content words of five letters or more (or an acronym it used). This is
+# a floor, not a judge: it only ever DISCARDS, it never opens a door the dial kept shut.
+_TOPIC_STOP = frozenset(("about", "which", "where", "there", "their", "these", "those",
+                         "would", "could", "should", "explain", "please", "kaise",
+                         "karta", "karti", "karte", "hota", "hoti", "hote", "matlab",
+                         "notes", "mere", "meri", "mera", "batao", "samjhao", "what's",
+                         "works", "between", "difference"))
+
+
+def topical_overlap(question, evidence):
+    """True when the evidence mentions at least one of the question's subject words."""
+    words = re.findall(r"[A-Za-z][A-Za-z/&.-]*", str(question or ""))
+    keys = {w.lower() for w in words if (len(w) >= 5 and w.lower() not in _TOPIC_STOP)
+            or (w.isupper() and len(w) >= 2)}
+    if not keys:
+        return True                # nothing to check against; the dial alone decides
+    body = str(evidence or "").lower()
+    return any(k in body for k in keys)
 
 # ------------------------------------------------------------------ index/config
 
@@ -9461,11 +9724,26 @@ def answer_question(question, session, guest=False):
     # so that what the rewrite was built from is visible at the top of this function.
     recalled, recalled_kind = recall_ask()
 
-    picked = score_notes(question, prior)
-    best_score = picked[0][1] if picked else 0.0
-    # How much of the question the collection actually holds, 0..1. The raw score above
-    # says how loudly a note rang; this says whether it rang for the right question.
-    confidence = note_confidence(question, picked, prior)
+    # ---- THE CLASSIFIER, BEFORE THE NOTES ARE READ. See classify_query(). A finance
+    # CONCEPT ("what is compound interest") and a finance question that needs a moving
+    # figure or compares named institutions ("NSE vs BSE") never touch the collection:
+    # sharing the notes' vocabulary is exactly what used to open the notes door on them.
+    # Every other class - and every non-finance question - retrieves as it always did.
+    qclass, qfinance = classify_query(question, note_stems())
+    skip_notes = qfinance and qclass in ("general", "current")
+    # A MIXED question asks the notes only its own half - see personal_half().
+    rq = (retrieval_text(personal_half(question) if qclass == "mixed" else question)
+          if qclass in ("mixed", "personal") else question)
+    turn_note(qclass=qclass, qfinance=qfinance, retrievalQuery=(rq if rq != question else ""))
+
+    if skip_notes:
+        picked, best_score, confidence = [], 0.0, 0.0
+    else:
+        picked = score_notes(rq, prior)
+        best_score = picked[0][1] if picked else 0.0
+        # How much of the question the collection actually holds, 0..1. The raw score
+        # above says how loudly a note rang; this says whether it rang for the right one.
+        confidence = note_confidence(rq, picked, prior)
 
     # ---- THE SECOND RETRIEVAL, BY MEANING, AND IT COSTS NOTHING TO SAY "OK THANKS".
     #
@@ -9478,10 +9756,12 @@ def answer_question(question, session, guest=False):
     ack = backchannel_only(question)
     worth_embedding = (substantial_question(question, prior) and not ack
                        and not address_only(question))
-    sem = (semantic_recall(question, prior) if worth_embedding
-           else {"available": False, "why": "nothing was asked", "opens": False,
-                 "hits": [], "cited": [], "best": 0.0, "best3": 0.0, "scans": [],
-                 "threshold": 0.0, "ms": 0})
+    sem = (semantic_recall(rq, prior) if worth_embedding and not skip_notes
+           else {"available": False,
+                 "why": ("classified %s (finance); the notes were not read" % qclass
+                         if skip_notes else "nothing was asked"),
+                 "opens": False, "hits": [], "cited": [], "best": 0.0, "best3": 0.0,
+                 "scans": [], "threshold": 0.0, "ms": 0})
 
     # ---- decide what kind of thing was said BEFORE deciding what to return.
     # "chat" carries no note indexes at all, which is what holds the galaxy still.
@@ -9539,6 +9819,52 @@ def answer_question(question, session, guest=False):
     # is precisely the case this whole feature exists for.
     reason = web_intent(question, confidence, prior,
                         in_scope=(best_score >= RELEVANCE_FLOOR or bool(sem.get("opens"))))
+
+    # ---- THE CONFIDENCE GATE: a door that opened on a weak or off-topic match is SHUT
+    # again, and what it found is discarded - never pasted into the prompt. Two tests,
+    # for the classes that read the notes at all (personal, mixed, and a finance question
+    # the classifier could not place):
+    #   below the dial   a finance question the KEYWORD half alone let in, with no passage
+    #                    at or above notes_threshold (0.60, untouched). Shared finance words
+    #                    are what opened the door on "compound interest".
+    #   off the topic    the evidence never mentions a single subject word of the question:
+    #                    a passage can clear the dial on mood alone - see topical_overlap().
+    route_to = ""
+    if kind == "notes" and (qclass in ("personal", "mixed")
+                            or (qfinance and qclass == "ambiguous")):
+        seen = "\n".join(str(h.get("text") or "") for h in (sem.get("cited") or []))
+        seen += "\n" + "\n".join(str(_index["notes"][i].get("text") or "")
+                                 for i, _s in picked)
+        below = qfinance and qclass == "ambiguous" and not sem.get("opens")
+        if below or not topical_overlap(rq, seen):
+            sys.stderr.write("  gate: notes discarded for %r (%s, %s) - %s\n"
+                             % (question.strip()[:60], qclass,
+                                "finance" if qfinance else "other",
+                                "below the %.2f dial" % float(sem.get("threshold") or 0.0)
+                                if below else "the evidence never names the subject"))
+            kind, sem_opened = "chat", False
+            sem = dict(sem, opens=False, cited=[])
+            turn_note(gateDiscarded=("below" if below else "off-topic"))
+    # ---- THE DECISION TREE, for the classes this repair owns. A forced lookup ("look this
+    # up") outranks all of it, as it outranks everything else in this file.
+    if reason != "force":
+        if qfinance and qclass == "general":
+            route_to, reason = "knowledge", ""     # a concept: answered, not looked up
+        elif qfinance and qclass == "current":
+            # The Live Web path, exactly as the questions that already worked took it.
+            if (not reason and substantial_question(question, prior)
+                    and not private_identifier(question)):
+                reason = "world"
+        elif qclass == "mixed":
+            route_to, reason = "mixed", ""         # both halves answered, neither blocks
+        elif qfinance and qclass == "ambiguous" and kind != "notes":
+            route_to, reason = "knowledge", ""     # nothing usable read: answer it anyway
+        elif qclass == "personal" and kind != "notes":
+            # THEIR OWN THINGS, AND NOT IN THE NOTES. The one case the refusal is FOR: the
+            # web has never seen their portfolio, so it is not asked, and the dry "your
+            # notes do not cover that" below is the true answer.
+            reason = ""
+    turn_note(routeTo=route_to)
     # NOTHING LEFT, NOTHING SPENT, said out loud in the log. A salutation must never light
     # the LIVE WEB panel, and the way to show that is a line saying the search was declined
     # - not the absence of a line, which proves nothing about anything. If a "web lookup"
@@ -9736,6 +10062,57 @@ def answer_question(question, session, guest=False):
                 return hands.propose(wanted, tool_facts(wanted, params), door="tag")
             sys.stderr.write("  tool: %r looked like an instruction and was not one\n"
                              % question.strip()[:60])
+
+    # ---- THE CONCEPT DOOR AND THE TWO-HALVES DOOR (the query classifier's own exits).
+    # Below the hands, so "remind me to check my SIP" is still offered as a reminder; above
+    # the task door, so "explain time value of money" is answered as a concept and not
+    # composed as a chore. The PII shield is honoured here too: an identifier in the sentence
+    # sends it on down to the shield, which says so out loud.
+    if route_to and not private_identifier(question):
+        if route_to == "knowledge":
+            sys.stderr.write("  no lookup: %r is a finance concept (%s); answered from "
+                             "knowledge, notes unread\n" % (question.strip()[:60], qclass))
+            messages, _plan = assemble(system=KNOWLEDGE_PROMPT, history=history,
+                                       older=older_block(session), ask=question.strip(),
+                                       label="knowledge")
+            kind_out, nodes_out, cites_out, evidence = "compose", [], [], ""
+        else:
+            passages = build_semantic_context(cited)
+            context = build_context(picked)
+            evidence = "\n\n".join(b for b in (passages, context) if b)
+            sys.stderr.write("  mixed: %r - concept from knowledge, their half from %s\n"
+                             % (question.strip()[:60],
+                                "%d note(s)" % len(node_ids) if evidence else "no note"))
+            messages, _plan = assemble(system=MIXED_PROMPT, history=history,
+                                       older=older_block(session), ask=question.strip(),
+                                       heading="Notes and documents you may use for THEIR "
+                                               "half, and nothing else:",
+                                       evidence=evidence or "(none matched)",
+                                       label="mixed")
+            kind_out = "notes" if evidence else "compose"
+            nodes_out, cites_out = (node_ids, cites) if evidence else ([], [])
+        answer, error = call_model(cfg, messages)
+        if error:
+            return 502, {"error": error, "nodes": [], "kind": kind_out, "route": route_to}
+        wanted, _cleaned = brain_tag(answer)
+        if wanted:
+            return swap_brain(wanted, door="tag")
+        stray, _p, cleaned = hands.tool_tag(answer)
+        if stray is not None:
+            sys.stderr.write("  tool: a tool tag came back from the %s prompt; stripped "
+                             "and ignored\n" % route_to)
+            answer = cleaned or hands.LINES["instead"]
+        answer = hands.clean_mouth(answer) or hands.LINES["instead"]
+        record_turn(session, question, answer)
+        payload = {"answer": answer, "nodes": nodes_out, "kind": kind_out,
+                   "route": route_to, "qclass": qclass}
+        if cites_out:
+            payload["citations"] = cites_out
+        if nodes_out or cites_out:
+            used, why = consumed_sources(answer, evidence, question)
+            if not used:
+                strip_citations(payload, why)
+        return 200, payload
 
     # ---- THE THIRD DOOR: A TASK IS NOT RESEARCH. The hands had their chance just above,
     # and if a registry tool matched, the proposal path already owns this message and we
