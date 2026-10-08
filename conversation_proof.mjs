@@ -1175,12 +1175,13 @@ async function main() {
     ' lid: __galaxy.presence.lid, truth: __galaxy.eyes.sight.truth,' +
     ' probation: __galaxy.presence.probation, baseline: __galaxy.presence.baseline,' +
     ' trial: __galaxy.presence.trial, degraded: __galaxy.presence.degraded,' +
+    ' cheap: __galaxy.presence.dust().cheap,' +
     ' gov: __galaxy.layout.last})');
   note('   the governor at the end of it: ' + JSON.stringify({
     vw: docked.gov.vw, vh: docked.gov.vh, panelOpen: docked.gov.panelOpen,
     canvasW: docked.gov.canvasW, toast: docked.gov.toast, well: docked.gov.wellBox }));
   note('   the audition: ' + docked.probation + ' - ' + docked.trial + 'fps with the presence' +
-       ' against ' + docked.baseline + 'fps with the ring' +
+       ' against ' + docked.baseline + 'fps drawn cheap' +
        (docked.degraded ? ' -> ' + docked.degraded : ''));
   /* §32 PART 1 CHANGED THE ONE WORD IN THIS LINE THAT NAMES THE RICH MODE. The claim has not
      moved: "kept" and the rich mode are the same fact said twice, and a verdict that disagreed
@@ -1189,9 +1190,15 @@ async function main() {
      drops it wears the ring. The literal is written out here rather than read from
      __galaxy on purpose: reading the page's own idea of its rich mode would turn this into
      "the page agrees with itself". The face is still a mode and still auditions when asked for
-     by hand - voice_proof does exactly that - but nothing in this file asks. */
+     by hand - voice_proof does exactly that - but nothing in this file asks.
+     UI MANDATE II PART 3 CHANGED IT AGAIN, and this time the fact moved with it: ring, cube and
+     core are gone, the rich mode is the DUST, and a dropped audition no longer changes the mode -
+     it draws the same dust CHEAP (PRES.CHEAP_DENSITY of its points). So "kept" and "drawn whole"
+     are the same fact said twice. Old: (kept) === (mode === 'core'). New: mode === 'dust' and
+     (kept) === !cheap. */
   ok(docked.built === true && docked.well.fits === true && docked.frames > 100 &&
-     docked.fps >= 55 && (docked.probation === 'kept') === (docked.mode === 'core'),
+     docked.fps >= 55 && docked.mode === 'dust' &&
+     (docked.probation === 'kept') === (docked.cheap === false),
      'AND THE PRESENCE WAS DOCKED THROUGH ALL OF IT: a ' + docked.well.side +
      'px well ' + docked.well.why + ', ' + docked.frames + ' frames at ' + docked.fps +
      'fps in "' + docked.mode + '" mode (the audition said ' + docked.probation +
@@ -1199,7 +1206,7 @@ async function main() {
      JSON.stringify({ built: docked.built, mode: docked.mode, frames: docked.frames,
                       fps: docked.fps, well: docked.well, level: docked.level,
                       from: docked.from, probation: docked.probation,
-                      degraded: docked.degraded }));
+                      degraded: docked.degraded, cheap: docked.cheap }));
   ok(docked.lid === 0 && docked.truth === false,
      'with its eyes SHUT, because this room has a microphone open and no camera: the Eyes ' +
      'Law does not care that the ear is live',

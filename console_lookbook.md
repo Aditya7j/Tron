@@ -12299,3 +12299,946 @@ eyes have no local engine by §41's design. The two warns (10, 11) are the routi
 that reads `viewer/index.html` passes:** 32 (one surface), **34 (the head is large and shaded, and
 still one object and one allocation)**, which is the law the face's mesh was built inside, 35, and
 **36 (the palette fits the clusters)**.
+
+
+---
+
+# §50 — THE ROOM, THE DUST, AND A FACE THAT FOLLOWS ANATOMY
+
+*2026-10-07 · UI enhancement mandate II: full layout and presence system*
+
+This round changes where things sit and how they look. `server.py`, `google_api.py`,
+`send_email.py` and `send_newsletter.py` were not opened for writing; §38, §39 and §41 and every
+hand/tool-tag contract are as they were. The diff is `viewer/index.html`, five proofs
+(`layout_proof`, `deck_proof`, `cine_proof`, `conversation_proof` and `ui_enhancement_proof`), one
+preflight clause (34(f), see Preflight), the proof plates the harnesses rewrite, and this section.
+
+**What I read first.** §49 (PR #4) is the duotone, the named easings and the orbit map's
+data-reading discipline, and all three carry forward unchanged: the dust's four tints are
+stylesheet tokens, the turn uses `--ease-panel-open`, and the map still draws
+`GRAPH.meta.groups` with no folder name in its source. PR #3 (e08ed4f) was the routing,
+brain and voice consistency round. It has no UI content to carry, but its §38/§39 laws are the
+ones karaoke and conversation still pin.
+
+**What arrived.** Two of the three images: reference 1 (the dashboard) and reference 2 (the wireframe
+head). The third (a screenshot of the current app) did not, so "current" in the comparison below
+means PR #4's committed plates.
+
+---
+
+## PART 1 — The layout
+
+The room is now four parts. The **header** (58px, `--rail-h` at `viewer/index.html:179`) holds
+the brand mark and title block on the left (`:3282`) and the old telemetry rail to its right. The
+**sidebar** sits on the left (`:3257`): 184px with labels from 1500px wide, 68px icons from 1180,
+gone below that (`layoutSide`, `:4081`). The **main pane** shows the galaxy or the presence. The
+**conversation column** is on the right (`#brain` with `#convohead`, `:3497`).
+
+The ask (caption, status line and organ bar) moved out of the old toast into `#dock` at the foot
+of the pane (`:3576`). The governor writes the walls as CSS variables, and every surface in the
+pane is placed against them.
+
+**The header's numbers are computed, not written.** `#stats` is counted by `paintStats()` from
+the page's own arrays. ONLINE is set by `railFrom()` from `/health`'s `ok` (`:7483`). Neither is
+duplicated: the stats line moved into the header, it was not copied there. The proof checks the
+notes and connections counts against what `server.py` itself reports on `/health`.
+
+**The galaxy fills the pane.** The orbit map is the pane's stage now, not a sheet over the sky
+(`#orbit` at `:3175`). It's open from boot, has no frame or close button, and the pane's dim
+(`#galaxywash`, `:3168`, a constant 0.58) lies over the 3D sky inside the pane only. At 1600×900
+it spans x 184–1180, the whole pane, and 81% of the pane's area above the ask. Each folder is a
+labelled card on its orbit, carrying its real count, and the in-folder links are drawn as stars.
+
+**The conversation column shows real sources.** Its head names the assistant and the boss as
+`/persona` serves them (`convoNamePaint`, `:6627`). The avatar is a live mirror of the presence
+canvas (`convoMirror`, `:6641`). Answers render through the house's own `renderAnswer`, with
+"Drawn from" chips naming the actual notes, or "According to" links for a web answer.
+
+**One thing my own proof caught in the column.** At 1280 wide, the sidebar, the 760px bar, the
+column and the 420px note panel cannot all stand side by side. With a note open, the column sat
+*under* the panel. So did a proposal's Yes/No: layout_proof's hit-test found the panel at their
+centres, and the toast-width and panel-whole checks went red. Now, while the panel is open, the
+column steps left of it into the pane (`:4165`). The lanes stack below it, and the well treats it
+as a lane.
+
+### The sidebar mapping
+
+| row | reaches | what it is in this house |
+|---|---|---|
+| Galaxy | `stageSet('galaxy')` | the orbit map of the corpus in the main pane |
+| Chat | the `/` organ → `typeLineUp()` | the written ask line, focused |
+| Archive | `cmdRun('archive')` → `cmdArchive()` | the panel listing archive/: files, passages, scanned pages. **The reference's "Memory".** What this house keeps and reads back is its archive and its notes, so the row is named for what it is |
+| Web | `openSources()` with the last lookup's own arguments | the pages the last web lookup read. With none fetched this session, it says so on the status line instead of opening an empty panel |
+| Focus | `cmdRun('focus')` → the focus button | a real focus session |
+| System | `cmdOpen(true)` | the command panel, where every setting lives (Ctrl+K) |
+| voice card | presses `#mic` | the ear; it shows the seal's own word |
+
+`navGo` is at `:6609`. ui_enhancement_proof presses every row with a real mouse event and checks
+what it reached.
+
+### What reference 1 has that this house doesn't
+
+- **Eight dense clusters, hundreds of glowing nodes.** The corpus is 4 folders, 81 notes and 1 link.
+  The map draws four worlds and won't invent density that doesn't exist.
+- **A Focus Session pill in the header** (24:37, LOCKED ON, pause/end). The house's focus card is
+  a lane card in the pane. Its layout is measured by layout, desk and karaoke, so it stays a card.
+- **Header cells "Local Corpus / Web Sources / Model Bedrock · Nova Micro".** The header shows
+  MODEL / VOICE / ARCHIVE / WEB from `/health`. Bedrock isn't a provider here any more (§41
+  removed every AWS path).
+- **A SOURCES (7) list split into LOCAL KNOWLEDGE and LIVE WEB, with ages.** The column shows the
+  sources an answer actually used, as chips or links. It has no per-source age, because the
+  answer payload carries none, and no running list across answers.
+- **The user's question as a chat bubble.** The card shows the question as its kicker line, not as
+  a bubble. There is no multi-turn transcript list. The house keeps one answer card, and the
+  minutes panel is the transcript.
+- **3D/2D toggle, axis gizmo, Nodes/Links/Clusters toggles.** Nothing in the house switches the map
+  between 3D and 2D. Links/clusters is the existing "showing strongest links · see all" density
+  toggle, which is in the header.
+- **An "Ask Tron…" input in the bar with a waveform.** The written ask is the `/` organ's type line,
+  and the bar is the organ rail. I didn't fold the type line into the bar: roll_proof measures the
+  bar's contents at 760px.
+
+---
+
+## PART 2 — The face follows anatomy
+
+PR #4's mesh was an 11×10 jittered lattice in (height, azimuth). Rows, columns and an alternating
+diagonal gave every interior vertex degree 4 or 8. The new mesh (`presFaceMesh`, `:21856`) is
+built from 200 anatomical landmarks:
+
+- eye rings, sockets and orbits;
+- brow, cheekbone, cheek fold and temple;
+- jaw (along the mandible, `presJawLine`, `:21646`) and chin;
+- nose wings and ridge, philtrum;
+- inner and outer mouth rings;
+- forehead rows and cranium;
+- two ear loops.
+
+They're triangulated by Bowyer–Watson in (azimuth × 0.62, y) (`presDelaunay`, `:21806`). Edges
+longer than 0.42 are dropped. Points are laid along each edge in proportion to its 3D length,
+plus neck rings.
+
+**Measured, not described:** 7,200 points along 641 edges, 10 points a side. Both eyes and the
+mouth are closed loops in the edge set (8/8, 8/8, 10/10). Only 12% of the vertices have degree 4
+or 8, against 65% of the lattice, and 80% have degree 5–7, against 15%. The lattice figures are
+exact: the proof rebuilds PR #4's edge set from its own constants via `git show e5ead43`.
+
+**Inside the same budget and the same object.** `FACE_MESH_PTS` stays a stratum inside
+`PRES.CAP` = 13,800 (`:20600`). preflight check 34 (`preflight.py:6678`) pins one Points object,
+one material, four buffers allocated once at `PRES.CAP`, and the 14,000 ceiling. It passes.
+
+**Centre, at a stated ratio.** The well is centred in the pane's free band at **PRES_RATIO 0.80 ×
+min(pane width, pane height)**, capped at 720px (`:4025`, computed at `:4317`). At 1600×900 that is
+**534px**, against PR #4's docked 420px: 0.80 of the 667px band, 0.54 of the pane's width.
+layout_proof and ui_enhancement_proof both check the rectangle's midpoint against the band's centre
+(±1.5px).
+
+---
+
+## PART 3 — Ring, cube and core are gone; the dust has four states
+
+`PRES.MODES` is `['dust', 'face']` (`:20583`), superseding the DO-NOT-ALTER on RING and CUBE as
+instructed. Their fills, shader branches and the core's flare are deleted, and asking for any of
+the three leaves the presence where it was. The cheap fallback that used to be "the ring" is now
+the same dust drawn at 20% of its points (`CHEAP_DENSITY`, `:20723`).
+
+**The dust** (`presDustFill`, `:21472`, noise `presNoise3`, `:21461`) is a rejection-sampled ball:
+a gaussian falloff times a sine-noise field. That gives a dense heart, filaments and voids, and no
+features. All 13,800 points have one role. Measured off the drawn buffer:
+
+- **Density:** 12,235 per unit volume in the inner fifth against 2,257 in the outer fifth (5.4×),
+  falling shell by shell.
+- **Clumping:** 3.41× a uniform scatter of the same mean.
+- **Octants:** within 0.80 of each other.
+- **Frame:** 0.669 of the frame's half-height.
+
+**The states, driven by the house's own live state.** `presLiveState()` (`:23292`) reads the same
+facts as `sealPaint()` (`:14249`), in the same order of precedence:
+
+1. the ear fault;
+2. an error card on the glass;
+3. the `#status` class that `setStatus()` (`:15056`) writes.
+
+Speaking outranks thinking, and "looking" counts as thinking. The colours are stylesheet tokens,
+read once at boot (`presDustPalette`, `:23304`) and eased per frame on a 320ms clock
+(`presDustTick`, `:23339`):
+
+| state | token | hex |
+|---|---|---|
+| listening | `--blue-structure` | #7cc4ff |
+| thinking | `--gold-core` | #ffb23c |
+| speaking | `--gold-hot` | #fff2d2, **the chosen third tint**: the gold family's white-hot, so speaking reads as thinking brought to the boil, not a new hue |
+| alert | `--fail` | #ff6b6b |
+
+**Two things the plates showed and I fixed.**
+
+1. **The haze was a ring of petals.** The cinema's twelve smoke sprites orbit 0.46–0.92 of the
+   frame. That was right around the old core's shell, but around a ball it read as a four-lobed
+   plus sign. In dust mode their radii now scale by 0.40 (`SMOKE_DUST_K`, `:20902`): same sprites,
+   same material, same clamp.
+2. **The speaking haze was too bright.** The haze took each state's heart colour, and #fff2d2 under
+   additive blending lit the whole well into a pale disc. Each state's haze is now its tint scaled
+   to the listening blue's luma (`:23330`), so only the hue moves.
+
+---
+
+## PART 4 — Galaxy at rest, the presence when the voice is on
+
+The page boots on the galaxy (`body.stage-galaxy`). **The trigger is the one the house already
+had.** `earOpen()` (`:17640`) puts `.ear` on `#mic` (`:17684`) and calls `sealPaint()`.
+`sealPaint()` then calls `stageVoice(open, cls === 'speaking')` (`:14330`), so the ear open *or*
+a chunk being spoken brings the presence in. `earClose()` (`:17705`) takes `.ear` off (`:17715`),
+and the pane turns back to the galaxy 2,000ms after both are off (`STAGE_HOLD_MS`, `:6565`).
+
+**The turn** (`stageFlip`, `:6539`) runs as two Web-Animation halves. The leaving surface rotates
+0→∓90° about Y, then the arriving one ±90→0°. Each half is half of `--dur-stage-flip` (0.8s,
+`:185`), on **`--ease-panel-open`**, PR #4's curve for a surface arriving; no new curve was needed.
+At rest each surface is visibility-only at full size, and `html.nomove` or reduced motion simply
+cuts. The sidebar, header and column don't move.
+
+**My own proof caught a bug here.** `sealPaint()` runs on every status write and seal tick, and
+`stageVoice` restarted the hold timer on each call. So the pane went back only after two quiet
+seconds *of painting*: measured at 5.1–6.6s. The hold now starts once and is cancelled only by
+the voice returning. The tightened assertion was red on the old build (5,149ms) and is green on
+the new one (2,380ms).
+
+## PART 5
+
+"explore · learn · build · grow" is removed from the orbit map's footer.
+
+---
+
+## PART 6 — Proofs
+
+### layout_proof: every assertion changed
+
+| # | assertion | old | new | why the new value is correct |
+|---|---|---|---|---|
+| 1 | 2c, wide: toast clear of the focus card | `disjoint(rects.brain, focuscard)` | `disjoint(rects.dock, focuscard)` | the surface at the bottom of the pane is `#dock` now. Against `#brain`, now the right-hand column, this would pass by being on the other side of the room |
+| 2 | 2c, tight: still no overlap | `rects.brain` | `rects.dock` | same |
+| 3 | 2c: gave up WIDTH, not position | `tightR.brain.w / .left` vs formula | `tightR.dock.w / .left` vs formula | same surface move |
+| 4 | 2c: the formula it is checked against | `wantW = clamp(canvasW − 2·EDGE)`, `wantX = max(EDGE/2, (canvasW−w)/2)` | `wantW = clamp(canvasW − 2·PANE_PAD)`, `wantX = pane.left + max(PANE_PAD/2, (canvasW−w)/2)` | the ask is centred in the *pane*, which starts after the sidebar. This is the governor's own formula recomputed |
+| 5 | 2e, ×3 widths: THE LAW | toast (`#brain`) does not touch the well | neither `#dock` nor `#brain` touches the well | the toast became two surfaces, and the law is about both |
+| 6 | 2e, ×3 widths: placement | right-of-centre: midpoint > canvasW/2 | **centred**: midpoint = band centre ±1.5px, side = min(ask, band w, band h), inside the pane | PART 2 specifies centre placement |
+| — | 2e setup (not an assertion) | measured at rest | stage turned to `presence` (with `html.nomove`) for the reading, handed back after | at rest the pane shows the galaxy and the well is hidden; without this, every disjointness check would pass against an invisible rectangle |
+| — | 2d notes (not assertions) | name `#brain` | name `#dock` | |
+
+**Why 174 assertions and not 168.** None was added by hand. The section 2e loop runs more
+checks per width when the well fits. At 1280 the old docked well stood down ("no room"); the
+centred one fits at all three widths. So the "stood down with a reason" and "miniature is
+blank" checks give way to the fitted-well checks: painted, renderer size, on the glass, panel
+clear and card clear. **174/174.**
+
+### Assertions replaced outside layout_proof, because what they tested no longer exists
+
+These proofs pinned the core, the ring or the old geometry. §32's precedent applies: one listed
+replacement per removed assertion, and the count stays at or above baseline.
+
+- **deck_proof**, presence section (44 → 44 assertions):
+  - "the audition kept the CORE" → "kept the DUST".
+  - "exactly 13,740 points" (the core's sum) → "exactly 13,800" (one constant).
+  - "core mode is live" → "dust mode is live, on the stage".
+  - "still the CORE at the end" → "still the DUST".
+  - "ALL FOUR MODES switch" → "BOTH MODES switch".
+  - "the other modes untouched by the core (ring 5092, cube 8748)" → "ring, cube and core are GONE".
+  - "the face still builds beside the core" → "… beside the dust".
+  - "left wearing its CORE" → "… its DUST".
+  - The core door's twelve criteria became the dust's twelve: door answers; a volume, not a shell;
+    noise-shaped, not a fog (≥2× Poisson); dense at the heart (≥3×); featureless; four states and
+    four tokens; every octant (≥0.6); each state its own token colour; the live funnel drives it;
+    it stays inside its window; a state change eases (14 intermediate colours in 14 frames); fills
+    60–75% of the frame; and the ceiling.
+  - "the two shape doors" → "dust() answers, shape() is null, core() is gone".
+  - The ring-phase plates → dust-phase plates.
+  - The compact fallback "drops to the ring" → "drops to the cheap draw of the same dust".
+  - Plus one header check: "a **30px** band at x=0" → "a **58px** (`--rail-h`) band starting at the
+    title block's measured width". PART 1 moved the rail into the header.
+  - Every threshold was set *after* measuring the shipped cloud, with margin.
+- **cine_proof**, section 2 (7 → 7):
+  - two orbital bands → point-built in one buffer;
+  - inclinations/speeds → turns, drifts and breathes slowly;
+  - each ring at its radius → reaches its radius and no further;
+  - inside the reticle → every octant carries dust;
+  - the seven-radius ladder → density falls shell by shell;
+  - the cap with the whole core → the cap with the whole dust;
+  - §32 where §32 left it → the dust where this round left it.
+
+  And §34/PART 3: the edge window's reach is the dust at full breath, level and pulse (was the
+  reticle's corner); the sizing law is PRES_RATIO × the pane (was PRES_CORE_FRAC / PRES_FILL,
+  both deleted); "PRES_FILL agrees with core().frame.fill" → "the governor's ask agrees with this
+  file's recomputation".
+- **conversation_proof**, one: "(kept) === (mode === 'core')" → "mode === 'dust' and (kept) === !cheap".
+  A dropped audition no longer changes the mode; it draws the same dust cheap.
+- **ui_enhancement_proof**, PR #4's own:
+  - "the dim > 0.9 behind the open map" → "0.58 over the pane only";
+  - "close hides the map" → "the presence stage hides it, the galaxy stage restores it";
+  - "the dim is 0 before and after the command panel" → "the pane's 0.58 before and after";
+  - "back to wearing the core" → "… the dust".
+  - Plus one readiness wait before asking for the face. A face asked for mid-boot is overwritten by
+    the boot's first mode; that was latent in PR #4's version of this check, and it showed once
+    under swiftshader.
+
+### ui_enhancement_proof, extended: 11 new assertions, 42/42
+
+The sidebar renders with six rows and the voice card under the header. Every row, pressed with a
+real mouse event, reaches its section; archive's file count equals `/health`'s. The header's
+notes and connections equal `/health`'s, and its clusters equal graph-data.js's. ONLINE equals
+`/health.ok`. The map spans the pane and draws exactly the groups on disk. The column is headed by
+`/persona`'s assistant, and a real answer lists exactly the labels graph-data.js gives the cited
+ids, inside the right-hand column, with the avatar mirroring. The four dust tints equal the four
+tokens, read off the shader's heart uniform. Ring, cube and core are gone: from the mode list,
+from the panel's call, and from the source. The face's degree histogram is against PR #4's
+lattice. The presence is centred at 0.80. The turn fires off a real click on `#mic`: two rotateY
+halves on `--ease-panel-open`, and back to the galaxy within the hold plus 1s.
+
+### Two more things the sweep found, both fixed
+
+- **The conversation avatar was starving the deck.** Details are in the table notes above. The
+  mirror (`convoMirror`, `viewer/index.html:6641`) now copies at most twice a second
+  (`CONVO_MIRROR_MS`), and only while the avatar is laid out. conversation_proof went from 2–7
+  stalls a run to 0.
+- **cine's bloom readout went stale.** three r183's `UnrealBloomPass.setSize` resizes its render
+  targets but never updates `.resolution`, which is set once in its constructor. The cine door
+  publishes `.resolution`. PR #4's well was a fixed 420px ask, so the build-time value always
+  matched. This round's well follows the pane's band, which shifts when the greeting caption comes
+  and goes, so the reading was one resize stale (268 for a 531px canvas) while the pass itself was
+  right. The existing half-resolution wrapper now keeps `.resolution` in step (`:23819`). It's the
+  same pass, and the readout now tells the truth.
+
+### Before / after
+
+"Before" is PR #4's after-column on e5ead43, its committed build, including its solo re-runs. "After"
+is the full sweep on this round's build, run solo and sequentially in a background shell. "Final"
+re-runs, after the last fix (the avatar's readback cap), every suite that renders the presence or
+measures the layout. Excluded as before: `tools_live`, which presses `add_calendar_event` for real.
+
+| suite | before (e5ead43) | after (sweep) | solo / final build | verdict |
+|---|---|---|---|---|
+| layout_proof | 168/168 | **174/174** | **174/174** | 6 assertions changed (table above); more 2e checks run because the well now fits at 1280 |
+| deck_proof | 248/253 | **248/253** | **248/253** | same 5 corpus-size reds; the 44-assertion presence section replaced one for one; rail-height check moved to 58px |
+| desk_proof | 44/44 | **44/44** | **44/44** | same |
+| karaoke_proof | 93/93 (solo) | 87/93 | 92/93 solo, **92/93** final | 1 mandated-layout consequence, rest environmental, below |
+| voice_proof | 162/169 | **162/169** | **162/169** | same, identical fail list |
+| boot_proof | 21/21 | **21/21** | **21/21** | same |
+| cine_proof | 62/62 | 61/62 | **61/62** | section 2 replaced one for one; 1 red, the edge window's positive control, below |
+| roll_proof | 114/114 (solo) | **114/114** | **114/114** | same |
+| bus_proof | 80/81 | **80/81** | | same, identical fail list |
+| clock_proof | 95/95 | **94/94** | | time of day: no tile was on another calendar day during this run, so one branch ran instead of two |
+| census_proof | 36/44 | **36/44** | | same, identical fail list |
+| connectors_proof | 61/61 | **61/61** | | same |
+| console_proof | 29/30 | **30/30** | | better |
+| lock_proof | 78/78 (3rd solo) | 73/78 | | environmental: the server's tab watcher follows the real front tab (drift counts), as in PR #4's 56 → 59 → 78 |
+| scribe_proof | 59/59 | **59/59** | | same |
+| speaker_proof | 70/70 | **70/70** | | same |
+| salutation_proof | 6/7 (solo) | **24/28** | | further than ever; reds are a model routing decision (`notes` for a web question) and an evaluate timeout, server/model side |
+| echo_proof | 47/49 | **49/49** | | better |
+| nudge_proof | 21/21 (solo) | **21/21** | | same |
+| study_proof | 118/121 | **118/121** | | same, identical fail list |
+| broadcaster_proof | 110/110 | **110/110** | | same |
+| groq_proof | 91/106 | **92/106** | | one fewer red |
+| memory_proof | 40/40 | **40/40** | | same |
+| routing_proof | 84/85, timed out | **84/86, completed** | | Groq throttle: a typed question routed `notes`; the spoken column's ear not up in 16s |
+| persona_proof | 18/19 | **18/19** | | same red |
+| followup_proof | 3/4 | **3/4** | | same (evaluate timeout under the throttle) |
+| chain_proof | 71/75 | **71/75** | | same, identical fail list |
+| conversation_proof | 105/114 | 107/114 | 110, 107, then **112/114** after the readback cap | a real stall regression, found and fixed, below; the final run's 2 reds are both in the baseline's list |
+| ui_enhancement_proof | 31/31 | **42/42** | 42/42 | 11 new assertions |
+| voice_sync_proof | 9/9 | **9/9** | | same |
+| test_brain | 142/142 | **142/142** | | same |
+| test_eyes | 104/109 | **104/109** | | same, identical fail list |
+| test_hands_privacy | 7/13 (stops) | **7/13 (stops)** | | same, pre-existing |
+| test_watch | 73, then crashes | **same** | | pre-existing stale anchor |
+
+**Every equal count had its failure list diffed;** nothing new went red in any of them.
+
+**The flagged rows:**
+
+- **conversation: a real regression, and it's fixed.** Two solo runs showed the heartbeat missing
+  17–28 beats, with the deck starved to 1–5fps for 2–4s at a time and the camera and ear live. The
+  one new main-thread cost this round added was the conversation avatar's mirror. It
+  `drawImage`d the WebGL presence canvas, a synchronous GPU readback, every fourth frame (about
+  15 a second). The baseline did none, because the focus card's mirror only runs while that card
+  shows. Capped at two a second, and only while the avatar is laid out, the next run had **0
+  stalls and 0 missed beats** and scored 112/114. Its two reds (the parting line, six turns 4 of
+  6) are both in the baseline's failure list. The restart-race and reset-contract reds from the
+  sweep run didn't reproduce in three solo runs: speech-recognition lifecycle variance.
+- **karaoke:** solo it's 92/93. The glass/grace reds in the sweep run don't reproduce. They fit the
+  documented hover re-derivation from the real OS cursor after a screenshot (karaoke's own
+  `park()` comment): the card now sits in the right-hand column, where a resting cursor can hold
+  it. **The one red that does reproduce is a mandated-layout consequence:** "the galaxy is ALIVE
+  in that rectangle" measures the sky's churn behind the card as a control. The card moved from
+  the bottom-centre toast into the right column, over a still part of the sky, and the churn there
+  is 0.
+- **cine: one red, and it's a decision, not a fix.** The edge window's positive control switches
+  the window off and requires the border to brighten by ≥0.02 on every side. The window applies
+  (read back off getComputedStyle), and the border is clean with it on (≤0.0001). But the dust
+  puts less light at the well's border than the core's reticle did: +0.0188 to +0.0221 against
+  the core's +0.045. One side falls 0.0012 short. The floor was measured against the core, and I
+  haven't lowered it.
+
+---
+
+## Live acceptance — plates against the references
+
+Real server, headless Chrome on the GPU (Intel Arc 140V), 1600×900, 0 page exceptions. The plates
+are in `_runs/sweep50/accept/`. The turn frames are the page's own animations, started by a real
+click on `#mic` and held at 25/50/75% for the camera.
+
+| plate | reference | where it matches | where it falls short |
+|---|---|---|---|
+| **01 idle** | ref 1, whole | sidebar with icon + label, active row in a gold frame; header with brand, title, live counts, ONLINE and status cells; the galaxy filling the centre; conversation column on the right with a named avatar; the ask at the foot; voice card at the bottom-left | four folders, not eight; no focus pill in the header; no sources list with ages; no question bubble; bar is the organ rail, not an "Ask Tron…" field |
+| **02 galaxy** | ref 1, centre | gold-hearted core, folder cards with real counts on tilted orbits, blue/gold duotone, the one real link drawn | sparse because the corpus is sparse; no dense node web; SVG, not a particle nebula |
+| **03a–f nav** | ref 1, sidebar | every row reaches a real section: map, type line, archive panel, "no web page has been read", a live focus session, the command panel | Archive, not Memory, by name |
+| **04 turn 25/50/75** | (none) | the map turns away about Y, the pane is empty edge-on at 50%, the dust turns in | a turn, not a "reveal" with particles; a deliberate motion-law choice (transform only) |
+| **06 dust ×4** | (mandate's own) | dense centre, noise structure, soft edge; blue, amber, white-gold and red, each its token | white-gold speaking is close to thinking in hue by design, and tells apart by brightness more than colour |
+| **07 face** | ref 2 | triangulated, edge-lit, closed eye and mouth loops, brow, cheekbones, jaw, ears and neck, inside the same budget | edges are *dotted* (the presence is one point cloud by preflight 34, so a line is points along it); no bust plinth; eyes are socket haze, not glowing irises; fewer, larger triangles than the reference |
+
+## Left open
+
+1. **The cine positive control** (see the table) needs a decision, not a tweak: lower its floor
+   against the dust's measured border light, or keep it as a guard the dust narrowly misses.
+2. **karaoke's glass/churn reds** are consequences of the mandated layout. Behind the note panel
+   the pane's sky is now dimmed to 0.58 and the old docked well no longer lights it, so the glass
+   reads flat. The assertions were written for a bright sky behind the panel.
+3. **Reference-1 surfaces this house doesn't have:** the focus pill, the sources list with ages,
+   the question bubble, the 3D/2D toggle, the bar input. Listed above; none was invented.
+4. **The face is procedural.** Anatomical landmarks, not a scanned topology, and dotted, not
+   continuous, by the one-object law.
+5. **The seal's colours and the dust's tints differ.** The seal keeps its own state colours (open
+   is the transparency law's colour). Only the dust follows the four tokens.
+6. **Pre-existing reds** (corpus-size reds in deck, Groq-throttle reds in the model proofs,
+   test_watch's stale anchor, test_hands_privacy stopping at 13) are unchanged.
+
+## Preflight
+
+```
+36 pass, 5 fail, 2 warn   (43 checks, count unchanged)
+```
+
+**This is not a clean pass, so I'm not calling it one.** PR #4 closed on 38 pass, 3 fail, 2 warn.
+
+- **Fails 7, 12 and 13** are the same three, each quoting `HTTP 502: Groq is rate limiting … (429)`.
+  The eyes have no local engine, by §41's design.
+- **Fails 15 and 30** are `/chat` turns that the 429 sent to local Ollama (`§41 fallback: groq chat
+  -> local qwen3:latest`, in the server trace), which then overran their own 180s bombs. Check 30's
+  clock answers all came from state in milliseconds (`route: clock - answered from state`); the
+  turn that timed out came after them. Neither check reads the page.
+- **The warns (10, 11)** are the routine pair.
+
+**Every check that reads `viewer/index.html` passes: 32, 33, 34, 35, 36.**
+
+**One preflight clause changed, and it's listed like the proof changes.** Check 34(f) required the
+*first* `vR = clamp(` in the shader to ride `* near`, the depth gate that stops the back of the head
+drawing a second fresnel outline. In PR #4 the first one was the head's, because the core's arms
+came after it. The dust's branch now comes first, and it has no fresnel or rim for `near` to gate.
+The clause now selects the vR assignment that carries the fresnel (`[^;]*fres[^;]*`). A negative
+control (the head's line with `* near` removed) still turns it red. Old: first match. New: the
+fresnel's match. Without the change, 34 failed on a line it was never about.
+
+
+---
+
+# §51 — FINAL POLISH: NO CIRCLE, FREE DUST, ONE TURN, THREADS, EYES
+
+*2026-10-08 · UI enhancement mandate III, the last UI round before lock*
+
+Same boundary as §50: `server.py`, `google_api.py`, `send_email.py` and `send_newsletter.py` were not
+opened; §38, §39 and §41 and every hand contract are as they were. The diff is `viewer/index.html`, three
+proofs (`cine_proof`, `deck_proof`, `ui_enhancement_proof`) and this section. Line citations are to
+`viewer/index.html` at this commit.
+
+---
+
+## PART 1 — The background circle, removed everywhere it appeared
+
+It had **two painters**, and both are gone.
+
+1. **The cinema's smoke** (§33): twelve additive sprites in their own scene, with their own render pass,
+   cut into a clean circle by the canvas's radial window. It sat behind every presence state: the four
+   dust tints and the face. It's deleted as a layer, not turned down: the sprites, their texture, their
+   build and drift functions, their scene and pass, eleven `CINE.SMOKE_*` constants, and the `smoke()`
+   door. CINE's note at `:20986`, the removed functions at `:23612`, and the chain is now one scene pass
+   (`:23836`): **RenderPass → UnrealBloomPass → OutputPass**. `smoke_on` is still published by the frozen
+   server and has nothing left to switch.
+2. **The bloom's blend**, which surfaced once the haze was gone. three r183's `UnrealBloomPass` composites
+   with `AdditiveBlending`, adding its blurred *alpha* along with its colour, and its skirt is wide. So the
+   bloom alone laid a faint lit sheet across the whole well, and the window trimmed it into a disc.
+   **Measured on the screen** (the well shot with the canvas shown, minus hidden, ring by ring): speaking
+   dust added 11–17/255 on a plateau from 0.7 to 0.95 of the radius, then stepped down at the window. The
+   blend now keeps the colour term and leaves destination alpha alone (`CustomBlending`, colour
+   SrcAlpha/One, alpha Zero/One). Out there it now adds 0.00–0.02. At `:23868`, the bloom pass in `presCine`.
+3. **The orbit map's heart** sat on `ob-halo`, a 190-unit gradient disc, over `ob-floor`, a gradient
+   ellipse under the plinth. Both are gone (`:6242`). The heart is its sphere, its latitude rings and its
+   motes.
+
+**Confirmed per surface:**
+
+| surface | canvas with its points off (peak, 0–255) | light added on screen at 0.85–0.95 of the well (0–255) |
+|---|---|---|
+| committed page, haze on (control) | 77–102 in every dust state, 36 round the face | listening 2.7 / speaking 11.8 / face 12.3 |
+| this round before the bloom fix | 0 | listening 3.2 / **speaking 12.4** / face 4.2 |
+| **this round, final** | **0 in all five states** | **listening −0.01, thinking 0, speaking 0, alert −0.01, face 0.07** |
+| orbit core | no gradient-filled circle in the heart wider than the sphere; `ob-halo`/`ob-floor` absent | — |
+
+**A correction to my own instrument.** My first in-page reading (`presence.snap`) weights light by canvas
+alpha. It can't see light added on zero alpha, which is exactly what the bloom does, so it read the
+speaking disc as clean. The plates showed the disc anyway. The proofs now use both readings: the bare
+snapshot proves no layer is drawn behind the presence, and the glass ring proves its own light lays no
+disc.
+
+## PART 1B — The dust has no fixed shape
+
+The buffer still holds a seed ball. Every point now wanders on its own path (`:22497`): three sines at
+frequencies and phases hashed from its own `aRnd`, a second octave so no path closes into a loop, and a
+radial swing of its own. Heart points move a little (0.07) and edge points a lot (0.26). **One in six is a
+stray** that goes 1.25× further (`:20790`). The move is normalised so it can never exceed its amplitude,
+which makes the reach a true bound (`presDustReach`, `:21544`). The seed went from 0.86 to 0.62 so that
+bound (0.915 of the frame) sits inside the canvas window (0.93), so no wandering point is ever cut.
+
+Point count, object and material are unchanged: 13,800 points, one object (preflight 34 passes).
+
+**Measured off the presence's own canvas, the far edge in 24 directions over 8.4s:**
+- **The old ball** (spin and breath only) moved 0.018–0.024 per direction between moments and reached
+  1.04–1.07× its seed edge.
+- **This round's dust** moves 0.049–0.055 per direction and reached 1.07–1.24× across runs.
+- **Pinned clock** (control): exactly 0.
+
+## PART 2 — The turn
+
+**What was wrong with the old motion.**
+
+- **Wrong curve.** It was two halves in *sequence* on `--ease-panel-open` = `cubic-bezier(0.16, 1, 0.3, 1)`,
+  an ease-out. Its starting slope is y1/x1 = 6.25× the mean speed and its ending slope is 0. So the galaxy
+  whipped toward edge-on in the first few dozen milliseconds, then *stopped* at 90°. The presence then
+  restarted at 6.25× from a standstill: a velocity jump of six means at the junction, which reads as a cut.
+- **An empty frame by design.** At the junction both surfaces were edge-on slivers and the pane was empty.
+- **Distortion.** A 90° turn of a ~1000px pane at perspective 1800px swings its near edge hundreds of
+  pixels toward the viewer.
+- **No intermediate frames that showed both surfaces.** There was no opacity at all, so it was a flip, not
+  a reveal.
+
+**The fix.** One motion, both surfaces at once, on a new named curve, **`--ease-stage-turn:
+cubic-bezier(.65,0,.35,1)`** over **`--dur-stage-turn: .9s`** (`:190`). It's symmetric with flat ends:
+zero speed at both ends, fastest at the crossing.
+
+- The galaxy turns 16° away, sinks to 0.92 and fades out.
+- At the same time, the presence turns in from 16° on the other side, settles from 1.08 and fades in
+  (`stageFlip`, `:6629`).
+- A turn already running is cancelled first, so a flickering voice can't stack two.
+
+The trigger is unchanged: `earOpen` → `sealPaint` → `stageVoice`. Transform and opacity only;
+`html.nomove` and reduced motion still cut.
+
+## PART 3 — The orbit map
+
+Every connection is now a **curved glowing thread** (`:3032`). Each is a quadratic curve drawn three
+times: a 7px translucent glow, a 3.4px halo, and a 1.5px line whose gradient runs from one end's family
+colour to the other's. A **bead of light** travels along it (`obThread`, `:6493`).
+
+- **Spokes** bend along the direction their world travels, like a tether.
+- **The cross-folder arc** keeps its §49 route around the heart.
+- **In-folder links** bow away from their world.
+- **Membership threads** (`:6356`) run from each note's star to its own folder's world. They're drawn far
+  fainter, as membership rather than links, so they can't be mistaken for links.
+- **Orbits** are a crisp line over a wide glow copy.
+
+The counts are the corpus's, checked in Node against `graph-data.js`: 4 spokes, 1 cross arc, 0 in-folder
+links, 81 membership threads. No names are written in the source and no counts are invented.
+
+**No SVG filter on anything that moves, and why.** My first cut blurred the threads and beads with
+`feGaussianBlur`. An SVG filter on a path that changes every frame is re-rasterised every frame, and that
+cost the presence its 60fps audition. The glow is layered translucent strokes instead. The folder worlds'
+moving blur discs (a pre-existing cost of the same kind) became radial-gradient glows (`:6334`), and the
+map now carries **zero filters**.
+
+## PART 4 — The eyes, and a fine-tune
+
+Each iris is now built from parts within its unchanged 210 points (`:22246`):
+
+- a **limbal ring**;
+- a **pupil ring**;
+- **14 radial striations**;
+- a **four-point catchlight**;
+- a sparse fill.
+
+Ring and catchlight points carry heat flags. The shader turns them into rim-light heat
+(`vR = max(vR, irisHeat)`, `:22679`), so the rings glow *through* the lid.
+
+The lid stays shut at rest; the Eyes Law and deck's `lid === 0` are untouched. It's now weighted to its
+rim (`:22302`), an outline with the iris showing through rather than a filled plate. Its shut alpha went
+from 0.74 to 0.56.
+
+**Fine-tune:** the head's haze points are dimmer (`0.24 + 0.10·aRnd`, `:22591`), so the wireframe reads
+crisper. With the smoke gone, nothing veils the face any more.
+
+**Measured off the drawn buffer** (`presence.eyes()`, `:29473`): 34% of iris points lie on the limbal ring
+and 14% on the pupil ring. A uniform disc puts 14% and 8% there by area alone.
+
+**What isn't changed: the eyes don't open at rest.** The reference's glowing irises are an open eye, and
+here an open eye is the camera-seal's statement that it is watching.
+
+---
+
+## PART 5 — Proofs
+
+### Assertions changed, one for one
+
+**cine_proof (62 → 63):**
+
+| old | new |
+|---|---|
+| section 3, five smoke claims (12 sprites; one material; no fog; own scene; drift clamped) | no sprites and no door; no second scene pass; no fog (kept); the presence scene is one object; the wander is bounded and the window is sized from the bound |
+| four passes, in order smoke → core → bloom → output | three passes, presence → bloom → output |
+| "the haze never occludes the Eyes' brackets" | nothing on the presence canvas runs on its own clock (pinned, five snapshots over 5.6s: 0 pixels changed) |
+| the smoke's price is bounded | toggling the removed haze's flag moves dispatch by nothing beyond noise (a null control) |
+| want.smoke follows /health | the bloom follows the flag; smoke has nothing to switch |
+| dust "where mandate II left it" (scale 0.86, fill 0.6687) | scale 0.62, seed fill 0.4822, wander bound under 0.92 |
+| "turns, drifts and breathes" | "turns, wanders and breathes", with the wander's own numbers |
+| §34 PART 2's haze-hue assertion | no disc behind the presence, two ways: a bare canvas, and on the glass (+1 assertion) |
+| §34 positive control "the window is what holds the border down" | the border is clean even with the window off |
+| §34 window reach | read from the wander's published bound |
+
+The §34 positive control was this suite's lone red in §50. Its subject, the bloom sheet reaching the
+border, no longer exists: the border gains +0.0000 with the window off.
+
+**deck_proof:**
+
+| old | new |
+|---|---|
+| "the dust fills 60–75% of the frame" | "the seed fills 44–52%, the wander is bounded at 80–93%, and the window opens outside the bound" |
+
+**ui_enhancement_proof (42 → 49):**
+
+| old | new |
+|---|---|
+| mandate II's turn assertion: two halves in sequence on `--ease-panel-open` | both surfaces at once, delay 0, on `--ease-stage-turn`, with fade-out/fade-in keyframes |
+| mandate II's "the galaxy fills the main pane" (read immediately) | now waits for the sidebar test's focus card to retire before measuring; one run read the map at half the pane because the card was still in the lane |
+
+Seven new assertions for this round:
+1. No background circle in any of the five states (bare canvas), and no haze layer in the DOM.
+2. No disc of light on the glass in any of the five states.
+3. Nothing behind the orbit heart.
+4. The dust has no fixed shape, with the pinned control.
+5. The turn's curve is named, declared and correctly shaped.
+6. The threads are curved and glowing, with counts matching the corpus and no filters.
+7. The eyes have rings, measured as radii.
+
+### Before / after
+
+**Before** is this round's before sweep (20:49), on the committed page. Two exceptions, marked †:
+- From 22:02 another session's work moved this checkout to a different branch (GitHub Desktop, open on the
+  repo, flipped it and auto-stashed). The before runs from followup onward therefore tested the wrong page,
+  and their before value is §50's final on the identical page.
+- **The machine:** a harness Chrome I orphaned at 22:26 (I stopped a run by killing its node, not its
+  browser) spun at full CPU until I found and killed it at about 00:00. Five suites that went red inside
+  that window were re-run solo once it was clean.
+
+| suite | before | after (sweep) | solo re-run / final build | verdict |
+|---|---|---|---|---|
+| layout_proof | 174/174 | 174/174 | **174/174** | same |
+| deck_proof | 246/253 | 248/253 | 231/239 | the 5 corpus-size reds as always; the final run also lost the hand gate (3 reds + its 14 dependents) to the Groq cap, which passed in the sweep |
+| desk_proof | 44/44 | 44/44 | **44/44** | same |
+| karaoke_proof | 92/93 | 93/93 | **93/93** | better |
+| voice_proof | 162/169 | 162/169 | **162/169** | same, identical fail list |
+| boot_proof | 21/21 | 21/21 | **21/21** | same |
+| cine_proof | 61/62 | 62/62 | **63/63** | better (+1 assertion) |
+| roll_proof | 114/114 | 114/114 | **114/114** | same |
+| bus_proof | 80/81 | 79/81 | 80/81 | the render's script step is model-written: 93s in the before run, 232s on the local fallback under the Groq cap |
+| clock_proof | 95/95 | 71/72 (leak) | **95/95** | same |
+| census_proof | 36/44 | 36/44 | | same |
+| connectors_proof | 61/61 | 61/61 | | same |
+| console_proof | 30/30 | 8/10 (leak) | 8/10 | Groq cap: the typed answer never reached the speaker inside the harness's wait, so the next case found the type line busy; 30/30 at 21:18, before the cap |
+| lock_proof | 59/73 | crashed (leak) | **78/78** | better |
+| scribe_proof | 59/59 | 36/42 (leak) | **59/59** | same |
+| speaker_proof | 70/70 | 70/70 | | same |
+| salutation_proof | 23/24 | 23/24 | | same |
+| echo_proof | 48/49 | 49/49 | | better |
+| nudge_proof | 21/21 | 21/21 | | same |
+| study_proof | 118/121 | 117/121 | | one red counts conversational turns completed inside a study window: model throughput, Groq cap |
+| broadcaster_proof | 110/110 | 110/110 | | same |
+| groq_proof | 91/106 | 91/106 | | same |
+| memory_proof | 40/40 | 40/40 | | same |
+| routing_proof | 94/96 | 82/86 | | Groq cap: the before ran at 21:38, before the cap |
+| persona_proof | 18/19 | 18/19 | | same red |
+| followup_proof | 3/4 † | 14/15 | | better |
+| chain_proof | 71/75 † | 44/75 | | Groq cap: the first red is "two instructions raise the gate", and 30 follow from it; 57 Groq→local fallbacks are in the server trace, and the local engine drops the hands manifest |
+| conversation_proof | 112/114 † | 110/114 | **111/114**, 0 stalls | the sweep's run logged 20 stalls; the solo re-run on the final build had **0 stalls and 0 missed beats**, sampled while `llama-server` used about 4 cores serving every Groq-capped turn locally. The three reds left (the parting line, "I'll let you work, sir", six turns 3 of 6) are all in its baseline failure list, and all wait on model turns |
+| ui_enhancement_proof | 42/42 † | 48/48 | **49/49** | +7 assertions |
+| voice_sync_proof | 9/9 † | 9/9 | | same |
+| test_brain | 142/142 † | 142/142 | | same |
+| test_eyes | 104/109 † | 104/109 | | same |
+| test_hands_privacy | 7/13 † | 7/13 | | same, pre-existing |
+| test_watch | 73, then crashes † | same | | pre-existing |
+
+**Every suite that renders the presence or reads the layout is at or above its before count on the final
+build.** Every red that's new against before is in a suite that waits on the model. Each was checked
+against the server trace's Groq 429 → local fallback lines, and the before runs of those suites predate
+the cap (about 22:28). None of them touches anything this round changed.
+
+---
+
+## Live acceptance — plates
+
+The real server, a solo machine, full density, bloom on, 0 page exceptions. Plates are in
+`_runs/sweep51/accept/`.
+
+| plate | against | matches | falls short |
+|---|---|---|---|
+| **04 dust × 4, a/b** | the boss's note: no circle, free motion | points and tint only in all four states; nothing behind them; frames a and b of each state scatter differently | it's still a roughly round cloud overall, with a ragged edge, not a wisp with no centre |
+| **04 speaking, full frame** | the circled disc | gone: the glow falls off round the heart and the deck shows through to the window | — |
+| **03 turn 0/25/50/75/100** | "one continuous motion" | at 25/50/75% both surfaces are on screen together, one fading as the other arrives | a turn and fade, not a particle dissolve |
+| **02 galaxy** | the attached reference | curved, glowing, gradient threads with travelling beads; glowing orbit rings; faint membership threads around each world | **sparse**, because the corpus is 4 folders, 81 notes and 1 link, and the map won't invent the reference's dense constellation |
+| **05 face / eyes** | reference 2 | crisp anatomical wireframe, no veil; each eye a lit ring with pupil ring, striations and catchlight | edges are dotted (one point cloud); the eyes are shut-lid irises, not open glowing eyes, by the Eyes Law |
+
+## Left open — and whether each is a future mandate or accept-and-lock
+
+1. **The galaxy's density** follows the corpus. **Accept and lock:** filling it would mean inventing data.
+2. **Eyes open only with a live camera session**, by the Eyes Law. **Accept and lock.**
+3. **The dust is still a roughly round cloud** with a ragged, moving edge. A cloud with no centre at all (a
+   "breath of smoke") would need a different seed distribution. **Accept and lock**, unless you want that
+   look, in which case it's a one-constant future mandate.
+4. **Model-dependent suites are red today under the Groq daily cap** (chain, routing, console, bus's
+   timing, deck's hand gate, study's turn count). **Not this round's to fix:** re-run them on a fresh Groq
+   day.
+
+## Preflight
+
+```
+38 pass, 2 fail, 3 warn   (43 checks, count unchanged)
+```
+
+**Not a clean pass, so I'm not calling it one.** It matches the line the other session reported on this
+machine the same evening.
+
+- **Both fails (7 and 13)** are vision turns, each quoting `HTTP 502: Groq is rate limiting … (429)` for
+  the day's tokens. The eyes have one engine, by §41, so a 429 there is a refusal.
+- **The three warns (10, 11, 12)** are the routine set.
+
+**Every check that reads `viewer/index.html` passes: 32, 33, 34 (one object, one allocation at PRES.CAP
+= 13,800), 35 and 36.** No preflight clause was changed this round.
+
+## A note on the evening, because it shaped the numbers
+
+- **GitHub Desktop**, open on the repo while another Claude session worked a separate mandate
+  (feature-gemini-fallback-tier), flipped this checkout's branch and auto-stashed. That voided part of the
+  before sweep (marked †). The two sessions coordinated, and the other session handed back the checkout
+  and the server. Its parked stash ("UI layout work in progress - parked by gemini-fallback mandate") is
+  still in the stack, unapplied. It holds only harness plates and a graph-data timestamp, and the decision
+  on it is yours. The server on :4700 is this branch's code, restarted 22:37:48.
+- **A harness Chrome I orphaned** by stopping a run's node process spun at full CPU for about 1.5 hours,
+  and I first misread it as the local engine's load. It's now a written lesson (memory:
+  killed-harness-leaves-its-chrome). Every suite that went red inside that window was re-run solo
+  afterwards.
+
+
+---
+
+# §52 — DUST SHAPE + CORNER MARKS (UI enhancement IV)
+
+Branch `feature-ui-layout-presence`, on top of 32a2db4 (§51). Scope: `viewer/index.html` plus three
+proofs (`deck_proof.mjs`, `cine_proof.mjs`, `ui_enhancement_proof.mjs`). `server.py`, `google_api.py`,
+`send_email.py`, `send_newsletter.py` and §38/§39/§41/§42 are untouched. Nothing here contradicts §51.
+§51's "the dust has no fixed shape" is kept and still asserted.
+
+The reference frames came in mid-round, as three stills of "Orb № 004 — Dust": Speaking (green),
+Thinking (amber) and the title card (white with a dim red heart). I had already built a filament
+(strand) draft from the text alone. It didn't look like the frames, so I replaced it with the ridged
+membrane below. No strand code survives; the build applies the strand patch, then the membrane patch
+on top of it, and the last of the strand wording was removed.
+
+## PART 1 — The distribution, old and new
+
+**Old (§51), `presDustFill` at HEAD `viewer/index.html:21549`:** sample a point uniformly in the cube and
+reject it if `d² > 1` (line 21556), giving a hard unit radius. Keep it with weight
+`exp(−d²·FALLOFF)` (line 21557, FALLOFF 1.5) × sine noise^CONTRAST. The result was a filled ball with a
+smooth radial fall-off. The wander roughened its outline, but it was still a ball's outline.
+
+**New: a ridged membrane, `viewer/index.html:21579` (`presDustFill`).** For each point:
+
+| step | function | line |
+|---|---|---|
+| direction | `u` uniform on the sphere | 21579+ |
+| own rim | `rim(u) = 1 + LUMP·(0.65·n(u·f + a) + 0.35·n(2.3·u·f + b))`, LUMP 0.55, f 1.05 — every direction has its own radius | `presDustRim` 21556 |
+| radius | `rim · (SHELL_IN + (1−SHELL_IN)·v^(1/SHELL_POW))`, 0.80 and 4.0, drawn toward the rim, so the inside is sparse; a TAIL share (10%) instead goes to `rim·(1 + 0.10·Exp)` and the edge dissolves | 21590 |
+| ridges | kept with probability `FLOOR + (1−FLOOR)·ridge(p)`, where `ridge = (0.62(1−|n(w(p)·f)|) + 0.38(1−|n(2.1·w(p)·f + c)|))^7`, f 3.3, FLOOR 0.015 | `presDustRidge` 21561, keep at 21593 |
+| domain warp | `w(p) = p + 0.70·(n(1.7p+a), n(1.7p+b), n(1.7p+c))` crumples the ridges into folds | 21561 |
+| core glow | 1,400 points, a true gaussian (Box–Muller, σ 0.15), drawn large (×14), faint (α 0.013) and with a gaussian sprite instead of the grain's disc | 21603; sprite `vG` at 22585, 22778 |
+
+**Noise and clustering approach:** `n` is the page's existing `presNoise3`, a sine-product noise. The
+outline comes from low-frequency noise *on the sphere* (the rim). The clustering comes from **ridged noise
+(1−|n|) through a domain warp**, used as an *acceptance probability*: grains collect along thin folded
+sheets with dark gaps between them, and because the shell is thin those sheets read as veins. Constants
+are at `viewer/index.html:20784–20815`.
+
+**Light and colour** (shader, `viewer/index.html:22565–22590`):
+- grains are brightest out on the membrane (`shell = smoothstep(0.18, 0.62, r)`) and faint inside;
+- grains are pale (`DUST_EDGE_PALE` 0.50 toward white, line 23527) but carry the state's tint;
+- the core glow keeps the state's own colour, so the dim tinted heart still changes with state, as required.
+
+**Motion.** A dense membrane averages each point's own wander out of its outline, so the far edge barely
+moved (0.021–0.026, a turning ball's figure). I added **`DUST_MORPH` 0.20** (line 22565): three travelling
+waves of position swell some lobes and draw others in, coherently, so the folds keep their structure while
+the shape changes. Measured on the final build, the far edge moves **0.066–0.086 per direction**, against a
+turning ball's 0.018–0.024. The pinned-clock control reads exactly 0.
+
+## PART 1B — Size, and the two populations
+
+**Size: `DUST_S` 0.545 on `DUST_RMAX` 1.45.** The furthest drawn point sits at **0.614** of the frame's
+half-height, against §51's 0.482: **27% larger**. DUST_S is the largest value whose *bound* stays inside the
+canvas's window. `presDustReach` (line 21574) is RMAX + the whole wander + every swell + MORPH, all at their
+peaks at once; it reads **0.914** against the window's `EDGE_MAX` 0.94, so no point is ever cut. Going
+bigger would mean taking amplitude away from the motion that §51 asserts.
+
+**Split (unchanged total, 13,800 = `PRES.CAP`, preflight 34):**
+
+| population | count | drawn as |
+|---|---|---|
+| PRIMARY | 4,400 | 1,400 core glow + 3,000 ridge grains at grain size 0.55 |
+| FINE | 9,400 | the same ridges at 0.55 of the grain's size and 0.70 of its light |
+
+**Perf cost: none measured.** deck_proof's idle galaxy, run solo on the final build, reads **59.8 fps,
+p95 16.8 ms**: the same as the before run on the committed page (59.8 / 16.8). One sweep reading of 47.6
+was a transient; §51's own before run read 40.5 on the committed page. The acceptance run held the full
+13,800 with bloom on, at 50 fps headless, probation "kept".
+
+## PART 2 — The corner marks
+
+**What they were:** four `<i class="pb b1..b4">` L-brackets.
+- Markup at HEAD `viewer/index.html:3255`.
+- CSS at HEAD 2498–2516: `#presence .pb`, `.pb.b1–b4`, absolutely placed at the four corners of the
+  presence well, *outside* the canvas mask.
+
+Because they were DOM siblings of the canvas, they framed the core in every view the presence appears in.
+
+**Now:** the markup and every `.pb` rule are deleted. A note remains at `viewer/index.html:2498`, and the
+markup comment now reads "an empty well" (2451).
+
+In the browser:
+- `.pb, #presence i` count 0;
+- the well holds exactly two children (canvas and tag);
+- no stylesheet carries a `.pb` rule.
+
+The proof reads this in five states: dust, face, mid-turn, galaxy, and with the command panel open. The
+acceptance run read 0 / 2 in the galaxy stage and the presence stage.
+
+## Proofs — assertions changed, one for one
+
+| file:line | old | new |
+|---|---|---|
+| `deck_proof.mjs:2260` | seed fills 44–52% of the half-height | furthest point 58–68% (bound band 80–93% kept) |
+| `cine_proof.mjs:486` | density falls at every shell | **the heart is the densest shell, the outermost is thinner than the membrane, densest ≥ 5× thinnest** (measured 52×). The old wording *is* the smooth radial fall-off this mandate removes; its stated failure mode, "an even fog with no heart", is now claimed directly |
+| `cine_proof.mjs:502` | radius 1, scale 0.62, fill 0.4822 | radius 1.45, scale 0.545, fill 0.58–0.68, bound < 0.92 |
+| `cine_proof.mjs:1649` | brackets scale with the well, ≥ BRACKET_PX | no `.pb` at any of the six well sizes, and the well holds only canvas + tag |
+| `ui_enhancement_proof.mjs:55` | TSTD_MIN 0.035 | 0.030, between the turning ball (≤ 0.024) and the membrane (0.034–0.086) |
+| **new** `ui_enhancement_proof.mjs:1051` | — | **no boundary:** twelve radius shells, outer quarter < 25% (a filled ball 58%; measured 16%), no step below 0.20× while a shell holds ≥ 2% (measured 0.249), outermost shell < 2% (1.2%) |
+| **new** `ui_enhancement_proof.mjs:1090` | — | **not a smooth radial fall-off:** max-radius-per-direction over 64 directions, CV **0.082** ≥ 2× a gaussian-ball control computed in the proof (**0.033**), plus the on-screen outline CV, mean of three ≥ 0.075 (a ball ≈ 0.04) |
+| **new** `ui_enhancement_proof.mjs:1099` | — | **budget split** counted off the drawn buffer's flags: 4,400 + 9,400 = 13,800, fine smaller and dimmer |
+| **new** `ui_enhancement_proof.mjs:1128` | — | **corner marks absent** from DOM and CSS in the dust, face, mid-turn, galaxy and command views |
+
+Two of my own floors were wrong on the first sweep, and I fixed them before the solo runs:
+- **On-screen CV floor:** I first asserted that every one of three snapshots reads ≥ 0.07. One landed at
+  0.064, because the cloud turns and from some yaws a lumpy shape projects rounder. The floor is now on
+  the mean.
+- **cine's density row:** the "density falls" assertion above went red as expected, and its replacement
+  is the row in the table.
+
+## Before / after
+
+**Before** is this round's sweep on the committed page (10:44–12:18). It ran while I was tuning, with
+probe Chromes contending, so some of its reds are the machine's. **After** is a solo sweep on the final
+build (12:18–14:06). Suites below their before count were re-run solo on the final build.
+
+Groq is capped today: the server trace holds 92 `429 → local qwen3` fallbacks. Model-bound suites are on
+the local engine in both columns.
+
+| suite | before | after (sweep) | solo, final build | verdict |
+|---|---|---|---|---|
+| layout_proof | 174/174 | 174/174 | | same |
+| deck_proof | 247/253 | 246/253 | **248/253**, 59.8 fps | better; the 5 corpus-size reds as always |
+| desk_proof | 44/44 | 44/44 | | same |
+| karaoke_proof | 87/93 | 92/93 | | better |
+| voice_proof | 162/169 | 162/169 | | same |
+| boot_proof | 21/21 | 21/21 | | same |
+| cine_proof | 63/63 | 62/63 | **63/63** | same, after the density row was retargeted |
+| roll_proof | 114/114 | 114/114 | | same |
+| bus_proof | 80/81 | 81/81 | | better |
+| clock_proof | 95/95 | 94/94 | | all pass both times (the count varies by run) |
+| census_proof | 36/44 | 36/44 | | same |
+| connectors_proof | 59/61 | 61/61 | | better |
+| console_proof | 25/30 | 25/30 | | same five piper-spawn reds |
+| lock_proof | 58/73 | 69/78 | **78/78** | better |
+| scribe_proof | 59/59 | 59/59 | | same |
+| speaker_proof | 70/70 | 70/70 | | same |
+| salutation_proof | 23/24 | 0/1 (timeout) | **23/24** | same: the 20s guard round a /chat turn |
+| echo_proof | 49/49 | 39/49 | **47/49** | see the control below |
+| nudge_proof | 21/21 | 21/21 | | same |
+| study_proof | 118/121 | 116/121 | **118/121** | same |
+| broadcaster_proof | 108/110 | 110/110 | | better |
+| groq_proof | 91/106 | 90/106 | **91/106** | same |
+| memory_proof | 40/40 | 40/40 | | same |
+| routing_proof | 66/86 | 77/96 | | model-bound; the total moves with the model's turns |
+| persona_proof | 18/19 | 18/19 | | same |
+| followup_proof | 3/4 | 14/15 | | better |
+| chain_proof | 71/75 | 71/75 | | same |
+| conversation_proof | 109/114 | 109/114 | | same |
+| ui_enhancement_proof | 49/49 | 52/53 | **53/53** | +4 assertions (section 8) |
+| voice_sync_proof | 9/9 | 9/9 | | same |
+| test_brain | 142/142 | 142/142 | | same |
+| test_eyes | 104/109 | 104/109 | | same, pre-existing |
+| test_hands_privacy | 7/13, aborts | same | | pre-existing |
+| test_watch | 73, then aborts | same | | pre-existing |
+
+**The echo control.** echo_proof read 49/49 before, then 39/49 in the sweep and 47/49 in the first solo run, with both solo reds waiting on the brain's answer to a barge-in. I didn't want to file that under the Groq cap without proof, so I ran it once on the **committed** page (49/49, 32s) and twice more on the **final** build (**49/49, 36s; 49/49, 43s**). The red run took 110s: a slow model turn, not the page.
+
+**Every suite that renders the presence or reads the layout is at or above its before count on the final
+build.**
+
+## Live acceptance — plates
+
+The real server, a solo machine, full density, bloom on, 0 page exceptions. Plates are in
+`_runs/sweep52/accept/`; the reference stills are in `_runs/sweep52/ref/`.
+
+| plate | against | matches | falls short |
+|---|---|---|---|
+| `compare-idle.png` | the title card (ORB № 004) | a lumpy, hollow membrane; brighter folded rim; darker interior; a dim tinted heart; fine pale grain | the reference is a far denser **mist** and fills more of its frame |
+| `compare-speaking.png` | the Speaking and Thinking tabs | same structure, the heart tinted by state, grains pale with the state's tint | the reference's veins are long bright filaments; at 13,800 points ours read as a granular membrane, and from some yaws the outline looks rounder than any reference still |
+| `dust-texture-4x.png` | "close-up of the fine texture" | two populations visible: grain on the folds, a gaussian haze at the heart | individual grains are still resolvable at 4× |
+| `galaxy-full.png`, `galaxy-presence-well-2x.png`, `presence-full.png` | "no corner marks" | none, in either stage | — |
+
+**On "make it exactly 100% the same":** it isn't, and I won't call it that. The shape language matches:
+lumps, a hollow membrane, folds, a dim tinted heart, fine grain, a dissolving edge. The texture can't
+match at this budget. The reference's mist reads as many tens of thousands of sub-pixel points, and the
+presence is held to **13,800 by `PRES.CAP`, which preflight check 34 locks**. Getting that last step is a
+decision for you: raise the cap (a preflight change plus a perf budget on the deck), or accept this
+texture.
+
+## Left open — after this round
+
+§51 left four items open:
+1. Galaxy density follows the corpus. Accept and lock.
+2. Eyes open only with a live camera session. Accept and lock.
+3. The dust is a roughly round cloud. **Closed by this round.**
+4. Groq-cap reds. Environmental, not code.
+
+**Item 3 was the last open code item, so this round closes §51's list.** The one new question it raises
+is the cap decision above. It's a choice, not a defect. Without it, the branch is **ready to lock and
+merge**.
+
+## Preflight
+
+```
+37 pass, 4 fail, 2 warn   (43 checks)
+```
+
+**Not a clean pass, so I'm not calling it one.** All four fails are the Groq daily cap:
+- **7, 12 and 13** each quote `HTTP 502: Groq is rate limiting … (429)` on a vision turn. The eyes have
+  one engine, by §41.
+- **3** is a `/chat` turn that timed out at 120s on the local fallback.
+
+The two warns (10, 11) are the routine set.
+
+**Every check that reads `viewer/index.html` passes:**
+- 8: the served files match the files on disk;
+- 32–36, including **34: one object, one allocation at `PRES.CAP` 13,800**.
+
+No preflight clause was changed this round.

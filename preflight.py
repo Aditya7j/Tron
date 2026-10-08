@@ -6821,7 +6821,11 @@ def check_face_shading():
                  "shading is of the anatomy and not of the animation")
 
     # -- (f) both edge terms ride the depth factor.
-    vr = re.search(r"vR = clamp\((.*?)\);", src)
+    # THE FRESNEL'S OWN vR LINE, not merely the first one. This took the first `vR = clamp(` in
+    # the file, which was the head's because the core's arms came after it. UI mandate II put the
+    # dust's branch first - a heart glow with no fresnel and no rim, so `near` has nothing to
+    # gate there - and the first match stopped being the line this clause is about.
+    vr = re.search(r"vR = clamp\(([^;]*fres[^;]*)\);", src)
     if not vr or "* near" not in vr.group(1):
         return FAIL, notes + ["vR no longer rides `near`: the back of the skull then catches its "
                               "own fresnel and the head wears a second bright outline one ring "
