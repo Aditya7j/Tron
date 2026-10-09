@@ -285,10 +285,21 @@ def _clean_tool(raw):
             triggers.append(re.compile(str(pattern), re.I))
         except re.error as exc:
             return None, "%s: trigger %r does not compile (%s)" % (tool_id, pattern, exc)
+    # THE DOORS, when an entry names any: the only doors propose() will accept it from. A tool
+    # that names doors is never offered to the brain (prompt_parts skips it), never taken from
+    # a [[tool: ...]] tag and never a step of a chain - because its parameters must come from
+    # the employer's own sentence, parsed by the server, and never from a model's. The ledger's
+    # two hands are the reason: an amount a model filled in is an invented number with a
+    # card around it. An entry that names none keeps every door, exactly as before.
+    doors = tuple(d for d in (_slug(x, 12) for x in (raw.get("doors") or [])) if d)
+    if raw.get("doors") and not doors:
+        return None, "%s: doors names no usable door" % tool_id
+    if "tag" in doors:
+        return None, "%s: a door list exists to shut out the tag; it cannot name it" % tool_id
     return {"id": tool_id, "name": str(raw.get("name") or tool_id).strip(),
             "script": script, "capabilities": caps, "params": params,
             "timeout_s": timeout, "proposal": proposal, "step": step,
-            "triggers": triggers}, ""
+            "triggers": triggers, "doors": doors}, ""
 
 
 def registry(force=False):
@@ -379,6 +390,8 @@ def prompt_parts():
     lines = ["\n- YOUR HANDS: there are a few things you can actually DO, by asking the "
              "server to run a script. These are all of them, and there are no others:"]
     for tool in tools:
+        if tool.get("doors"):
+            continue        # a door-bound hand is never the brain's to ask for - see _clean_tool
         shape = ", ".join("%s (%s%s)" % (p["name"], p["type"],
                                         "" if p["required"] else ", optional")
                           for p in tool["params"]) or "no details needed"
@@ -799,6 +812,16 @@ def propose(tool_id, params_text, door="tag"):
         _log("proposal refused: no such tool id (%d characters), nothing pending",
              len(str(tool_id or "")))
         return _reply(404, False, LINES["unknown"], refused="unknown-tool", pending=None)
+    if tool.get("doors") and str(door or "") not in tool["doors"]:
+        # A DOOR-BOUND HAND ASKED FOR THROUGH ANOTHER DOOR - a tag, almost always, naming a tool
+        # the brain was never told about. Refused in the same words as an unknown id, because
+        # from the brain's side of the glass that is exactly what it is.
+        _drop_for_refusal()
+        _log("proposal refused: %s is not taken through the %s door, nothing pending",
+             tool["id"], str(door or "")[:12])
+        _record(tool["id"], "refused")
+        return _reply(403, False, LINES["unknown"], refused="wrong-door", tool=tool["id"],
+                      pending=None)
 
     if params_text is None or str(params_text).strip() in ("", "{}"):
         raw = {}
@@ -960,6 +983,8 @@ def propose_chain(steps, door="tag", facts=None):
                           refused="chain-bad-step", at=index, pending=None)
         wanted = raw_step.get("hand") or raw_step.get("tool")
         tool = find(wanted)
+        if tool is not None and tool.get("doors"):
+            tool = None     # a door-bound hand is never a step: a plan is a model's composition
         if tool is None:
             # The id is not echoed and not logged, in this file's habit: it came from a model.
             _drop_for_refusal()
