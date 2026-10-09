@@ -1014,6 +1014,51 @@ MIXED_PROMPT = (
     "spelling, no exclamation marks, no emoji, \"sir\" at most once."
 )
 
+# THE QUANT PROMPT - "RSI of Reliance". The number was computed on the server (wilder_rsi())
+# and arrives as evidence; the model's whole job is to say it in the butler's voice. The
+# risk line is NOT left to the model: answer_quant() appends QUANT_DISCLAIMER to every reply
+# verbatim, so it cannot be dropped or reworded, and a reply that strays into advice or
+# loses the figure is replaced by quant_template(). This phase reports a reading. Trade
+# signals are a later phase with their own scope and risk controls.
+QUANT_PROMPT = (
+    "You are the butler of a private knowledge galaxy: English, impeccably polite, "
+    "unhurried and very dry. Your employer asked for a technical indicator on a named "
+    "stock or index. It has already been computed from end-of-day closes and is given "
+    "to you below; you report it.\n"
+    "\n"
+    "- State the symbol, the RSI figure exactly as given, its zone exactly as given, and "
+    "the date of the close it was computed on. Two or three sentences. One dry line is "
+    "permitted.\n"
+    "- You may say in one clause what the zone conventionally means (above 70 is called "
+    "overbought, below 30 oversold - a convention, not a forecast). Nothing more.\n"
+    "- Never write buy, sell, hold, accumulate, exit, sure shot, a price target or a stop "
+    "loss, in any language, and never suggest what they should do. You report a reading; "
+    "you do not make calls.\n"
+    "- The data is end-of-day. Never present the close as a live or current price. If they "
+    "asked for the current price (\"abhi ka price\"), say plainly that this is the last "
+    "daily close and a live price needs a live feed.\n"
+    "- Do not compute, alter or round the figure yourself. Do not add a disclaimer: a fixed "
+    "risk line is appended to your reply by the system.\n"
+    "- Do NOT mention notes, files, documents, the web or sources. If they wrote in "
+    "Hinglish, plain Hinglish is fine; otherwise English. British spelling, no exclamation "
+    "marks, no emoji, \"sir\" at most once."
+)
+QUANT_DISCLAIMER = ("This is a technical reading, not a trade recommendation; markets "
+                    "carry risk.")
+# What a QUANT reply may never contain. A hit swaps the model's prose for the template.
+QUANT_ADVICE_RE = re.compile(r"""\b(?:
+      buy | sell | hold | accumulate | sure \s* -? \s* shot | targets? | stop \s* -? \s* loss
+    | entry \s+ point | exit \s+ point | kharid\w* | bech\w*
+)\b""", re.IGNORECASE | re.VERBOSE)
+# A disclaimer the model wrote anyway, told not to (measured 2026-10-09: "*This is a
+# technical reading, not financial advice.*" in front of the real one). The sentence is
+# taken out so the reply carries ONE risk line, the fixed one, not two that differ.
+QUANT_SELF_DISCLAIMER_RE = re.compile(r"""[*_]* [^.!?\n*]* \b(?:
+      not \s+ (?: financial | investment | trading ) \s+ advice
+    | not \s+ a \s+ (?: trade \s+ | trading \s+ | investment \s+ )? recommendation
+    | markets? \s+ (?: carry | carries | involve | are \s+ subject \s+ to ) \s+ risks?
+)\b [^.!?\n]* [.!?]? [*_]*""", re.IGNORECASE | re.VERBOSE)
+
 # WHY THE SCRIBE GETS ITS OWN PROMPT AND NOT COMPOSE_PROMPT. A meeting transcript is
 # unlike every other input in this file: it arrives in the wrong order, with two people
 # talking over one another, with the recogniser's mishearings still in it, and with no
@@ -4576,6 +4621,9 @@ def classify_question(question, best_score, prior="", confidence=1.0):
 #    general    a CONCEPT: what is / explain / how does it work / kya hota hai.
 #    ambiguous  none of the above: retrieval runs, and is gated (see below).
 #  and a fifth, "mixed", for a personal pointer AND a concept in one sentence.
+#  And a sixth, "quant", checked BEFORE all of them: a technical indicator asked of one
+#  named symbol - "RSI of Reliance", "bank nifty ka RSI". See quant_request() below. "what
+#  is RSI" names no symbol, so it is still a concept and still reaches KNOWLEDGE_PROMPT.
 #
 #  THE DOMAIN, AND WHY IT IS NARROW. The model answers from its own knowledge ONLY
 #  for FINANCE - money, markets, investing, banking, tax, the economy (FINANCE_RE). A
@@ -4613,6 +4661,7 @@ FINANCE_RE = re.compile(r"""\b(?:
     | (?: insurance | option | options ) \s+ premium
     | bull \s+ market | bear \s+ market | rupee | forex | currency | crypto(?:currency)?
     | bitcoin | gold \s+ etf | reits? | demat | brokerage
+    | rsi | relative \s+ strength \s+ index
 )\b""", re.IGNORECASE | re.VERBOSE)
 
 # THE PERSONAL POINTER. English "my" is deliberately NOT here on its own: "what is my
@@ -4665,7 +4714,227 @@ COMPARE_RE = re.compile(r"""(?:
     | \b difference \s+ between \b | \b compare\w* \b | \b (?: better | farak | fark ) \b
   )""", re.IGNORECASE | re.VERBOSE)
 
-QUERY_CLASSES = ("personal", "current", "general", "ambiguous", "mixed")
+# =============================================================================
+#  THE QUANT, PHASE II.1: ONE TECHNICAL INDICATOR, ON ONE NAMED SYMBOL, FROM END-OF-DAY
+#  CLOSES. RSI only. It reports a reading; it never makes a trade call - see QUANT_PROMPT.
+#
+#  THE INDICATORS, one row each. A later phase adds MACD or Bollinger by adding a row here
+#  and a calculator to QUANT_CALCULATORS; quant_request() and classify_query() read only
+#  this table, so neither is rewritten for it.
+# =============================================================================
+QUANT_INDICATORS = {
+    "rsi": r"rsi | relative \s+ strength \s+ index",
+}
+QUANT_INDICATOR_RE = re.compile(
+    r"\b(?:%s)\b" % " | ".join("(?P<%s>%s)" % kv for kv in QUANT_INDICATORS.items()),
+    re.IGNORECASE | re.VERBOSE)
+
+# AN EXPLICIT SLOT FOR A NAME: "RSI of X", "RSI for X", "X ka RSI". With one, a name the
+# table does not know is still a quant question and fails out loud; without one ("is RSI
+# reliable"), an unknown word is just a word and the sentence falls through. Read on the
+# _quant_norm() form, so "X's RSI" has already lost its "'s" and needs a known X.
+_QUANT_IND = r"(?:%s)" % " | ".join(QUANT_INDICATORS.values())
+QUANT_SLOT_RE = re.compile(
+    r"\b%s \s+ (?: of | for | on ) \s+ \S | \S \s+ (?: ka | ki | ke ) \s+ %s \b"
+    % (_QUANT_IND, _QUANT_IND), re.IGNORECASE | re.VERBOSE)
+
+# THE SYMBOL TABLE: (exchange symbol, Yahoo ticker, the names people say). NSE symbols;
+# Yahoo wants ".NS" on an NSE equity and its own caret code for an index. Every ticker here
+# returned six months of daily closes when fetched on 2026-10-09. Left out ON PURPOSE,
+# because each would be a guess: "hdfc", "icici", "kotak", "mahindra", "hcl" on their own
+# (more than one listed company answers to each); Tata Motors (the 2025 demerger retired
+# TATAMOTORS); FINNIFTY (Yahoo returns a single bar). A name must match an alias EXACTLY -
+# "reliance power" is not "reliance" - and one that does not is refused, never guessed.
+QUANT_LISTINGS = (
+    ("NIFTY", "^NSEI", ("nifty", "nifty 50", "nifty50")),
+    ("BANKNIFTY", "^NSEBANK", ("bank nifty", "banknifty", "nifty bank")),
+    ("SENSEX", "^BSESN", ("sensex",)),
+    ("NIFTYIT", "^CNXIT", ("nifty it", "niftyit")),
+    ("RELIANCE", "RELIANCE.NS", ("reliance", "reliance industries", "ril")),
+    ("TCS", "TCS.NS", ("tcs", "tata consultancy", "tata consultancy services")),
+    ("HDFCBANK", "HDFCBANK.NS", ("hdfc bank", "hdfcbank")),
+    ("ICICIBANK", "ICICIBANK.NS", ("icici bank", "icicibank")),
+    ("INFY", "INFY.NS", ("infosys", "infy")),
+    ("SBIN", "SBIN.NS", ("sbi", "sbin", "state bank", "state bank of india")),
+    ("BHARTIARTL", "BHARTIARTL.NS", ("airtel", "bharti airtel", "bhartiartl")),
+    ("ITC", "ITC.NS", ("itc",)),
+    ("HINDUNILVR", "HINDUNILVR.NS", ("hul", "hindustan unilever", "hindunilvr")),
+    ("LT", "LT.NS", ("l&t", "l and t", "larsen", "larsen and toubro", "larsen&toubro")),
+    ("KOTAKBANK", "KOTAKBANK.NS", ("kotak bank", "kotak mahindra bank", "kotakbank")),
+    ("AXISBANK", "AXISBANK.NS", ("axis bank", "axisbank")),
+    ("BAJFINANCE", "BAJFINANCE.NS", ("bajaj finance", "bajfinance")),
+    ("MARUTI", "MARUTI.NS", ("maruti", "maruti suzuki")),
+    ("ASIANPAINT", "ASIANPAINT.NS", ("asian paints", "asianpaint")),
+    ("SUNPHARMA", "SUNPHARMA.NS", ("sun pharma", "sunpharma")),
+    ("TITAN", "TITAN.NS", ("titan",)),
+    ("WIPRO", "WIPRO.NS", ("wipro",)),
+    ("HCLTECH", "HCLTECH.NS", ("hcl tech", "hcltech", "hcl technologies")),
+    ("TATASTEEL", "TATASTEEL.NS", ("tata steel", "tatasteel")),
+    ("ADANIENT", "ADANIENT.NS", ("adani enterprises", "adanient")),
+    ("ULTRACEMCO", "ULTRACEMCO.NS", ("ultratech", "ultratech cement", "ultracemco")),
+    ("NTPC", "NTPC.NS", ("ntpc",)),
+    ("ONGC", "ONGC.NS", ("ongc",)),
+    ("POWERGRID", "POWERGRID.NS", ("power grid", "powergrid")),
+    ("M&M", "M&M.NS", ("m&m", "mahindra and mahindra", "mahindra&mahindra")),
+)
+
+
+def _quant_norm(text):
+    """Lowercase, "'s" off, "&" kept and closed up ("L & T" -> "l&t"), other punctuation to
+    spaces, single-spaced. Both the question and every alias go through this one door."""
+    t = re.sub(r"'s\b", "", str(text or "").lower())
+    t = re.sub(r"\s*&\s*", "&", re.sub(r"[^\w&\s]", " ", t))
+    return re.sub(r"\s+", " ", t).strip()
+
+
+QUANT_ALIASES = {_quant_norm(alias): (symbol, ticker)
+                 for symbol, ticker, aliases in QUANT_LISTINGS for alias in aliases}
+
+# Words around the name that are not the name. _HINGLISH_GLUE (below) is read as well.
+_QUANT_STOP = frozenset((
+    "what", "whats", "is", "are", "was", "a", "an", "of", "for", "on", "in", "at", "my",
+    "tell", "show", "give", "check", "get", "find", "please", "pls", "can", "you", "could",
+    "would", "current", "currently", "today", "todays", "now", "latest", "live", "abhi",
+    "aaj", "value", "level", "reading", "number", "daily", "14", "day", "days", "period",
+    "chart", "stock", "stocks", "share", "shares", "index", "indices", "price", "kitna",
+    "kitni", "kitne", "bataiye", "batayein", "dikhao", "jarvis", "sir", "bhai", "mujhe",
+    "hume", "humein", "nse", "bse", "ltd", "limited", "how", "much", "calculate",
+    "calculated", "compute", "computed", "chal", "raha", "rahi", "rahe", "chahiye",
+    "trading", "indicator", "technical", "analysis", "momentum", "mean", "means",
+    "meaning", "work", "works", "used", "use", "beginners", "example", "strategy",
+    "divergence", "settings", "portfolio", "holdings"))
+
+
+def quant_request(question):
+    """{"indicator", "name", "symbol", "ticker"} when `question` asks for an indicator on
+    one named symbol, else None. Pure and regex-only, like classify_query(), which calls it.
+
+    The name is what is left when the indicator and the words around it are taken away.
+      resolves to an alias      quant - "nifty RSI", "Reliance ka RSI kya hai"
+      unknown, explicit slot    quant, with symbol None, which answers "pata nahi" -
+                                "RSI of xyzabc123"; unless it points at their own things
+      nothing left / no slot    None - "what is RSI", "is RSI reliable": a concept or noise
+    """
+    text = _quant_norm(question)
+    hit = QUANT_INDICATOR_RE.search(text)
+    if not hit:
+        return None
+    indicator = hit.lastgroup
+    rest = [w for w in QUANT_INDICATOR_RE.sub(" ", text).split()
+            if w not in _QUANT_STOP and w not in _HINGLISH_GLUE]
+    name = " ".join(rest)
+    if not name:
+        return None
+    symbol, ticker = QUANT_ALIASES.get(name, (None, None))
+    if symbol is None and (not QUANT_SLOT_RE.search(text) or PERSONAL_RE.search(question)):
+        return None
+    return {"indicator": indicator, "name": name, "symbol": symbol, "ticker": ticker}
+
+
+RSI_PERIOD = 14
+# SIX MONTHS, NOT THE MINIMUM. Fifteen closes are enough to compute RSI(14), but Wilder's
+# smoothing is recursive: the seed average stays in every later value, and a seed only
+# fifteen bars back leaves the reading several points from what a charting platform shows
+# for the same day. About 125 sessions lets the seed decay to well under a tenth of a point.
+QUANT_HISTORY = "6mo"
+# NSE closes at 15:30 IST; Yahoo's bar for the day is final a little after. Before this, the
+# bar dated today is a session still trading and is dropped - this phase reads closes only.
+QUANT_SESSION_FINAL = (16, 0)
+_IST = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+
+
+def daily_closes(ticker, now=None):
+    """(dates, closes, error) - COMPLETED daily closes, oldest first, from yfinance.
+    `now` (an aware datetime) is for the tests; the server always passes nothing.
+
+    yfinance is imported here and not at the top: it drags pandas in (a second of start-up
+    for a feature most turns never touch), and a machine without it should lose this route,
+    not the server.
+    """
+    try:
+        import yfinance
+    except ImportError:
+        return [], [], "yfinance is not installed (python -m pip install --user yfinance)"
+    try:
+        hist = yfinance.Ticker(ticker).history(period=QUANT_HISTORY, interval="1d",
+                                               auto_adjust=False, timeout=10)
+        series = hist["Close"].dropna()
+    except Exception as exc:  # yfinance raises whatever its transport raises
+        return [], [], "yfinance could not fetch %s: %s" % (ticker, exc)
+    dates = [ts.date() for ts in series.index]
+    closes = [float(v) for v in series]
+    now = (now or datetime.datetime.now(_IST)).astimezone(_IST)
+    if dates and dates[-1] >= now.date() and (now.hour, now.minute) < QUANT_SESSION_FINAL:
+        dates, closes = dates[:-1], closes[:-1]
+    return dates, closes, ""
+
+
+def wilder_rsi(closes, period=RSI_PERIOD):
+    """RSI(period) at the LAST close, by Wilder's smoothing; None with fewer than period+1.
+
+    THE FORMULA, written out so it can be checked by hand:
+        change_t  = close_t - close_(t-1)
+        gain_t    = max(change_t, 0)            loss_t = max(-change_t, 0)
+        seed      avgGain = mean(gain_1 .. gain_period)
+                  avgLoss = mean(loss_1 .. loss_period)
+        then, for every later bar (Wilder's smoothing, alpha = 1/period):
+                  avgGain = (avgGain * (period - 1) + gain_t) / period
+                  avgLoss = (avgLoss * (period - 1) + loss_t) / period
+        RS  = avgGain / avgLoss
+        RSI = 100 - 100 / (1 + RS)
+    avgLoss of 0 means nothing fell: RSI is 100, or 50 if nothing moved either way.
+    """
+    if len(closes) < period + 1:
+        return None
+    changes = [b - a for a, b in zip(closes, closes[1:])]
+    gains = [max(c, 0.0) for c in changes]
+    losses = [max(-c, 0.0) for c in changes]
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
+    for g, l in zip(gains[period:], losses[period:]):
+        avg_gain = (avg_gain * (period - 1) + g) / period
+        avg_loss = (avg_loss * (period - 1) + l) / period
+    if avg_loss == 0:
+        return 100.0 if avg_gain > 0 else 50.0
+    return 100.0 - 100.0 / (1.0 + avg_gain / avg_loss)
+
+
+def rsi_zone(value):
+    """(zone, label) on the conventional 30/70 bands - a convention, not a forecast. The
+    zone is judged on the figure as shown, so "70.0" is never labelled overbought."""
+    shown = round(value, 1)
+    if shown > 70:
+        zone, band = "overbought", "overbought zone (>70)"
+    elif shown < 30:
+        zone, band = "oversold", "oversold zone (<30)"
+    else:
+        zone, band = "neutral", "neutral range (30-70)"
+    return zone, "RSI %.1f - %s" % (shown, band)
+
+
+QUANT_CALCULATORS = {"rsi": wilder_rsi}
+
+
+def quant_reading(req):
+    """The computed reading for a resolved quant_request(), or {"error": ...}. No model."""
+    dates, closes, error = daily_closes(req["ticker"])
+    if error:
+        return {"error": error}
+    value = QUANT_CALCULATORS[req["indicator"]](closes)
+    if value is None:
+        return {"error": "only %d daily close%s came back for %s - RSI(%d) needs %d"
+                         % (len(closes), "" if len(closes) == 1 else "s", req["symbol"],
+                            RSI_PERIOD, RSI_PERIOD + 1)}
+    zone, label = rsi_zone(value)
+    # "shown" is the figure in the label, rounded ONCE from the raw value: rounding the
+    # two-place "rsi" again would turn 36.446 into 36.45 and then 36.5.
+    return {"symbol": req["symbol"], "ticker": req["ticker"], "rsi": round(value, 2),
+            "shown": "%.1f" % round(value, 1),
+            "zone": zone, "label": label, "asOf": dates[-1].isoformat(),
+            "close": round(closes[-1], 2), "bars": len(closes)}
+
+
+QUERY_CLASSES = ("quant", "personal", "current", "general", "ambiguous", "mixed")
 
 
 def classify_query(question, note_names=()):
@@ -4676,6 +4945,10 @@ def classify_query(question, note_names=()):
     personal by name even with no pronoun in it.
     """
     text = str(question or "").strip()
+    # FIRST, because "mujhe Reliance ka RSI batao" carries a personal pointer and a
+    # concept shape, and neither is what it asks for. See quant_request().
+    if quant_request(text):
+        return "quant", True
     bare = _bare(text) or text.lower()
     # Both forms: _bare() turns "P/E" into "p e" and "P&L" into "p l", so the raw text is
     # where the ratio names survive; the bare form is where spacing is normalised.
@@ -9683,6 +9956,63 @@ def strip_citations(payload, why):
     return payload
 
 
+def quant_template(reading):
+    """The reading said plainly, with no model in it: the fallback for a model reply that
+    failed, strayed into advice or lost the figure."""
+    return ("%s: %s, computed on daily closes up to %s."
+            % (reading["symbol"], reading["label"], reading["asOf"]))
+
+
+def answer_quant(cfg, question, session, history, qclass):
+    """(status, payload) for the "quant" route. The number is computed here; the model only
+    words it, and the risk line is appended by this function, never by the model."""
+    req = quant_request(question) or {}
+    base = {"nodes": [], "kind": "compose", "route": "quant", "qclass": qclass,
+            "indicator": req.get("indicator")}
+    if not req.get("symbol"):
+        # REFUSED, NOT GUESSED. No fetch and no model: there is nothing to report.
+        name = req.get("name") or question.strip()
+        sys.stderr.write("  quant: %r did not resolve to a symbol\n" % name[:60])
+        answer = "%s ko kis exchange symbol se match karu, pata nahi." % name
+        record_turn(session, question, answer)
+        return 200, dict(base, kind="chat", answer=answer, symbol=None, rsi=None, zone=None)
+    reading = quant_reading(req)
+    if reading.get("error"):
+        sys.stderr.write("  quant: %s - %s\n" % (req["symbol"], reading["error"]))
+        return 502, dict(base, kind="chat", symbol=req["symbol"],
+                         error="Could not read %s's daily closes just now: %s"
+                               % (req["symbol"], reading["error"]))
+    sys.stderr.write("  quant: %s %s on %d closes to %s - %s\n"
+                     % (req["symbol"], req["indicator"], reading["bars"], reading["asOf"],
+                        reading["label"]))
+    turn_note(quant={k: reading[k] for k in ("symbol", "ticker", "rsi", "zone", "asOf",
+                                             "bars")})
+    facts = ("Symbol: %s (%s)\nIndicator: RSI(%d), Wilder's smoothing, daily closes\n"
+             "Reading: %s\nLast daily close used: %s on %s (end-of-day, not live)"
+             % (reading["symbol"], reading["ticker"], RSI_PERIOD, reading["label"],
+                reading["close"], reading["asOf"]))
+    messages, _plan = assemble(system=QUANT_PROMPT, history=history,
+                               older=older_block(session), ask=question.strip(),
+                               heading="The reading, computed on the server. Report it "
+                                       "exactly; do not recompute it:",
+                               evidence=facts, label="quant")
+    said, error = call_model(cfg, messages)
+    said = "" if error else hands.clean_mouth(QUANT_SELF_DISCLAIMER_RE.sub(" ", said or ""))
+    shown = reading["shown"]
+    why = ("the model failed (%s)" % error if error
+           else "a tag came back" if "[[" in said
+           else "it strayed into advice" if QUANT_ADVICE_RE.search(said)
+           else "it lost the figure %s" % shown if shown not in said
+           else "")
+    if why:
+        sys.stderr.write("  quant: the template answered - %s\n" % why)
+        said = quant_template(reading)
+    answer = said.rstrip() + "\n\n" + QUANT_DISCLAIMER
+    record_turn(session, question, answer)
+    return 200, dict(base, answer=answer, symbol=reading["symbol"], rsi=reading["rsi"],
+                     zone=reading["zone"], asOf=reading["asOf"])
+
+
 def answer_question(question, session, guest=False):
     """One question in, one of five worlds out, and the reply always says which.
 
@@ -9730,7 +10060,7 @@ def answer_question(question, session, guest=False):
     # sharing the notes' vocabulary is exactly what used to open the notes door on them.
     # Every other class - and every non-finance question - retrieves as it always did.
     qclass, qfinance = classify_query(question, note_stems())
-    skip_notes = qfinance and qclass in ("general", "current")
+    skip_notes = qfinance and qclass in ("general", "current", "quant")
     # A MIXED question asks the notes only its own half - see personal_half().
     rq = (retrieval_text(personal_half(question) if qclass == "mixed" else question)
           if qclass in ("mixed", "personal") else question)
@@ -9848,7 +10178,9 @@ def answer_question(question, session, guest=False):
     # ---- THE DECISION TREE, for the classes this repair owns. A forced lookup ("look this
     # up") outranks all of it, as it outranks everything else in this file.
     if reason != "force":
-        if qfinance and qclass == "general":
+        if qclass == "quant":
+            route_to, reason = "quant", ""         # computed here, from end-of-day closes
+        elif qfinance and qclass == "general":
             route_to, reason = "knowledge", ""     # a concept: answered, not looked up
         elif qfinance and qclass == "current":
             # The Live Web path, exactly as the questions that already worked took it.
@@ -10063,12 +10395,14 @@ def answer_question(question, session, guest=False):
             sys.stderr.write("  tool: %r looked like an instruction and was not one\n"
                              % question.strip()[:60])
 
-    # ---- THE CONCEPT DOOR AND THE TWO-HALVES DOOR (the query classifier's own exits).
+    # ---- THE QUANT, CONCEPT AND TWO-HALVES DOORS (the query classifier's own exits).
     # Below the hands, so "remind me to check my SIP" is still offered as a reminder; above
     # the task door, so "explain time value of money" is answered as a concept and not
     # composed as a chore. The PII shield is honoured here too: an identifier in the sentence
     # sends it on down to the shield, which says so out loud.
     if route_to and not private_identifier(question):
+        if route_to == "quant":
+            return answer_quant(cfg, question, session, history, qclass)
         if route_to == "knowledge":
             sys.stderr.write("  no lookup: %r is a finance concept (%s); answered from "
                              "knowledge, notes unread\n" % (question.strip()[:60], qclass))
