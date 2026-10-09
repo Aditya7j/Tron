@@ -115,6 +115,11 @@ import quant_paper
 # answer_confidence(). No model is in its arithmetic or in the answer.
 import confidence
 
+# THE LEDGER. Two books - Galaxy's running costs and the boss's business - in ledger.json. This
+# file reads it for the "ledger" query class and PROPOSES writes to it through hands.propose()
+# on the ledger door; it never writes a row itself. See answer_ledger().
+import ledger
+
 # The live lookup. Query in, at most three snippets out, and it NEVER raises - a dead
 # network, a captcha or a redesigned results page all come back as an empty list, which
 # is the one case this file has to handle anyway. No key, no pip, no SDK.
@@ -5004,7 +5009,62 @@ def confidence_request(question):
     return agent.lastgroup if agent else "overall"
 
 
-QUERY_CLASSES = ("confidence", "paper", "quant", "personal", "current", "general",
+# THE LEDGER'S QUESTIONS: "Groq ka bill 500 rupaye add karo", "is mahine ka kharcha kitna hua",
+# "business income kitna hai October mein", "koi unverified entry hai kya". A write needs a verb
+# of adding, a figure and a word of money; a read needs a word of asking, a subject (kharcha,
+# income, bill) and a pointer at THIS house's books - a period, a book, one of its categories -
+# so "how much income tax do I pay" stays a concept and "what does Groq cost" stays a lookup.
+# A reminder or a meeting with a figure in it is the calendar's, never the ledger's.
+_LEDGER_ADD_RE = re.compile(r"""\b(?: add | daal\w* | dal\s+do | dalo | likh\w* | record
+    | jod\w* | enter | log )\b""", re.IGNORECASE | re.VERBOSE)
+_LEDGER_MONEY_RE = re.compile(r"""\u20b9 | \$ | \b(?: rs\.? | inr | rupees? | rupaye | rupaiye
+    | rupay | rupiya | dollars? | bill | kharcha | kharch | expense | income | revenue | kamai
+    | fee | fees | subscription | payment )\b""", re.IGNORECASE | re.VERBOSE)
+_LEDGER_NOT_RE = re.compile(r"\b(?:remind\w*|calendar|meeting|schedule|yaad|alarm)\b",
+                            re.IGNORECASE)
+_LEDGER_VOID_RE = re.compile(r"\b(?:void|strike\s+out|cancel|galat|hata\w*|remove|delete)\b",
+                             re.IGNORECASE)
+_LEDGER_ENTRY_RE = re.compile(r"\bL-\d{1,6}\b|\b(?:last|aakhri|akhri|pichli|latest)\s+entry\b",
+                              re.IGNORECASE)
+_LEDGER_UNVERIFIED_RE = re.compile(r"""\b(?: unverified | bina\s+(?:proof|receipt|rasid)
+    | without\s+(?:a\s+)?(?:proof|receipt) | no\s+(?:proof|receipt) | proof\s+nahi\w* )\b""",
+                                   re.IGNORECASE | re.VERBOSE)
+_LEDGER_ROWS_RE = re.compile(r"""\b(?: entry | entries | ledger | book | hisaab | hisab
+    | kharch\w* | expenses? | income | kamai | bills? )\b""", re.IGNORECASE | re.VERBOSE)
+_LEDGER_BALANCE_RE = re.compile(r"""\bbalance\b.*\b(?: ledger | book | hisaab | hisab | galaxy
+    | business )\b | \b(?: ledger | book | hisaab | hisab | galaxy | business )\b.*\bbalance\b""",
+                                re.IGNORECASE | re.VERBOSE)
+_LEDGER_ASK_RE = re.compile(r"""\b(?: kitna | kitni | kitne | how\s+much | total | summary
+    | dikhao | batao | show | list | hua | hui )\b""", re.IGNORECASE | re.VERBOSE)
+_LEDGER_SUBJECT_RE = re.compile(r"""\b(?: kharcha | kharche | kharch | expenses? | spend | spent
+    | income | kamai | revenue | earnings? | bills? | hisaab | hisab | ledger )\b""",
+                                re.IGNORECASE | re.VERBOSE)
+_LEDGER_POINTER_RE = re.compile(r"""\b(?: mera | meri | mere | my | our | hamara | hamari
+    | galaxy | business | book | ledger | hisaab | hisab | kharcha | kharch | groq | gemini
+    | hosting | domain | youtube | newsletter | consulting )\b""", re.IGNORECASE | re.VERBOSE)
+
+
+def ledger_request(question):
+    """"add", "void", "unverified", "balance" or "summary" for a question about the two
+    books, else None. Regex-only and microseconds, like paper_request()."""
+    text = str(question or "")
+    if _LEDGER_VOID_RE.search(text) and _LEDGER_ENTRY_RE.search(text):
+        return "void"
+    if (_LEDGER_ADD_RE.search(text) and _LEDGER_MONEY_RE.search(text)
+            and re.search(r"\d", text) and not _LEDGER_NOT_RE.search(text)):
+        return "add"
+    if _LEDGER_UNVERIFIED_RE.search(text) and _LEDGER_ROWS_RE.search(text):
+        return "unverified"
+    if _LEDGER_BALANCE_RE.search(text):
+        return "balance"
+    if (_LEDGER_ASK_RE.search(text) and _LEDGER_SUBJECT_RE.search(text)
+            and (_LEDGER_POINTER_RE.search(text)
+                 or ledger.parse_period(text)["start"] is not None)):
+        return "summary"
+    return None
+
+
+QUERY_CLASSES = ("confidence", "ledger", "paper", "quant", "personal", "current", "general",
                  "ambiguous", "mixed")
 
 
@@ -5022,6 +5082,9 @@ def classify_query(question, note_names=()):
     # The meter's before the desk's: "Quant kitna reliable hai" asks about the agent.
     if confidence_request(text):
         return "confidence", False
+    # The books before the desk: "Groq ka bill 500 add karo" names no symbol and no trade.
+    if ledger_request(text):
+        return "ledger", True
     if paper_request(text):
         return "paper", True
     if quant_request(text):
@@ -10181,6 +10244,48 @@ def answer_confidence(question, session, qclass):
                  "qclass": qclass, "confidence": {"view": view, "report": rep}}
 
 
+LEDGER_GUEST_LINE = ("The books are kept for the household and read only to it, so I will "
+                     "leave those figures where they are.")
+
+
+def answer_ledger(question, session, qclass, guest=False):
+    """(status, payload) for the "ledger" route.
+
+    A READ - a summary, a balance, the unverified list - is answered from ledger.json in the
+    ledger's own sentences, with no model and no gate: it changes nothing.
+    A WRITE - an entry or a void - is never made here. The sentence is parsed by
+    ledger.parse_request() and either refused out loud (no amount, two amounts, no book, a
+    proof that is not there) or put up as a card by hands.propose() on the ledger door - the
+    same slot, TTL and Doorman as every other hand - and only a yes runs the tool that writes.
+    A GUEST - a voice this house has identified as not the boss's - is told nothing and offered
+    nothing: these are the boss's own figures.
+    """
+    action = ledger_request(question) or "summary"
+    base = {"nodes": [], "route": "ledger", "qclass": qclass, "ledgerAction": action}
+    if guest:
+        sys.stderr.write("  ledger: a guest asked (%s); nothing read, nothing proposed\n"
+                         % action)
+        record_turn(session, question, LEDGER_GUEST_LINE)
+        return 200, dict(base, kind="chat", answer=LEDGER_GUEST_LINE, refused="guest")
+    req = ledger.parse_request(question, action)
+    if action in ("add", "void"):
+        if req["error"]:
+            sys.stderr.write("  ledger: %s refused before a card - %s\n"
+                             % (action, req["error"][:90]))
+            record_turn(session, question, req["error"])
+            return 200, dict(base, kind="chat", answer=req["error"], refused=action)
+        status, payload = hands.propose(req["tool"], req["params"], door="ledger")
+        sys.stderr.write("  ledger: %s %s, awaiting a word\n"
+                         % (action, "proposed" if payload.get("ok") else "refused"))
+        payload.update(base)
+        return status, payload
+    answer, data = ledger.answer(req)
+    sys.stderr.write("  ledger: answered %r from the books (%s)\n"
+                     % (question.strip()[:60], action))
+    record_turn(session, question, answer)
+    return 200, dict(base, kind="compose", answer=answer, ledger=data)
+
+
 def answer_question(question, session, guest=False):
     """One question in, one of five worlds out, and the reply always says which.
 
@@ -10228,6 +10333,10 @@ def answer_question(question, session, guest=False):
     # sharing the notes' vocabulary is exactly what used to open the notes door on them.
     # Every other class - and every non-finance question - retrieves as it always did.
     qclass, qfinance = classify_query(question, note_stems())
+    # THE BOOKS ARE ANSWERED HERE, before a note is read or a hand is offered to the brain: a
+    # figure in them is the boss's own, and the brain is never the one to fill it in.
+    if qclass == "ledger":
+        return answer_ledger(question, session, qclass, guest=guest)
     skip_notes = (qfinance and qclass in ("general", "current", "quant", "paper")
                   or qclass == "confidence")
     # A MIXED question asks the notes only its own half - see personal_half().
@@ -13088,6 +13197,10 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
             cmd = str(data.get("cmd") or "").strip().lower()[:16]
             ident = str(data.get("id") or "")[:40] or None
             door = str(data.get("door") or "button")[:16].lower()
+            if door == "ledger":
+                # The ledger door means "the server parsed the boss's own sentence" -
+                # answer_ledger() - and a body cannot claim it. See hands._clean_tool's doors.
+                door = "button"
             try:
                 if cmd == "propose":
                     status, payload = hands.propose(

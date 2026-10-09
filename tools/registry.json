@@ -460,6 +460,119 @@
       "timeout_s": 180,
       "proposal": "The newsletter on {topic} is ready, sir - '{subject}', going to {subscribers} subscriber(s). The card carries the opening and the notes it cites. Shall I send it?",
       "step": "Send the newsletter '{subject}' to {subscribers} subscriber(s)."
+    },
+    {
+      "id": "add_ledger_entry",
+      "name": "Write an entry into the ledger",
+      "script": "add_ledger_entry.py",
+      "_why": [
+        "THE LEDGER'S PEN, and the one write a chat sentence can reach beyond the other hands.",
+        "Every amount in it is the employer's own figure, parsed by the server from what he said",
+        "(ledger.parse_request) - never a model's. So it names DOORS: proposed only through the",
+        "ledger door the server's own parse uses, never from a [[tool: ...]] tag, never as a step",
+        "of a chain, and never described to the brain at all. See hands._clean_tool.",
+        "",
+        "`entry` IS THE SENTENCE THE CARD SPEAKS, composed by ledger.describe() from the other",
+        "parameters - and add_ledger_entry.py composes it again from them and refuses to write if",
+        "the two differ. What he approved out loud is what goes in the book, to the paisa.",
+        "amount_paise is an INTEGER: a ledger has no floats, and the card shows the exact figure",
+        "that will be written. proof is 'none' or a path under proofs/ that exists."
+      ],
+      "doors": [
+        "ledger"
+      ],
+      "capabilities": [
+        "write an income or an expense the employer has just stated into one of the two books, Galaxy's own running costs or his business's"
+      ],
+      "triggers": [],
+      "params": [
+        {
+          "name": "entry",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "book",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "kind",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "amount_paise",
+          "type": "integer",
+          "required": true
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "category",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "on",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "proof",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "note",
+          "type": "text",
+          "required": false
+        }
+      ],
+      "timeout_s": 15,
+      "proposal": "{entry}, sir. Shall I write it down?",
+      "step": "Write an entry into the ledger: {entry}."
+    },
+    {
+      "id": "void_ledger_entry",
+      "name": "Void an entry in the ledger",
+      "script": "void_ledger_entry.py",
+      "_why": [
+        "THE LEDGER'S STRIKE-THROUGH. Nothing in the book is ever deleted: a wrong entry is voided,",
+        "keeps its row, and gains a reason and a time. Door-bound for the same reason as",
+        "add_ledger_entry. `entry` is the existing entry as ledger.entry_line() reads it, and",
+        "void_ledger_entry.py reads it again at the moment of writing and refuses if it changed."
+      ],
+      "doors": [
+        "ledger"
+      ],
+      "capabilities": [
+        "strike out one entry in the ledger as void, keeping it in the book with the reason the employer gave"
+      ],
+      "triggers": [],
+      "params": [
+        {
+          "name": "entry",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "timeout_s": 15,
+      "proposal": "That would strike out {entry}, because: {reason}. It stays in the book, marked void. Shall I void it?",
+      "step": "Void {id} in the ledger."
     }
   ]
 }

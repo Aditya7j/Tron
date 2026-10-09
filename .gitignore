@@ -101,3 +101,9 @@ newsletter_subscribers.json
 # THE CONFIDENCE METER'S CACHE. The test files' last exit codes and the last report -
 # derived local state, rebuilt by `python confidence.py --tests`.
 confidence-cache.json
+# THE LEDGER'S TWO. ledger.json is the boss's money - both books, every entry and every void -
+# and proofs/ holds the receipts and statements its entries point at. Local, private, and
+# nobody else's business; neither is source.
+ledger.json
+ledger.json.tmp
+proofs/
