@@ -98,3 +98,6 @@ Thumbs.db
 # third party who subscribed to a newsletter did not consent to appearing in a git history.
 # Read-only to every tool in this house; nothing in newsletter.py or tools/ writes it.
 newsletter_subscribers.json
+# THE CONFIDENCE METER'S CACHE. The test files' last exit codes and the last report -
+# derived local state, rebuilt by `python confidence.py --tests`.
+confidence-cache.json

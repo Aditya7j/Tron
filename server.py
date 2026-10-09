@@ -110,6 +110,11 @@ import scholar
 # it and reads its ledger for the "paper" query class - see answer_paper().
 import quant_paper
 
+# THE CONFIDENCE METER. Read-only: it scores each agent from the ledgers above and writes
+# nothing but its own cache. This file only asks it, for the "confidence" query class - see
+# answer_confidence(). No model is in its arithmetic or in the answer.
+import confidence
+
 # The live lookup. Query in, at most three snippets out, and it NEVER raises - a dead
 # network, a captcha or a redesigned results page all come back as an empty list, which
 # is the one case this file has to handle anyway. No key, no pip, no SDK.
@@ -4970,7 +4975,37 @@ def paper_request(question):
     return None
 
 
-QUERY_CLASSES = ("paper", "quant", "personal", "current", "general", "ambiguous", "mixed")
+# THE CONFIDENCE METER'S QUESTIONS: "Galaxy ka confidence kitna hai", "kaunsa agent sabse weak
+# hai abhi", "Quant kitna reliable hai". Answered from confidence.report() and nothing else.
+# Each needs a trust word AND a pointer at this house, so "how reliable is RSI" and "what is a
+# confidence interval" stay concepts. "Director of" is a company's director, and a Samsung
+# Galaxy is a phone.
+_CONF_AGENT_RE = re.compile(r"""\b(?: (?P<director> director (?! \s+ of \b) )
+    | (?P<broadcaster> broadcaster ) | (?P<publisher> publisher ) | (?P<scholar> scholar )
+    | (?P<quant> quant ) )\b""", re.IGNORECASE | re.VERBOSE)
+_CONF_HOUSE_RE = re.compile(r"\b(?: galaxy | agents? )\b", re.IGNORECASE | re.VERBOSE)
+_CONF_TRUST_RE = re.compile(r"""\b(?: confiden\w* | reliab\w* | trust\w* | bharos\w*
+    | dependab\w* | weak\w* | kamzor\w* | worst | least \s+ reliable )\b""",
+                            re.IGNORECASE | re.VERBOSE)
+_CONF_WEAK_RE = re.compile(r"\b(?: weak\w* | kamzor\w* | worst | least \s+ reliable )\b",
+                           re.IGNORECASE | re.VERBOSE)
+
+
+def confidence_request(question):
+    """"overall", "weakest" or an agent key for a question about the meter, else None."""
+    text = str(question or "")
+    if not _CONF_TRUST_RE.search(text) or re.search(r"\bsamsung\b", text, re.I):
+        return None
+    agent = _CONF_AGENT_RE.search(text)
+    if not agent and not _CONF_HOUSE_RE.search(text):
+        return None
+    if _CONF_WEAK_RE.search(text):
+        return "weakest"
+    return agent.lastgroup if agent else "overall"
+
+
+QUERY_CLASSES = ("confidence", "paper", "quant", "personal", "current", "general",
+                 "ambiguous", "mixed")
 
 
 def classify_query(question, note_names=()):
@@ -4984,6 +5019,9 @@ def classify_query(question, note_names=()):
     # FIRST, because "mujhe Reliance ka RSI batao" carries a personal pointer and a
     # concept shape, and neither is what it asks for. See quant_request(). The paper desk's
     # own questions before even that: "Quant ka track record" names no symbol to resolve.
+    # The meter's before the desk's: "Quant kitna reliable hai" asks about the agent.
+    if confidence_request(text):
+        return "confidence", False
     if paper_request(text):
         return "paper", True
     if quant_request(text):
@@ -10122,6 +10160,18 @@ def answer_paper(question, session, qclass):
                                              "trades": shown, "halted": quant_paper.halted()}}
 
 
+def answer_confidence(question, session, qclass):
+    """(status, payload) for the "confidence" route: every figure is confidence.report()'s,
+    and the sentence around it is the meter's own template - no model words or scores it."""
+    view = confidence_request(question) or "overall"
+    answer, rep = confidence.answer(view)
+    sys.stderr.write("  confidence: answered %r from the ledgers (%s, overall %s)\n"
+                     % (question.strip()[:60], view, rep["overall"]["score"]))
+    record_turn(session, question, answer)
+    return 200, {"answer": answer, "nodes": [], "kind": "compose", "route": "confidence",
+                 "qclass": qclass, "confidence": {"view": view, "report": rep}}
+
+
 def answer_question(question, session, guest=False):
     """One question in, one of five worlds out, and the reply always says which.
 
@@ -10169,7 +10219,8 @@ def answer_question(question, session, guest=False):
     # sharing the notes' vocabulary is exactly what used to open the notes door on them.
     # Every other class - and every non-finance question - retrieves as it always did.
     qclass, qfinance = classify_query(question, note_stems())
-    skip_notes = qfinance and qclass in ("general", "current", "quant", "paper")
+    skip_notes = (qfinance and qclass in ("general", "current", "quant", "paper")
+                  or qclass == "confidence")
     # A MIXED question asks the notes only its own half - see personal_half().
     rq = (retrieval_text(personal_half(question) if qclass == "mixed" else question)
           if qclass in ("mixed", "personal") else question)
@@ -10197,7 +10248,8 @@ def answer_question(question, session, guest=False):
                        and not address_only(question))
     sem = (semantic_recall(rq, prior) if worth_embedding and not skip_notes
            else {"available": False,
-                 "why": ("classified %s (finance); the notes were not read" % qclass
+                 "why": ("classified %s%s; the notes were not read"
+                         % (qclass, " (finance)" if qfinance else "")
                          if skip_notes else "nothing was asked"),
                  "opens": False, "hits": [], "cited": [], "best": 0.0, "best3": 0.0,
                  "scans": [], "threshold": 0.0, "ms": 0})
@@ -10287,8 +10339,8 @@ def answer_question(question, session, guest=False):
     # ---- THE DECISION TREE, for the classes this repair owns. A forced lookup ("look this
     # up") outranks all of it, as it outranks everything else in this file.
     if reason != "force":
-        if qclass in ("quant", "paper"):
-            route_to, reason = qclass, ""          # computed here / read from the paper ledger
+        if qclass in ("quant", "paper", "confidence"):
+            route_to, reason = qclass, ""          # computed here / read from a ledger
         elif qfinance and qclass == "general":
             route_to, reason = "knowledge", ""     # a concept: answered, not looked up
         elif qfinance and qclass == "current":
@@ -10514,6 +10566,8 @@ def answer_question(question, session, guest=False):
             return answer_quant(cfg, question, session, history, qclass)
         if route_to == "paper":
             return answer_paper(question, session, qclass)
+        if route_to == "confidence":
+            return answer_confidence(question, session, qclass)
         if route_to == "knowledge":
             sys.stderr.write("  no lookup: %r is a finance concept (%s); answered from "
                              "knowledge, notes unread\n" % (question.strip()[:60], qclass))
