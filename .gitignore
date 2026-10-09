@@ -64,6 +64,12 @@ calendar.json
 # notes with one command. The script.md inside it is derived from the notes too.
 jobs-ledger.json
 output/
+# THE PAPER DESK'S THREE. paper-ledger.json is the Quant's simulated track record on this
+# machine, paper-dryrun.json is a replay written by `python quant_paper.py --dryrun`, and
+# quant-paper.off is the kill switch, whose presence is a local decision, not source.
+paper-ledger.json
+paper-dryrun.json
+quant-paper.off
 
 # PROOF ARTEFACTS (screenshots the harnesses write)
 deck-*.png

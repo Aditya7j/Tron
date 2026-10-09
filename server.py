@@ -104,6 +104,12 @@ import focus
 # four callbacks injected below.
 import scholar
 
+# THE PAPER DESK. Phase II.2 of the Quant: a daemon that opens and follows HYPOTHETICAL trades
+# on NIFTY and BANKNIFTY and keeps their score in paper-ledger.json. Its own file, its own
+# thread and its own lock, like the Scholar; it places nothing anywhere. This file only starts
+# it and reads its ledger for the "paper" query class - see answer_paper().
+import quant_paper
+
 # The live lookup. Query in, at most three snippets out, and it NEVER raises - a dead
 # network, a captcha or a redesigned results page all come back as an empty list, which
 # is the one case this file has to handle anyway. No key, no pip, no SDK.
@@ -4934,7 +4940,37 @@ def quant_reading(req):
             "close": round(closes[-1], 2), "bars": len(closes)}
 
 
-QUERY_CLASSES = ("quant", "personal", "current", "general", "ambiguous", "mixed")
+# THE PAPER DESK'S QUESTIONS (Phase II.2): "Quant ka track record kya hai", "koi open setup
+# hai abhi", "aaj ke paper trades dikhao". Answered from paper-ledger.json and nothing else.
+# Each needs a pointer at the desk itself, so "what is paper trading" stays a concept and
+# "what is the accuracy of RSI" stays a question about RSI.
+_PAPER_SUBJECT_RE = re.compile(r"\b(?: quant | paper [\s-]* trad\w* )\b",
+                               re.IGNORECASE | re.VERBOSE)
+_PAPER_RECORD_RE = re.compile(r"""\b(?: track \s+ record | win \s* rate | hit \s* rate
+    | accuracy | success \s+ rate | performance | score \s* card )\b""",
+                              re.IGNORECASE | re.VERBOSE)
+_PAPER_OPEN_RE = re.compile(r"""\b(?: open | active | chalu | running ) \s+ (?: \w+ \s+ )?
+    (?: setups? | positions? | trades? )\b | \b (?: koi | any ) \s+ (?: \w+ \s+ )? setups? \b""",
+                            re.IGNORECASE | re.VERBOSE)
+_PAPER_LIST_RE = re.compile(r"""\b(?: dikhao | show | list | batao | aaj | today | todays
+    | recent | latest | last | kitne | how \s+ many | kya \s+ hua )\b""",
+                            re.IGNORECASE | re.VERBOSE)
+
+
+def paper_request(question):
+    """"record", "open" or "today" for a question about the paper desk, else None."""
+    text = str(question or "")
+    subject = _PAPER_SUBJECT_RE.search(text)
+    if subject and _PAPER_RECORD_RE.search(text):
+        return "record"
+    if _PAPER_OPEN_RE.search(text) and (subject or re.search(r"\bsetups?\b", text, re.I)):
+        return "open"
+    if re.search(r"\bpaper[\s-]*trad", text, re.I) and _PAPER_LIST_RE.search(text):
+        return "today"
+    return None
+
+
+QUERY_CLASSES = ("paper", "quant", "personal", "current", "general", "ambiguous", "mixed")
 
 
 def classify_query(question, note_names=()):
@@ -4946,7 +4982,10 @@ def classify_query(question, note_names=()):
     """
     text = str(question or "").strip()
     # FIRST, because "mujhe Reliance ka RSI batao" carries a personal pointer and a
-    # concept shape, and neither is what it asks for. See quant_request().
+    # concept shape, and neither is what it asks for. See quant_request(). The paper desk's
+    # own questions before even that: "Quant ka track record" names no symbol to resolve.
+    if paper_request(text):
+        return "paper", True
     if quant_request(text):
         return "quant", True
     bare = _bare(text) or text.lower()
@@ -10013,6 +10052,76 @@ def answer_quant(cfg, question, session, history, qclass):
                      zone=reading["zone"], asOf=reading["asOf"])
 
 
+PAPER_SHOW_MAX = 8
+
+
+def _paper_hhmm(iso):
+    try:
+        return datetime.datetime.fromisoformat(iso).astimezone(_IST).strftime("%d %b %H:%M")
+    except (TypeError, ValueError):
+        return "?"
+
+
+def paper_trade_text(t):
+    """One paper-trade as the employer reads it. The last line is quant_paper.NOTICE, always:
+    it is part of the trade's text, so no caller can show a trade without it."""
+    head = ("%s %s at %.2f (opened %s), target %.2f, stop %.2f"
+            % (t["symbol"], t["direction"], t["entry"], _paper_hhmm(t.get("openedAt")),
+               t["target"], t["stop"]))
+    if t.get("status") == "closed":
+        head += (" - closed at %.2f by %s (%s): %s, %+.2f points."
+                 % (t["exit"], {"target": "target", "stop": "stop", "time": "the 15:20 time "
+                                "exit"}.get(t["exitReason"], t["exitReason"]),
+                    _paper_hhmm(t.get("closedAt")), t["outcome"], t["pnlPts"]))
+    else:
+        head += " - still open."
+    return "%s\nWhy: %s.\n%s" % (head, "; ".join((t.get("reasons") or [])[:2]),
+                                 quant_paper.NOTICE)
+
+
+def answer_paper(question, session, qclass):
+    """(status, payload) for the "paper" route: read from paper-ledger.json, never composed by
+    a model, so nothing in it can be a trade that did not happen or a figure not measured."""
+    view = paper_request(question) or "today"
+    live = [t for t in quant_paper.read_trades() if t.get("mode") == "live"]
+    record = quant_paper.track_record(live)
+    today = datetime.datetime.now(_IST).date().isoformat()
+    if view == "record":
+        shown = []
+        lines = [record["sentence"]]
+        if record["open"]:
+            lines.append("%d still open." % record["open"])
+    elif view == "open":
+        shown = [t for t in live if t.get("status") == "open"]
+        lines = ["%d paper-trade%s open right now:" % (len(shown), "" if len(shown) == 1
+                                                         else "s")
+                 if shown else "No paper-trade is open right now."]
+    else:
+        shown = [t for t in live if str(t.get("openedAt") or "")[:10] == today]
+        lines = ["%d paper-trade%s today:" % (len(shown), "" if len(shown) == 1 else "s")
+                 if shown else "No paper-trade has opened today."]
+    if quant_paper.halted():
+        lines.append("The desk is halted (quant-paper.off is present): no new paper-trade "
+                     "will open until it is removed.")
+    if view != "record" and quant_paper.MANAGER.last.get("at"):
+        lines.append("It last checked the market at %s."
+                     % _paper_hhmm(quant_paper.MANAGER.last["at"]))
+    more = len(shown) - PAPER_SHOW_MAX
+    shown = shown[-PAPER_SHOW_MAX:]
+    answer = "\n\n".join([" ".join(lines)] + [paper_trade_text(t) for t in shown])
+    if more > 0:
+        answer += "\n\n(%d earlier one%s not shown.)" % (more, "" if more == 1 else "s")
+    if not shown:
+        answer += "\n\n" + ("Everything above is about simulated paper-trades: not real "
+                            "positions, not advice.")
+    sys.stderr.write("  paper: answered %r from the ledger (%s, %d shown)\n"
+                     % (question.strip()[:60], view, len(shown)))
+    record_turn(session, question, answer)
+    return 200, {"answer": answer, "nodes": [], "kind": "compose", "route": "paper",
+                 "qclass": qclass, "paper": {"view": view, "record": record,
+                                             "trades": shown, "halted": quant_paper.halted()}}
+
+
 def answer_question(question, session, guest=False):
     """One question in, one of five worlds out, and the reply always says which.
 
@@ -10060,7 +10169,7 @@ def answer_question(question, session, guest=False):
     # sharing the notes' vocabulary is exactly what used to open the notes door on them.
     # Every other class - and every non-finance question - retrieves as it always did.
     qclass, qfinance = classify_query(question, note_stems())
-    skip_notes = qfinance and qclass in ("general", "current", "quant")
+    skip_notes = qfinance and qclass in ("general", "current", "quant", "paper")
     # A MIXED question asks the notes only its own half - see personal_half().
     rq = (retrieval_text(personal_half(question) if qclass == "mixed" else question)
           if qclass in ("mixed", "personal") else question)
@@ -10178,8 +10287,8 @@ def answer_question(question, session, guest=False):
     # ---- THE DECISION TREE, for the classes this repair owns. A forced lookup ("look this
     # up") outranks all of it, as it outranks everything else in this file.
     if reason != "force":
-        if qclass == "quant":
-            route_to, reason = "quant", ""         # computed here, from end-of-day closes
+        if qclass in ("quant", "paper"):
+            route_to, reason = qclass, ""          # computed here / read from the paper ledger
         elif qfinance and qclass == "general":
             route_to, reason = "knowledge", ""     # a concept: answered, not looked up
         elif qfinance and qclass == "current":
@@ -10403,6 +10512,8 @@ def answer_question(question, session, guest=False):
     if route_to and not private_identifier(question):
         if route_to == "quant":
             return answer_quant(cfg, question, session, history, qclass)
+        if route_to == "paper":
+            return answer_paper(question, session, qclass)
         if route_to == "knowledge":
             sys.stderr.write("  no lookup: %r is a finance concept (%s); answered from "
                              "knowledge, notes unread\n" % (question.strip()[:60], qclass))
@@ -13189,6 +13300,14 @@ def main():
               % (", ".join(t["name"] for t in scholar.read_syllabus()["topics"]) or "no topics",
                  "yt-dlp, ffmpeg, ffprobe present" if not missing
                  else "MISSING %s - audio study will refuse and say so" % ", ".join(missing)))
+
+    # ---- AND THE PAPER DESK, the same way: its own thread, its own lock, its own ledger. It
+    # is handed the searxng URL and nothing else from config.json, so its news reads can only
+    # ever reach the public backends.
+    if quant_paper.MANAGER.start(search_url=(cfg or {}).get("search_url")):
+        print("  paper desk        :  NIFTY, BANKNIFTY on a thread · every %ds in market hours"
+              " · %s" % (quant_paper.TICK_S, "HALTED (quant-paper.off)" if quant_paper.halted()
+                         else "simulated trades only"))
 
     try:
         httpd.serve_forever()
