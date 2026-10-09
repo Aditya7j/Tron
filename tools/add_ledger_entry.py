@@ -33,7 +33,11 @@ import ledger                                                  # noqa: E402
 
 
 def main():
+    # BOTH STREAMS, and stdin is the one that matters. hands._spawn() writes the card as UTF-8,
+    # but a Windows python started without PYTHONIOENCODING reads stdin in the ANSI codepage,
+    # so "₹500.00" arrived as "â‚¹500.00" and the card check below - correctly - refused it.
     try:
+        sys.stdin.reconfigure(encoding="utf-8")
         sys.stdout.reconfigure(encoding="utf-8")
     except Exception:                                          # noqa: BLE001
         pass
