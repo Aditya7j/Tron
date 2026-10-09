@@ -27,7 +27,10 @@ import ledger                                                  # noqa: E402
 
 
 def main():
+    # BOTH STREAMS - see add_ledger_entry.py: without stdin's, a card carrying "₹" arrives
+    # mis-decoded and never matches the entry it names.
     try:
+        sys.stdin.reconfigure(encoding="utf-8")
         sys.stdout.reconfigure(encoding="utf-8")
     except Exception:                                          # noqa: BLE001
         pass

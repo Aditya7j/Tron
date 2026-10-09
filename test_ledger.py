@@ -21,6 +21,9 @@
      subject write nothing; a tag, a chain, another door and a body claiming the ledger door are
      all refused, and the brain is never told the hands exist. A card whose sentence and figures
      disagree writes nothing. A guest is told nothing and offered nothing.
+ 7b. THE BOUNDARY. A ₹ card is added and voided through the real spawner with PYTHONIOENCODING
+     and PYTHONUTF8 taken out of the environment - the way the server runs the hands - because
+     with them inherited, a hand that read stdin in the ANSI codepage passed every check above.
   8. THE SOURCE. No float anywhere in ledger.py or its two hands - no float literal, no float(),
      no "/" operator. server.py never calls add_entry() or void_entry(); only the hands do.
      ledger.py deletes nothing, imports nothing that reaches a network, and both hands are
@@ -445,6 +448,41 @@ ok(pending and pending["tool"] == "void_ledger_entry" and not rows()[0]["void"],
 st, p = hands.execute(door="voice", proposal_id=pending["id"])
 ok(p.get("ok") and rows()[0]["void"] and rows()[0]["voidReason"] == "entered twice"
    and len(rows()) == 1, "a yes strikes it out - and the row is still there", p.get("answer"))
+
+# ---------------------------------------------------------------------------------------
+head("7b. the subprocess boundary, crossed the way the server crosses it")
+# MEASURED 2026-10-09: every card carries "₹", and hands._spawn() writes it to the hand's stdin
+# as UTF-8 - which a Windows python started WITHOUT PYTHONIOENCODING reads in the ANSI
+# codepage, so the card arrived as "â‚¹500.00" and the card check refused every live write.
+# The checks above crossed this boundary too and still passed, because this file is usually
+# run with PYTHONIOENCODING=utf-8 and the hands inherited it. So these take it away first -
+# from os.environ, which is what hands._spawn() hands down - and then go through the real
+# spawner with the real scripts. Whatever the caller's environment, this is the server's.
+hidden = {k: os.environ.pop(k) for k in ("PYTHONIOENCODING", "PYTHONUTF8") if k in os.environ}
+try:
+    fresh()
+    server.answer_ledger("Groq ka bill 1,250.50 rupaye add karo", "test-ledger", "ledger")
+    card = hands.pending_public()
+    ok(card and "₹1,250.50" in card["params"]["entry"],
+       "a card carrying ₹ is up, with no PYTHONIOENCODING anywhere in the environment")
+    st, p = hands.execute(door="voice", proposal_id=card["id"])
+    book = rows()
+    ok(p.get("ok") and len(book) == 1 and book[0]["amount"] == 125050
+       and "₹1,250.50" in p["answer"],
+       "and a yes WRITES it - the ₹ survived stdin, and the reply came back intact",
+       p.get("answer"))
+    # Its own entry, written in-process, so the void hand is judged on its own even when the
+    # add hand above is the one that broke.
+    fresh()
+    lg.add_entry("galaxy", "expense", 125050, "groq")
+    server.answer_ledger("L-0001 void karo kyunki entered twice", "test-ledger", "ledger")
+    card = hands.pending_public()
+    st, p = (hands.execute(door="voice", proposal_id=card["id"]) if card
+             else (None, {"answer": "no card went up"}))
+    ok(p.get("ok") and rows()[0]["void"],
+       "and the void hand, whose card carries ₹ too, strikes it out", p.get("answer"))
+finally:
+    os.environ.update(hidden)
 
 # ---------------------------------------------------------------------------------------
 head("8. the source")
