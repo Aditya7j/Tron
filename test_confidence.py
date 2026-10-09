@@ -22,8 +22,17 @@
   9. READ-ONLY AND MODEL-FREE. confidence.py imports nothing that reaches a network or a
      model, starts a process only inside run_tests(), writes only through _write_cache(), and
      neither it nor server.py's new lines name an execution API or a model call.
+ 10. THE TREND. rising, falling, steady and early come out of hand-built runs as the docstring
+     says, and the middle run of an odd count belongs to neither half.
+ 11. THE PER-RESPONSE LINE. answer_quant and answer_paper end with the agent's line, which
+     matches the cached score; four reads cost one ledger read, a stale cache exactly one more,
+     and none of it writes a file. Only those two functions call it, so an answer that touched
+     no agent carries no line. A meter that throws costs the answer nothing.
+ 12. /health AND THE TILE. The real /health handler, on a loopback server of this file's own,
+     carries "confidence" with nulls on empty ledgers; the page's own railConfidence(), run in
+     node, prints "--" for every null and no number until MIN_RUNS_TO_SCORE is met.
 
-Nothing touches the network, the real ledgers or the real cache.
+Nothing touches the network beyond that loopback port, the real ledgers or the real cache.
 
 Run it:  python test_confidence.py
 Exit status is the number of failures.
@@ -38,6 +47,11 @@ import os
 import re
 import sys
 import tempfile
+import threading
+import time
+import urllib.request
+from functools import partial
+from http.server import ThreadingHTTPServer
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -50,6 +64,7 @@ except Exception:                                              # noqa: BLE001
 import confidence as cf                                        # noqa: E402
 import quant_paper as qp                                       # noqa: E402
 import server                                                  # noqa: E402
+from tools import _proc                                        # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 failures = []
@@ -343,9 +358,140 @@ try:
     st, p = server.answer_confidence("Quant kitna reliable hai", "test-confidence", "confidence")
     ok(p["answer"].startswith("Quant: no data - paper-ledger.json does not exist yet.")
        and "%" not in p["answer"], "the Quant with no ledger: no data, no figure", p["answer"])
+
+    # -----------------------------------------------------------------------------------
+    head("10. the trend, by hand")
+
+    def runs_of(flags):
+        return [{"ok": bool(f)} for f in flags]
+    ok(cf.trend(runs_of([0, 0, 0, 1, 1, 1])) == "rising", "0 of 3, then 3 of 3: rising")
+    ok(cf.trend(runs_of([1, 1, 1, 1, 1, 0])) == "falling", "3 of 3, then 2 of 3 (-0.33): falling")
+    ok(cf.trend(runs_of([1, 1, 0, 0, 1, 0, 1, 0])) == "steady", "2 of 4, then 2 of 4: steady")
+    ok(cf.trend(runs_of([1, 1, 1, 0, 1, 1, 1])) == "steady",
+       "7 runs: the middle failure is in neither half, so 3 of 3 and 3 of 3 is steady")
+    ok(cf.trend(runs_of([1] * 5)) == "early", "5 runs: halves too small to compare - early")
+
+    # -----------------------------------------------------------------------------------
+    head("11. the per-response line, read from the cache")
+    clear()
+    qp.write_trades(thirty, cf.PAPER_LEDGER)
+    computed = {"n": 0}
+    real_report = cf.report
+
+    def counting(*a, **k):
+        computed["n"] += 1
+        return real_report(*a, **k)
+    cf.report = counting
+    real_quant = {n: getattr(server, n) for n in ("quant_reading", "call_model")}
+    try:
+        cf.forget()
+        line = cf.agent_line("quant")
+        q = agent(cf.cached(), "quant")
+        ok(line == "Quant confidence: %d%% (falling)." % q["score"],
+           "the line is the cached score and trend: %r (12 wins, then 18 losses: falling)" % line)
+        st, p = server.answer_paper("Quant ka track record kya hai", "test-confidence", "paper")
+        ok(st == 200 and p["answer"].endswith("\n\n" + line)
+           and p["answer"].count("confidence:") == 1,
+           "answer_paper ends with it, once", p["answer"])
+        server.quant_reading = lambda req: {
+            "symbol": "RELIANCE", "ticker": "RELIANCE.NS", "rsi": 72.31, "shown": "72.3",
+            "zone": "overbought", "label": "RSI 72.3 - overbought zone (>70)",
+            "asOf": "2026-10-08", "close": 1175.3, "bars": 125}
+        server.call_model = lambda cfg, messages, image=None: (
+            "Reliance closed on 8 October with an RSI of 72.3.", "")
+        st, p = server.answer_quant({}, "RSI of Reliance", "test-confidence", [], "quant")
+        ok(st == 200 and p["answer"].endswith(server.QUANT_DISCLAIMER + "\n\n" + line),
+           "answer_quant ends with the risk line and then it", p["answer"])
+        cf.health()
+        ok(computed["n"] == 1,
+           "a line, a cached read, two answers and a /health read: ONE ledger read", str(computed))
+        cf._memo["at"] = time.monotonic() - cf.REFRESH_S - 1
+        cf.agent_line("quant")
+        cf.agent_line("quant")
+        ok(computed["n"] == 2, "older than REFRESH_S: exactly one recompute, then cached again",
+           str(computed))
+        ok(not os.path.exists(cf.CACHE_PATH), "and nothing on the hot path wrote a file")
+    finally:
+        cf.report = real_report
+        for n, v in real_quant.items():
+            setattr(server, n, v)
+    qp.write_trades(four, cf.PAPER_LEDGER)
+    cf.forget()
+    ok(cf.agent_line("quant") == "Quant confidence: -- (not enough data yet).",
+       "4 trades: '--' and the reason, no number")
+    os.remove(cf.PAPER_LEDGER)
+    cf.forget()
+    ok(cf.agent_line("quant") == "Quant confidence: -- (no data).", "no ledger: '--', no data")
+    srv_tree = ast.parse(io.open(os.path.join(HERE, "server.py"), encoding="utf-8").read())
+
+    def callers(dotted):
+        out = set()
+        for fn in [n for n in ast.walk(srv_tree) if isinstance(n, ast.FunctionDef)]:
+            if any(isinstance(c, ast.Call) and ast.unparse(c.func) == dotted
+                   for c in ast.walk(fn)):
+                out.add(fn.name)
+        return out
+    ok(callers("confidence_tail") == {"answer_quant", "answer_paper"}
+       and callers("confidence.agent_line") == {"confidence_tail"},
+       "only the Quant's two answers carry the line - a general, current or knowledge answer "
+       "never reaches it", str((callers("confidence_tail"), callers("confidence.agent_line"))))
+    real_cached = cf.cached
+    cf.cached = lambda: 1 / 0
+    try:
+        ok(cf.agent_line("quant") == "" and server.confidence_tail("quant") == ""
+           and cf.health() == {"overall": None, "at": None, "agents": {}},
+           "a meter that throws: no line, null health, and the answer is not touched")
+    finally:
+        cf.cached = real_cached
+
+    # -----------------------------------------------------------------------------------
+    head("12. /health and the tile")
+    clear()
+    cf.forget()
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0),
+                                partial(server.GalaxyHandler, directory=server.VIEWER_DIR))
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        url = "http://127.0.0.1:%d/health" % httpd.server_address[1]
+        live = json.load(urllib.request.urlopen(url, timeout=120))
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    conf = live.get("confidence")
+    ok(isinstance(conf, dict) and conf.get("overall") is None
+       and conf.get("agents") == {k: None for k, _n, _l, _j in cf.AGENTS},
+       "the real /health handler, empty ledgers: confidence.overall null, every agent null",
+       json.dumps(conf))
+    page = io.open(os.path.join(HERE, "viewer", "index.html"), encoding="utf-8").read()
+    fn = re.search(r"\n  function railConfidence\(data\) \{.*?\n  \}", page, re.S)
+    ok(fn and "railSet('confidence', railConfidence(data)" in page,
+       "the page paints the cell through railConfidence(), inside railFrom()")
+
+    def tile(payloads):
+        script = (fn.group(0) + "\nconsole.log(JSON.stringify(" + json.dumps(payloads)
+                  + ".map(railConfidence)));")
+        out = _proc.run(["node", "-e", script], capture_output=True, timeout=60)
+        return json.loads(out.stdout.decode("utf-8") or "null")
+    ok(tile([live, {"confidence": {"overall": None}}, {"confidence": {"overall": 87}},
+             {"ok": True}]) == ["--", "--", "87%", ""],
+       "in node: null -> '--', 87 -> '87%', an old server with no field -> an empty cell")
+    shown = []
+    # The cache reads the real clock, so these runs are an hour or two before the real now -
+    # NOW-relative rows would drift out of the window on any later day this file is run.
+    real_now = datetime.datetime.now()
+    for n in range(1, cf.MIN_RUNS_TO_SCORE + 1):
+        put(cf.JOBS_LEDGER, {"version": 1, "jobs": [
+            {"at": (real_now - datetime.timedelta(hours=1 + i)).isoformat(timespec="seconds"),
+             "name": "director", "outcome": "done", "detail": "done"} for i in range(n)]})
+        cf.forget()
+        shown.append(tile([{"confidence": cf.health()}])[0])
+    ok(all(s == "--" for s in shown[:-1]) and re.fullmatch(r"\d+%", shown[-1] or ""),
+       "1 and 2 runs: the tile reads '--'; the 3rd run (MIN_RUNS_TO_SCORE) is the first number",
+       str(shown))
 finally:
     for n, v in REAL.items():
         setattr(cf, n, v)
+    cf.forget()
 
 # ---------------------------------------------------------------------------------------
 head("9. read-only and model-free")
@@ -393,7 +539,8 @@ ok(set(replaces) == {"_write_cache"}, "and the one rename is the cache's own ato
 MODEL = re.compile(r"requests\.|urllib|http\.client|socket|call_model|assemble\(|groq|ollama|"
                    r"openrouter|anthropic|openai|gemini", re.I)
 new_server = (inspect.getsource(server.confidence_request)
-              + inspect.getsource(server.answer_confidence))
+              + inspect.getsource(server.answer_confidence)
+              + inspect.getsource(server.confidence_tail))
 for name, text in (("confidence.py", src), ("server.py's new lines", new_server)):
     hits = sorted(set(m.group(0) for m in MODEL.finditer(text)))
     ok(not hits, "%s names no network call and no model" % name, str(hits))

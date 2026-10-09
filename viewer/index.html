@@ -530,10 +530,10 @@
   #legend{display:none}
 
   /* ================= THE TELEMETRY TOP RAIL =================================
-     Four facts about the machine, across the top of the window, in mono, always:
+     Five facts about the machine, across the top of the window, in mono, always:
 
          [ MODEL: OPUS 5 ]  [ VOICE: PIPER · RYAN-HIGH ]
-         [ ARCHIVE: 36 FILES ]  [ WEB: READY ]
+         [ ARCHIVE: 36 FILES ]  [ WEB: READY ]  [ CONFIDENCE: 58% ]
 
      It is a READOUT and not a control: pointer-events:none, so it cannot take a click
      off the galaxy behind it, and nothing in it is clickable. Everything it says is
@@ -3117,8 +3117,17 @@
   #toprail .rl::before,#toprail .rl::after{content:none}
   #toprail .rl .rk{opacity:.62;letter-spacing:.16em}
   #toprail .rl .rv{font-size:11px}
+  /* FIVE CELLS ON NARROWER GLASS. CONFIDENCE made the rail ~117px wider, and below 1366px the
+     cell ran off the right edge into overflow:hidden - measured at 1280: content 747px in a
+     689px rail. So under that width the rail gives up AIR, never type: cell padding and
+     tracking tighten, and the font sizes the deck proof holds stay exactly as they are. */
+  @media (max-width: 1365px){
+    #toprail .rl{padding:0 8px}
+    #toprail .rl .rk{letter-spacing:.06em}
+    #toprail .rl .rv{letter-spacing:.04em}
+  }
   /* ONLINE is the last /health reading, and it is set by the same function that paints the
-     four cells from that reading - see railFrom() - so it can only be on while they are fresh. */
+     five cells from that reading - see railFrom() - so it can only be on while they are fresh. */
   #toprail::before{content:'offline';display:flex;align-items:center;gap:7px;padding:0 16px 0 4px;white-space:nowrap;flex:none;
     color:var(--fail);letter-spacing:.18em}
   #toprail.online::before{content:'\25CF  online';color:var(--gold-core)}
@@ -3267,6 +3276,7 @@
   <div class="rl" id="rail-voice"><span class="rk">voice:</span><b class="rv">…</b></div>
   <div class="rl" id="rail-archive"><span class="rk">archive:</span><b class="rv">…</b></div>
   <div class="rl" id="rail-web"><span class="rk">web:</span><b class="rv">…</b></div>
+  <div class="rl" id="rail-confidence"><span class="rk">confidence:</span><b class="rv">…</b></div>
 </div>
 
 <!-- THE SIDEBAR. Six rows, each one a door to something this house already does - the mapping
@@ -7519,9 +7529,10 @@ async function loadLib() {
   }
 
   /* ==================================================== THE TELEMETRY RAIL ====
-     Four facts, across the top, in mono, always:
+     Five facts, across the top, in mono, always:
 
        [ MODEL: OPUS 5 ]  [ VOICE: PIPER · RYAN-HIGH ]  [ ARCHIVE: 36 FILES ]  [ WEB: READY ]
+       [ CONFIDENCE: 58% ]   (the fifth, from the confidence meter: "--" until it has a score)
 
      WHY A RAIL AND NOT A DIALOG. Each of these was already knowable and each of them cost
      something to know: the brain was on a chip, the voice was in a title attribute, the
@@ -7623,7 +7634,23 @@ async function loadLib() {
       if (doors && !doors.length) railWeb = 'offline';
       else if (doors && railWeb === 'offline') railWeb = 'ready';
       railSet('web', railWeb, railWeb === 'ready' ? 'live' : 'bad');
+
+      /* CONFIDENCE: the meter's overall score, exactly as /health carries it - see
+         railConfidence(). Plain white: it is a measurement of this house, neither local
+         material nor somebody else's door. */
+      railSet('confidence', railConfidence(data), '');
     } catch (e) { /* a rail is a readout: it never costs the caller anything */ }
+  }
+
+  /* The CONFIDENCE cell's text. The server's number with a % on it, or "--" when the server
+     says null - not enough recorded runs yet - and NEVER a number the page made up: no
+     default, no rounding of its own, no last-known value carried over a null. A server too
+     old to send the field gets an empty cell, because where the server says nothing the
+     rail says nothing. */
+  function railConfidence(data) {
+    if (!data || !data.confidence || typeof data.confidence !== 'object') return '';
+    const n = data.confidence.overall;
+    return (typeof n === 'number' && isFinite(n)) ? n + '%' : '--';
   }
 
   /* The answer path's one word to the rail. Called with false by a web answer that
@@ -27771,7 +27798,7 @@ async function loadLib() {
       RAIL_MS: RAIL_MS,
       get cells() {
         const out = {};
-        ['model', 'voice', 'archive', 'web'].forEach(function (k) {
+        ['model', 'voice', 'archive', 'web', 'confidence'].forEach(function (k) {
           const cell = document.getElementById('rail-' + k);
           if (!cell) { out[k] = null; return; }
           const v = cell.querySelector('.rv');

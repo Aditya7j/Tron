@@ -45,6 +45,12 @@ import quant_paper as qp                                       # noqa: E402
 import server                                                  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# THE CONFIDENCE METER'S LINE ends every paper answer - confidence.agent_line(), from its cache.
+# Stubbed to a fixed sentence so this file tests the desk and not the ledgers on this machine;
+# test_confidence.py proves the line itself.
+# With a handful of trades the meter has no score, so the stub says what the real one would.
+METER = "Quant confidence: -- (not enough data yet)."
+server.confidence.agent_line = lambda agent: METER if agent == "quant" else ""
 failures = []
 checks = 0
 
@@ -279,11 +285,14 @@ try:
     ok(st == 200 and p["route"] == "paper" and len(p["paper"]["trades"]) == 2,
        "today: both live trades, the dry-run one left out")
     blocks = p["answer"].split("\n\n")[1:]
-    ok(len(blocks) == 2 and all(b.endswith(qp.NOTICE) for b in blocks),
-       "every trade shown ends with the SIMULATED line", p["answer"])
+    ok(len(blocks) == 3 and all(b.endswith(qp.NOTICE) for b in blocks[:-1])
+       and blocks[-1] == METER,
+       "every trade shown ends with the SIMULATED line, and the meter's line comes last",
+       p["answer"])
     st, p = server.answer_paper("koi open setup hai abhi", "test-paper", "paper")
     ok(len(p["paper"]["trades"]) == 1 and "still open" in p["answer"]
-       and p["answer"].endswith(qp.NOTICE), "open: the one open trade, with its line")
+       and p["answer"].endswith(qp.NOTICE + "\n\n" + METER),
+       "open: the one open trade, with its line")
     st, p = server.answer_paper("Quant ka track record kya hai", "test-paper", "paper")
     ok("Only 1 paper-trade closed so far" in p["answer"] and "%" not in p["answer"]
        and "not real positions, not advice" in p["answer"],
