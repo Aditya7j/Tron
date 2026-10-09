@@ -10040,6 +10040,14 @@ def quant_template(reading):
             % (reading["symbol"], reading["label"], reading["asOf"]))
 
 
+def confidence_tail(agent):
+    """"\n\n" and the agent's one confidence line, read from the meter's cache - or "" if the
+    meter cannot be read. Appended after an agent's own disclaimer, and only to an answer an
+    agent gave: a question that touched no agent has nothing to score."""
+    line = confidence.agent_line(agent)
+    return "\n\n" + line if line else ""
+
+
 def answer_quant(cfg, question, session, history, qclass):
     """(status, payload) for the "quant" route. The number is computed here; the model only
     words it, and the risk line is appended by this function, never by the model."""
@@ -10084,7 +10092,7 @@ def answer_quant(cfg, question, session, history, qclass):
     if why:
         sys.stderr.write("  quant: the template answered - %s\n" % why)
         said = quant_template(reading)
-    answer = said.rstrip() + "\n\n" + QUANT_DISCLAIMER
+    answer = said.rstrip() + "\n\n" + QUANT_DISCLAIMER + confidence_tail("quant")
     record_turn(session, question, answer)
     return 200, dict(base, answer=answer, symbol=reading["symbol"], rsi=reading["rsi"],
                      zone=reading["zone"], asOf=reading["asOf"])
@@ -10152,6 +10160,7 @@ def answer_paper(question, session, qclass):
     if not shown:
         answer += "\n\n" + ("Everything above is about simulated paper-trades: not real "
                             "positions, not advice.")
+    answer += confidence_tail("quant")
     sys.stderr.write("  paper: answered %r from the ledger (%s, %d shown)\n"
                      % (question.strip()[:60], view, len(shown)))
     record_turn(session, question, answer)
@@ -11623,6 +11632,12 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 # rather than something discovered when a tick fails. Counts and booleans only;
                 # scholar.PUBLIC_KEYS is the whitelist and it carries no note text and no key.
                 "studying": scholar.MANAGER.state(),
+                # AND HOW MUCH EACH AGENT HAS EARNED TRUST, for the rail's CONFIDENCE cell. The
+                # meter's last report from its in-memory cache - recomputed at most once per
+                # confidence.REFRESH_S by whichever reader finds it stale, never once per poll.
+                # Scores and nulls only: a null is "not enough data yet" and the rail prints it
+                # as "--". confidence.health() never raises.
+                "confidence": confidence.health(),
                 # AND WHETHER THIS HOUSE KNOWS ANY VOICES. Published on the same trip and
                 # for the same reason as the Scribe's: the Command Panel has to know whether
                 # there is a model to embed with and whether anybody is enrolled BEFORE it
@@ -13362,6 +13377,16 @@ def main():
         print("  paper desk        :  NIFTY, BANKNIFTY on a thread · every %ds in market hours"
               " · %s" % (quant_paper.TICK_S, "HALTED (quant-paper.off)" if quant_paper.halted()
                          else "simulated trades only"))
+
+    # ---- AND THE CONFIDENCE METER, primed once so the first question and the first /health
+    # poll read a report instead of computing one. No thread: see confidence.cached().
+    try:
+        meter = confidence.refresh()["overall"]
+        print("  confidence        :  %s overall · from the ledgers, refreshed every %d min"
+              % ("--" if meter["score"] is None else "%d%%" % meter["score"],
+                 confidence.REFRESH_S // 60))
+    except Exception as exc:                                       # noqa: BLE001
+        print("  confidence        :  could not be read (%s) - the rail will say --" % exc)
 
     try:
         httpd.serve_forever()

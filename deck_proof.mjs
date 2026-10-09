@@ -2815,16 +2815,16 @@ async function main() {
             valueColour: av.color, keyMono: kv.fontFamily};
   })()`);
   const cells = trail.cells || {};
-  note('top rail: ' + ['model', 'voice', 'archive', 'web'].map((k) =>
+  note('top rail: ' + ['model', 'voice', 'archive', 'web', 'confidence'].map((k) =>
     '[' + k + ': ' + ((cells[k] || {}).text || '?') +
     ((cells[k] || {}).tone ? ' ' + cells[k].tone : '') + ']').join(' '));
   ok(JSON.stringify(trail.order) ===
-     JSON.stringify(['rail-model', 'rail-voice', 'rail-archive', 'rail-web']),
+     JSON.stringify(['rail-model', 'rail-voice', 'rail-archive', 'rail-web', 'rail-confidence']),
      'THE TELEMETRY RAIL READS LEFT TO RIGHT AS THE CONSTITUTION ORDERS IT: ' +
-     'model, voice, archive, web', JSON.stringify(trail.order));
-  const filled = ['model', 'voice', 'archive', 'web'].every((k) => cells[k] &&
+     'model, voice, archive, web, confidence', JSON.stringify(trail.order));
+  const filled = ['model', 'voice', 'archive', 'web', 'confidence'].every((k) => cells[k] &&
     cells[k].shown && cells[k].text && cells[k].text !== '…');
-  ok(filled, 'and all four cells are painted with a value rather than the markup’s ellipsis',
+  ok(filled, 'and all five cells are painted with a value rather than the markup’s ellipsis',
      JSON.stringify(cells));
   ok(/mono/i.test(trail.css.mono) && trail.css.up === 'uppercase' &&
      trail.css.size === '10px' && /mono/i.test(trail.keyMono),
@@ -2873,6 +2873,11 @@ async function main() {
      'WEB reports the door this config actually has: ' + (cells.web || {}).text +
      ' (' + (doors.length ? doors.join(', ') : 'no backends') + ')',
      JSON.stringify({ cell: cells.web, backends: doors }));
+  const meter0 = (live0.confidence || {}).overall;
+  ok((cells.confidence || {}).text === (typeof meter0 === 'number' ? meter0 + '%' : '--'),
+     'CONFIDENCE is the meter’s overall score as /health carries it: ' +
+     (cells.confidence || {}).text, JSON.stringify({ cell: cells.confidence,
+                                                     health: live0.confidence }));
   ok(trail.ms === 10000,
      'and it re-reads /health every ' + (trail.ms / 1000) + 's, so an archive rebuilt in ' +
      'another window is a stale readout for seconds and not for the session', String(trail.ms));
@@ -2913,6 +2918,20 @@ async function main() {
   ok(restored.text === files0 + (files0 === 1 ? ' file' : ' files') && restored.tone === 'local',
      'then one real reading puts it back to ' + restored.text + ' - the forced state was a ' +
      'paint and nothing else', JSON.stringify(restored));
+
+  /* THE CONFIDENCE CELL NEVER INVENTS A NUMBER. A null from the meter - not enough recorded
+     runs yet - is forced through the same door and must read "--"; a real number must read as
+     itself. Then the live reading goes back, as above. */
+  const meterNull = await page.json(`(function(){
+    __galaxy.rail.paint({confidence: {overall: null, agents: {quant: null}}});
+    var a = __galaxy.rail.cells.confidence.text;
+    __galaxy.rail.paint({confidence: {overall: 73, agents: {}}});
+    return {none: a, some: __galaxy.rail.cells.confidence.text};
+  })()`);
+  await page.evaluate('__galaxy.rail.paint(' + JSON.stringify(live1) + ')');
+  ok(meterNull.none === '--' && meterNull.some === '73%',
+     'A NULL SCORE READS [ CONFIDENCE: -- ], and 73 reads 73% - the cell prints the server’s ' +
+     'number or nothing that could pass for one', JSON.stringify(meterNull));
 
   /* ---- the organ rail, at rest ---- */
   const org = await page.json(`(function(){

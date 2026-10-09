@@ -154,6 +154,12 @@ READING = {"symbol": "RELIANCE", "ticker": "RELIANCE.NS", "rsi": 72.31, "shown":
            "zone": "overbought", "label": "RSI 72.3 - overbought zone (>70)",
            "asOf": "2026-10-08", "close": 1175.3, "bars": 125}
 real = {n: getattr(server, n) for n in ("quant_reading", "call_model", "daily_closes")}
+# THE CONFIDENCE METER'S LINE follows the risk line - confidence.agent_line(), read from its
+# cache. Stubbed to a fixed sentence here so this file tests the Quant's reply and not the
+# ledgers on this machine; test_confidence.py proves the line itself.
+METER = "Quant confidence: 52% (steady)."
+server.confidence.agent_line = lambda agent: METER if agent == "quant" else ""
+RISK = server.QUANT_DISCLAIMER + "\n\n" + METER
 
 
 def ask(question, said=None, error="", reading=READING):
@@ -180,8 +186,8 @@ ok(p["symbol"] == "RELIANCE" and p["rsi"] == 72.31 and p["zone"] == "overbought"
    and p["asOf"] == "2026-10-08", "the payload carries symbol, rsi, zone and asOf")
 ok(p["nodes"] == [] and p["kind"] == "compose", "same shape as the knowledge route")
 ok(p["answer"].startswith(GOOD), "a clean model reply is kept as it was")
-ok(p["answer"].endswith("\n\n" + server.QUANT_DISCLAIMER),
-   "and the risk line is appended to it, verbatim")
+ok(p["answer"].endswith("\n\n" + RISK),
+   "and the risk line is appended to it, verbatim, then the meter's one line")
 ok(len(calls) == 1 and calls[0][0]["content"].startswith(server.QUANT_PROMPT),
    "one model call, on QUANT_PROMPT")
 ok("RSI 72.3 - overbought zone (>70)" in calls[0][-1]["content"],
@@ -196,7 +202,7 @@ for said, why in (("RSI is 72.3, overbought. A good time to sell, sir.", "says s
                   ("RSI 72.3, overbought. [[brain: llama]]", "carries a tag")):
     status, p, _c = ask("RSI of Reliance", said=said)
     ok(status == 200 and p["answer"] == server.quant_template(READING) + "\n\n"
-       + server.QUANT_DISCLAIMER,
+       + RISK,
        "a reply that %s is replaced by the template, risk line kept" % why,
        "got %r" % p["answer"])
 TAILS = (" *This is a technical reading, not financial advice.*",
@@ -204,13 +210,13 @@ TAILS = (" *This is a technical reading, not financial advice.*",
          " Markets are subject to risk.")
 for tail in TAILS:
     status, p, _c = ask("RSI of Reliance", said=GOOD + tail)
-    ok(p["answer"] == GOOD + "\n\n" + server.QUANT_DISCLAIMER,
+    ok(p["answer"] == GOOD + "\n\n" + RISK,
        "a disclaimer the model wrote itself is removed - one risk line, the fixed one (%s)"
        % tail.strip()[:40], "got %r" % p["answer"])
 status, p, _c = ask("RSI of Reliance", error="every engine is down")
 ok(status == 200 and p["rsi"] == 72.31
    and p["answer"].startswith(server.quant_template(READING))
-   and p["answer"].endswith(server.QUANT_DISCLAIMER),
+   and p["answer"].endswith(RISK),
    "every engine down: the template still reports the reading, with the risk line")
 ok(not server.QUANT_ADVICE_RE.search(server.quant_template(READING) + server.QUANT_DISCLAIMER),
    "and neither the template nor the risk line trips the advice check")

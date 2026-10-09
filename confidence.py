@@ -66,6 +66,23 @@ THE SCORE
 THE OVERALL NUMBER is the plain mean of the agents that have a score, and the sentence names
 every agent that does not. With no agent scored there is no overall number.
 
+THE TREND, one word beside a score. The runs that were scored are split into an older half and
+a newer half of equal size (the middle run of an odd count belongs to neither), and the newer
+half's success rate is compared with the older half's:
+    rising    newer - older >= TREND_DELTA (0.15)
+    falling   newer - older <= -0.15
+    steady    anything between
+    early     fewer than 2 x MIN_RUNS_TO_SCORE runs - two halves too small to compare
+It describes the record, like the score, and says nothing about the next run.
+
+TWO SURFACES READ ONE CACHE. An agent's own chat answer carries agent_line() - "Quant
+confidence: 52% (steady)." - and /health carries health() for the header rail. Both read
+cached(): the last report, kept in memory and recomputed only when it is older than
+REFRESH_S (5 minutes), by whichever reader first finds it stale. However many questions or
+polls arrive, the ledgers are read at most once per five minutes, and no thread of this
+module's own exists to do it. The server primes it once at boot. Nothing on that path writes
+a file: the report reaches confidence-cache.json only from the command line.
+
 WHAT IT DOES NOT DO
     It predicts nothing. Every number is "here is what happened", never "how likely the next
     run is to work" - the same "measured, not forecast" rule as quant_paper.track_record().
@@ -105,6 +122,8 @@ DETAIL_MAX = 160
 # the two copies equal to their sources.
 JOBS_RING, STUDY_RING = 50, 60
 TEST_TIMEOUT_S = 900
+TREND_DELTA = 0.15
+REFRESH_S = 300
 
 # (key, name, ledger, the jobs-ledger names that are this agent's)
 AGENTS = (("director", "Director", "jobs", ("director",)),
@@ -252,6 +271,21 @@ def window(runs, now):
     return [r for r in runs if r["at"] >= since][-WINDOW_RUNS:]
 
 
+def trend(runs):
+    """rising / falling / steady between the older and newer halves of `runs`, or early."""
+    half = len(runs) // 2
+    if len(runs) < 2 * MIN_RUNS_TO_SCORE:
+        return "early"
+    old, new = runs[:half], runs[len(runs) - half:]
+    delta = sum(r["ok"] for r in new) / half - sum(r["ok"] for r in old) / half
+    # Compared with a hair of slack, so 0.15 exactly reads as the 0.15 it is on paper.
+    if delta >= TREND_DELTA - 1e-9:
+        return "rising"
+    if delta <= -TREND_DELTA + 1e-9:
+        return "falling"
+    return "steady"
+
+
 def _ago(hours):
     if hours < 1:
         return "%d min" % max(0, round(hours * 60))
@@ -283,7 +317,7 @@ def _verdict(key, name, source, runs, notes, tests, now, whole=False, min_runs=N
     out = {"agent": key, "name": name, "source": source, "status": "nodata", "score": None,
            "raw": None, "runs": 0, "succeeded": 0, "successRate": None, "freshness": None,
            "lastAt": None, "ageHours": None, "lastFailure": None, "capped": False,
-           "tests": tests, "notes": notes}
+           "trend": None, "tests": tests, "notes": notes}
     runs = sorted(runs, key=lambda r: r["at"])
     if not runs:
         out["diagnosis"] = "%s: no data - %s holds no %s run yet." % (name, source, name)
@@ -308,7 +342,8 @@ def _verdict(key, name, source, runs, notes, tests, now, whole=False, min_runs=N
     success, fresh = ok / len(judged), freshness(age_h)
     raw, shown = blend(success, fresh, bool(tests["red"]))
     out.update(status="scored", score=shown, raw=raw, succeeded=ok,
-               successRate=round(success, 3), freshness=round(fresh, 3), capped=shown < raw)
+               successRate=round(success, 3), freshness=round(fresh, 3), capped=shown < raw,
+               trend=trend(judged))
     line = ("%s %d%%: %d of %d runs succeeded%s, last run %s ago."
             % (name, shown, ok, len(judged), "" if whole else " in the window", _ago(age_h)))
     if out["capped"]:
@@ -404,6 +439,63 @@ def report(now=None, write=True):
     return rep
 
 
+# ------------------------------------------------------------------------------ the cache
+# THE ONE COPY BOTH SURFACES READ. In memory, stamped with time.monotonic() so a clock change
+# cannot make it look fresh, and replaced whole under its own lock - a reader gets the old
+# report or the new one, never half of each.
+_memo = {"at": None, "report": None}
+_memo_lock = threading.Lock()
+
+
+def refresh(now=None):
+    """Recompute from the ledgers and keep the result in memory. Writes no file."""
+    rep = report(now=now, write=False)
+    with _memo_lock:
+        _memo.update(at=time.monotonic(), report=rep)
+    return rep
+
+
+def forget():
+    """Drop the in-memory report, so the next reader recomputes. For tests."""
+    with _memo_lock:
+        _memo.update(at=None, report=None)
+
+
+def cached():
+    """The last report, recomputed only once it is older than REFRESH_S. The chat turn's read
+    and /health's - at most one ledger read per five minutes, whoever is asking."""
+    with _memo_lock:
+        rep, at = _memo["report"], _memo["at"]
+    if rep is None or at is None or time.monotonic() - at > REFRESH_S:
+        rep = refresh()
+    return rep
+
+
+def agent_line(key):
+    """"Quant confidence: 52% (steady)." for the end of that agent's own answer, from cached().
+    An unscored agent gets "--" and the reason, never a number. "" if the meter cannot be read
+    at all: a meter that fails must never cost an answer its reply."""
+    try:
+        a = next(a for a in cached()["agents"] if a["agent"] == key)
+    except Exception:                                          # noqa: BLE001
+        return ""
+    if a["score"] is None:
+        return "%s confidence: -- (%s)." % (a["name"], "no data" if a["status"] == "nodata"
+                                            else "not enough data yet")
+    return "%s confidence: %d%% (%s)." % (a["name"], a["score"], a["trend"])
+
+
+def health():
+    """/health's "confidence" field, from cached(): the overall score and each agent's, None
+    wherever there is no score. Never raises - /health is what every tile stands on."""
+    try:
+        rep = cached()
+        return {"overall": rep["overall"]["score"], "at": rep["at"],
+                "agents": {a["agent"]: a["score"] for a in rep["agents"]}}
+    except Exception:                                          # noqa: BLE001
+        return {"overall": None, "at": None, "agents": {}}
+
+
 def weakest(rep):
     """The scored agents sharing the lowest score - more than one on a tie, none if unscored."""
     scored = [a for a in rep["agents"] if a["score"] is not None]
@@ -413,8 +505,9 @@ def weakest(rep):
 
 def answer(view="overall", now=None):
     """(text, report) for a chat question. `view` is "overall", "weakest" or an agent key.
-    Every figure in the text is one report() computed; nothing here is composed by a model."""
-    rep = report(now=now)
+    Every figure in the text is one report() computed; nothing here is composed by a model.
+    Asked outright, the meter recomputes - and the two cached surfaces get the fresh copy too."""
+    rep = refresh(now=now)
     by_key = {a["agent"]: a for a in rep["agents"]}
     if view in by_key:
         a = by_key[view]
