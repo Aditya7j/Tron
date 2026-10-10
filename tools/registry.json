@@ -573,6 +573,35 @@
       "timeout_s": 15,
       "proposal": "That would strike out {entry}, because: {reason}. It stays in the book, marked void. Shall I void it?",
       "step": "Void {id} in the ledger."
+    },
+    {
+      "id": "send_whatsapp",
+      "name": "Send a WhatsApp message",
+      "script": "send_whatsapp.py",
+      "_comment": [
+        "Not door-bound: the ordinary propose -> confirm gate, from any door, like send_email.",
+        "There is no recipient parameter. The number is meta_whatsapp_to in config.json,",
+        "the employer's own, read by the script itself - so the model can choose what is",
+        "said and never to whom. And, like send_email, the proposal never speaks {body}:",
+        "the body is on the card, verbatim, and a report read aloud to the room is the",
+        "same mistake as a letter read aloud to it."
+      ],
+      "capabilities": [
+        "send a WhatsApp message to the employer's own phone"
+      ],
+      "triggers": [
+        "\\bwhatsapp\\b"
+      ],
+      "params": [
+        {
+          "name": "body",
+          "type": "text",
+          "required": true
+        }
+      ],
+      "timeout_s": 20,
+      "proposal": "I have a WhatsApp message ready for your own phone, sir. The card carries what it says. Shall I send it?",
+      "step": "Send a WhatsApp message to your own phone."
     }
   ]
 }
