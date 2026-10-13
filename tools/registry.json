@@ -602,6 +602,52 @@
       "timeout_s": 20,
       "proposal": "I have a WhatsApp message ready for your own phone, sir. The card carries what it says. Shall I send it?",
       "step": "Send a WhatsApp message to your own phone."
+    },
+    {
+      "id": "operator_browser",
+      "name": "Open a website, and play something on YouTube or Hotstar",
+      "script": "operator_browser.py",
+      "_comment": [
+        "Operator, phase 1.1: browser only. YouTube and Hotstar get search, first result",
+        "and playback, watched until the video's clock moves; any other site is OPENED and",
+        "nothing more, and both the proposal ({plan}) and the success line say so. {where}",
+        "and {plan} are derived blanks from operator_browser.describe(), the code the run",
+        "itself uses, so a guessed '.com' is on the card before Yes.",
+        "Ctrl+H is registered system-wide only while the hand runs and stops it at the next",
+        "safe point; that is why the proposal names it.",
+        "timeout_s is 60 because real page loads are slow: a cold YouTube results page, a",
+        "watch page and the first frame (often an advert's) measured 11.7 s on 2026-10-14 on",
+        "a good line, and Hotstar is an SPA that paints its results after 'complete'. The",
+        "hand keeps a budget of 52 s of its own, so a slow site is reported in its words, as",
+        "the step it was on, and never killed here and called a crash for being patient."
+      ],
+      "capabilities": [
+        "open a website and, for YouTube or Hotstar, search and play something the employer asked for",
+        "play a song or a video on YouTube - site youtube, query what to search for",
+        "put a match, a show or a film on Hotstar (JioHotstar) - site hotstar, query its name",
+        "open any other site by its address and do nothing more on it - site is the domain or URL"
+      ],
+      "triggers": [
+        "\\byou\\s?tube\\b",
+        "\\b(?:jio\\s?)?hot\\s?star\\b",
+        "\\b(?:open|go\\s+to|pull\\s+up|bring\\s+up|launch)\\s+(?:up\\s+)?(?:the\\s+)?(?:(?:web)?site\\s+|page\\s+)?(?:https?://)?[a-z0-9-]+(?:\\.[a-z0-9-]+)+",
+        "\\b(?:open|go\\s+to|pull\\s+up|bring\\s+up|launch)\\b[^.]{0,20}\\b(?:website|web\\s+site|site|web\\s+page|url)\\b"
+      ],
+      "params": [
+        {
+          "name": "site",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "query",
+          "type": "text",
+          "required": false
+        }
+      ],
+      "timeout_s": 60,
+      "proposal": "I'll open {where} and {plan}, sir - press Ctrl+H any time to take it back. Shall I?",
+      "step": "Open {where} and {plan}."
     }
   ]
 }
