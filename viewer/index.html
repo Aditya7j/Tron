@@ -3815,6 +3815,7 @@ let stars2d = null;
    Null means the original palette, including all original material/texture values. */
 let workThemePalette = null;
 let workThemeRepaint = null;
+let orbitWorkLabelReset = null;
 /* Both skies dim by the same fifth, and they dim by the SAME NUMBER: the canvas field and
    the WebGL one are two drawings of one sky, and a handover that changed its brightness
    would be visible as a flicker at the exact moment it is meant to be invisible. */
@@ -4666,7 +4667,9 @@ function paintWorkNebula() {
 }
 function toggleWorkTheme() {
   const root = document.documentElement;
-  root.setAttribute('data-theme', root.dataset.theme === 'work' ? '' : 'work');
+  const leavingWork = root.dataset.theme === 'work';
+  if (leavingWork && orbitWorkLabelReset) orbitWorkLabelReset();
+  root.setAttribute('data-theme', leavingWork ? '' : 'work');
   workThemePalette = null;
   if (root.dataset.theme === 'work') {
     const cs = getComputedStyle(root);
@@ -6629,6 +6632,7 @@ async function loadLib() {
         orbitState.nodes.push({
           group: c.name, count: c.count, family: c.family, ring: ri, r: R, el: g, spoke: spoke,
           cardParts: [card, fold, lbl, sub], cardW: cw, cardX: cx, cardY: cy, labelSlot: -1,
+          cardBaseTransforms: null, cardWorkTransforms: null,
           phase: (j / list.length) * Math.PI * 2 + ri * 0.62 + 0.38, side: 1, x: 0, y: 0
         });
       });
@@ -6664,6 +6668,7 @@ async function loadLib() {
      every 2.4s, after entry, rather than measuring or shuffling labels every frame.
      The score keeps cards inside the SVG and clear of the core, worlds and each other. */
   function orbitWorkLabels() {
+    if (!workThemePalette || document.documentElement.dataset.theme !== 'work') return;
     const nodes = orbitState.nodes.slice().sort(function (a, b) {
       return Math.hypot(a.x, a.y) - Math.hypot(b.x, b.y);
     });
@@ -6673,6 +6678,9 @@ async function loadLib() {
       return (px-x)*(px-x)+(py-y)*(py-y) < r*r;
     };
     nodes.forEach(function (n) {
+      if (n.cardWorkTransforms && n.cardParts.some(function (part, i) {
+        return part.getAttribute('transform') !== n.cardWorkTransforms[i];
+      })) return; // another feature owns a changed transform
       const slots = [
         [n.r+18, -n.r-30], [-n.r-18-n.cardW, -n.r-30],
         [n.r+18, n.r-14], [-n.r-18-n.cardW, n.r-14]
@@ -6703,11 +6711,33 @@ async function loadLib() {
       if (best !== n.labelSlot) {
         const dx = slot[0]-n.cardX, dy = slot[1]-n.cardY;
         const tf = 'translate(' + dx.toFixed(1) + ',' + dy.toFixed(1) + ')';
-        n.cardParts.forEach(function (part) { part.setAttribute('transform', tf); });
+        if (!n.cardBaseTransforms) n.cardBaseTransforms = n.cardParts.map(function (part) {
+          return part.getAttribute('transform');
+        });
+        n.cardWorkTransforms = n.cardParts.map(function (part, i) {
+          const applied = tf + (n.cardBaseTransforms[i] ? ' ' + n.cardBaseTransforms[i] : '');
+          part.setAttribute('transform', applied);
+          return applied;
+        });
         n.labelSlot = best;
       }
     });
   }
+  orbitWorkLabelReset = function () {
+    if (!orbitState || !orbitState.nodes) return;
+    orbitState.nodes.forEach(function (n) {
+      if (!n.cardBaseTransforms) return;
+      n.cardParts.forEach(function (part, i) {
+        if (part.getAttribute('transform') !== n.cardWorkTransforms[i]) return;
+        const original = n.cardBaseTransforms[i];
+        if (original === null) part.removeAttribute('transform');
+        else part.setAttribute('transform', original);
+      });
+      n.cardBaseTransforms = n.cardWorkTransforms = null;
+      n.labelSlot = -1;
+    });
+    orbitState.labelAt = 0;
+  };
   /* ONE FRAME OF ORBIT. Transform only. The angle is the drift curve applied to how far round
      this orbit's period the clock is - linear today, because a world goes round at constant
      speed, but read from --ease-node-orbit-drift so that is a decision made in one place. */
