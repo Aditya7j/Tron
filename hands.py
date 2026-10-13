@@ -268,7 +268,7 @@ def _clean_tool(raw):
     if not step:
         return None, ("%s: no step template, so it could not appear in a chain's numbered "
                       "list in anything but its own filename" % tool_id)
-    for secret in ("{body}", "{minutes}", "{description}"):
+    for secret in ("{body}", "{minutes}", "{description}", "{code}"):
         if secret in step:
             return None, ("%s: the step template interpolates %s, and a step line is spoken "
                           "aloud - see the note above _clean_tool's step check" % (tool_id,
@@ -661,6 +661,11 @@ def readings(params):
                 out["where"], out["plan"] = found
         except Exception:
             pass
+    # OPERATOR'S {lines}: the size of the code operator_type_code will type, so the spoken
+    # proposal can name it by shape - "about 12 lines" - and NEVER by content. Code read
+    # aloud is the email-body mistake again, only longer; the card shows it in full.
+    if "code" in params:
+        out["lines"] = str(str(params.get("code") or "").count("\n") + 1)
     # THERE IS NO {preview} HERE, AND THAT IS A DELIBERATE OMISSION WITH A TEST BEHIND IT.
     # A 200-character preview of the email body was written here first, and the registry's
     # proposal sentence read it out: "...and it reads: 'Dear Tom, about the numbers...'".

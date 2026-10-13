@@ -4228,7 +4228,7 @@ def talk_about_proposal(question, session, pending, cfg=None):
         # which is exactly right here: he asked for the change himself. The prose the
         # model wrote around the tag is dropped, as it is everywhere else - one voice.
         sys.stderr.write("  tool: the offer was AMENDED in conversation -> %s\n" % wanted)
-        return hands.propose(wanted, tool_facts(wanted, params), door="tag")
+        return hands.propose(wanted, tool_facts(wanted, params, session), door="tag")
     record_turn(session, question, answer)
     return 200, {"answer": answer, "nodes": [], "kind": "chat", "route": "proposal",
                  "lookups": 0, "pending": hands.pending_public()}
@@ -7501,9 +7501,92 @@ def write_voice_model(name):
 #
 # So it is overwritten here, after the tag and before the proposal, from config.json
 # itself. Whatever the brain put in this field is discarded exactly like its prose.
-def tool_facts(tool_id, params_text):
-    """Parameters the SERVER knows, written over whatever arrived with the request."""
-    if str(tool_id or "").strip().lower() != "set_voice":
+# The largest code block operator_type_code is handed. hands.validate() cuts a "text"
+# parameter at 4000 characters, and a solution cut short and then typed - verified and all -
+# is a wrong program in the editor, so a block over the cut is refused instead of trimmed.
+CODE_PARAM_MAX = 4000
+
+
+def latest_code_block(session):
+    """The code Galaxy most recently WROTE in this conversation, or "".
+
+    The newest assistant turn that holds a fenced block, and within it the LONGEST block -
+    an answer that shows the solution and then a two-line usage example means the
+    solution. Read from _history, the record_turn() memory every /chat answer goes into.
+    The screen answer (/see) is not in it and never was: it is prompted for two spoken
+    sentences, not for code.
+    """
+    with _lock:
+        hist = list(_history.get(session, []))
+    for msg in reversed(hist):
+        if msg.get("role") != "assistant":
+            continue
+        blocks = re.findall(r"```[^\n`]*\n(.*?)```", str(msg.get("content") or ""), re.S)
+        blocks = [b.rstrip("\n") for b in blocks if b.strip()]
+        if blocks:
+            return max(blocks, key=len)
+    return ""
+
+
+# "TYPE IT IN" IS A PROTECTED ROUTE, NOT A TAG. Measured 2026-10-14 on the first live run:
+# the hands-offer call saw "type it in", declined to emit the tag, and the turn fell through
+# to a web search that read the boss a paragraph about a Windows app called TypeItIn. The
+# tag carried nothing anyway - the code is the server's (latest_code_block) - so asking a
+# model for it was only a way to fail. operator_type_code is therefore door-bound to
+# "editor" (the brain is never offered it, no tag can raise it), and this is the door.
+#
+# ONE DEFINITION OF THE PHRASE: the registry entry's own triggers, searched on every
+# addressless form of the sentence. And a sentence that is a QUESTION never matches, however
+# it ends - "how do I type it in" is asking, and "what is the answer" stays an answer.
+TYPE_CODE_QUESTION_RE = re.compile(
+    r"^(?:how|why|what|what's|whats|when|where|which|who|whose|is|are|does|do|did|should|"
+    r"shall\s+i|explain|tell\s+me)\b", re.IGNORECASE)
+
+
+def type_code_asked(question):
+    """True when this sentence explicitly asks for the code to go into the editor."""
+    tool = hands.find("operator_type_code")
+    if tool is None:
+        return False
+    forms = _addressless_forms(question) or [str(question or "").strip()]
+    if any(TYPE_CODE_QUESTION_RE.match(form) for form in forms):
+        return False
+    return any(rx.search(form) for form in forms for rx in tool["triggers"])
+
+
+def propose_typing(session):
+    """(status, payload): the card for operator_type_code, or a plain sentence saying why
+    there is none. Nothing is pending after a refusal, as everywhere in hands."""
+    code = latest_code_block(session)
+    line = ""
+    if not code:
+        line = ("I have not written any code in this conversation to type, sir - ask me "
+                "for the solution first.")
+    elif len(code) > CODE_PARAM_MAX:
+        line = ("That solution is %d characters, sir, longer than I can carry to the "
+                "editor in one go." % len(code))
+    if line:
+        sys.stderr.write("  route: operator - typing asked, nothing to type (%s)\n"
+                         % ("no code block" if not code else "%d chars" % len(code)))
+        return 200, {"answer": line, "nodes": [], "kind": "chat", "route": "operator",
+                     "pending": hands.pending_public()}
+    sys.stderr.write("  route: operator - typing %d lines proposed\n"
+                     % (code.count("\n") + 1))
+    return hands.propose("operator_type_code",
+                         tool_facts("operator_type_code", {}, session), door="editor")
+
+
+def tool_facts(tool_id, params_text, session=None):
+    """Parameters the SERVER knows, written over whatever arrived with the request.
+
+    set_voice: the voice speaking now. operator_type_code: the code itself, from
+    latest_code_block() - NEVER a model's copy. The hands-offer call is shown no history,
+    so a code param in its tag could only be a model re-typing code from memory; it is
+    dropped either way, and with no block in the conversation the param is simply absent
+    and hands.validate() refuses for want of it.
+    """
+    wanted = str(tool_id or "").strip().lower()
+    if wanted not in ("set_voice", "operator_type_code"):
         return params_text
     raw = params_text
     if isinstance(raw, str):
@@ -7516,6 +7599,16 @@ def tool_facts(tool_id, params_text):
     if not isinstance(raw, dict):
         return params_text
     raw = dict(raw)
+    if wanted == "operator_type_code":
+        raw.pop("code", None)
+        code = latest_code_block(session) if session is not None else ""
+        if len(code) > CODE_PARAM_MAX:
+            sys.stderr.write("  tool: the latest code block is %d characters, over the %d "
+                             "a hand may be given - not offered\n"
+                             % (len(code), CODE_PARAM_MAX))
+        elif code:
+            raw["code"] = code
+        return raw
     cfg = load_config()[0]
     name = os.path.basename(str(cfg.get("voice_model")
                                 or DEFAULT_CONFIG["voice_model"]).strip())
@@ -10589,6 +10682,11 @@ def answer_question(question, session, guest=False):
     #   the brain             - which tool, with which details, named by id in a tag.
     # If the brain answers in prose instead, nothing is pending and the turn carries on
     # to the ordinary lookup below, one model call the poorer and no harm done.
+    # ---- OPERATOR, PHASE 1.2: "type it in". Above the hands-offer below, which would put
+    # the sentence to a model that has no way to see the code - see type_code_asked().
+    if type_code_asked(question):
+        return propose_typing(session)
+
     if (hands.hands_wanted(question) and substantial_question(question, prior)
             and not address_only(question)):
         # NO HISTORY ON THIS ONE, DELIBERATELY, and the plan records it as absent rather
@@ -10620,7 +10718,9 @@ def answer_question(question, session, guest=False):
                 sys.stderr.write("  tool: a chain tag, %s\n" % why)
                 # propose_chain() falls through to propose() for a plan of one, and
                 # tool_facts is handed in rather than applied here so it reaches EVERY step.
-                return hands.propose_chain(plan, door="tag", facts=tool_facts)
+                return hands.propose_chain(
+                    plan, door="tag",
+                    facts=lambda tid, raw: tool_facts(tid, raw, session))
             if why:
                 # A chain tag that arrived malformed is NOT quietly turned into a search: the
                 # employer asked for two things and the model tried to say so. It is logged
@@ -10661,7 +10761,9 @@ def answer_question(question, session, guest=False):
                     if plan2 is not None:
                         sys.stderr.write("  tool: the second ask proposed a chain, %s\n"
                                          % why2)
-                        return hands.propose_chain(plan2, door="tag", facts=tool_facts)
+                        return hands.propose_chain(
+                            plan2, door="tag",
+                            facts=lambda tid, raw: tool_facts(tid, raw, session))
                     wanted, params, _prose = hands.tool_tag(said2)
                     if wanted is not None:
                         sys.stderr.write("  tool: the second ask found %s where the first \n"
@@ -10670,7 +10772,8 @@ def answer_question(question, session, guest=False):
                 # The prose is DISCARDED and the proposal is composed from the registry
                 # template: see hands.propose(). One voice, and it is not the model's.
                 # tool_facts() overwrites the fields this machine is the authority on.
-                return hands.propose(wanted, tool_facts(wanted, params), door="tag")
+                return hands.propose(wanted, tool_facts(wanted, params, session),
+                                     door="tag")
             sys.stderr.write("  tool: %r looked like an instruction and was not one\n"
                              % question.strip()[:60])
 
@@ -11026,7 +11129,10 @@ def answer_question(question, session, guest=False):
                        "chainSeen": bool(hands.CHAIN_TAG_AT.search(answer or ""))})
     if asked is not None:
         if offer_hands:
-            return hands.propose(asked, params, door="tag")
+            # tool_facts here too: a tag that arrives at the end of an ordinary answer is
+            # the same request as one from the hands-offer call, and the server's facts
+            # (the voice speaking, the code it wrote) outrank the model's either way.
+            return hands.propose(asked, tool_facts(asked, params, session), door="tag")
         # It was never offered hands for this message and it asked anyway. The tag is
         # not honoured and it is not read out either - a stray control tag spoken aloud
         # is a bug the employer has to interpret.
@@ -13205,7 +13311,9 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 if cmd == "propose":
                     status, payload = hands.propose(
                         data.get("tool"),
-                        tool_facts(data.get("tool"), data.get("params")), door=door)
+                        tool_facts(data.get("tool"), data.get("params"),
+                                   str(data.get("session") or "default")[:120]),
+                        door=door)
                 elif cmd == "chain":
                     # THE PLAN DOOR, and it is the exact sibling of "propose" above: it asks
                     # for a proposal and it cannot run one. Every guard the /chat path gets -
@@ -13229,7 +13337,10 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                                 "error": "That carried no chain: %s." % (why or "no chain tag"),
                                 "answer": hands.LINES["chainempty"], "why": why or "no tag"}
                             return self._send_json(status, payload)
-                    status, payload = hands.propose_chain(plan, door=door, facts=tool_facts)
+                    asker = str(data.get("session") or "default")[:120]
+                    status, payload = hands.propose_chain(
+                        plan, door=door,
+                        facts=lambda tid, raw: tool_facts(tid, raw, asker))
                 elif cmd == "cancel":
                     # AND THE SAME AT THE NO. A guest's no cancels a proposal the boss made
                     # and is waiting on, which is a decision about his business, not an

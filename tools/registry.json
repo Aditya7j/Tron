@@ -648,6 +648,51 @@
       "timeout_s": 60,
       "proposal": "I'll open {where} and {plan}, sir - press Ctrl+H any time to take it back. Shall I?",
       "step": "Open {where} and {plan}."
+    },
+    {
+      "id": "operator_type_code",
+      "name": "Type the solution into the locked page's code editor",
+      "script": "operator_type_code.py",
+      "_comment": [
+        "Operator, phase 1.2. Types into the tab the focus session has LOCKED - never a new",
+        "tab - at the editor's cursor, inserting and never replacing, and never presses Run",
+        "or Submit. The code is NOT the model's: server.tool_facts() drops any code a tag",
+        "carries and fills it from the latest fenced block in this conversation's history",
+        "(server.latest_code_block). And it is DOOR-BOUND to 'editor': the brain is never",
+        "offered it and no tag can raise it - server.type_code_asked() matches these very",
+        "triggers on the employer's own sentence and proposes through that door. Measured: a",
+        "model shown 'type it in' declined the tag and the turn became a web search.",
+        "The proposal names the code by SIZE ({lines}, a derived blank in hands.readings)",
+        "and never by content; the card shows it in full for the eyes.",
+        "Triggers are for an explicit ask to put it in the editor, and nothing that is a",
+        "question: 'what is the answer' must stay an answer in chat.",
+        "timeout_s is 35: typing is paced at ~16 lines a second with a read-back after every",
+        "line, so a 100-line solution takes ~7 s, and a page whose editor answers slowly",
+        "needs room for one same-path retry and two fallback paths. The hand's own budget",
+        "is 28 s, so a slow editor is reported with the count of lines read back, not killed",
+        "here and called a crash."
+      ],
+      "doors": [
+        "editor"
+      ],
+      "capabilities": [
+        "type the code solution Galaxy just wrote in chat into the code editor of the page the employer has locked, at the cursor"
+      ],
+      "triggers": [
+        "\\btype\\s+(?:it|that|this|them)\\s+(?:in|out|into)\\b",
+        "\\btype\\s+(?:in\\s+|out\\s+)?(?:the|your|my)\\s+(?:solution|code|answer)\\b",
+        "\\b(?:write|put|paste|type|enter|drop)\\s+(?:it|that|this|the\\s+(?:solution|code|answer)|your\\s+(?:solution|code))\\s+(?:in|into|on)\\s+(?:the\\s+|my\\s+)?(?:code\\s+)?editor\\b"
+      ],
+      "params": [
+        {
+          "name": "code",
+          "type": "text",
+          "required": true
+        }
+      ],
+      "timeout_s": 35,
+      "proposal": "I'll type the solution - about {lines} lines - into the editor at your cursor, sir. Press Ctrl+H any time to take it back. Shall I?",
+      "step": "Type the solution, about {lines} lines, into the editor at your cursor."
     }
   ]
 }
