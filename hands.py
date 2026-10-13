@@ -647,6 +647,20 @@ def readings(params):
             # that failed here leaves the blanks standing rather than refusing, because a
             # broken module is not the employer's mistake and the script checks again.
             pass
+    # OPERATOR'S {where} AND {plan}: what the browser hand will actually do with this site
+    # and query, from operator_browser.describe() - built on the very resolve() the run
+    # uses - so "I'll open YouTube and play the first result for X" cannot disagree with
+    # what happens, and an "open it only" site is SAID to be open-only before Yes. Same
+    # furniture rules as {when}: never in params, silent on failure.
+    if "site" in params:
+        try:
+            from tools import operator_browser
+            found = operator_browser.describe(params.get("site", ""),
+                                              params.get("query", ""))
+            if found:
+                out["where"], out["plan"] = found
+        except Exception:
+            pass
     # THERE IS NO {preview} HERE, AND THAT IS A DELIBERATE OMISSION WITH A TEST BEHIND IT.
     # A 200-character preview of the email body was written here first, and the registry's
     # proposal sentence read it out: "...and it reads: 'Dear Tom, about the numbers...'".
