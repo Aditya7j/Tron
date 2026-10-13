@@ -200,6 +200,55 @@
     --mono:"JetBrains Mono","JetBrainsMono Nerd Font",ui-monospace,"Cascadia Mono",
       "SFMono-Regular",Menlo,Consolas,monospace;
   }
+  :root[data-theme="work"]{
+    --ink:#f5efee;
+    --muted:#b8878b;
+    --line:rgba(255,40,60,.18);
+    --glass:rgba(17,8,12,.82);
+    --void:#07080b;
+    --void-rgb:7,8,11;
+    --accent:#ff2a3d;
+    --web:#ff7547;
+    --doc:#ffc18a;
+    --live:#ff7547;
+    --local:#ed975c;
+    --fail:#ff9cbb;
+    --gold-core:#ff813f;
+    --gold-core-rgb:255,129,63;
+    --gold-hot:#ffe1c2;
+    --gold-glow:rgba(var(--gold-core-rgb),.5);
+    --gold-dim:rgba(var(--gold-core-rgb),.2);
+    --gold-trace:rgba(var(--gold-core-rgb),.08);
+    --gold-local:#ed975c;
+    --blue-structure:#ff2a3d;
+    --blue-structure-rgb:255,42,61;
+    --blue-glow:rgba(var(--blue-structure-rgb),.42);
+    --blue-dim:rgba(var(--blue-structure-rgb),.14);
+    --blue-trace:rgba(var(--blue-structure-rgb),.07);
+    --blue-deep:#4a0b19;
+    --blue-deep-rgb:74,11,25;
+    --blue-live:#ff7547;
+    --duo-ribbon:linear-gradient(118deg,rgba(var(--gold-core-rgb),.92) 0%,rgba(var(--gold-core-rgb),.25) 30%,rgba(var(--blue-structure-rgb),.2) 62%,rgba(var(--blue-structure-rgb),.85) 100%);
+  }
+  /* Scene backgrounds contain literal colors in the original theme. Keep those rules
+     intact; only the active work theme substitutes their colors, not their geometry. */
+  :root[data-theme="work"], :root[data-theme="work"] body{
+    background-image:radial-gradient(120% 120% at 50% 45%,rgba(var(--blue-deep-rgb),.24) 0%,rgba(var(--blue-deep-rgb),.12) 46%,var(--void) 100%)}
+  :root[data-theme="work"] #nebula{background:
+    radial-gradient(52% 46% at 21% 27%,rgba(var(--blue-structure-rgb),.06),transparent 72%),
+    radial-gradient(46% 40% at 81% 68%,rgba(var(--gold-core-rgb),.05),transparent 72%),
+    radial-gradient(64% 52% at 55% 98%,rgba(var(--blue-structure-rgb),.035),transparent 74%)}
+  :root[data-theme="work"] #nebula-work{background:
+    radial-gradient(48% 42% at 24% 30%,rgba(var(--blue-structure-rgb),.05),transparent 72%),
+    radial-gradient(44% 38% at 78% 64%,rgba(var(--gold-core-rgb),.045),transparent 72%)}
+  :root[data-theme="work"] #sunglow .score{background:radial-gradient(circle at 50% 50%,
+    rgba(var(--gold-core-rgb),.30) 0 5%,rgba(var(--gold-core-rgb),.14) 20%,
+    rgba(var(--blue-structure-rgb),.055) 44%,rgba(var(--blue-structure-rgb),0) 72%)}
+  :root[data-theme="work"] #sunglow .sstreak{background:linear-gradient(90deg,
+    rgba(var(--blue-structure-rgb),0) 0%,rgba(var(--blue-structure-rgb),.07) 20%,
+    rgba(var(--gold-core-rgb),.22) 50%,rgba(var(--blue-structure-rgb),.07) 80%,
+    rgba(var(--blue-structure-rgb),0) 100%)}
+
   *{box-sizing:border-box}
   /* THE VOID. Not black - black is what a switched-off screen looks like, and a galaxy
      painted on it has no depth to sit in. A deep radial fall from #0c0e18 at the edges to
@@ -3701,6 +3750,10 @@ const FINISH_MS = 900;
    frames is the exact opposite of the point.
    The handle is out here rather than on window: the deck is the only caller. */
 let stars2d = null;
+/* CSS is read once per theme toggle; drawing loops use this cached palette.
+   Null means the original palette, including all original material/texture values. */
+let workThemePalette = null;
+let workThemeRepaint = null;
 /* Both skies dim by the same fifth, and they dim by the SAME NUMBER: the canvas field and
    the WebGL one are two drawings of one sky, and a handover that changed its brightness
    would be visible as a flicker at the exact moment it is meant to be invisible. */
@@ -3793,7 +3846,9 @@ const STAR_BANDS = [
       // THROUGH the space between them and the space stopped reading as depth.
       const a = s.a * STAR_DIM * (0.62 + 0.38 * Math.sin(t / 1000 * s.tw + s.ph));
       ctx.beginPath();
-      ctx.fillStyle = s.hue + a.toFixed(3) + ')';
+      ctx.fillStyle = (workThemePalette
+        ? (s.hue === 'rgba(190,215,255,' ? workThemePalette.starCold : workThemePalette.starWarm)
+        : s.hue) + a.toFixed(3) + ')';
       ctx.arc(s.x + px * s.par, s.y + py * s.par, s.r, 0, 6.2832);
       ctx.fill();
     }
@@ -4495,6 +4550,40 @@ function esc(s) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
   });
 }
+function workThemeColor(original, token) {
+  return workThemePalette ? workThemePalette.colors[token] : original;
+}
+function toggleWorkTheme() {
+  const root = document.documentElement;
+  root.setAttribute('data-theme', root.dataset.theme === 'work' ? '' : 'work');
+  workThemePalette = null;
+  if (root.dataset.theme === 'work') {
+    const cs = getComputedStyle(root);
+    const colors = {};
+    ['--gold-core', '--gold-hot', '--blue-structure', '--blue-deep', '--web', '--void']
+      .forEach(function (token) { colors[token] = cs.getPropertyValue(token).trim(); });
+    const rgb = function (hex) {
+      const n = parseInt(hex.slice(1), 16);
+      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    };
+    const crimson = rgb(colors['--blue-structure']), ember = rgb(colors['--gold-core']);
+    const groups = {};
+    /* Keep nine distinguishable cluster swatches and their stable original assignments.
+       Never overwrite colorOf/PALETTE: newly captured groups must still restore correctly. */
+    const mix = [0, 0.78, 0.55, 0.15, 0.95, 0.28, 0.65, 0.08, 0.4];
+    PALETTE.forEach(function (original, i) {
+      groups[original] = '#' + crimson.map(function (v, c) {
+        return Math.round(v + (ember[c] - v) * mix[i % mix.length]).toString(16).padStart(2, '0');
+      }).join('');
+    });
+    workThemePalette = { colors: colors, groups: groups,
+      starCold: 'rgba(' + crimson.join(',') + ',',
+      starWarm: 'rgba(' + rgb(colors['--gold-hot']).join(',') + ',' };
+  }
+  /* The closure is installed only after main's state exists. Late renderer boots also
+     read the active palette, so toggling during a CDN import cannot strand blue objects. */
+  if (workThemeRepaint) workThemeRepaint();
+}
 function bootFail(msg) {
   $('boot').classList.remove('gone');
   $('boot').querySelector('.t').textContent = 'galaxy offline';
@@ -4567,7 +4656,12 @@ async function loadLib() {
     : Array.from(new Set(GRAPH.nodes.map(function (n) { return n.group; }))).sort();
   const colorOf = {};
   groups.forEach(function (g, i) { colorOf[g] = PALETTE[i % PALETTE.length]; });
-  const groupColor = function (n) { return colorOf[n.group] || '#9fb4d8'; };
+  const groupColor = function (n) {
+    const original = colorOf[n.group] || '#9fb4d8';
+    return workThemePalette
+      ? (workThemePalette.groups[original] || workThemePalette.colors['--blue-structure'])
+      : original;
+  };
 
   /* ---- copy data: the layout engine mutates what you hand it ---- */
   const nodes = GRAPH.nodes.map(function (n) { return Object.assign({}, n); });
@@ -4693,7 +4787,7 @@ async function loadLib() {
       else out = hexToRgba(c, 0.09);
       // The wash goes on LAST, over whatever this node was already, so a hidden folder
       // stays hidden and a dimmed one stays dimmed. See washTo.
-      return webAmt > 0 ? washTo(out, WEB_CYAN, webAmt * 0.85) : out;
+      return webAmt > 0 ? washTo(out, workThemeColor(WEB_CYAN, '--web'), webAmt * 0.85) : out;
     })
     /* ---- THE SILENT WIRES ----
        THERE IS NO LINE. Not a faint one, not a hairline, not a tenth of an opacity - none,
@@ -6220,7 +6314,7 @@ async function loadLib() {
     }).length;
     return {
       clusters: groups.map(function (g) {
-        return { name: g, count: counts[g] || 0, colour: colorOf[g] || '#9fb4d8',
+        return { name: g, count: counts[g] || 0, colour: groupColor({ group: g }),
                  family: obFamily(colorOf[g]), muted: hidden.has(g) };
       }),
       notes: nodes.length, liveNotes: liveN,
@@ -6784,7 +6878,7 @@ async function loadLib() {
     groups.forEach(function (g) {
       const row = document.createElement('div');
       row.className = 'lg' + (hidden.has(g) ? ' off' : '');
-      row.style.color = colorOf[g];
+      row.style.color = groupColor({ group: g });
       row.innerHTML = '<b>' + (counts[g] || 0) + '</b><span style="color:inherit">' +
                       esc(g) + '</span><i></i>';
       row.onclick = function () {
@@ -9576,6 +9670,12 @@ async function loadLib() {
     if (bback) bback.onclick = function () { cmdView('list'); cmdPaint(); };
     addEventListener('keydown', function (e) {
       const k = String(e.key || '').toLowerCase();
+      if (k === 'y' && (e.ctrlKey || e.metaKey) && !e.altKey) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        toggleWorkTheme();
+        return;
+      }
       if (k === 'k' && (e.ctrlKey || e.metaKey) && !e.altKey) {
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -20321,6 +20421,7 @@ async function loadLib() {
       });
       scene.add(points);
       deckStars = points;
+      if (workThemePalette) paintWorkSky();
       /* The scratch vectors for the per-frame sway and for the sun, allocated once here.
          Three Vector3s a frame at sixty frames a second is ten thousand objects a minute
          for the collector to deal with, in the one loop on this deck that must not stutter. */
@@ -23509,9 +23610,9 @@ async function loadLib() {
     /* THE LIGHT FOLLOWS THE MODE. The face is the house blue it has always been; the dust is
        whichever state the house is in, set at once on the way in (and eased thereafter). */
     if (want === 'face') {
-      presMat.uniforms.uTint.value.setHex(PRES.TINT);
-      presMat.uniforms.uTint2.value.setHex(PRES.TINT);
-      presMat.uniforms.uRimTint.value.setHex(PRES.RIM_TINT);
+      presMat.uniforms.uTint.value.set(workThemeColor(PRES.TINT, '--blue-structure'));
+      presMat.uniforms.uTint2.value.set(workThemeColor(PRES.TINT, '--blue-structure'));
+      presMat.uniforms.uRimTint.value.set(workThemeColor(PRES.RIM_TINT, '--gold-hot'));
     } else {
       presDustTick(0, true);
     }
@@ -24586,6 +24687,36 @@ async function loadLib() {
   let planetShellGeo = null;          // one atmosphere sphere, shared by every world
   let planetScanRig = null;
   const planetSkins = new Map();      // node id -> { tex, facts } - painted once, at boot
+  /* Retain the original texture objects. Work textures exist only while the theme is
+     active and are disposed after the original maps have been reattached. */
+  const workPlanetTextures = new Map();
+  function workPlanetTexture(skin, css) {
+    if (!workThemePalette) return skin.tex;
+    const cached = workPlanetTextures.get(skin);
+    if (cached && cached.css === css) return cached.tex;
+    try {
+      const image = skin.tex.image;
+      const cv = document.createElement('canvas');
+      cv.width = image.width; cv.height = image.height;
+      const g = cv.getContext('2d');
+      if (!g || !window.__planetTHREE) return skin.tex;
+      g.drawImage(image, 0, 0);
+      const pixels = g.getImageData(0, 0, cv.width, cv.height);
+      const rgb = planetRgb(css), data = pixels.data;
+      /* Preserve surface detail and alpha; recolor a copy, never the original canvas. */
+      for (let i = 0; i < data.length; i += 4) {
+        const light = data[i] * 0.2126 + data[i + 1] * 0.7152 + data[i + 2] * 0.0722;
+        for (let c = 0; c < 3; c++) data[i + c] = Math.round(light * (0.28 + 0.72 * rgb[c] / 255));
+      }
+      g.putImageData(pixels, 0, 0);
+      const tex = new window.__planetTHREE.CanvasTexture(cv);
+      tex.wrapS = skin.tex.wrapS; tex.wrapT = skin.tex.wrapT;
+      tex.anisotropy = skin.tex.anisotropy; tex.colorSpace = skin.tex.colorSpace;
+      if (cached) cached.tex.dispose();
+      workPlanetTextures.set(skin, { css: css, tex: tex });
+      return tex;
+    } catch (e) { return skin.tex; } // emissive/rim colors still change if canvas allocation fails
+  }
   const planetScan = { on: false, at: 0, id: null, of: null };
 
   /* ---- the crust: ONE frosted roughness map for the whole galaxy ----
@@ -25203,7 +25334,7 @@ async function loadLib() {
       skyKeyLight = new THREE.DirectionalLight(PLANET.KEY_TINT, PLANET.KEY);
       scene.add(skyKeyLight); sky.added++;
     }
-    skyKeyLight.color.set(PLANET.KEY_TINT);
+    skyKeyLight.color.set(workThemeColor(PLANET.KEY_TINT, '--gold-hot'));
     skyKeyLight.intensity = PLANET.KEY;
     skyKeyLight.position.copy(dir).multiplyScalar(2400);
     if (skyKeyLight.target) {
@@ -25216,6 +25347,7 @@ async function loadLib() {
       skyFillLight.position.copy(dir).multiplyScalar(-1800);
       scene.add(skyFillLight); sky.added++;
     }
+    if (workThemePalette) skyFillLight.color.set(workThemeColor(PLANET.FILL_TINT, '--blue-deep'));
     skyFillLight.intensity = PLANET.FILL;
     spare.forEach(function (o) {
       if (o === skyKeyLight || o === skyFillLight) return;
@@ -25402,7 +25534,7 @@ async function loadLib() {
     const core = new THREE.Mesh(planetGeo, new THREE.MeshStandardMaterial({
       color: skin ? planetDim('rgb(255,255,255)', PLANET.SKIN_LEVEL)
                   : planetDim(col, PLANET.BODY),
-      map: skin ? skin.tex : null,
+      map: skin ? workPlanetTexture(skin, col) : null,
       emissive: col, emissiveIntensity: PLANET.EMISSIVE,
       roughness: feel.rough, metalness: feel.metal,
       roughnessMap: planetFrostTex || null
@@ -25572,6 +25704,8 @@ async function loadLib() {
       }
 
       const tone = planetTone(n);
+      const skin = planetSkins.get(n.id);
+      if (skin) p.core.material.map = workPlanetTexture(skin, groupColor(n));
       /* WORK MODE IS IN THE KEY, because the law above is not a suggestion: the emissive
          below is now a function of (tone, work.k), and a key that named only the tone would
          let a session start and never reach the material. work.key is k quantised to 2%
@@ -26056,7 +26190,7 @@ async function loadLib() {
     try {
       const scene = Graph.scene && Graph.scene();
       if (!scene || scene.fog) return;
-      scene.fog = new THREE.FogExp2(FOG_COLOUR, FOG_DENSITY);
+      scene.fog = new THREE.FogExp2(workThemeColor(FOG_COLOUR, '--void'), FOG_DENSITY);
       skyFogTune();
     } catch (e) { /* a scene without fog is the sky as it was */ }
   }
@@ -26161,7 +26295,7 @@ async function loadLib() {
       planetNoiseBuild();
       planetKindsFrom(nodes);
       nodes.forEach(function (n) {
-        const made = planetSkin(THREE, n, planetKind(n), groupColor(n), planetSeed(n));
+        const made = planetSkin(THREE, n, planetKind(n), colorOf[n.group] || '#9fb4d8', planetSeed(n));
         if (made) planetSkins.set(n.id, made);
       });
       /* And the sun, before the first paint: a world built and painted under the library's
@@ -27171,6 +27305,41 @@ async function loadLib() {
      otherwise stall silently, and "is this page still running" is not a question about the
      server, so it breaks no part of the hermetic contract - one timer, no fetch, no organ. */
   heartUp();
+
+  /* Theme repaint is color-only: no force restart, camera move, layout, or new loop.
+     Bloom passes are neutral here: they spread the newly colored source pixels, so
+     their strength, threshold, radius and existing performance safeguards stay intact. */
+  function paintWorkSky() {
+    deckSkyLayers.forEach(function (layer, i) {
+      const tokens = ['--blue-structure', '--gold-hot', '--gold-core'];
+      layer.obj.material.color.set(workThemeColor(0xffffff, tokens[i % tokens.length]));
+    });
+    const scene = Graph.scene && Graph.scene();
+    if (scene && scene.fog) scene.fog.color.set(workThemeColor(FOG_COLOUR, '--void'));
+    if (skyKeyLight) skyKeyLight.color.set(workThemeColor(PLANET.KEY_TINT, '--gold-hot'));
+    if (skyFillLight) skyFillLight.color.set(workThemeColor(PLANET.FILL_TINT, '--blue-deep'));
+  }
+  workThemeRepaint = function () {
+    refresh(); // graph accessor, custom planet materials/maps, and link-particle colors
+    if (!workThemePalette) {
+      workPlanetTextures.forEach(function (entry) { entry.tex.dispose(); });
+      workPlanetTextures.clear();
+    }
+    paintWorkSky();
+    Array.prototype.forEach.call(legend.children, function (row, i) {
+      row.style.color = groupColor({ group: groups[i] });
+    });
+    if (orbitState && orbitState.built) orbitPaint();
+    if (presMat) {
+      presDustPalette(); // CSS-driven, but cached at boot rather than read every frame
+      if (pres.mode === 'face') {
+        presMat.uniforms.uTint.value.set(workThemeColor(PRES.TINT, '--blue-structure'));
+        presMat.uniforms.uTint2.value.set(workThemeColor(PRES.TINT, '--blue-structure'));
+        presMat.uniforms.uRimTint.value.set(workThemeColor(PRES.RIM_TINT, '--gold-hot'));
+      } else presDustTick(0, true);
+    }
+  };
+  if (workThemePalette) workThemeRepaint();
 
   if (PROBE_ON) {
     /* THE HERMETIC PAGE. Every call below this comment talks to the server, and a
