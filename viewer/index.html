@@ -202,32 +202,32 @@
   }
   :root[data-theme="work"]{
     --ink:#f5efee;
-    --muted:#b8878b;
-    --line:rgba(255,40,60,.18);
-    --glass:rgba(17,8,12,.82);
-    --void:#07080b;
-    --void-rgb:7,8,11;
-    --accent:#ff2a3d;
-    --web:#ff7547;
-    --doc:#ffc18a;
-    --live:#ff7547;
-    --local:#ed975c;
-    --fail:#ff9cbb;
-    --gold-core:#ff813f;
-    --gold-core-rgb:255,129,63;
-    --gold-hot:#ffe1c2;
-    --gold-glow:rgba(var(--gold-core-rgb),.5);
-    --gold-dim:rgba(var(--gold-core-rgb),.2);
-    --gold-trace:rgba(var(--gold-core-rgb),.08);
-    --gold-local:#ed975c;
-    --blue-structure:#ff2a3d;
-    --blue-structure-rgb:255,42,61;
-    --blue-glow:rgba(var(--blue-structure-rgb),.42);
-    --blue-dim:rgba(var(--blue-structure-rgb),.14);
+    --muted:#b9a6a9;
+    --line:rgba(255,42,52,.24);
+    --glass:rgba(8,6,9,.88);
+    --void:#030407;
+    --void-rgb:3,4,7;
+    --accent:#ff2835;
+    --web:#53cbd5;
+    --doc:#e7b2a9;
+    --live:#53cbd5;
+    --local:#d85b55;
+    --fail:#ff91ac;
+    --gold-core:#c2231d;
+    --gold-core-rgb:194,35,29;
+    --gold-hot:#ff534b;
+    --gold-glow:rgba(var(--gold-core-rgb),.55);
+    --gold-dim:rgba(var(--gold-core-rgb),.24);
+    --gold-trace:rgba(var(--gold-core-rgb),.10);
+    --gold-local:#d85b55;
+    --blue-structure:#ff2835;
+    --blue-structure-rgb:255,40,53;
+    --blue-glow:rgba(var(--blue-structure-rgb),.50);
+    --blue-dim:rgba(var(--blue-structure-rgb),.15);
     --blue-trace:rgba(var(--blue-structure-rgb),.07);
-    --blue-deep:#4a0b19;
-    --blue-deep-rgb:74,11,25;
-    --blue-live:#ff7547;
+    --blue-deep:#36090d;
+    --blue-deep-rgb:54,9,13;
+    --blue-live:#53cbd5;
     --duo-ribbon:linear-gradient(118deg,rgba(var(--gold-core-rgb),.92) 0%,rgba(var(--gold-core-rgb),.25) 30%,rgba(var(--blue-structure-rgb),.2) 62%,rgba(var(--blue-structure-rgb),.85) 100%);
   }
   /* Scene backgrounds contain literal colors in the original theme. Keep those rules
@@ -3281,12 +3281,73 @@
   /* THE LEGEND IS ABOUT THE GALAXY, so it stands down while the presence holds the pane, and the
      well gets the lane's room. display, not visibility, so the governor sees it go. */
   body.stage-presence #legend{display:none}
+  /* Cinematic crimson: all geometry and lighting overrides are opt-in. */
+  #work-nebula{display:none;position:fixed;inset:0;width:100%;height:100%;z-index:1;pointer-events:none}
+  :root[data-theme="work"] #work-nebula{display:block;opacity:.52}
+  :root[data-theme="work"] #nebula{opacity:.22}
+  @media(min-width:1000px){:root[data-theme="work"] #orbit svg{top:-30px}}
+  :root[data-theme="work"] #toprail,
+  :root[data-theme="work"] #title{background:rgba(3,4,7,.94);border-bottom-color:var(--gold-core)}
+  :root[data-theme="work"] #sidenav{background:rgba(3,4,7,.88);border-right-color:var(--gold-dim)}
+  :root[data-theme="work"] .nav.active{color:var(--blue-structure);box-shadow:inset 3px 0 var(--blue-structure),0 0 22px var(--gold-trace)}
+  :root[data-theme="work"] #convohead{background:rgba(3,4,7,.90);border-color:var(--gold-glow);box-shadow:inset 0 1px rgba(255,255,255,.035),0 12px 40px rgba(0,0,0,.28)}
+  :root[data-theme="work"] #bar{background:rgba(3,4,7,.94);border-color:var(--blue-structure);box-shadow:0 0 24px var(--gold-trace),inset 0 1px rgba(255,255,255,.04)}
+  :root[data-theme="work"] #bar button{border-color:var(--gold-glow)}
+  :root[data-theme="work"] #density,
+  :root[data-theme="work"] .online{color:var(--blue-structure)}
+  :root[data-theme="work"] #orbit .ob-f b{color:var(--blue-structure)}
+  :root[data-theme="work"] #orbit .ob-card{fill:rgba(3,4,7,.86);stroke:rgba(255,120,125,.22)}
+  :root[data-theme="work"] #orbit .ob-lbl{fill:var(--ink);letter-spacing:.12em}
+  :root[data-theme="work"] #orbit .ob-sub{fill:var(--muted)}
+  :root[data-theme="work"] #orbit .ob-ring{stroke:var(--blue-structure);stroke-width:1.2}
+  :root[data-theme="work"] #orbit .ob-thread-glow{stroke-width:8;opacity:.18}
+  :root[data-theme="work"] #orbit .ob-thread-halo{stroke-width:3.2;opacity:.3}
+  :root[data-theme="work"] #orbit .ob-spoke.ob-thread{stroke-width:.95;opacity:.72}
+  :root[data-theme="work"] #orbit .ob-cross.ob-thread{stroke-width:1.8;opacity:1}
+  :root[data-theme="work"] #orbit .ob-bead{fill:#ffe8e5}
+  :root[data-theme="work"] #orbit .ob-cn{fill:#fff4f0;text-shadow:0 0 8px var(--gold-hot)}
+  :root[data-theme="work"] #orbit .ob-pulse{stroke:var(--blue-structure);stroke-width:1.6}
+  #orbit .ob-work-light{display:none;pointer-events:none}
+  :root[data-theme="work"] #orbit .ob-work-light{display:inline}
+  :root[data-theme="work"] #orbit .ob-core-body{fill:url(#ob-crimson-core)}
+  :root[data-theme="work"] #orbit .ob-core-rim{fill:none;stroke:var(--gold-hot);stroke-width:.8;opacity:.65}
+  @media(max-width:900px){
+    :root[data-theme="work"] #work-nebula{opacity:.20}
+    :root[data-theme="work"] #title{width:100vw;max-width:100vw;padding:0 14px;display:flex}
+    :root[data-theme="work"] #title .brand{border-right:0;padding-right:0}
+    :root[data-theme="work"] #title h1,
+    :root[data-theme="work"] #title #stats,
+    :root[data-theme="work"] #title #density,
+    :root[data-theme="work"] #toprail{display:none}
+    :root[data-theme="work"] #sidenav.gone{display:flex}
+    :root[data-theme="work"] #sidenav{top:auto!important;bottom:0;left:0;width:100vw!important;height:58px;
+      flex-direction:row;align-items:center;justify-content:space-around;gap:0;padding:5px 7px;
+      border-right:0;border-top:1px solid var(--gold-dim)}
+    :root[data-theme="work"] #sidenav .navi{height:46px;width:calc((100vw - 24px)/7);justify-content:center;padding:0}
+    :root[data-theme="work"] #sidenav .navi span,
+    :root[data-theme="work"] #sidenav #navvoice .nv-t{display:none}
+    :root[data-theme="work"] #navvoice{margin:0;padding:7px;width:40px;height:40px;justify-content:center}
+    :root[data-theme="work"] #brain{top:70px!important;left:auto!important;right:12px!important;width:min(276px,calc(100vw - 24px))!important}
+    :root[data-theme="work"] #orbit{left:0;right:0;top:145px;bottom:160px}
+    :root[data-theme="work"] #orbit .ob-card,
+    :root[data-theme="work"] #orbit .ob-fold,
+    :root[data-theme="work"] #orbit .ob-lbl,
+    :root[data-theme="work"] #orbit .ob-sub{display:none}
+    :root[data-theme="work"] #orbit .ob-f{bottom:70px;gap:8px;font-size:9px;letter-spacing:.04em}
+    :root[data-theme="work"] #dock{left:8px!important;right:8px!important;width:auto!important;bottom:66px!important;top:auto!important}
+    :root[data-theme="work"] #bar{gap:7px;padding-left:10px}
+    :root[data-theme="work"] #bar #seal-text{display:none}
+  }
+  @media(max-width:900px) and (max-height:700px){
+    :root[data-theme="work"] #orbit .ob-f{bottom:24px}
+  }
 </style>
 </head>
 <body>
 
 <canvas id="stars"></canvas>
 <div id="nebula"></div>
+<canvas id="work-nebula" width="1200" height="720" aria-hidden="true"></canvas>
 <div id="nebula-work"></div>
 <div id="sunglow" aria-hidden="true"><i class="score"></i><i class="sstreak"></i></div>
 <div id="graph"></div>
@@ -4553,6 +4614,53 @@ function esc(s) {
 function workThemeColor(original, token) {
   return workThemePalette ? workThemePalette.colors[token] : original;
 }
+/* A bounded, deterministic background raster. Generated once per palette, never per frame.
+   Decorative dust is separate from the real note stars and graph links. No asset or worker. */
+function paintWorkNebula() {
+  if (!workThemePalette) return;
+  const canvas = $('work-nebula'), key = workThemePalette.colors['--gold-core'];
+  if (!canvas || canvas.dataset.palette === key) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const w = canvas.width, h = canvas.height, image = ctx.createImageData(w, h);
+  const hex = parseInt(key.slice(1), 16), red = hex >> 16, green = (hex >> 8) & 255, blue = hex & 255;
+  const hash = function (x, y) { let n = Math.imul(x, 374761393) + Math.imul(y, 668265263); n = Math.imul(n ^ (n >>> 13), 1274126177); return ((n ^ (n >>> 16)) >>> 0) / 4294967295; };
+  const noise = function (x, y) {
+    const ix = Math.floor(x), iy = Math.floor(y); let fx = x - ix, fy = y - iy;
+    fx *= fx * (3 - 2 * fx); fy *= fy * (3 - 2 * fy);
+    const a = hash(ix, iy), b = hash(ix + 1, iy), c = hash(ix, iy + 1), d = hash(ix + 1, iy + 1);
+    return (a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy;
+  };
+  const cloud = function (x, y) { return noise(x,y)*.52 + noise(x*2.1,y*2.1)*.27 + noise(x*4.3,y*4.3)*.14 + noise(x*8.7,y*8.7)*.07; };
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const u = x/w, v = y/h, n = cloud(u*8+23,v*8+11);
+    const warp = (n-.5)*.12;
+    const armA = v - (.77-.53*u+.065*Math.sin(u*8)) + warp;
+    const armB = v - (.09+.76*u+.07*Math.sin(u*10+1)) - warp;
+    const edgeA = Math.max(.16,Math.pow(Math.abs(u-.51)*1.8,.65));
+    const edgeB = Math.min(1,Math.max(0,(u-.56)*3));
+    const cloudA = Math.exp(-armA*armA/.024)*edgeA;
+    const cloudB = Math.exp(-armB*armB/.032)*edgeB;
+    const density = Math.max(0,Math.min(1,(n-.36)*3.2));
+    const wisps = Math.pow(Math.max(0,1-Math.abs(n-.53)*5),2);
+    const grain = hash(x+91,y+53);
+    const light = (cloudA+cloudB)*(.24+density*.55+wisps*.24)*(.8+grain*.2);
+    const p = (y*w+x)*4;
+    image.data[p] = Math.min(255, red*light*1.45);
+    image.data[p+1] = green*light*.58;
+    image.data[p+2] = blue*light*.72;
+    image.data[p+3] = 255;
+  }
+  ctx.putImageData(image,0,0);
+  let seed = 0x71c0ffee;
+  const random = function () { seed = (Math.imul(seed,1664525)+1013904223)>>>0; return seed/4294967296; };
+  for (let i=0;i<850;i++) {
+    const x=random()*w,y=random()*h,r=random();
+    ctx.fillStyle=i%7 ? 'rgba(225,226,236,'+(.08+r*.3)+')' : 'rgba('+red+','+green+','+blue+','+(.3+r*.4)+')';
+    ctx.fillRect(x,y,r>.985?1.5:.65,r>.985?1.5:.65);
+  }
+  canvas.dataset.palette = key;
+}
 function toggleWorkTheme() {
   const root = document.documentElement;
   root.setAttribute('data-theme', root.dataset.theme === 'work' ? '' : 'work');
@@ -4577,11 +4685,12 @@ function toggleWorkTheme() {
       }).join('');
     });
     workThemePalette = { colors: colors, groups: groups,
-      starCold: 'rgba(' + crimson.join(',') + ',',
+      starCold: 'rgba(218,224,238,',
       starWarm: 'rgba(' + rgb(colors['--gold-hot']).join(',') + ',' };
   }
   /* The closure is installed only after main's state exists. Late renderer boots also
      read the active palette, so toggling during a CDN import cannot strand blue objects. */
+  paintWorkNebula();
   if (workThemeRepaint) workThemeRepaint();
 }
 function bootFail(msg) {
@@ -6337,6 +6446,18 @@ async function loadLib() {
     /* UI MANDATE III PART 1: ob-halo (a 190-unit gradient disc behind the heart) and ob-floor (a
        gradient ellipse under the plinth) stood here. Both were background circles; both are gone.
        The heart is its sphere, its latitude rings and its motes; the plinth is its rings. */
+    const crimsonCore = obEl('radialGradient', { id: 'ob-crimson-core', cx: '38%', cy: '32%', r: '68%' }, defs);
+    [['0%', '--gold-hot', .85], ['24%', '--gold-core', .65], ['64%', '--blue-deep', .96], ['89%', '--gold-core', .9], ['96%', '--blue-structure', .85], ['100%', '--blue-structure', 0]].forEach(function (s) {
+      obEl('stop', { offset: s[0], style: 'stop-color:var(' + s[1] + ')', 'stop-opacity': s[2] }, crimsonCore);
+    });
+    const corona = obEl('radialGradient', { id: 'ob-crimson-corona' }, defs);
+    [['0%',0],['44%',0],['51%',.32],['62%',.1],['100%',0]].forEach(function (s) {
+      obEl('stop', { offset:s[0], class:'s-bs', 'stop-opacity':s[1] }, corona);
+    });
+    const shade = obEl('radialGradient', { id:'ob-crimson-shade', cx:'30%', cy:'25%', r:'80%' }, defs);
+    [['0%','#ffe2da',.4],['30%','#ffffff',0],['72%','#050107',.24],['100%','#050107',.85]].forEach(function(s) {
+      obEl('stop',{offset:s[0],'stop-color':s[1],'stop-opacity':s[2]},shade);
+    });
     const gloss = obEl('radialGradient', { id: 'ob-gloss', cx: '36%', cy: '30%', r: '70%' }, defs);
     obEl('stop', { offset: '0%', 'stop-color': '#ffffff', 'stop-opacity': 0.55 }, gloss);
     obEl('stop', { offset: '60%', 'stop-color': '#ffffff', 'stop-opacity': 0 }, gloss);
@@ -6359,11 +6480,13 @@ async function loadLib() {
     /* THE HEART: three latitude rings, a sphere that is gold at the centre and
        blue at the limb - the presence's own "blue shade, amber heart" - and a pulse. */
     const core = obEl('g', { id: 'ob-core' }, svg);
+    obEl('circle', { r:OB.CORE_R*2, fill:'url(#ob-crimson-corona)', class:'ob-work-light' },core);
     [[-14, 1.0], [8, 0.78], [-3, 0.56]].forEach(function (l) {
       obEl('ellipse', { rx: OB.CORE_R * 1.55 * l[1], ry: OB.CORE_R * 0.42 * l[1], class: 'ob-lat',
                         transform: 'rotate(' + l[0] + ')' }, core);
     });
-    obEl('circle', { r: OB.CORE_R, fill: 'url(#ob-sphere)' }, core);
+    obEl('circle', { r: OB.CORE_R, fill: 'url(#ob-sphere)', class:'ob-core-body' }, core);
+    obEl('circle', { r: OB.CORE_R*.97, class:'ob-work-light ob-core-rim' },core);
     obEl('circle', { r: OB.CORE_R, class: 'ob-pulse' }, core);
     /* MOTES: a fixed scatter inside the sphere, seeded so the heart looks the same every time
        the map opens. They twinkle on the sphere's own curve. */
@@ -6389,6 +6512,7 @@ async function loadLib() {
   function orbitPaint() {
     if (!orbitState) return;
     orbitBuild();
+    $('ob-svg').setAttribute('viewBox', workThemePalette ? '-550 -290 1100 580' : '-580 -330 1160 640');
     const d = orbitData();
     orbitState.data = d;
     const back = $('ob-back'), front = $('ob-front'), links = $('ob-links');
@@ -6474,6 +6598,7 @@ async function loadLib() {
         });
         obEl('circle', { r: R.toFixed(1), fill: c.colour }, g);
         obEl('circle', { r: R.toFixed(1), fill: 'url(#ob-gloss)' }, g);
+        obEl('circle', { r: R.toFixed(1), fill:'url(#ob-crimson-shade)', class:'ob-work-light' },g);
         obEl('circle', { r: (R + 6).toFixed(1), class: 'ob-ring ' + c.family }, g);
         obEl('text', { class: 'ob-ini' }, g).textContent = c.name.charAt(0).toUpperCase();
         /* THE FOLDER CARD, beside the world as on the plate: a folder mark, the folder's own
@@ -25724,7 +25849,9 @@ async function loadLib() {
          word on a muted world's opacity and a hidden folder would come back lit. */
       p.dim = dim;
       p.hot = !!tone.hot;
-      p.rest = tone.hot ? PLANET.EMISSIVE_HOT : PLANET.EMISSIVE;
+      /* Crimson worlds gain internal light without changing the hot or muted tiers. */
+      p.rest = (tone.hot ? PLANET.EMISSIVE_HOT : PLANET.EMISSIVE) *
+        (workThemePalette ? 1.3 : 1);
       /* THE ACCESSOR STILL DECIDES, AND A MAP CHANGES WHAT THAT DECISION MULTIPLIES.
          With no skin, material.color IS the crust and BODY darkens it, exactly as before.
          With a skin, the same colour is a multiplier over a surface that is already dark,
@@ -25745,7 +25872,7 @@ async function loadLib() {
       if (planetScan.of !== p) p.core.material.emissiveIntensity = p.rest;
       if (p.glow) {
         p.glow.material.color.set(tone.css);
-        p.glow.material.opacity = (tone.hot ? PLANET.GLOW_HOT : PLANET.GLOW_ALPHA) * dim;
+        p.glow.material.opacity = Math.min(1, (tone.hot ? PLANET.GLOW_HOT : PLANET.GLOW_ALPHA) * dim * (workThemePalette ? 1.18 : 1));
       }
       /* The shell takes the same two decisions through its uniforms. A hidden folder's air
          goes with it: a rim of atmosphere around a world at five per cent opacity would be
@@ -25753,7 +25880,7 @@ async function loadLib() {
       if (p.shell) {
         p.shell.material.uniforms.uColor.value.set(tone.css);
         p.shell.material.uniforms.uOpacity.value =
-          (tone.hot ? PLANET.SHELL_ALPHA_HOT : PLANET.SHELL_ALPHA) * dim;
+          (tone.hot ? PLANET.SHELL_ALPHA_HOT : PLANET.SHELL_ALPHA) * dim * (workThemePalette ? 1.12 : 1);
       }
       /* THE RING IS THE READOUT, so it is the one part that gets the jewel treatment on
          whatever colour the accessor handed down - a dimmed folder's ring is a dimmed
@@ -25761,7 +25888,7 @@ async function loadLib() {
          world turning white. */
       p.ring.material.color.set(planetJewel(tone.css));
       p.ring.material.opacity =
-        (tone.hot ? PLANET.RING_ALPHA_HOT : PLANET.RING_ALPHA) * dim;
+        Math.min(1, (tone.hot ? PLANET.RING_ALPHA_HOT : PLANET.RING_ALPHA) * dim * (workThemePalette ? 1.08 : 1));
       /* EVERY WORLD WEARS ONE. The only thing that takes a ring away is the world itself
          going: a hidden folder at 0.12 alpha or less has nothing left to read. */
       p.ring.visible = dim > 0.12;
@@ -25877,7 +26004,7 @@ async function loadLib() {
            size of the deck; floored at PLANET.GLOW so this can only ever add. */
         const halo = Math.min(PLANET.FAR_HALO_PX / Math.max(px, 0.35), PLANET.HALO_MAX);
         const wantS = PLANET.GLOW + (Math.max(PLANET.GLOW, halo) - PLANET.GLOW) * k;
-        const wantA = (base + (PLANET.FAR_ALPHA - base) * k) * dim;
+        const wantA = Math.min(1, (base + (PLANET.FAR_ALPHA - base) * k) * dim * (workThemePalette ? 1.18 : 1));
         if (Math.abs(p.glow.scale.x - wantS) > 0.002) p.glow.scale.setScalar(wantS);
         if (Math.abs(p.glow.material.opacity - wantA) > 0.002) {
           p.glow.material.opacity = wantA;
@@ -26046,6 +26173,7 @@ async function loadLib() {
   function flowPaint() {
     if (!flow.on || !flowCol) return;
     flow.paints++;
+    if (flowMat) flowMat.size = FLOW.SIZE * (workThemePalette ? 1.12 : 1);
     const links = flowList;
     for (let i = 0; i < links.length; i++) {
       const l = links[i];
@@ -26060,6 +26188,7 @@ async function loadLib() {
       if (!s || !t || hidden.has(s.group) || hidden.has(t.group)) k = 0;
       else if (hiLinks.has(l)) k = FLOW.TINT * FLOW.HOT_ALPHA;
       else if (hiLinks.size) k = FLOW.TINT * FLOW.ALPHA * FLOW.DIM;
+      if (workThemePalette) k = Math.min(1, k * 1.28);
       const rgb = flowRgb(s ? groupColor(s) : '#ffffff');
       for (let d = 0; d < FLOW.PER_LINK; d++) {
         const at = (i * FLOW.PER_LINK + d) * 3;
