@@ -20969,10 +20969,10 @@ async function loadLib() {
 
      THE PERFORMANCE CONTRACT, stated before any of the pretty part, because it is what
      makes the pretty part affordable:
-       ONE Points OBJECT. One BufferGeometry, allocated once at CAP capacity, one
-         ShaderMaterial, one draw call. Switching modes rewrites the attributes and moves
-         setDrawRange - it does not build geometry. Switching modes happens when a human
-         presses a key, which is not a per-frame event.
+       ONE Points OBJECT keeps the fixed CAP buffer for dust and face atmosphere.
+         Face mode adds one cached LineSegments geometry and material for connected
+         topology. Switching modes rewrites point attributes and setDrawRange, then
+         toggles the lines; it does not rebuild either GPU object.
        NO SECOND rAF. It renders from the orbit loop's hook, for the reason written at
          that loop: two loops asking the same clock the same question is how a 60fps page
          becomes a 55fps page for no visible reason. See presTick.
@@ -21041,44 +21041,19 @@ async function loadLib() {
        shoulders reach below the chin and 42 degrees at z=3.35 gives only 1.286 to work
        in. Scaling the object rather than the points keeps the buffer in the units the
        acceptance criteria are stated in, so a ratio read off it needs no undoing. */
-    /* §31 adds EAR_PTS, and it is taken OUT OF THE SKULL's share rather than added to the
-       total, so CAP is untouched and deck_proof's ceiling needs no re-opening. 260 a side is
-       chosen against the nose's 900: an ear is the strongest single cue that a silhouette is
-       a head rather than an ovoid, and in the yaw-90 plate there was not one point of it -
-       but it is also small, and a thousand points on an ear would make a head wearing two
-       lamps. */
-    NOSE_PTS: 420, LIP_PTS: 300, IRIS_PTS: 210, LID_PTS: 200, NECK_PTS: 600,
-    /* UI MANDATE III PART 4: the iris's two rings (radius, in face units) and its striations. */
+    /* The connected wireframe now carries the face; these small point layers only
+       soften its silhouette and retain the existing organ animation roles. */
+    NOSE_PTS: 70, LIP_PTS: 50, LID_PTS: 16, NECK_PTS: 90,
+    /* Kept for diagnostic compatibility; Face Presence draws one eye centre per side. */
     EYE_IRIS_R: 0.055, EYE_PUPIL_R: 0.019, EYE_SPOKES: 14,
-    EAR_PTS: 260,
-    /* ---- UI MANDATE II PART 2: THE MESH FOLLOWS THE FACE ----
-       WHAT §49 BUILT AND WHY IT WAS NOT ENOUGH. A share of the shell's budget was laid along an
-       11 x 10 jittered lattice in (height, azimuth) - edges, but edges in rows and columns. The
-       boss's reference is a low-poly head whose edges run where a face's do: loops round the
-       eyes and the mouth, a ridge down the nose, the brow, the cheekbones, the jaw to the chin,
-       and a neck dropping to a bust. §49's report named the gap; this closes it.
-       HOW, PROCEDURALLY, AND WITH NO ASSET. The topology is a set of LANDMARK VERTICES placed on
-       anatomical curves - written below in presFaceMesh(), in the face's own coordinates and
-       reusing the socket, lip, nose and jaw tables the haze is built from, so the mesh and the
-       cloud agree about where an eye is - and then TRIANGULATED: a Delaunay pass in the head's
-       (azimuth, height) surface space. Delaunay is what turns a ring of points round an eye into
-       a ring of EDGES round an eye: consecutive points on a loop are each other's nearest
-       neighbours, so the loop survives triangulation as edges and the space between loops fills
-       with triangles. Edges longer than MAX_EDGE (in that space) are dropped, which is what keeps
-       a triangle from spanning the back of the skull. The neck is its own rings and verticals.
-       EVERY EDGE IS SAMPLED IN PROPORTION TO ITS LENGTH, so a long cheek edge and a short eyelid
-       edge read as lines of the same density - §49 spent the same count on every edge, which is
-       why its short edges were bright and its long ones dotted.
-       STILL POINTS, STILL ONE ALLOCATION. The same pen writes them into the same buffer, out of
-       the shell's own budget, and the total stays at PRES.CAP: preflight check 34 holds this
-       face to "one object, one material, four buffers allocated once at PRES.CAP", and
-       ui_enhancement_proof asserts the mesh sits inside the cap on one object. The mesh is
-       flagged by aRnd >= 1 exactly as §49 flagged it (edges [1.00, 1.20), vertices [1.25, 1.30]),
-       so the shader branch is unchanged. MESH_PTS rises from 3,600 to 4,800, taken from the
-       haze: the reference is a wireframe, so the edges carry more of the picture than before.
-       SPEAK_GLOW, DRIFT and DRIFT_SHARE are §49's and unchanged. */
-    FACE_MESH_PTS: 7200, FACE_MESH_VERT: 3, FACE_MESH_MAX_EDGE: 0.42, FACE_MESH_AKX: 0.62,
-    FACE_SPEAK_GLOW: 0.55, FACE_DRIFT: 0.007, FACE_DRIFT_SHARE: 0.32,
+    EAR_PTS: 35,
+    /* The 3D shell is sampled at near-equal arc length by height, then Delaunay
+       triangulated in azimuth/height. Small eye and mouth polygons are the only
+       feature constraints. One cached line geometry draws the primary topology;
+       a restrained point layer shares its animation and theme uniforms. */
+    FACE_MESH_PTS: 500, FACE_SHELL_PTS: 160, FACE_MESH_VERT: 1,
+    FACE_MESH_MAX_EDGE: 0.42, FACE_MESH_AKX: 0.62,
+    FACE_SPEAK_GLOW: 0.55, FACE_DRIFT: 0.007, FACE_DRIFT_SHARE: 0,
     HEAD_S: 0.94,
     JAW_MAX: 0.20,            // radians at full level: 11 degrees of hinge, not a hinge-open
     YAW_IDLE: 0.087,          // +/- 5 degrees, the mandate's figure, in radians
@@ -21195,7 +21170,7 @@ async function loadLib() {
     CHEAP_DENSITY: 0.2,
     /* HOW FAR THE FACE REACHES, in natural units, for the canvas's edge window: the neck's
        lowest point. The window is sized to the larger of this and the dust's reach. */
-    FACE_EXT: 1.24,
+    FACE_EXT: 1.50,
     CAM_Z: 3.35,              // fov 42 at z=3.35 gives 1.286 of half-height to work in
     SIZE: 2.0, DPR_MAX: 1.75, TINT: 0x7cc4ff,
     /* ---- §27 PART 3: THE SPRITE FOLLOWS THE WELL ----
@@ -21284,9 +21259,9 @@ async function loadLib() {
        window manager; voice_proof now pins visibility and counts the frames it measured
        across, so the figures above are the ones this constant answers to. */
     RMS_FULL: 0.22,
-    /* THE COMPACT TIER'S DENSITY, and it is a fraction of the POINTS and not of the
-       geometry: the same three modes, the same one shader, the same one material and the
-       same one allocation - setDrawRange simply stops sooner. 0.45 and not 0.22 (which is
+    /* THE COMPACT TIER'S DENSITY is a fraction of the points; the cached line geometry
+       remains intact so the eyes, mouth and silhouette survive a point-density cut.
+       setDrawRange simply stops the point pass sooner. 0.45 and not 0.22 (which is
        what scaling by area, 140^2/300^2, would give) because the head is not a texture: a
        point cloud that thins in proportion to its own area holds its per-pixel density
        constant, and constant per-pixel density at a third of the size is a head whose
@@ -21825,6 +21800,8 @@ async function loadLib() {
   }
 
   let presR = null, presScene = null, presCam = null, presPts = null, presMat = null;
+  let presWire = null, presWireGeo = null, presWireMat = null;
+  let presMeshSamples = null;
   let presGeo = null, presCvs = null, presHost = null;
   let presAnal = null, presData = null;
   let pxPos = null, pxRole = null, pxRnd = null, pxCell = null;
@@ -21965,46 +21942,27 @@ async function loadLib() {
      analytic outline anybody reaches for first - an ellipse, a superellipse, a cosine -
      is widest at its middle. A human head is widest at the CHEEKBONES, which are two
      thirds of the way up, and the distance between "widest in the middle" and "widest at
-     the cheekbones" is the entire distance between an egg and a face. So twelve measured
-     rows from chin to crown, linearly interpolated, and the maximum is row seven. */
-  /* §31 REBUILT THIS TABLE, and the reason is worth keeping because the old one LOOKED
-     anatomical and was not. It named a gonion at [-0.40, 0.555] and a cheekbone at
-     [ 0.06, 0.645], so reading it you would say it had a jaw. Differentiate it and the
-     jaw disappears: the half-width's slope from chin to cheekbone ran 1.00, 0.86, 0.69,
-     0.58, 0.25, 0.15 - falling monotonically the whole way, which is the definition of a
-     smooth convex arc. An egg. The label said gonion; the arithmetic said no corner.
-       A GONION IS A CORNER, not a landmark you annotate. What makes a jaw read is that the
-     mandible runs nearly STRAIGHT from the chin up to the angle and then the silhouette
-     TURNS - the slope collapses by a factor of four inside a tenth of a unit. Below the
-     corner, the boundary is a bone; above it, it is the side wall of the skull, which is
-     nearly vertical from the gonion through the cheekbone to the temple. The eye reads that
-     turn as a jaw before it reads any feature on the front of the face, which is why a
-     relief with excellent eyes and no corner still reads as a mask.
-       AND IT WAS TOO NARROW. A human head is about 1.4 times as tall as it is wide, so at
-     a half-height of 1 the half-width wants to be near 0.70; this table's widest was 0.645,
-     giving 1.55 - and 1.55 tall by 1 wide IS an egg, whatever is drawn on it. The floor in
-     deck_proof (taller than 1.35x wide, neck included) is cleared with room to spare either
-     way, so the old number was not protecting anything.
-       THE CHIN IS A BLOCK, not a point. 0.10 tapered the jaw to a spike and is the single
-     biggest contributor to the alien read in the yaw-0 plate; a chin is about a quarter of
-     the head's width across.
-     Slopes now: 0.93, 0.73, 0.63, 0.69 | 0.17, 0.09, 0.05 - a straight-ish bone, then the
-     corner, then a wall. The break is between the fourth and fifth rows and it is the whole
-     point of the table. */
+      the cheekbones" is the entire distance between an egg and a face. Thirteen measured
+      rows from chin to crown are linearly interpolated; the widest is y = 0.20. */
+   /* The cheekbone remains the widest row and the chin remains broad enough to be a
+      surface, not a point. The earlier 0.635 jaw angle made the lower face nearly as
+      wide as the cheekbones and printed a hard mask. Easing that angle to 0.58, then
+      tracing a short chin arc in the wire topology, retains a mandible without a V.
+      Above the temples the rows open into a broader, curved crown rather than a roof. */
   const PRES_OUTLINE = [
     [-1.00, 0.20],   // THE CHIN, a block a quarter of the head wide - not a spike
-    [-0.85, 0.34],
-    [-0.70, 0.45],
-    [-0.55, 0.545],  // the mandible, running nearly straight
-    [-0.42, 0.635],  // THE GONION: the corner. The slope collapses 0.69 -> 0.17 here
+    [-0.85, 0.32],
+    [-0.70, 0.43],
+    [-0.55, 0.51],   // the mandible eases from the rounded chin
+    [-0.42, 0.58],   // the jaw angle stays inside the wider cheekbone
     [-0.20, 0.672],
     [ 0.00, 0.690],  // the side wall, nearly vertical through the cheekbone
     [ 0.20, 0.700],  // THE WIDEST the head ever is: zygomatic into parietal
     [ 0.42, 0.693],
-    [ 0.60, 0.660],  // the temples coming in
-    [ 0.75, 0.600],
-    [ 0.88, 0.500],
-    [ 1.00, 0.30]    // the crown, and a cranium is not a dome to a point either
+    [ 0.60, 0.674],  // a gradual temple-to-parietal turn
+    [ 0.75, 0.640],
+    [ 0.88, 0.560],
+    [ 1.00, 0.42]    // a broad, softly rounded crown rather than a narrow roof
   ];
   /* ---- AND THE TWO DEPTH TABLES, which are what makes this a head and not a mask ----
      A RELIEF IS NOT A VOLUME, and the version this replaces was a relief: eight Gaussians
@@ -22191,6 +22149,12 @@ async function loadLib() {
                                       (PRES_NOSE.top - PRES_NOSE.tip)));
     return PRES_NOSE.hw * (0.42 + 0.58 * (1 - f)) * (1 + 0.42 * presG(f - 0.10, 0.10));
   }
+  /* Keep the helix proud of the side wall in both the wire mesh and its point haze. */
+  function presEarX(sx, y, z, out) {
+    const back = Math.max(1e-4, presRow(PRES_BACK, y));
+    const ca = Math.max(-0.999, Math.min(0, z / back));
+    return sx * (presHalf(y) * Math.sqrt(Math.max(0, 1 - ca * ca)) + out);
+  }
 
   /* AND WHERE THE POINTS GO, which is the half of this that makes it readable. A head of
      evenly scattered points is a cloud. The features are in the DENSITY: brow, cheekbone,
@@ -22320,78 +22284,79 @@ async function loadLib() {
                .map(function (tr) { return tr.v; });
   }
 
-  /* ---- THE MESH: anatomical landmarks, triangulated, sampled along every edge ----
-     See PRES.FACE_MESH_* for the argument. Landmarks are written in the face's (x, y) where they
-     are front-facing - which is where a face's anatomy lives - and in (azimuth, y) for the
-     cranium, the ears and the back. Each one carries a KIND, so a harness can ask "is there a
-     closed loop round each eye" instead of trusting a picture. */
+  /* Equal-distance surface rows make the skull's facets consistent. Anatomical
+     openings and separate organ edges keep the face recognizable. */
   function presFaceMesh(pen, rnd, budget) {
+    if (presMeshSamples && presMeshSamples.length >= budget) {
+      for (let i = 0; i < budget; i++) pen.put.apply(pen, presMeshSamples[i]);
+      pres.meshPts = budget;
+      return;
+    }
+    const samples = [];
     const L = [];
+    const featureRings = [];
     const addXY = function (x, y, kind) {
       const h = Math.max(1e-3, presHalf(y));
       L.push({ a: Math.asin(Math.max(-0.995, Math.min(0.995, x / h))), y: y, kind: kind });
     };
     const addAY = function (a, y, kind) { L.push({ a: a, y: y, kind: kind }); };
     const ring = function (cx, cy, rx, ry, n, kind, rot) {
+      const ids = [];
       for (let i = 0; i < n; i++) {
         const th = (i / n) * Math.PI * 2 + (rot || 0);
-        addXY(cx + Math.cos(th) * rx, cy + Math.sin(th) * ry, kind);
+        const sy = Math.sin(th);
+        const lidArc = /^(eye|socket|orbit)/.test(kind);
+        const eyelid = lidArc ? Math.sign(sy) * Math.pow(Math.abs(sy), 1.45) : sy;
+        ids.push(L.length);
+        addXY(cx + Math.cos(th) * rx, cy + eyelid * ry, kind);
       }
+      featureRings.push({ kind: kind, ids: ids });
+      return ids;
     };
     const E = PRES_EYE, LIP = PRES_LIP, NOSE = PRES_NOSE;
     [-1, 1].forEach(function (sx) {
       const side = sx < 0 ? 'L' : 'R';
-      /* THE EYES: three loops - the opening, the socket rim, the orbit - the reference's
-         concentric eye rings. */
-      ring(sx * E.x, E.y, E.rx * 1.02, E.ry * 1.05, 8, 'eye' + side);
-      ring(sx * E.x, E.y + 0.006, E.rx * 1.62, E.ry * 1.85, 10, 'socket' + side, Math.PI / 10);
-      ring(sx * E.x, E.y + 0.012, E.rx * 2.25, E.ry * 2.75, 12, 'orbit' + side);
-      /* THE BROW RIDGE, the CHEEKBONE, the NASOLABIAL FOLD, the TEMPLE. */
-      [0.10, 0.22, 0.36, 0.49].forEach(function (x) { addXY(sx * x, E.y + 0.155 + 0.02 * (x > 0.3), 'brow'); });
-      [[0.40, 0.03], [0.50, -0.09], [0.36, -0.13], [0.27, -0.06]].forEach(function (q) {
-        addXY(sx * q[0], q[1], 'cheekbone');
-      });
-      [[0.15, -0.27], [0.21, -0.35], [0.25, -0.43]].forEach(function (q) { addXY(sx * q[0], q[1], 'fold'); });
-      [[0.30, -0.30], [0.44, -0.30], [0.38, -0.44]].forEach(function (q) { addXY(sx * q[0], q[1], 'cheek'); });
-      [[0.54, 0.30], [0.58, 0.12], [0.56, -0.06]].forEach(function (q) { addXY(sx * q[0], q[1], 'temple'); });
-      /* THE JAW, from below the ear to the chin, read off the face's own jaw table. */
-      [0.58, 0.52, 0.42, 0.30, 0.17].forEach(function (x) {
-        addXY(sx * x, presJawLine(x) + 0.02, 'jaw');
-      });
-      /* THE NOSE'S WINGS AND CREASE. */
-      addXY(sx * 0.12, NOSE.tip - 0.01, 'nose');
-      addXY(sx * 0.14, -0.10, 'nose');
+      /* One polygonal aperture per eye; the luminous centre is a point in presFaceFill. */
+      ring(sx * E.x, E.y, E.rx * 1.20, E.ry * 0.88, 8, 'eye' + side);
     });
-    /* THE NOSE'S RIDGE AND TIP, down the midline, and the philtrum below it. */
-    [0.13, 0.0, -0.12, NOSE.tip].forEach(function (y) { addXY(0, y, 'nose'); });
-    addXY(0, NOSE.tip - 0.075, 'philtrum');
-    /* THE MOUTH: the lips' line and the outer loop. */
-    ring(0, LIP.y, LIP.hw * 1.05, 0.045, 10, 'mouth');
-    ring(0, LIP.y + 0.005, LIP.hw * 1.65, 0.13, 12, 'mouthOuter', Math.PI / 12);
-    /* THE CHIN, the FOREHEAD's rows and the glabella. */
-    [[0, -0.62], [0, -0.74], [-0.11, -0.69], [0.11, -0.69]].forEach(function (q) { addXY(q[0], q[1], 'chin'); });
-    addXY(0, E.y + 0.12, 'brow');
-    [[0.48, [0, 0.16, 0.32, 0.46]], [0.64, [0, 0.18, 0.36]], [0.80, [0, 0.20]]].forEach(function (row) {
-      row[1].forEach(function (x) { addXY(x, row[0], 'forehead'); if (x) addXY(-x, row[0], 'forehead'); });
+    /* The narrow mouth opening stays separate from the uniformly sampled shell. */
+    const mouthIds = [];
+    [[-0.20,-0.44],[-0.12,-0.415],[0,-0.416],[0.12,-0.415],[0.20,-0.44],
+     [0.12,-0.484],[0,-0.505],[-0.12,-0.484]].forEach(function (q) {
+      mouthIds.push(L.length); addXY(q[0], q[1], 'mouth');
     });
-    /* THE CRANIUM, the SIDES and the BACK, in (azimuth, y): sparser, because the reference's
-       facets grow larger away from the face. */
-    [0.94, 0.66, 0.38, 0.10, -0.18, -0.46].forEach(function (y, k) {
-      for (let a = 1.55; a <= 2.5; a += 0.45) {
-        const aa = a + (k % 2) * 0.22;
-        if (aa > 2.5) continue;
-        addAY(aa, y, 'cranium');
-        addAY(-aa, y, 'cranium');
+    featureRings.push({ kind: 'mouth', ids: mouthIds });
+    /* Equal arc-length samples on the actual 3D shell. Varying angular step by row
+       accounts for the changing head radius and facial relief; staggered rows give
+       Delaunay near-equilateral facets without landmark crowding. */
+    const rows = 16, spacing = 0.145, aMax = 2.05, probes = 96;
+    for (let r = 0; r < rows; r++) {
+      const rowY = -0.99 + r * 1.98 / (rows - 1);
+      const extent = aMax * Math.min(1, Math.max(0.18, (1.06 - rowY) / 0.34));
+      const arc = [0], az = [], xyz = [];
+      for (let i = 0; i <= probes; i++) {
+        const a = -extent + i * 2 * extent / probes;
+        const q = onHead(a, rowY);
+        az.push(a); xyz.push(q);
+        if (i) arc.push(arc[i - 1] + Math.hypot(q[0] - xyz[i - 1][0], q[2] - xyz[i - 1][2]));
       }
-    });
-    addAY(0, 0.97, 'cranium');
-    /* THE EARS: a loop on each side, where the haze's ear is. */
-    [-1, 1].forEach(function (sx) {
-      for (let i = 0; i < 7; i++) {
-        const th = (i / 7) * Math.PI * 2;
-        addAY(sx * (1.78 + 0.16 * Math.cos(th)), 0.03 + 0.15 * Math.sin(th), 'ear' + (sx < 0 ? 'L' : 'R'));
+      const count = Math.max(3, Math.round(arc[probes] / spacing));
+      for (let k = 0; k <= count; k++) {
+        const distance = Math.min(arc[probes], (k + (r % 2) * 0.5) * arc[probes] / count);
+        let hi = 1;
+        while (hi < arc.length - 1 && arc[hi] < distance) hi++;
+        const mix = (distance - arc[hi - 1]) / Math.max(1e-8, arc[hi] - arc[hi - 1]);
+        const a = az[hi - 1] + (az[hi] - az[hi - 1]) * mix;
+        const y = rowY + 0.014 * Math.sin(k * 2.399963 + r * 0.71);
+        const x = presHalf(y) * Math.sin(a);
+        if ([-1, 1].some(function (sx) {
+          return ((x - sx * E.x) / (E.rx * 1.48)) ** 2 +
+                 ((y - E.y) / (E.ry * 1.22)) ** 2 < 1;
+        })) continue;
+        if ((x / (LIP.hw * 1.20)) ** 2 + ((y - LIP.y) / 0.075) ** 2 < 1) continue;
+        addAY(a, y, 'surface');
       }
-    });
+    }
 
     /* TRIANGULATE in (azimuth * AKX, y): AKX is roughly the face's half-width, so a step in
        azimuth and a step in height cost about the same - otherwise Delaunay would prefer
@@ -22401,22 +22366,43 @@ async function loadLib() {
     const seen = {};
     const E2 = [];
     const maxE = PRES.FACE_MESH_MAX_EDGE;
+    const XY = L.map(function (p) { return [presHalf(p.y) * Math.sin(p.a), p.y]; });
+    const ringOf = [];
+    featureRings.forEach(function (r) { r.ids.forEach(function (id) { ringOf[id] = r.kind; }); });
+    const innerRing = function (id) { return ringOf[id] === 'mouth'; };
+    const crossesOpening = function (i, j, cx, cy, rx, ry) {
+      const a = XY[i], b = XY[j];
+      const ax = (a[0] - cx) / rx, ay = (a[1] - cy) / ry;
+      const dx = (b[0] - a[0]) / rx, dy = (b[1] - a[1]) / ry;
+      const t = Math.max(0, Math.min(1, -(ax * dx + ay * dy) / Math.max(1e-6, dx * dx + dy * dy)));
+      return (ax + t * dx) ** 2 + (ay + t * dy) ** 2 < 1.0;
+    };
+    const addEdge = function (i, j, forced) {
+      const key = i < j ? i + ',' + j : j + ',' + i;
+      if (seen[key]) return;
+      const da = (L[i].a - L[j].a) * AK, dy = L[i].y - L[j].y;
+      if (!forced && Math.hypot(da, dy) > maxE) return;
+      if (!forced && (innerRing(i) || innerRing(j) || (ringOf[i] && ringOf[j]))) return;
+      if (!forced && ([-1, 1].some(function (sx) {
+        return crossesOpening(i, j, sx * E.x, E.y, E.rx * 0.96, E.ry * 0.70);
+      }) || crossesOpening(i, j, 0, LIP.y, LIP.hw * 1.05, 0.045))) return;
+      seen[key] = true;
+      E2.push([i, j]);
+    };
     tris.forEach(function (tr) {
       for (let k = 0; k < 3; k++) {
-        const i = tr[k], j = tr[(k + 1) % 3];
-        const key = i < j ? i + ',' + j : j + ',' + i;
-        if (seen[key]) continue;
-        seen[key] = true;
-        const da = (L[i].a - L[j].a) * AK, dy = L[i].y - L[j].y;
-        if (Math.sqrt(da * da + dy * dy) > maxE) continue;
-        E2.push([i, j]);
+        addEdge(tr[k], tr[(k + 1) % 3], false);
       }
+    });
+    /* The eye and mouth polygons bound true openings in the uniform shell. */
+    featureRings.forEach(function (r) {
+      r.ids.forEach(function (id, i) { addEdge(id, r.ids[(i + 1) % r.ids.length], true); });
     });
 
     /* THE SURFACE: a point in (azimuth, y) mapped onto the head by the shell's own formulas,
        and lifted onto the nose where the nose stands proud of the face - so the ridge edges run
        DOWN the nose rather than through it. */
-    const onHead = function (a, y) {
+    function onHead(a, y) {
       const ca = Math.cos(a);
       const x = presHalf(y) * Math.sin(a);
       let z = presShellZ(x, y, ca);
@@ -22430,7 +22416,7 @@ async function loadLib() {
         }
       }
       return [x, y, z, ca];
-    };
+    }
     /* THE NECK: rings and verticals on the haze's own neck cylinder, dropping to a bust edge. */
     const NK = PRES_NECK, neckEdges = [];
     const neckAt = function (th, y) {
@@ -22441,13 +22427,109 @@ async function loadLib() {
     for (let k = 0; k < NTH; k++) {
       const th0 = (k / NTH) * Math.PI * 2, th1 = ((k + 1) / NTH) * Math.PI * 2;
       for (let r = 0; r < NY.length; r++) {
-        neckEdges.push([neckAt(th0, NY[r]), neckAt(th1, NY[r])]);
+        if (r === 0 || r === NY.length - 1)
+          neckEdges.push([neckAt(th0, NY[r]), neckAt(th1, NY[r])]);
         if (r + 1 < NY.length) {
           neckEdges.push([neckAt(th0, NY[r]), neckAt(th0, NY[r + 1])]);
           neckEdges.push([neckAt(th0, NY[r]), neckAt(th1, NY[r + 1])]);
         }
       }
     }
+    const extraEdges = neckEdges.filter(function (e) {
+      return e[0][2] + e[1][2] >= 2 * NK.z - 0.08;
+    }).map(function (e) {
+      return [e[0], e[1], PRES_CELL.NECK, PRES_ROLE.NECK];
+    });
+    const extra = function (a, b, cell, role) { extraEdges.push([a, b, cell, role]); };
+    /* A real helix projects beyond the skull's side wall. Two open arcs and short
+       spokes describe each ear without the closed, coin-like ring of the old mesh. */
+    [-1, 1].forEach(function (sx) {
+      const outer = [], inner = [];
+      for (let i = 0; i < 12; i++) {
+        const th = 0.42 + i / 11 * (Math.PI * 2 - 1.18);
+        const y = 0.03 + 0.17 * Math.sin(th), z = -0.30 + 0.12 * Math.cos(th);
+        outer.push([presEarX(sx, y, z, 0.11), y, z]);
+        const yi = 0.03 + 0.105 * Math.sin(th), zi = -0.30 + 0.075 * Math.cos(th);
+        inner.push([presEarX(sx, yi, zi, 0.065), yi, zi]);
+        if (i) {
+          extra(outer[i-1], outer[i], PRES_CELL.EAR, PRES_ROLE.SKULL);
+          extra(inner[i-1], inner[i], PRES_CELL.EAR, PRES_ROLE.SKULL);
+        }
+        if (i % 2 === 0) extra(inner[i], outer[i], PRES_CELL.EAR, PRES_ROLE.SKULL);
+      }
+      [[0.16, 2], [0.03, 5], [-0.10, 9]].forEach(function (join) {
+        const root = onHead(sx * 1.38, join[0]);
+        extra([root[0], root[1], root[2]], inner[join[1]], PRES_CELL.EAR, PRES_ROLE.SKULL);
+      });
+      const upperRoot = onHead(sx * 1.52, 0.17);
+      const lowerRoot = onHead(sx * 1.52, -0.13);
+      extra(upperRoot, outer[2], PRES_CELL.EAR, PRES_ROLE.SKULL);
+      extra(lowerRoot, outer[9], PRES_CELL.EAR, PRES_ROLE.SKULL);
+      extra(inner[3], inner[7], PRES_CELL.EAR, PRES_ROLE.SKULL);
+    });
+    /* Bridge, paired nasal walls, alar wings and nostril sill are actual depth
+       edges, not a bright patch painted over the facial triangles. */
+    const noseAt = function (x, y) {
+      if (y < NOSE.tip) return [x, y, presFrontZ(x, y) + 0.035];
+      const hw = presNoseHW(y), u = Math.min(1, Math.abs(x) / hw);
+      const flank = presRow(PRES_FRONT, y) + 0.03;
+      return [x, y, flank + (presNoseZ(y) - flank) * Math.pow(1 - u, 0.7)];
+    };
+    const bridgeY = [0.16, 0.07, -0.03, -0.12, -0.20];
+    for (let i = 1; i < bridgeY.length; i++) {
+      extra(noseAt(0, bridgeY[i-1]), noseAt(0, bridgeY[i]), PRES_CELL.NOSE, PRES_ROLE.SKULL);
+    }
+    [-1, 1].forEach(function (sx) {
+      const wallX = [0.035, 0.055, 0.075, 0.105, 0.12];
+      for (let i = 0; i < bridgeY.length; i++) {
+        const wall = noseAt(sx * wallX[i], bridgeY[i]);
+        extra(noseAt(0, bridgeY[i]), wall, PRES_CELL.NOSE, PRES_ROLE.SKULL);
+        if (i) extra(noseAt(sx * wallX[i-1], bridgeY[i-1]), wall,
+                     PRES_CELL.NOSE, PRES_ROLE.SKULL);
+      }
+      extra(noseAt(sx * 0.12, -0.20), noseAt(sx * 0.075, -0.235),
+            PRES_CELL.NOSE, PRES_ROLE.SKULL);
+      extra(noseAt(sx * 0.075, -0.235), noseAt(0, -0.24),
+            PRES_CELL.NOSE, PRES_ROLE.SKULL);
+      extra(noseAt(sx * 0.13, -0.225), noseAt(sx * 0.105, -0.25),
+            PRES_CELL.NOSE, PRES_ROLE.SKULL);
+      extra(noseAt(sx * 0.105, -0.25), noseAt(sx * 0.055, -0.245),
+            PRES_CELL.NOSE, PRES_ROLE.SKULL);
+      const cheekFold = [sx * 0.21, -0.35, presFrontZ(sx * 0.21, -0.35) + 0.02];
+      extra(noseAt(sx * 0.13, -0.225), cheekFold, PRES_CELL.NOSE, PRES_ROLE.SKULL);
+    });
+    /* Curved trapezius and shoulder bands flare from the neck, then converge at
+       rounded outside tips instead of closing as a rectangular pedestal. */
+    const topShoulder = [[0.23,-1.02,0.12],[0.41,-1.08,0.11],[0.62,-1.13,0.04],
+                         [0.82,-1.20,-0.07],[1.00,-1.28,-0.17],[1.09,-1.37,-0.22]];
+    const midShoulder = [[0.23,-1.20,0.16],[0.415,-1.245,0.15],[0.63,-1.29,0.09],
+                         [0.83,-1.34,-0.015],[1.00,-1.38,-0.13],[1.09,-1.37,-0.22]];
+    const lowShoulder = [[0.23,-1.36,0.16],[0.42,-1.41,0.13],[0.64,-1.44,0.05],
+                         [0.84,-1.45,-0.06],[1.00,-1.43,-0.17],[1.09,-1.37,-0.22]];
+    [-1, 1].forEach(function (sx) {
+      const top = topShoulder.map(function (p) { return [sx*p[0],p[1],p[2]]; });
+      const mid = midShoulder.map(function (p) { return [sx*p[0],p[1],p[2]]; });
+      const low = lowShoulder.map(function (p) { return [sx*p[0],p[1],p[2]]; });
+      for (let i = 0; i < top.length; i++) {
+        if (i + 1 < top.length) {
+          extra(top[i], mid[i], PRES_CELL.NECK, PRES_ROLE.NECK);
+          extra(mid[i], low[i], PRES_CELL.NECK, PRES_ROLE.NECK);
+        }
+        if (i) {
+          extra(top[i-1], top[i], PRES_CELL.NECK, PRES_ROLE.NECK);
+          extra(mid[i-1], mid[i], PRES_CELL.NECK, PRES_ROLE.NECK);
+          extra(low[i-1], low[i], PRES_CELL.NECK, PRES_ROLE.NECK);
+          extra(top[i-1], mid[i], PRES_CELL.NECK, PRES_ROLE.NECK);
+          extra(mid[i-1], low[i], PRES_CELL.NECK, PRES_ROLE.NECK);
+        }
+      }
+    });
+    extra([-0.23,-1.02,0.12],[0.23,-1.02,0.12],PRES_CELL.NECK,PRES_ROLE.NECK);
+    extra([-0.23,-1.25,0.16],[0.23,-1.25,0.16],PRES_CELL.NECK,PRES_ROLE.NECK);
+    extra([-0.23,-1.36,0.16],[0,-1.39,0.17],PRES_CELL.NECK,PRES_ROLE.NECK);
+    extra([0,-1.39,0.17],[0.23,-1.36,0.16],PRES_CELL.NECK,PRES_ROLE.NECK);
+    extra([-0.23,-1.25,0.16],[0,-1.39,0.17],PRES_CELL.NECK,PRES_ROLE.NECK);
+    extra([0.23,-1.25,0.16],[0,-1.39,0.17],PRES_CELL.NECK,PRES_ROLE.NECK);
 
     /* THE BUDGET, by length. Vertices first (VERT each), then every edge's share of what is left
        in proportion to its 3D length. */
@@ -22456,40 +22538,42 @@ async function loadLib() {
                        (p[2] - q[2]) * (p[2] - q[2]));
     };
     const V3 = L.map(function (p) { return onHead(p.a, p.y); });
+    if (!presWire) presBuildWire(L, E2, extraEdges, V3);
     const lens = E2.map(function (e) { return len3(V3[e[0]], V3[e[1]]); });
-    const nlens = neckEdges.map(function (e) { return len3(e[0], e[1]); });
-    const total = lens.concat(nlens).reduce(function (s, v) { return s + v; }, 0) || 1;
+    const extraLens = extraEdges.map(function (e) { return len3(e[0], e[1]); });
+    const total = lens.concat(extraLens).reduce(function (s, v) { return s + v; }, 0) || 1;
     const vert = PRES.FACE_MESH_VERT;
     const left = Math.max(0, budget - L.length * vert);
     let made = 0;
     const roleAt = function (x, y, z) {
       return (z > -0.12 && y < presMandible(Math.abs(x))) ? PRES_ROLE.JAW : PRES_ROLE.SKULL;
     };
-    const put = function (x, y, z, ca, rn, cell) {
+    const put = function (x, y, z, ca, rn, cell, role) {
       if (made >= budget) return;
-      pen.put(x, y, z, roleAt(x, y, z), rn, cell === undefined ? presShellCell(x, y, ca) : cell);
+      const args = [x, y, z, role === undefined ? roleAt(x, y, z) : role,
+                    rn, cell === undefined ? presShellCell(x, y, ca) : cell];
+      pen.put.apply(pen, args);
+      samples.push(args);
       made++;
     };
+    V3.forEach(function (q) {
+      for (let k = 0; k < vert; k++) put(q[0], q[1], q[2], q[3], 1.25);
+    });
+    extraEdges.forEach(function (e, idx) {
+      const per = Math.round(extraLens[idx] / total * left);
+      for (let k = 1; k <= per; k++) {
+        const u = k / (per + 1);
+        put(e[0][0] + (e[1][0] - e[0][0]) * u, e[0][1] + (e[1][1] - e[0][1]) * u,
+            e[0][2] + (e[1][2] - e[0][2]) * u, 1, 1.0 + 0.20 * rnd(), e[2], e[3]);
+      }
+    });
     E2.forEach(function (e, idx) {
-      const per = Math.max(2, Math.round(lens[idx] / total * left));
+      const per = Math.round(lens[idx] / total * left);
       const A = L[e[0]], B = L[e[1]];
       for (let k = 1; k <= per; k++) {
         const u = k / (per + 1);
         const q = onHead(A.a + (B.a - A.a) * u, A.y + (B.y - A.y) * u);
         put(q[0], q[1], q[2], q[3], 1.0 + 0.20 * rnd());
-      }
-    });
-    neckEdges.forEach(function (e, idx) {
-      const per = Math.max(2, Math.round(nlens[idx] / total * left));
-      for (let k = 1; k <= per; k++) {
-        const u = k / (per + 1);
-        put(e[0][0] + (e[1][0] - e[0][0]) * u, e[0][1] + (e[1][1] - e[0][1]) * u,
-            e[0][2] + (e[1][2] - e[0][2]) * u, 1, 1.0 + 0.20 * rnd(), PRES_CELL.NECK);
-      }
-    });
-    V3.forEach(function (q) {
-      for (let k = 0; k < vert; k++) {
-        put(q[0] + (rnd() - 0.5) * 0.004, q[1] + (rnd() - 0.5) * 0.004, q[2], q[3], 1.25 + 0.05 * rnd());
       }
     });
     /* What rounding left over goes on the longest edges, so the budget is spent exactly. */
@@ -22516,8 +22600,9 @@ async function loadLib() {
       const closed = ids.filter(function (i) { return (deg[i] || 0) >= 2; }).length;
       return { n: ids.length, closed: closed };
     };
-    pres.meshPts = made; pres.meshEdges = E2.length + neckEdges.length; pres.meshVerts = L.length;
-    pres.meshPer = Math.round(left / Math.max(1, E2.length + neckEdges.length));
+    pres.meshPts = made; pres.meshEdges = E2.length + extraEdges.length; pres.meshVerts = L.length;
+    presMeshSamples = samples;
+    pres.meshPer = +(left / Math.max(1, E2.length + extraEdges.length)).toFixed(2);
     pres.meshKinds = kinds;
     pres.meshLoops = { eyeL: loop('eyeL'), eyeR: loop('eyeR'), mouth: loop('mouth'),
                        socketL: loop('socketL'), socketR: loop('socketR') };
@@ -22531,13 +22616,62 @@ async function loadLib() {
     L.forEach(function (p, i) { const d = degOf[i] || 0; pres.meshDeg[d] = (pres.meshDeg[d] || 0) + 1; });
   }
 
+  /* The face's topology is drawn once as connected WebGL lines. The point buffer below
+     remains the atmosphere and moving organs; neither theme nor voice state rebuilds it. */
+  function presBuildWire(L, edges, extras, verts) {
+    if (presWire || !presTHREE || !presScene || !presMat) return;
+    const pos = [], role = [], rnd = [], cell = [];
+    const add = function (q, r, c) {
+      pos.push(q[0], q[1], q[2]); role.push(r); rnd.push(1.12); cell.push(c);
+    };
+    const segment = function (a, b, ra, rb, ca, cb) {
+      add(a, ra, ca); add(b, rb, cb);
+    };
+    const roleAt = function (p, q) {
+      if (/^mouth/.test(p.kind)) return q[1] >= PRES_LIP.y ? PRES_ROLE.LIP_UP : PRES_ROLE.LIP_LOW;
+      return q[2] > -0.12 && q[1] < presMandible(Math.abs(q[0])) ? PRES_ROLE.JAW : PRES_ROLE.SKULL;
+    };
+    const cellAt = function (p, q) {
+      if (/^eye/.test(p.kind)) return PRES_CELL.LID;
+      if (/^(socket|orbit)/.test(p.kind)) return PRES_CELL.SOCKET;
+      if (/^mouth/.test(p.kind)) return PRES_CELL.LIP;
+      if (p.kind === 'nose') return PRES_CELL.NOSE;
+      return presShellCell(q[0], q[1], q[3]);
+    };
+    edges.forEach(function (e) {
+      const i = e[0], j = e[1], a = verts[i], b = verts[j];
+      if (a[3] + b[3] < 0 || /^ear/.test(L[i].kind) || /^ear/.test(L[j].kind)) return;
+      segment(a, b, roleAt(L[i], a), roleAt(L[j], b), cellAt(L[i], a), cellAt(L[j], b));
+    });
+    extras.forEach(function (e) { segment(e[0], e[1], e[3], e[3], e[2], e[2]); });
+    /* The existing point iris already carries gaze, catchlights and the Eyes Law.
+       Duplicating its rings as lines made a bright target-like bullseye at rest;
+       the connected eyelid and orbital loops supply the structural eye mesh. */
+    const THREE = presTHREE;
+    presWireGeo = new THREE.BufferGeometry();
+    presWireGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    presWireGeo.setAttribute('aRole', new THREE.Float32BufferAttribute(role, 1));
+    presWireGeo.setAttribute('aRnd', new THREE.Float32BufferAttribute(rnd, 1));
+    presWireGeo.setAttribute('aCell', new THREE.Float32BufferAttribute(cell, 1));
+    presWireMat = new THREE.ShaderMaterial({
+      uniforms: presMat.uniforms, vertexShader: PRES_VERT, fragmentShader: PRES_WIRE_FRAG,
+      blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true
+    });
+    presWire = new THREE.LineSegments(presWireGeo, presWireMat);
+    presWire.frustumCulled = false;
+    presWire.renderOrder = 1;
+    presWire.scale.setScalar(PRES.HEAD_S);
+    presWire.position.y = 0.10;
+    presWire.visible = pres.mode === 'face';
+    presScene.add(presWire);
+    pres.wireEdges = pos.length / 6;
+  }
+
   function presFaceFill(pen, rnd) {
     const MESH_PTS = presN(PRES.FACE_MESH_PTS);
-    const shell = presN(PRES.CAP - PRES.FACE_MESH_PTS - PRES.NOSE_PTS - PRES.LIP_PTS * 2 -
-                        PRES.IRIS_PTS * 2 - PRES.LID_PTS * 2 - PRES.NECK_PTS -
-                        PRES.EAR_PTS * 2);
+    const shell = presN(PRES.FACE_SHELL_PTS);
     const NOSE_PTS = presN(PRES.NOSE_PTS), LIP_PTS = presN(PRES.LIP_PTS);
-    const IRIS_PTS = presN(PRES.IRIS_PTS), LID_PTS = presN(PRES.LID_PTS);
+    const LID_PTS = presN(PRES.LID_PTS);
     const NECK_PTS = presN(PRES.NECK_PTS), EAR_PTS = presN(PRES.EAR_PTS);
     /* REJECTION SAMPLING, with a ceiling on the tries. The weight field's mean acceptance
        is 0.28 measured over 300k draws, so a point costs three and a half; the cap is
@@ -22606,7 +22740,7 @@ async function loadLib() {
        th = 0 is FORWARD (+z, toward the face), th = PI is toward the occiput.
        THE RAKE: a real ear leans its top backward off the skull. Without it the C stands
        dead vertical and reads as machined. */
-    const EAR = { y: 0.03, z: -0.30, ry: 0.155, rz: 0.115, out: 0.052 };
+    const EAR = { y: 0.03, z: -0.30, ry: 0.155, rz: 0.115, out: 0.11 };
     const EAR_GAP = 0.40, EAR_ARC = Math.PI * 2 - 1.18, EAR_RAKE = -0.032;
     [-1, 1].forEach(function (sx) {
       for (let i = 0; i < EAR_PTS; i++) {
@@ -22628,63 +22762,18 @@ async function loadLib() {
           z = EAR.z + Math.cos(th) * EAR.rz * rr;
         }
         z += EAR_RAKE * ((y - EAR.y) / EAR.ry);
-        const back = Math.max(1e-4, presRow(PRES_BACK, y));
-        const ca = Math.max(-0.999, Math.min(0, z / back));
-        const wall = presHalf(y) * Math.sqrt(Math.max(0, 1 - ca * ca));
-        const x = sx * (wall + EAR.out * (0.40 + 0.60 * rr));
+        const x = presEarX(sx, y, z, EAR.out * (0.55 + 0.45 * rr));
         pen.put(x, y, z, PRES_ROLE.SKULL, rnd(), PRES_CELL.EAR);
       }
     });
-    /* THE IRISES, inside the sockets. They no longer collapse onto a line when the eye
-       shuts - the LID does the closing now, which is why they can stay where an eye is
-       and be measured against the thing in front of them. */
-    /* UI MANDATE III PART 4: AN IRIS WITH PARTS, in the same IRIS_PTS a side. It was a uniformly
-       filled disc, which behind a uniformly filled lid read as a flat patch. Now, by share of the
-       eye's points: the LIMBAL RING (the iris's dark-edged rim, here its brightest line), the
-       PUPIL RING, fourteen radial STRIATIONS between them, a four-point CATCHLIGHT up and to the
-       side, and a sparse fill. aRnd carries the light: >= 1 is a ring point (hot), >= 1.24 the
-       catchlight (hottest) - the same flag convention the face's mesh already uses - and the
-       shader turns that into heat, so the rings glow through the lid. */
-    const IRIS_R = PRES.EYE_IRIS_R, PUPIL_R = PRES.EYE_PUPIL_R;
-    pres.eyeParts = { limbal: 0, pupil: 0, striae: 0, catch: 0, fill: 0, spokes: PRES.EYE_SPOKES };
+    /* Exactly one luminous point in each open eye facet. Its existing iris role keeps
+       gaze, blink intensity, permission state, and theme tint in the shared shader. */
+    pres.eyeParts = { centre: 0, limbal: 0, pupil: 0, striae: 0, catch: 0, fill: 0, spokes: 0 };
     [-1, 1].forEach(function (sx, k) {
       const role = k ? PRES_ROLE.IRIS_R : PRES_ROLE.IRIS_L;
-      const nLimb = Math.round(IRIS_PTS * 0.34), nPup = Math.round(IRIS_PTS * 0.14);
-      const nCat = Math.max(2, Math.round(IRIS_PTS * 0.04));
-      const perSpoke = Math.max(1, Math.floor(IRIS_PTS * 0.40 / PRES.EYE_SPOKES));
-      const nFill = Math.max(0, IRIS_PTS - nLimb - nPup - nCat - perSpoke * PRES.EYE_SPOKES);
-      const at = function (r, th, flag) {
-        const x = sx * PRES_EYE.x + Math.cos(th) * r;
-        const y = PRES_EYE.y + Math.sin(th) * r * 0.88;
-        pen.put(x, y, presFrontZ(x, y) - 0.022, role, flag, PRES_CELL.IRIS);
-      };
-      for (let i = 0; i < nLimb; i++) {
-        at(IRIS_R + (rnd() - 0.5) * 0.003, (i + 0.3 * rnd()) / nLimb * Math.PI * 2, 1.0 + 0.2 * rnd());
-        pres.eyeParts.limbal++;
-      }
-      for (let i = 0; i < nPup; i++) {
-        at(PUPIL_R + (rnd() - 0.5) * 0.002, (i + 0.3 * rnd()) / nPup * Math.PI * 2, 1.0 + 0.2 * rnd());
-        pres.eyeParts.pupil++;
-      }
-      for (let s = 0; s < PRES.EYE_SPOKES; s++) {
-        const th0 = (s + 0.5) / PRES.EYE_SPOKES * Math.PI * 2;
-        for (let j = 0; j < perSpoke; j++) {
-          const u = (j + 0.5) / perSpoke;
-          at(PUPIL_R * 1.25 + (IRIS_R * 0.92 - PUPIL_R * 1.25) * u, th0 + 0.18 * u, 0.55 + 0.4 * rnd());
-          pres.eyeParts.striae++;
-        }
-      }
-      for (let i = 0; i < nCat; i++) {
-        const a = rnd() * Math.PI * 2, r = 0.005 * Math.sqrt(rnd());
-        const x = sx * PRES_EYE.x + IRIS_R * 0.32 + Math.cos(a) * r;
-        const y = PRES_EYE.y + IRIS_R * 0.34 + Math.sin(a) * r;
-        pen.put(x, y, presFrontZ(x, y) - 0.018, role, 1.30 + 0.1 * rnd(), PRES_CELL.IRIS);
-        pres.eyeParts.catch++;
-      }
-      for (let i = 0; i < nFill; i++) {
-        at(IRIS_R * Math.sqrt(rnd()), rnd() * Math.PI * 2, rnd() * 0.5);
-        pres.eyeParts.fill++;
-      }
+      const x = sx * PRES_EYE.x, y = PRES_EYE.y;
+      pen.put(x, y, presFrontZ(x, y) - 0.018, role, 1.34, PRES_CELL.IRIS);
+      pres.eyeParts.centre++;
     });
     /* THE LIDS, as REAL SURFACE PATCHES and stored SHUT. Storing the closed position is
        the whole trick: closed is the state that has to be legible and the state the
@@ -22778,6 +22867,7 @@ async function loadLib() {
        it at the 60% of frame the mandate's checkpoint plate asks for. See PRES.CORE_S. */
     if (presPts) {
       presPts.scale.setScalar(mode === 'face' ? PRES.HEAD_S : PRES.DUST_S);
+      presPts.position.y = mode === 'face' ? 0.10 : 0;
     }
     pres.points = n;
     return n;
@@ -22982,6 +23072,7 @@ async function loadLib() {
     '      float ih = step(1.0, aRnd), icl = step(1.24, aRnd);',
     '      a = mix(0.30 + 0.34 * ih + 0.30 * icl, 1.0, eyeOpen);',
     '      sz *= 1.0 + 0.25 * ih + 0.55 * icl;',
+    '      sz *= 2.6;',
     '      irisHeat = (0.34 * ih + 0.56 * icl) * (0.70 + 0.30 * eyeOpen);',
     '      sz *= mix(0.90, 1.18, eyeOpen);',
     '    } else if (aRole > 6.5 && aRole < 8.5) {',
@@ -22992,7 +23083,7 @@ async function loadLib() {
     '    } else if (aRole > 9.5) {',
     /* The neck fades out at its base rather than ending: a cut-off neck is a trophy.
        Faded on the LOCAL y, before any rotation, so it is anatomy and not screen position. */
-    '      a = (0.26 + 0.18 * aRnd) * clamp((p.y + 1.46) / 0.34, 0.0, 1.0);',
+    '      a = mix(0.26 + 0.18 * aRnd, 0.95, step(1.0, aRnd)) * clamp((p.y + 1.53) / 0.25, 0.0, 1.0);',
     '    } else {',
     /* THE SKULL, AND THE LINE THAT WAS HIDING THE SHADING. This was 0.30 + 0.30 * aRnd - a
        per-point random brightness spanning 2:1. The form term added below spans 3:1 across
@@ -23062,6 +23153,8 @@ async function loadLib() {
        inside the FACE branch: RING and CUBE are not touched by any of this. */
     '    float near = clamp((p.z + 0.62) / 1.45, 0.0, 1.0);',
     '    a *= 0.26 + 0.74 * near;',
+    '    if (aRnd >= 1.0 && aCell > 5.5 && aCell < 6.5) a *= 0.38;',
+    '    if (aRnd >= 1.0 && aCell > 10.5 && aCell < 11.5) a *= 1.65;',
     '    sz *= 0.70 + 0.48 * near;',
     /* ---- §27 PART 3: FORM SHADING, THE RIM, AND THE FRESNEL ----
        THE DEPTH CUE ABOVE IS NOT SHADING, and that distinction is the whole of this block.
@@ -23085,6 +23178,10 @@ async function loadLib() {
     '    float lam = max(0.0, dot(nrm, uRimDir));',
     '    a *= ' + PRES.LAM_LO.toFixed(3) + ' + ' +
       (PRES.LAM_HI - PRES.LAM_LO).toFixed(3) + ' * lam;',
+    '    if (aRnd >= 1.0 && aCell > 4.5 && aCell < 5.5) a = max(a, 0.76 * near);',
+    '    if (aRnd >= 1.0 && aCell > 9.5 && aCell < 10.5) a = max(a, 1.00 * near);',
+    '    if (aRole > 9.5 && aRole < 10.5 && aRnd >= 1.0) a = max(a, 1.05 * near * clamp((position.y + 1.53) / 0.25, 0.0, 1.0));',
+    '    if (aCell > 10.5 && aCell < 11.5 && aRnd >= 1.0) a = max(a, 0.92 * near);',
     /* THE KEY LIGHT REACHES THE SPRITE, not just its alpha - see PRES.LAM_SZ_LO for why
        this line is the difference between a 3:1 term that reads as texture and one that
        reads as a cheekbone. */
@@ -23151,6 +23248,17 @@ async function loadLib() {
        way to white. */
     '  vec3 col = mix(mix(uTint, uTint2, vC), uRimTint, vR);',
     '  gl_FragColor = vec4(col, min(1.0, vA + 0.45 * vR) * f * 0.85);',
+    '}'
+  ].join('\n');
+
+  const PRES_WIRE_FRAG = [
+    'uniform vec3 uTint;',
+    'uniform vec3 uRimTint;',
+    'varying float vA;',
+    'varying float vR;',
+    'void main(){',
+    '  vec3 col = mix(uTint, uRimTint, vR);',
+    '  gl_FragColor = vec4(col, min(1.0, max(vA, 0.30) + 0.35 * vR) * 0.90);',
     '}'
   ].join('\n');
 
@@ -23700,9 +23808,8 @@ async function loadLib() {
      THE HEAD GETS SMALLER BEFORE IT GETS ABSENT. The governor has two floors now (see
      LAYOUT.PRES_MIN_COMPACT); this is the renderer's half of that, and it is deliberately
      the smallest possible half. Nothing about the hologram changes except how many points
-     are written into the one buffer: same three modes, same one shader program, same one
-     material, same one allocation at PRES.CAP, and setDrawRange stops sooner. The claim
-     §17.2 makes - "shader true, one material" - is not weakened by this, it is re-used.
+      are written into the fixed point buffer: same two modes and shared animation
+      uniforms, while the cached face lines retain essential anatomy at every tier.
      THE REFILL IS UNCONDITIONAL ON A TIER CHANGE and skipped on everything else, because
      the buffer's contents are a function of (mode, density) and of nothing else. */
   function presTier(tier) {
@@ -23823,6 +23930,7 @@ async function loadLib() {
     pres.switches++;
     presDensity();
     presFill(want);
+    if (presWire) presWire.visible = want === 'face';
     presMat.uniforms.uMode.value = want === 'dust' ? 0 : 2;
     /* THE LIGHT FOLLOWS THE MODE. The face is the house blue it has always been; the dust is
        whichever state the house is in, set at once on the way in (and eased thereafter). */
@@ -24414,7 +24522,7 @@ async function loadLib() {
         depthTest: false, depthWrite: false, transparent: true
       });
       presPts = new THREE.Points(presGeo, presMat);
-      presPts.frustumCulled = false;      // one object, always on screen, never culled
+      presPts.frustumCulled = false;      // fixed point stratum, never culled
       presScene.add(presPts);
     } catch (e) {
       presR = null;
@@ -29981,12 +30089,11 @@ async function loadLib() {
       /* The face's mesh as laid: points, edges, landmark vertices, the mean points per edge,
          and the anatomy - landmarks by kind and whether the eye and mouth loops CLOSE. Zero
          until the face has been built once. */
-      /* THE EYES, WALKED OFF THE DRAWN BUFFER: every IRIS_L/IRIS_R point's distance from its eye's
-         centre (y unsquashed by the 0.88 the fill applies), binned, plus how many carry the ring
-         and catchlight flags. A ring is a claim about radii, so it is measured as radii. */
+       /* Count the actual centre points; legacy ring fields remain zero for callers
+          that read the old diagnostic shape. */
       eyes: function () {
         if (pres.mode !== 'face' || !pxPos) return null;
-        const out = { points: 0, onLimbal: 0, onPupil: 0, hot: 0, catch: 0, parts: pres.eyeParts || null,
+         const out = { points: 0, centres: 0, onLimbal: 0, onPupil: 0, hot: 0, catch: 0, parts: pres.eyeParts || null,
                       irisR: PRES.EYE_IRIS_R, pupilR: PRES.EYE_PUPIL_R, spokes: PRES.EYE_SPOKES };
         for (let i = 0; i < pres.points; i++) {
           const role = pxRole[i];
@@ -29995,8 +30102,7 @@ async function loadLib() {
           const dx = pxPos[i * 3] - sx * PRES_EYE.x, dy = (pxPos[i * 3 + 1] - PRES_EYE.y) / 0.88;
           const r = Math.hypot(dx, dy);
           out.points++;
-          if (Math.abs(r - PRES.EYE_IRIS_R) < 0.004) out.onLimbal++;
-          if (Math.abs(r - PRES.EYE_PUPIL_R) < 0.003) out.onPupil++;
+         if (r < 0.004) out.centres++;
           if (pxRnd[i] >= 1) out.hot++;
           if (pxRnd[i] >= 1.24) out.catch++;
         }
