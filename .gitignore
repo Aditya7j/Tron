@@ -107,3 +107,7 @@ confidence-cache.json
 ledger.json
 ledger.json.tmp
 proofs/
+# THE HUNTER'S BOOK. Other businesses' names, phones and emails, read off public pages - public
+# where they were found, and still not this repository's to publish as a list.
+leads.json
+leads.json.tmp

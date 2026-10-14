@@ -7696,6 +7696,38 @@ def act_asked(question):
     return None
 
 
+# THE HUNTER'S DOOR. "find me 20 dentists in Pune" is the boss's own sentence, and the hunt's
+# what/where/count are read from it here - by hunter.parse_request(), never by a model, because
+# hunt_leads is door-bound to "hunt" exactly as the ledger's hands are to "ledger". The gate is
+# the registry entry's own triggers, as for type_code_asked(); a QUESTION never matches ("what
+# are the best dentists in Pune" is the web's), and the grammar refuses advice-seeking ("find me
+# a good dentist in Pune") and things that are not businesses (flights, jobs, flats).
+HUNT_GUEST_LINE = ("Lead hunting is the household's business, so I will leave that one for "
+                   "the boss to ask.")
+
+
+def hunt_asked(question):
+    """hunt_leads's {what, where, count, asked} for an explicit ask to find businesses, or None."""
+    tool = hands.find("hunt_leads")
+    if tool is None:
+        return None
+    try:
+        import hunter
+    except Exception:                                          # noqa: BLE001
+        return None
+    raw = str(question or "").strip()
+    forms = list(dict.fromkeys(f for f in (raw, _strip_address(raw)) if f))
+    for form in forms:
+        if TYPE_CODE_QUESTION_RE.match(form):
+            continue
+        if not any(rx.search(form) for rx in tool["triggers"]):
+            continue
+        parsed = hunter.parse_request(form)
+        if parsed:
+            return parsed
+    return None
+
+
 def browse_asked(question):
     """operator_browser's {site, query} for "play X on <a site the hand knows>", or None.
     Raw and de-addressed forms only, as act_asked() reads them."""
@@ -10862,6 +10894,20 @@ def answer_question(question, session, guest=False):
     # figure in them is the boss's own, and the brain is never the one to fill it in.
     if qclass == "ledger":
         return answer_ledger(question, session, qclass, guest=guest)
+    # ---- THE HUNTER, PHASE 1: "find me 20 dentists in Pune". A protected route for the same
+    # measured reason as Operator's below - before the notes are scored - and door-bound, so the
+    # card's what/where/count are the boss's words, never a model's. A guest is offered nothing.
+    hunt = hunt_asked(question)
+    if hunt is not None:
+        if guest:
+            sys.stderr.write("  route: hunter - a guest asked; nothing proposed\n")
+            record_turn(session, question, HUNT_GUEST_LINE)
+            return 200, {"answer": HUNT_GUEST_LINE, "nodes": [], "kind": "chat",
+                         "route": "hunter", "refused": "guest"}
+        sys.stderr.write("  route: hunter - %d proposed (protected route)\n" % hunt["count"])
+        status, payload = hands.propose("hunt_leads", hunt, door="hunt")
+        payload.setdefault("route", "hunter")
+        return status, payload
     # ---- OPERATOR, PHASE 1.3: the one generic door - click, type, choose, scroll, hover on
     # the locked page. A protected route (see act_asked), taken HERE, before the notes are
     # scored and the meaning search is paid for: measured, "click the c++ button" spent an

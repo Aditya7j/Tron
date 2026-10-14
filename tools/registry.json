@@ -781,6 +781,64 @@
       "timeout_s": 40,
       "proposal": "On the locked page I'll {plan}, sir - press Ctrl+M any time to take it back. Shall I?",
       "step": "On the locked page, {plan}."
+    },
+    {
+      "id": "hunt_leads",
+      "name": "Hunt for leads in open listings and on the businesses' own sites",
+      "script": "hunt_leads.py",
+      "_comment": [
+        "The Hunter, phase 1. Finds businesses of a kind in a place - 'find me 20 dentists in",
+        "Pune', 'find SaaS startups in Bangalore working on fintech' - in OpenStreetMap",
+        "(Nominatim) and Wikidata, reads each one's own website (robots.txt first) for an email,",
+        "a phone or a contact page it published, and writes the ones that have one into",
+        "leads.json with status 'new'. It SENDS NOTHING. See hunter.py for the sources, the",
+        "honest User-Agent, the pace, the dedupe and the never-invented rule.",
+        "DOOR-BOUND to 'hunt': what, where and count are the employer's own sentence, parsed by",
+        "hunter.parse_request() in server.hunt_asked() - never a model's tag - and the brain is",
+        "never offered it. The triggers are the gate hunt_asked() matches first, as",
+        "type_code_asked() matches operator_type_code's; the grammar then decides.",
+        "{plan} is a derived blank from hunter.describe() - '20 dentists in Pune', and the cap",
+        "said out loud when more than 25 were asked for.",
+        "timeout_s is 180: Nominatim allows one request a second and every site is read at",
+        "most twice after its robots.txt, a second apart. Measured: 5 dentists in Pune in",
+        "26.6 s, 10 fintech startups in Bangalore in 35.8 s. The hand's own budget is 165 s,",
+        "so a long hunt stops itself and says what it found rather than being killed here."
+      ],
+      "doors": [
+        "hunt"
+      ],
+      "capabilities": [
+        "find businesses of a kind in a place from open public listings and their own websites, and keep the ones with public contact details in the leads book as new"
+      ],
+      "triggers": [
+        "^(?:please\\s+)?(?:(?:can|could|would)\\s+you\\s+)?(?:find|get|hunt|search\\s+for|look\\s+for|dig\\s+up|scout|source|track\\s+down)\\b[^?]{0,120}\\s(?:in|at|around|near|from|based\\s+in)\\s+[a-z]",
+        "\\b(?:mein|me|main)\\b[^.]{0,80}\\b(?:dhundo|dhoondo|dhundho|dhoondho|dhund\\s+do|dhoondh\\s+do|dhundh\\s+do|nikalo)\\b"
+      ],
+      "params": [
+        {
+          "name": "what",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "where",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "count",
+          "type": "integer",
+          "required": true
+        },
+        {
+          "name": "asked",
+          "type": "integer",
+          "required": false
+        }
+      ],
+      "timeout_s": 180,
+      "proposal": "I'll hunt for {plan} in open listings and on their own websites, sir, and keep only those with public contact details. Nothing is sent to anyone. Shall I?",
+      "step": "Hunt for {plan} and write them into the leads book."
     }
   ]
 }
