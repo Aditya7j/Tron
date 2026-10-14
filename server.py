@@ -5064,8 +5064,38 @@ def ledger_request(question):
     return None
 
 
-QUERY_CLASSES = ("confidence", "ledger", "paper", "quant", "personal", "current", "general",
-                 "ambiguous", "mixed")
+# A CODING-PROBLEM REQUEST. "write two sum javascript function" scored 0.21 against
+# CAREER_HISTORY.md and "happy number leetcode problem ka javascript solution likho"
+# scored above WEB_CONFIDENCE_THRESHOLD against CODING_AND_LEARNING_STYLE.md - a note
+# about HOW Aditya likes to learn, not a note that holds any problem's solution - and
+# the notes door opened and refused rather than answering from the model's own
+# knowledge. Same defect the finance carve-out above repairs, for a second domain:
+# a note that shares a topic's words (coding, LeetCode, practice) is not a note that
+# answers a question about one specific problem. Narrow by design - a PLATFORM name
+# and a code-asking verb both have to be present - so "how do I get better at coding"
+# stays personal/general and still reads the learning-style note on purpose.
+_CODE_PLATFORM_RE = re.compile(r"""\b(?:
+      leetcode | hackerrank | codeforces | geeksforgeeks | codechef | hackerearth
+    | interviewbit | topcoder | codewars | spoj
+  )\b""", re.IGNORECASE | re.VERBOSE)
+_CODE_ASK_RE = re.compile(r"""\b(?:
+      write | code | solution | solve | implement | likho | likh | likh\w* | bana\w* | de\s+do
+  )\b""", re.IGNORECASE | re.VERBOSE)
+
+
+def code_request(question):
+    """True for an explicit ask to solve/write a NAMED platform's coding problem.
+
+    Checked before PERSONAL_RE gets a vote, same as quant_request() and paper_request()
+    above: "leetcode" and "write" together are never a pointer at Aditya's own notes,
+    whatever Hinglish verb carries the ask.
+    """
+    text = str(question or "")
+    return bool(_CODE_PLATFORM_RE.search(text)) and bool(_CODE_ASK_RE.search(text))
+
+
+QUERY_CLASSES = ("confidence", "ledger", "paper", "quant", "code", "personal", "current",
+                 "general", "ambiguous", "mixed")
 
 
 def classify_query(question, note_names=()):
@@ -5089,6 +5119,8 @@ def classify_query(question, note_names=()):
         return "paper", True
     if quant_request(text):
         return "quant", True
+    if code_request(text):
+        return "code", False
     bare = _bare(text) or text.lower()
     # Both forms: _bare() turns "P/E" into "p e" and "P&L" into "p l", so the raw text is
     # where the ratio names survive; the bare form is where spacing is normalised.
@@ -10431,7 +10463,13 @@ def answer_question(question, session, guest=False):
     if qclass == "ledger":
         return answer_ledger(question, session, qclass, guest=guest)
     skip_notes = (qfinance and qclass in ("general", "current", "quant", "paper")
-                  or qclass == "confidence")
+                  or qclass == "confidence"
+                  # A NAMED PLATFORM'S CODING PROBLEM - see code_request(). Never the
+                  # employer's own data, and a note that merely shares the words "coding"
+                  # or "leetcode" (how Aditya likes to learn) is not a note that holds
+                  # any problem's solution. Answered from the model's own knowledge,
+                  # same as a finance concept is.
+                  or qclass == "code")
     # A MIXED question asks the notes only its own half - see personal_half().
     rq = (retrieval_text(personal_half(question) if qclass == "mixed" else question)
           if qclass in ("mixed", "personal") else question)
