@@ -692,6 +692,11 @@
           "name": "code",
           "type": "text",
           "required": true
+        },
+        {
+          "name": "page_url",
+          "type": "text",
+          "required": false
         }
       ],
       "timeout_s": 35,

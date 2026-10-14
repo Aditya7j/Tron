@@ -7640,6 +7640,23 @@ def tool_facts(tool_id, params_text, session=None):
                              % (len(code), CODE_PARAM_MAX))
         elif code:
             raw["code"] = code
+        # OPERATOR 1.4, PRIORITY ONE: the locked tab's address NOW. Measured live: after
+        # the locked tab moved from problem A to problem B, the hand looked the tab up by
+        # A's title and refused ("...its title has changed since it was locked"). The URL
+        # is read through the lock's own socket, as operator_act's page_url is.
+        locked = focus.locked_tab()
+        if locked:
+            try:
+                from tools import operator_core
+                tab = operator_core.CDP(locked["ws"])
+                try:
+                    here = str(tab.evaluate("location.href", timeout=3.0) or "")
+                finally:
+                    tab.close()
+                if here:
+                    raw["page_url"] = here
+            except Exception:                                  # noqa: BLE001
+                pass
         return raw
     cfg = load_config()[0]
     name = os.path.basename(str(cfg.get("voice_model")

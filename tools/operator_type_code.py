@@ -358,12 +358,12 @@ def main():
         say("I did not type anything, sir - there was no code to type.")
         return 1
 
-    label = core.locked_label()
+    label, locked = core.lock_state()
     if label is None:
         say("I did not type anything - I could not reach the focus session to ask which "
             "page is locked, sir.")
         return 1
-    if not label:
+    if not locked:
         say(NO_LOCK)
         return 1
 
@@ -379,7 +379,8 @@ def main():
                 return 1
             sys.stderr.write("operator_type_code: NO PANIC KEY - %s\n" % panic.why)
         run.at("finding the locked page")
-        found = core.find_locked_tab(label, verb="type anything")
+        found = core.find_locked_tab(label, verb="type anything",
+                                     url=str(params.get("page_url") or "").strip() or None)
         tab = core.CDP(found["ws"])
         landed, path, _info = type_code(run, tab, code, progress)
         note("typed by %s" % path)
