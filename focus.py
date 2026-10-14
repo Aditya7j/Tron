@@ -227,6 +227,7 @@ HASH_BYTES = 12           # truncated, salted, per-process: internal only, never
 # the wrong side of the second and a half.
 LOCK_POLL_S = 0.30        # how often the locked tab is asked whether it is still live
 LOCK_GRACE_MS = 400       # passing through a tab is not leaving for one
+LOCK_TITLE_REFRESH_S = 2.0  # how often the locked tab's title is re-read for the card
 LOCK_TITLE_CHARS = 24     # what the card may show of the locked tab's title
 SUMMON_WITHIN_S = 30.0    # a second drift this soon after the first is a pull
 LOCK_ACTIVATE_S = 1.2     # how long an activation is given to actually take effect
@@ -697,6 +698,10 @@ PUBLIC_KEYS = {
     # invent an explanation - and the card turns it into prose. It is how "no silent
     # degradation" is kept on the screen as well as out loud.
     "lockedTab": str, "tabLockWhy": str,
+    # tabLocked: whether a tab lock is live, as a bare boolean. lockedTab cannot say it for
+    # a page with no title (it is "" either way), and Operator 1.3's hands must not mistake
+    # a locked, untitled page for no lock at all. It carries no title and no id.
+    "tabLocked": bool,
 }
 
 
@@ -1482,6 +1487,7 @@ class LockWatch:
         self.polls = 0
         self.misses = 0            # consecutive unanswered questions
         self.activations = 0
+        self._title_at = time.monotonic()
 
     def poll(self, now=None):
         """One question, and the state it leaves behind.
@@ -1499,9 +1505,30 @@ class LockWatch:
         if seen is None:
             self.misses += 1
             if self.misses >= 3:
-                self.state = "gone"
+                # GONE MEANS GONE FROM THE BROWSER, NOT "DID NOT ANSWER". Measured on the
+                # real lock, 2026-10-14 (Operator 1.4): a locked tab navigating to the next
+                # problem over a slow line answers nothing for seconds, three 0.6 s misses
+                # read as "gone", and a session that dropped the lock there would have said
+                # "The tab you locked has gone" about a tab that was still in front of him.
+                # So three misses ASK the browser's own target list: listed means it is
+                # loading, and it stays what it was; absent - or no port at all - is gone.
+                listed, _title = self._listing()
+                if listed:
+                    self.misses = 2          # re-ask on the next miss, not every poll after
+                else:
+                    self.state = "gone"
             return self.state
         self.misses = 0
+        if now - self._title_at >= LOCK_TITLE_REFRESH_S:
+            # THE TITLE FOLLOWS THE TAB. The lock holds a target id, so it survives a
+            # navigation; the title on the card did not, and read "LOCKED: Fizz Buzz" while
+            # the tab showed Reverse String. Refreshed from the same target list, cut and
+            # cleaned exactly as at lock time; an untitled page keeps the last one.
+            self._title_at = now
+            listed, title = self._listing()
+            fresh = (_clean_label(title) or "")[:LOCK_TITLE_CHARS].strip() if listed else ""
+            if fresh:
+                self.title = fresh
         # BIT 1, and not bit 2. Bit 1 is "I am the active tab of my window", which is
         # the tab statement; bit 2 is "my window has the keyboard", which is the OS's
         # statement about applications and is already the window reader's job. Reading
@@ -1514,6 +1541,21 @@ class LockWatch:
                 self.off_since = now
             self.state = "off"
         return self.state
+
+    def _listing(self):
+        """(listed, title): is this target still in its browser's /json list, and what is
+        it called now. (False, "") when the port does not answer - a browser that has gone
+        has taken the tab with it. One HTTP request; no socket to the page."""
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:%d/json" % self.port,
+                                        timeout=CDP_TIMEOUT_S) as res:
+                targets = json.loads(res.read().decode("utf-8", "replace"))
+        except Exception:                                      # noqa: BLE001
+            return False, ""
+        for t in targets if isinstance(targets, list) else ():
+            if isinstance(t, dict) and str(t.get("id") or "") == self.id:
+                return True, str(t.get("title") or "")
+        return False, ""
 
     def drifted(self, now=None):
         """Has it been off long enough to count? The grace lives here - LOCK_GRACE_MS."""
@@ -3869,6 +3911,7 @@ def public_state(session):
             "lockedTab": (session.watch.title
                           if (session.watch is not None and session.watch.live) else ""),
             "tabLockWhy": session.tab_lock_why,
+            "tabLocked": bool(session.watch is not None and session.watch.live),
         }
         raw.update(eyes_raw)
 
@@ -4066,6 +4109,25 @@ def is_focus_request(text):
         live = (MANAGER._session is not None                   # noqa: SLF001
                 and MANAGER._session.state != "ended")         # noqa: SLF001
     return parse_command(text, live) is not None
+
+
+def locked_tab():
+    """{"ws", "title", "port"} of the tab the live session has locked, or None.
+
+    For the SERVER'S OWN PROCESS ONLY - Operator 1.3's dry look before a card and its read
+    of the problem text behind a coding answer. LockWatch's docstring explains why the
+    socket is held at all and why it never goes on the wire; this hands it to code in the
+    same process and nowhere else. Nothing here is serialised, logged or put in /focus,
+    and the hands (separate processes) still find the tab by its published title.
+    """
+    with MANAGER._lock:                                        # noqa: SLF001
+        session = MANAGER._session                             # noqa: SLF001
+        if session is None or session.state == "ended":
+            return None
+        watch = session.watch
+        if watch is None or not watch.live:
+            return None
+        return {"ws": watch.ws, "title": watch.title, "port": watch.port}
 
 
 def handle(payload):
