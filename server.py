@@ -7653,6 +7653,270 @@ def tool_facts(tool_id, params_text, session=None):
     return raw
 
 
+# ---- OPERATOR, PHASE 1.3: THE ONE GENERIC DOOR - "click the subscribe button". ----
+#
+# A PROTECTED ROUTE, like "type it in" above, and for the same reason: the parameters are
+# the employer's own words, read by operator_act.parse_request() - the hand's own grammar,
+# beside the hand, so the parse and the run cannot drift - and never a model's. The tool is
+# door-bound to "page"; no tag can raise it.
+#
+# THE CARD IS DRAWN ONLY FOR SOMETHING THAT IS THERE. Before it, the server LOOKS at the
+# locked page - operator_core's finder, through the focus session's own socket, nothing
+# pressed - and either proposes with the name it found (`expect`, which the run checks
+# again before touching anything) or says what it looked for and the nearest miss, with
+# nothing pending. A "shall I click it?" for a button that is not on the page is a question
+# the employer should never have to answer.
+ACT_LOOK_S = 4.0         # how long the look before a card waits for a page still loading
+
+
+def act_asked(question):
+    """operator_act's parameters for an explicit ask to act on the locked page, or None.
+    Read on the RAW sentence and its de-addressed form only: the bare forms drop the
+    punctuation and case a typed text must keep ("asha@example.com")."""
+    if hands.find("operator_act") is None:
+        return None
+    try:
+        from tools import operator_act
+    except Exception:                                          # noqa: BLE001
+        return None
+    raw = str(question or "").strip()
+    for form in dict.fromkeys((raw, _strip_address(raw))):
+        parsed = operator_act.parse_request(form) if form else None
+        if parsed:
+            return parsed
+    return None
+
+
+def propose_act(session, parsed):
+    """(status, payload): operator_act's card for what was found, or a plain sentence
+    saying why there is none. Nothing is pending after a refusal, as everywhere in hands.
+    The element's NAME is never written to the log - like the locked tab's title, it is
+    the employer's page - only its kind and its confidence."""
+    from tools import operator_act, operator_core
+
+    def plain(line, why):
+        sys.stderr.write("  route: operator - %s asked, nothing proposed (%s)\n"
+                         % (parsed.get("action"), why))
+        return 200, {"answer": line, "nodes": [], "kind": "chat", "route": "operator",
+                     "pending": hands.pending_public()}
+
+    locked = focus.locked_tab()
+    if not locked:
+        return plain("There is no page locked for me to act on, sir - lock the tab "
+                     "first, and then ask me again.", "no lock")
+    verb = operator_act.VERB.get(parsed["action"], "touch anything")
+    try:
+        tab = operator_core.CDP(locked["ws"])
+    except operator_core.Failed:
+        return plain("I cannot reach the locked page, sir - it may have been closed.",
+                     "no socket")
+    try:
+        # A FEW SECONDS, NOT ONE GLANCE. The usual moment for this look is right after the
+        # last action moved the page on, and a document mid-navigation answers nothing for
+        # seconds (measured ~7 s on a slow line) or answers with half a page. So it looks
+        # until the target is found or ACT_LOOK_S runs out; a page that never answers is a
+        # sentence, not a hang.
+        end = time.monotonic() + ACT_LOOK_S
+        found, last_error = None, None
+        while True:
+            try:
+                found = operator_core.find_target(tab, parsed["target"], call_timeout=2.0,
+                                                  headings=(parsed["action"] == "scroll"))
+                last_error = None
+                if found["ok"]:
+                    break
+            except operator_core.Failed as exc:
+                last_error = exc
+            if time.monotonic() >= end:
+                break
+            time.sleep(0.3)
+        if found is None:
+            raise last_error or operator_core.Failed("no answer")
+        # The locked tab's address NOW, for the hand to find it by - the published title
+        # is the title at lock time and goes stale with the first navigation. See
+        # operator_core.find_locked_tab.
+        page_url = str(tab.evaluate("location.href", timeout=3.0) or "")
+    except operator_core.Failed as exc:
+        return plain("The locked page did not answer me, sir, so I have not touched it.",
+                     str(exc)[:80])
+    finally:
+        tab.close()
+    pick = found.get("pick") or {}
+    if not found["ok"]:
+        line = operator_core.failure_line(operator_core.Failed(
+            operator_core.miss_line(found, parsed["target"], verb=verb)))
+        return plain(line, "%s, best %.2f" % (found["why"], float(pick.get("conf") or 0)))
+    if parsed["action"] == "type" and pick.get("type") == "password":
+        return plain("That is a password field, sir, and I do not type into those - it is "
+                     "yours to fill.", "password field")
+    sys.stderr.write("  route: operator - %s proposed on a %s (%.2f via %s)\n"
+                     % (parsed["action"], pick.get("role"), float(pick.get("conf") or 0),
+                        pick.get("src")))
+    params = dict(parsed, expect=pick.get("name") or "")
+    if page_url:
+        params["page_url"] = page_url
+    return hands.propose("operator_act", params, door="page")
+
+
+# ---- OPERATOR 1.3, CARRIED FORWARD FROM 1.2: THE CODING LANE. ----
+#
+# A. GROUNDED IN THE PAGE, NOT THE PROBLEM'S NAME. Measured in 1.2: "Merge Sorted Array"
+#    got a plausible signature that was not LeetCode's, because the model was given the
+#    name and answered from memory. When a tab is locked, a coding answer is now shown the
+#    page's own text (operator_core.read_page - the statement, examples, constraints) and,
+#    labelled separately, what the page's code editor holds: a platform's starter code is
+#    the exact function name, parameters and language the grader will call.
+# B. A CORRECTION STAYS IN THE LANE. "type the correct code" and "fix it" name no platform,
+#    so code_request() said no and the sentence went to the notes. A turn that comes
+#    straight after a coding answer, inside CODE_LANE_TTL_S, and READS as a correction
+#    (CODE_CORRECTION_RE) is now a coding turn without re-naming anything. "Straight
+#    after" is literal: any other recorded turn in between closes the lane.
+#
+# THE PAGE TEXT IS EVIDENCE, NOT A RECORD: it goes into this one prompt and nowhere else -
+# never the log (its size is logged, not its words), never the history, never disk.
+CODE_LANE_TTL_S = 15 * 60
+# session -> {"at": monotonic, "last": the answer that opened it}. By IDENTITY, not by the
+# history's length: record_turn() caps the history, so once it is full its length stops
+# moving and "nothing was said since" could not be told from "two turns were".
+_code_lane = {}
+
+CODE_CORRECTION_RE = re.compile(r"""\b(?:
+      fix(?:\s+it|\s+this|\s+that)? | correct(?:ed|ion)? | wrong | galat | sahi | incorrect
+    | broken | bug(?:gy|s)? | error | exception | fails? | failing | failed
+    | (?:does\s*n[o']?t|does\s+not|did\s*n[o']?t|did\s+not)\s+(?:work|compile|pass|run)
+    | not\s+(?:working|passing|compiling|accepted) | try\s+again | once\s+more | redo
+    | re-?write | signature | wrong\s+answer | time\s+limit | tle | runtime | compil\w*
+    | test\s*cases? | edge\s+cases? | optimi[sz]e | faster | slower | o\(n\)
+    | (?:in|use|using|into)\s+(?:python3?|java|c\+\+|cpp|javascript|js|typescript|ts|golang|go|rust|
+                               kotlin|swift|c\#|ruby|php|scala)
+    | type\s+(?:the\s+)?(?:correct|right|fixed|new|updated|proper)
+)(?!\w)""", re.IGNORECASE | re.VERBOSE)
+
+# "solve this problem" - no platform named, but a locked page is the problem being pointed at.
+PAGE_PROBLEM_RE = re.compile(r"""\b(?:this|the|that|is|iss|ye|yeh|current)\s+
+    (?:problem|question|challenge|exercise|kata|task)\b
+    | \bon\s+(?:the|this|my)\s+(?:page|screen|tab)\b""", re.IGNORECASE | re.VERBOSE)
+
+# A correction that also asks for the result to go into the editor.
+TYPE_AFTER_RE = re.compile(r"\b(?:type|paste|put|enter|write)\b.{0,40}\b(?:it|code|solution|"
+                           r"answer|editor|in)\b", re.IGNORECASE)
+
+CODE_PROMPT = (
+    "You are the butler of a private knowledge galaxy: English, impeccably polite, "
+    "unhurried and very dry. Your employer is solving a coding problem and has asked you for "
+    "code. Your job is to produce the complete, correct solution.\n"
+    "\n"
+    "- If the problem as it reads on their locked page is given below, IT is the authority. "
+    "Write in the language the code editor is SET TO. Use the exact function or method "
+    "name, parameter names and types, return type and class wrapper of the platform's "
+    "starter code for that language. If the editor holds a draft in a different language, "
+    "it is the employer's leftover work: translate its intent if useful, but never switch "
+    "language because of it, and do not remark on it. Never substitute a remembered "
+    "version of a similarly named problem: if your memory and the page disagree, the page "
+    "is right.\n"
+    "- Respect the statement's constraints and required behaviour (for example, modifying "
+    "an argument in place rather than returning a value, when the statement says so).\n"
+    "- Give ONE complete solution in ONE fenced code block in the editor's language, ready "
+    "to replace the starter code. At most one short line of framing before it, and at most "
+    "two short lines after it naming the approach and its complexity.\n"
+    "- If they say your previous code was wrong, compare it against the page, say in one "
+    "line what was wrong, and give the corrected complete solution - never a fragment.\n"
+    "- If no page is given, work from what they told you and from the conversation so far.\n"
+    "- Say \"sir\" only now and then. No exclamation marks, no emoji, no closing offer of "
+    "further assistance."
+)
+
+
+def code_lane_continues(question, session, history):
+    """True for a correction that follows a coding answer directly - see B above."""
+    lane = _code_lane.get(session)
+    if not lane or time.monotonic() - lane["at"] > CODE_LANE_TTL_S:
+        return False
+    if not history or history[-1].get("content") != lane["last"]:
+        return False                          # something else was said since: lane closed
+    return bool(CODE_CORRECTION_RE.search(str(question or "")))
+
+
+def page_code_request(question):
+    """True for "solve this problem" with a locked page to read it from: a code-asking verb
+    and a pointer at the problem in front of them, no platform name needed."""
+    text = str(question or "")
+    return (bool(_CODE_ASK_RE.search(text)) and bool(PAGE_PROBLEM_RE.search(text))
+            and focus.locked_tab() is not None)
+
+
+def page_problem():
+    """(evidence, facts) from the locked page, or ("", {}) - see A above. Never raises:
+    grounding is furniture, and losing it must not lose the answer."""
+    locked = focus.locked_tab()
+    if not locked:
+        return "", {}
+    try:
+        from tools import operator_core
+        page = operator_core.read_ws(locked["ws"])
+    except Exception:                                          # noqa: BLE001
+        page = None
+    if not page or not (page.get("text") or page.get("editor")):
+        return "", {}
+    parts = ["Title: %s" % str(page.get("title") or "")[:200],
+             "", str(page.get("text") or "").strip()]
+    ed = page.get("editor") or {}
+    if ed.get("text"):
+        # THE SETTING AND THE CONTENTS, SAID APART. Measured on LeetCode: an editor SET to
+        # Python 3 still held a C++ draft from before the switch, the block was labelled
+        # with one word for both, and the model flip-flopped between languages across two
+        # turns, calling the pane "mislabeled". The setting is what the grader runs; the
+        # contents are a starter or the employer's own draft.
+        parts += ["", "The page's code editor is SET TO: %s." % (ed.get("lang") or
+                                                                 "a language it does not name"),
+                  "It currently holds the following - the platform's starter code, or the "
+                  "employer's own draft, which may be in another language:",
+                  "```", str(ed["text"]).rstrip(), "```"]
+    facts = {"chars": len(page.get("text") or ""), "scope": page.get("scope"),
+             "cut": bool(page.get("cut")), "editor": bool(ed.get("text")),
+             "lang": ed.get("lang") or ""}
+    return "\n".join(parts), facts
+
+
+def answer_code(cfg, question, session, history, sticky):
+    """The coding lane's one exit: a solution composed with the locked page as its
+    authority, the lane opened for the next turn, and - when the sentence also asked for it
+    to go in - the typing card raised for the block just written."""
+    evidence, facts = page_problem()
+    sys.stderr.write("  code: %r - %s%s\n" % (
+        question.strip()[:60], "a correction in the lane, " if sticky else "",
+        ("grounded in the locked page (%d chars%s%s)" % (
+            facts["chars"], ", the editor's %s starter" % (facts["lang"] or "code")
+            if facts["editor"] else "", ", cut" if facts["cut"] else ""))
+        if evidence else "no locked page to read"))
+    turn_note(codeLane={"sticky": bool(sticky), "grounded": bool(evidence),
+                        "editor": bool(facts.get("editor")), "chars": facts.get("chars", 0)})
+    messages, _plan = assemble(system=CODE_PROMPT, history=history,
+                               older=older_block(session), ask=question.strip(),
+                               heading=("The problem as it reads on the page your employer "
+                                        "has locked:" if evidence else ""),
+                               evidence=evidence, label="code")
+    answer, error = call_model(cfg, messages)
+    if error:
+        return 502, {"error": error, "nodes": [], "kind": "compose", "route": "code"}
+    stray, _p, cleaned = hands.tool_tag(answer)
+    if stray is not None:
+        sys.stderr.write("  tool: a tool tag came back from the CODE prompt; stripped\n")
+        answer = cleaned or hands.LINES["instead"]
+    record_turn(session, question, answer)
+    _code_lane[session] = {"at": time.monotonic(), "last": str(answer or "")}
+    payload = {"answer": answer, "nodes": [], "kind": "compose", "route": "code",
+               "grounded": bool(evidence)}
+    if sticky and TYPE_AFTER_RE.search(question) and latest_code_block(session):
+        # "type the correct code": the corrected block is written above, and the card for
+        # typing it is raised in the same reply. Typing still needs its own Yes.
+        status, card = propose_typing(session)
+        if card.get("pending"):
+            payload["answer"] = answer.rstrip() + "\n\n" + str(card.get("answer") or "")
+            payload["pending"] = card["pending"]
+    return 200, payload
+
+
 def call_chat_completions(url, key, model, who, messages, image=None, extra=None,
                           status=None):
     """OpenAI's /chat/completions shape, which OpenRouter and Groq speak too.
@@ -10458,10 +10722,26 @@ def answer_question(question, session, guest=False):
     # sharing the notes' vocabulary is exactly what used to open the notes door on them.
     # Every other class - and every non-finance question - retrieves as it always did.
     qclass, qfinance = classify_query(question, note_stems())
+    # THE CODING LANE (Operator 1.3, carried forward from 1.2): a correction straight after a
+    # coding answer, or "solve this problem" with a locked page to read it from, is a coding
+    # turn though it names no platform. Decided here so the notes are skipped for it below.
+    code_sticky = False
+    if qclass not in ("code", "ledger", "confidence", "paper", "quant"):
+        if code_lane_continues(question, session, history):
+            qclass, qfinance, code_sticky = "code", False, True
+        elif page_code_request(question):
+            qclass, qfinance = "code", False
     # THE BOOKS ARE ANSWERED HERE, before a note is read or a hand is offered to the brain: a
     # figure in them is the boss's own, and the brain is never the one to fill it in.
     if qclass == "ledger":
         return answer_ledger(question, session, qclass, guest=guest)
+    # ---- OPERATOR, PHASE 1.3: the one generic door - click, type, choose, scroll, hover on
+    # the locked page. A protected route (see act_asked), taken HERE, before the notes are
+    # scored and the meaning search is paid for: measured, "click the c++ button" spent an
+    # embedding call and opened the notes door on a PDF before the route below caught it.
+    asked = act_asked(question)
+    if asked is not None:
+        return propose_act(session, asked)
     skip_notes = (qfinance and qclass in ("general", "current", "quant", "paper")
                   or qclass == "confidence"
                   # A NAMED PLATFORM'S CODING PROBLEM - see code_request(). Never the
@@ -10724,6 +11004,10 @@ def answer_question(question, session, guest=False):
     # the sentence to a model that has no way to see the code - see type_code_asked().
     if type_code_asked(question):
         return propose_typing(session)
+    # ---- THE CODING LANE'S ONE EXIT, above the hands: a solution is the server's to write
+    # with the page in front of it, and "type the correct code" must not become a tool hunt.
+    if qclass == "code" and not private_identifier(question):
+        return answer_code(cfg, question, session, history, code_sticky)
 
     if (hands.hands_wanted(question) and substantial_question(question, prior)
             and not address_only(question)):
@@ -10912,6 +11196,10 @@ def answer_question(question, session, guest=False):
                              "stripped and ignored\n")
             answer = cleaned or hands.LINES["instead"]
         record_turn(session, question, answer)
+        if "```" in str(answer or ""):
+            # A composed answer that WROTE CODE opens the coding lane too ("write a python
+            # function for two sum" names no platform), so "fix it" stays with it.
+            _code_lane[session] = {"at": time.monotonic(), "last": str(answer or "")}
         return 200, {"answer": answer, "nodes": [], "kind": "compose"}
 
     # ---- THE PII SHIELD, the last thing between a private identifier and a search box.

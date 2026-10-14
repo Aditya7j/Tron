@@ -76,28 +76,20 @@ so typing is visible and stoppable - a fifty-line paste in one event would finis
 a hand could reach the key. If Ctrl+H cannot be armed on Windows the hand refuses to
 start. On abort it reports how many lines were in the editor, as read back.
 
-Standard library only, one file. The CDP client, the panic key and the run machinery are
-copied from operator_browser.py (which copied the framing from focus.py), and the label
-cleaning and front-tab expression from focus.py - copied rather than imported, because a
-hand is one file.
+Standard library only. The CDP client, the panic key, the run machinery and the
+locked-tab join are operator_core's (phase 1.3), imported rather than copied: this file
+held a fourth copy of them until then. What is left here is the part that is only this
+hand's - the editor, read and typed through its own API, line by line.
 """
-import base64
 import json
-import os
-import re
-import socket
-import struct
 import sys
-import threading
 import time
-import urllib.parse
-import urllib.request
 
-SERVER = "http://127.0.0.1:4700"  # the focus session lives in the server's process
-PORTS = (9222, 9223, 9224)        # focus.py's CDP_PORTS, in its order
-HTTP_TIMEOUT_S = 1.5
-CALL_TIMEOUT_S = 8.0
-POLL_S = 0.25
+try:
+    from tools import operator_core as core          # imported by the server
+except ImportError:                                  # run as a hand, from tools/
+    import operator_core as core
+
 LINE_PAUSE_S = 0.06               # visible, stoppable typing: ~16 lines a second
 # How long a line is given to SHOW UP before it is called "nothing landed". Measured on
 # LeetCode's Monaco, 2026-10-14: right after the editor was handed focus, a paste took
@@ -110,372 +102,20 @@ FOCUS_SETTLE_S = 0.25             # after the hand itself moves focus into the e
 # reported in this file's words, with the line count read back, never as a bare timeout.
 BUDGET_S = 28.0
 
-# focus.py, copied: what the server's lockedTab is made of.
-HOME_BASE_HOSTS = frozenset(("127.0.0.1", "localhost", "::1", "[::1]"))
-LOCK_TITLE_CHARS = 24
-LABEL_MAX_CHARS = 28
-_LABEL_CLEAN_RE = re.compile(r"[^A-Za-z0-9 .+&'-]+")
-_LABEL_WORD_RE = re.compile(r"[A-Za-z0-9]")
-_FRONT_EXPR = ("((document.visibilityState==='visible')?1:0)"
-               "+(document.hasFocus()?2:0)")
-
-NO_PORT = ("I cannot do that, sir - Chrome has no debugging port open. Ask me to "
-           "relaunch Chrome with the debugging port first.")
+NO_PORT = core.NO_PORT
 NO_LOCK = "I did not type anything - there is no page locked to type into, sir."
-
-
-def say(line):
-    sys.stdout.buffer.write(str(line).encode("ascii", "replace") + b"\n")
-    sys.stdout.buffer.flush()
+Failed = core.Failed
+Aborted = core.Aborted
+say = core.say
 
 
 def note(text):
     """For a developer, never for the room: stderr is not spoken on success."""
-    sys.stderr.write("operator_type_code: %s\n" % text)
-
-
-class Failed(Exception):
-    """A reason, in words that can be spoken."""
-
-
-class Aborted(Exception):
-    """Ctrl+H. Carries the step that was in progress."""
+    core.note("operator_type_code", text)
 
 
 def lines_word(n):
     return "one line" if n == 1 else "%d lines" % n
-
-
-# =============================================================================
-#  THE PANIC KEY - operator_browser.py's, unchanged
-# =============================================================================
-
-MOD_CONTROL = 0x0002
-MOD_NOREPEAT = 0x4000
-VK_H = 0x48
-WM_HOTKEY = 0x0312
-WM_QUIT = 0x0012
-HOTKEY_ID = 0x0B1B
-
-
-class PanicKey:
-    """Ctrl+H on a background thread with its own message loop: RegisterHotKey binds to
-    the calling thread, only that thread may unregister it, and WM_QUIT is what makes
-    GetMessage return. While registered, Chrome's own Ctrl+H (History) is suppressed; it
-    comes back the instant UnregisterHotKey runs. Off Windows there is NO panic key and
-    `why` says so loudly - see operator_browser.PanicKey for the full reasoning."""
-
-    def __init__(self):
-        self.fired = threading.Event()
-        self.armed = False
-        self.why = ""
-        self._tid = None
-        self._thread = None
-        self._ready = threading.Event()
-
-    def arm(self):
-        if sys.platform != "win32":
-            # LOUD, ON PURPOSE: no RegisterHotKey off Windows, so no Ctrl+H.
-            self.why = "not Windows: RegisterHotKey does not exist here, so no Ctrl+H"
-            return False
-        try:
-            import ctypes
-            from ctypes import wintypes
-        except Exception as exc:                               # noqa: BLE001
-            self.why = "ctypes is unavailable (%s), so no Ctrl+H" % type(exc).__name__
-            return False
-
-        def pump():
-            user32 = ctypes.WinDLL("user32", use_last_error=True)
-            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-            self._tid = kernel32.GetCurrentThreadId()
-            ok = user32.RegisterHotKey(None, HOTKEY_ID, MOD_CONTROL | MOD_NOREPEAT, VK_H)
-            if not ok:
-                self.why = "RegisterHotKey refused Ctrl+H (error %d)" % ctypes.get_last_error()
-                self._ready.set()
-                return
-            self.armed = True
-            self._ready.set()
-            try:
-                msg = wintypes.MSG()
-                while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
-                    if msg.message == WM_HOTKEY and msg.wParam == HOTKEY_ID:
-                        self.fired.set()
-            finally:
-                user32.UnregisterHotKey(None, HOTKEY_ID)
-                self.armed = False
-
-        self._thread = threading.Thread(target=pump, name="ctrl-h", daemon=True)
-        self._thread.start()
-        self._ready.wait(3.0)
-        return self.armed
-
-    def disarm(self):
-        if self._thread is None or not self._thread.is_alive():
-            return
-        import ctypes
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
-        for _ in range(20):
-            if user32.PostThreadMessageW(self._tid, WM_QUIT, 0, 0):
-                break
-            time.sleep(0.05)
-        self._thread.join(2.0)
-
-
-class Run:
-    """The brake and the clock, consulted before every line (operator_browser.Run)."""
-
-    def __init__(self, panic, budget_s=BUDGET_S):
-        self.panic = panic
-        self.step = "starting"
-        self.deadline = time.monotonic() + budget_s
-
-    def at(self, step):
-        self.step = step
-        self.check()
-
-    def check(self):
-        if self.panic is not None and self.panic.fired.is_set():
-            raise Aborted(self.step)
-        if time.monotonic() > self.deadline:
-            raise Failed("I ran out of time while %s, sir, so I stopped there" % self.step)
-
-    def nap(self, seconds=POLL_S):
-        end = time.monotonic() + seconds
-        while True:
-            self.check()
-            left = end - time.monotonic()
-            if left <= 0:
-                return
-            time.sleep(min(0.02, left))
-
-
-# =============================================================================
-#  CDP - operator_browser.py's client (framing from focus.py), unchanged
-# =============================================================================
-
-def _ws_frame(payload):
-    mask = os.urandom(4)
-    n = len(payload)
-    if n < 126:
-        head = struct.pack("!BB", 0x81, 0x80 | n)
-    elif n < 65536:
-        head = struct.pack("!BBH", 0x81, 0x80 | 126, n)
-    else:
-        head = struct.pack("!BBQ", 0x81, 0x80 | 127, n)
-    return head + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
-
-
-def _ws_read(sock, buf):
-    def fill(n):
-        while len(buf) < n:
-            chunk = sock.recv(65536)
-            if not chunk:
-                return False
-            buf.extend(chunk)
-        return True
-
-    if not fill(2):
-        return None
-    if buf[1] & 0x80:
-        return None
-    length, at = buf[1] & 0x7F, 2
-    if length == 126:
-        if not fill(4):
-            return None
-        length, at = struct.unpack_from("!H", buf, 2)[0], 4
-    elif length == 127:
-        if not fill(10):
-            return None
-        length, at = struct.unpack_from("!Q", buf, 2)[0], 10
-    if length > (8 << 20) or not fill(at + length):
-        return None
-    opcode, data = buf[0] & 0x0F, bytes(buf[at:at + length])
-    del buf[:at + length]
-    return opcode, data
-
-
-class CDP:
-    def __init__(self, ws_url):
-        parts = urllib.parse.urlsplit(ws_url or "")
-        if parts.scheme != "ws" or not parts.hostname or not parts.path:
-            raise Failed("the browser gave me no address to talk to the tab on")
-        port = parts.port or 80
-        path = parts.path + (("?" + parts.query) if parts.query else "")
-        self._next = 0
-        self.buf = bytearray()
-        try:
-            self.sock = socket.create_connection((parts.hostname, port), timeout=5.0)
-            self.sock.sendall(("GET %s HTTP/1.1\r\nHost: %s:%d\r\n"
-                               "Upgrade: websocket\r\nConnection: Upgrade\r\n"
-                               "Sec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n"
-                               % (path, parts.hostname, port,
-                                  base64.b64encode(os.urandom(16)).decode("ascii"))
-                               ).encode("ascii"))
-            while b"\r\n\r\n" not in self.buf:
-                chunk = self.sock.recv(4096)
-                if not chunk or len(self.buf) > 65536:
-                    raise OSError("no handshake")
-                self.buf.extend(chunk)
-        except OSError as exc:
-            raise Failed("the browser would not let me talk to the tab (%s)"
-                         % type(exc).__name__)
-        head, rest = bytes(self.buf).split(b"\r\n\r\n", 1)
-        if b"101" not in head.split(b"\r\n", 1)[0]:
-            raise Failed("the browser refused the DevTools connection to the tab")
-        self.buf = bytearray(rest)
-
-    def call(self, method, params=None, timeout=CALL_TIMEOUT_S):
-        self._next += 1
-        mid = self._next
-        try:
-            self.sock.sendall(_ws_frame(json.dumps(
-                {"id": mid, "method": method, "params": params or {}}).encode("utf-8")))
-            deadline = time.monotonic() + timeout
-            while True:
-                left = deadline - time.monotonic()
-                if left <= 0:
-                    raise socket.timeout()
-                self.sock.settimeout(left)
-                frame = _ws_read(self.sock, self.buf)
-                if frame is None:
-                    raise OSError("the DevTools connection closed")
-                opcode, data = frame
-                if opcode == 8:
-                    raise OSError("the DevTools connection closed")
-                if opcode != 1:
-                    continue
-                try:
-                    msg = json.loads(data.decode("utf-8", "replace"))
-                except ValueError:
-                    continue
-                if msg.get("id") != mid:
-                    continue
-                if "error" in msg:
-                    raise Failed("the browser refused %s: %s" % (
-                        method, (msg["error"] or {}).get("message", "no reason given")))
-                return msg.get("result") or {}
-        except socket.timeout:
-            raise Failed("the browser did not answer %s within %.0f seconds"
-                         % (method, timeout))
-        except OSError as exc:
-            raise Failed("the browser stopped answering (%s)" % (str(exc) or
-                                                                 type(exc).__name__))
-
-    def evaluate(self, expression, gesture=False, timeout=CALL_TIMEOUT_S):
-        res = self.call("Runtime.evaluate",
-                        {"expression": expression, "returnByValue": True,
-                         "userGesture": bool(gesture)}, timeout=timeout)
-        if res.get("exceptionDetails"):
-            return None
-        return (res.get("result") or {}).get("value")
-
-    def close(self):
-        try:
-            self.sock.close()
-        except Exception:                                      # noqa: BLE001
-            pass
-
-
-def get_json(url, timeout=HTTP_TIMEOUT_S):
-    try:
-        with urllib.request.urlopen(url, timeout=timeout) as res:
-            return json.loads(res.read().decode("utf-8", "replace"))
-    except Exception:                                          # noqa: BLE001
-        return None
-
-
-# =============================================================================
-#  THE LOCKED TAB - focus.py's title join, from outside the server's process
-# =============================================================================
-
-def clean_label(text):
-    """focus.py's _clean_label, copied: the shape lockedTab is cut from."""
-    name = _LABEL_CLEAN_RE.sub(" ", str(text or ""))
-    name = " ".join(name.split())[:LABEL_MAX_CHARS].strip(" .-'&+")
-    if not name or not _LABEL_WORD_RE.search(name):
-        return None
-    return name
-
-
-def lock_label(title):
-    """What focus.py's LockWatch and state() would show for a tab with this title."""
-    return (clean_label(title) or "")[:LOCK_TITLE_CHARS].strip()
-
-
-def locked_label():
-    """The session's lockedTab, or "" - and None when the server cannot be asked."""
-    found = get_json(SERVER + "/focus", timeout=4.0)
-    if not isinstance(found, dict):
-        return None
-    return str((found.get("focus") or {}).get("lockedTab") or "").strip()
-
-
-def _front_bits(ws):
-    """_FRONT_EXPR asked of one page on a socket of its own, or None."""
-    try:
-        tab = CDP(ws)
-    except Failed:
-        return None
-    try:
-        value = tab.evaluate(_FRONT_EXPR, timeout=1.0)
-        return int(value) if value is not None else None
-    except (Failed, TypeError, ValueError):
-        return None
-    finally:
-        tab.close()
-
-
-def find_locked_tab(label):
-    """The one DevTools page whose title is the locked tab's, as {ws, title, host}.
-
-    Raises Failed for no port, no match, and an ambiguity that _FRONT_EXPR cannot settle.
-    """
-    alive, hits = False, []
-    for port in PORTS:
-        targets = get_json("http://127.0.0.1:%d/json" % port)
-        if targets is None:
-            continue
-        alive = True
-        for t in targets if isinstance(targets, list) else ():
-            if not isinstance(t, dict) or t.get("type") != "page":
-                continue
-            url = str(t.get("url") or "")
-            host = (urllib.parse.urlsplit(url).hostname or "").lower()
-            if not t.get("webSocketDebuggerUrl") or not host or host in HOME_BASE_HOSTS:
-                continue
-            if not url.lower().startswith(("http://", "https://")):
-                continue
-            if lock_label(t.get("title")) == label:
-                hits.append({"ws": t["webSocketDebuggerUrl"], "host": host,
-                             "title": str(t.get("title") or "")})
-        if hits:
-            break
-    if not alive:
-        raise Failed(NO_PORT)
-    if not hits:
-        raise Failed("I did not type anything - the locked page, '%s', is not open in the "
-                     "browser I can reach, or its title has changed since it was locked"
-                     % label)
-    if len(hits) == 1:
-        return hits[0]
-    # _cdp_front_target's order: focused, then merely visible. Two left is a question.
-    focused, visible = [], []
-    for hit in hits:
-        bits = _front_bits(hit["ws"])
-        if bits is None:
-            continue
-        if bits & 2:
-            focused.append(hit)
-        elif bits & 1:
-            visible.append(hit)
-    for pool in (focused, visible):
-        if len(pool) == 1:
-            return pool[0]
-        if len(pool) > 1:
-            break
-    raise Failed("I did not type anything - %d tabs answer to the locked page's name, "
-                 "'%s', and I will not guess which one you meant" % (len(hits), label))
 
 
 # =============================================================================
@@ -718,7 +358,7 @@ def main():
         say("I did not type anything, sir - there was no code to type.")
         return 1
 
-    label = locked_label()
+    label = core.locked_label()
     if label is None:
         say("I did not type anything - I could not reach the focus session to ask which "
             "page is locked, sir.")
@@ -727,8 +367,8 @@ def main():
         say(NO_LOCK)
         return 1
 
-    panic = PanicKey()
-    run = Run(panic)
+    panic = core.PanicKey(0x0B1B)
+    run = core.Run(panic, BUDGET_S)
     tab = None
     progress = {"landed": 0, "total": code.count("\n") + 1}
     try:
@@ -739,8 +379,8 @@ def main():
                 return 1
             sys.stderr.write("operator_type_code: NO PANIC KEY - %s\n" % panic.why)
         run.at("finding the locked page")
-        found = find_locked_tab(label)
-        tab = CDP(found["ws"])
+        found = core.find_locked_tab(label, verb="type anything")
+        tab = core.CDP(found["ws"])
         landed, path, _info = type_code(run, tab, code, progress)
         note("typed by %s" % path)
         say("Typed the solution into the editor - %s added at the cursor."

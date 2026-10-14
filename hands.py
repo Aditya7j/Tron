@@ -661,6 +661,17 @@ def readings(params):
                 out["where"], out["plan"] = found
         except Exception:
             pass
+    # OPERATOR 1.3's {plan} for the generic door: what will be done, to the thing the
+    # server's dry look FOUND (`expect`), from operator_act.describe() - the same module
+    # whose grammar read the sentence. What is typed is spoken only when short; see there.
+    if "action" in params and "target" in params:
+        try:
+            from tools import operator_act
+            plan = operator_act.describe(params)
+            if plan:
+                out["plan"] = plan
+        except Exception:
+            pass
     # OPERATOR'S {lines}: the size of the code operator_type_code will type, so the spoken
     # proposal can name it by shape - "about 12 lines" - and NEVER by content. Code read
     # aloud is the email-body mistake again, only longer; the card shows it in full.

@@ -605,14 +605,17 @@
     },
     {
       "id": "operator_browser",
-      "name": "Open a website, and play something on YouTube or Hotstar",
+      "name": "Open a website, search it and play the first match",
       "script": "operator_browser.py",
       "_comment": [
-        "Operator, phase 1.1: browser only. YouTube and Hotstar get search, first result",
-        "and playback, watched until the video's clock moves; any other site is OPENED and",
-        "nothing more, and both the proposal ({plan}) and the success line say so. {where}",
-        "and {plan} are derived blanks from operator_browser.describe(), the code the run",
-        "itself uses, so a guessed '.com' is on the card before Yes.",
+        "Operator, phase 1.1, rebuilt in 1.3 on operator_core's generic primitives: with a",
+        "query, ANY site is opened in a new tab, searched through its own search box, its",
+        "first confident match opened and, if it is a video, watched until its clock moves.",
+        "YouTube and Hotstar keep only a thin data layer (SITES in the script: home, advert",
+        "regions, what a result links to, muted previews). Without a query the site is",
+        "OPENED and nothing more, and both the proposal ({plan}) and the success line say",
+        "so. {where} and {plan} are derived blanks from operator_browser.describe(), the",
+        "code the run itself uses, so a guessed '.com' is on the card before Yes.",
         "Ctrl+H is registered system-wide only while the hand runs and stops it at the next",
         "safe point; that is why the proposal names it.",
         "timeout_s is 60 because real page loads are slow: a cold YouTube results page, a",
@@ -622,10 +625,11 @@
         "the step it was on, and never killed here and called a crash for being patient."
       ],
       "capabilities": [
-        "open a website and, for YouTube or Hotstar, search and play something the employer asked for",
+        "open a website and, given something to look for, search it and play or open the first match",
         "play a song or a video on YouTube - site youtube, query what to search for",
         "put a match, a show or a film on Hotstar (JioHotstar) - site hotstar, query its name",
-        "open any other site by its address and do nothing more on it - site is the domain or URL"
+        "search any other site for something and open the first match - site is the domain, query what to look for",
+        "open any site by its address and do nothing more on it - site is the domain or URL, no query"
       ],
       "triggers": [
         "\\byou\\s?tube\\b",
@@ -693,6 +697,75 @@
       "timeout_s": 35,
       "proposal": "I'll type the solution - about {lines} lines - into the editor at your cursor, sir. Press Ctrl+H any time to take it back. Shall I?",
       "step": "Type the solution, about {lines} lines, into the editor at your cursor."
+    },
+    {
+      "id": "operator_act",
+      "name": "Act on the locked page: click, type, choose, scroll to or hover over something",
+      "script": "operator_act.py",
+      "_comment": [
+        "Operator, phase 1.3: the ONE generic door. Acts on the tab the focus session has",
+        "LOCKED, on any site, through operator_core's finder (text, aria, label, role,",
+        "placeholder - with a confidence) and executor (real input first, every action read",
+        "back). No site is named in it. DOOR-BOUND to 'page': the parameters are the",
+        "employer's own sentence, parsed by operator_act.parse_request() in",
+        "server.act_asked(), never a model's tag.",
+        "The server LOOKS before the card (a dry find, nothing pressed) and puts the name it",
+        "found in 'expect'; the run refuses if the best match has changed by then. Nothing",
+        "found confidently means no card at all, and a sentence naming the nearest miss.",
+        "{plan} is a derived blank from operator_act.describe(); typed text is spoken only",
+        "when short, and password fields are refused by the hand.",
+        "timeout_s is 40: a find waits up to 6 s for a late-painting page, a click that",
+        "navigates waits for the new document (measured ~7 s on a slow line), and the",
+        "hand's own budget is 32 s so a slow page is reported as the step it was on."
+      ],
+      "doors": [
+        "page"
+      ],
+      "capabilities": [
+        "click a button or link, type into a field, choose from a dropdown, scroll to or hover over something on the page the employer has locked"
+      ],
+      "triggers": [
+        "^(?:please\\s+)?(?:click|tap)\\b",
+        "^(?:please\\s+)?(?:select|choose|pick)\\b.+\\b(?:from|in)\\s+the\\b",
+        "^(?:please\\s+)?scroll\\s+(?:down\\s+|up\\s+)?to\\b",
+        "^(?:please\\s+)?hover\\s+over\\b",
+        "\\b(?:pe|par)\\s+click\\s+kar"
+      ],
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "target",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "text",
+          "type": "text",
+          "required": false
+        },
+        {
+          "name": "submit",
+          "type": "boolean",
+          "required": false
+        },
+        {
+          "name": "expect",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "page_url",
+          "type": "text",
+          "required": false
+        }
+      ],
+      "timeout_s": 40,
+      "proposal": "On the locked page I'll {plan}, sir - press Ctrl+H any time to take it back. Shall I?",
+      "step": "On the locked page, {plan}."
     }
   ]
 }

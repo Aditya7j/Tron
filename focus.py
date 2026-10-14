@@ -697,6 +697,10 @@ PUBLIC_KEYS = {
     # invent an explanation - and the card turns it into prose. It is how "no silent
     # degradation" is kept on the screen as well as out loud.
     "lockedTab": str, "tabLockWhy": str,
+    # tabLocked: whether a tab lock is live, as a bare boolean. lockedTab cannot say it for
+    # a page with no title (it is "" either way), and Operator 1.3's hands must not mistake
+    # a locked, untitled page for no lock at all. It carries no title and no id.
+    "tabLocked": bool,
 }
 
 
@@ -3869,6 +3873,7 @@ def public_state(session):
             "lockedTab": (session.watch.title
                           if (session.watch is not None and session.watch.live) else ""),
             "tabLockWhy": session.tab_lock_why,
+            "tabLocked": bool(session.watch is not None and session.watch.live),
         }
         raw.update(eyes_raw)
 
@@ -4066,6 +4071,25 @@ def is_focus_request(text):
         live = (MANAGER._session is not None                   # noqa: SLF001
                 and MANAGER._session.state != "ended")         # noqa: SLF001
     return parse_command(text, live) is not None
+
+
+def locked_tab():
+    """{"ws", "title", "port"} of the tab the live session has locked, or None.
+
+    For the SERVER'S OWN PROCESS ONLY - Operator 1.3's dry look before a card and its read
+    of the problem text behind a coding answer. LockWatch's docstring explains why the
+    socket is held at all and why it never goes on the wire; this hands it to code in the
+    same process and nowhere else. Nothing here is serialised, logged or put in /focus,
+    and the hands (separate processes) still find the tab by its published title.
+    """
+    with MANAGER._lock:                                        # noqa: SLF001
+        session = MANAGER._session                             # noqa: SLF001
+        if session is None or session.state == "ended":
+            return None
+        watch = session.watch
+        if watch is None or not watch.live:
+            return None
+        return {"ws": watch.ws, "title": watch.title, "port": watch.port}
 
 
 def handle(payload):
