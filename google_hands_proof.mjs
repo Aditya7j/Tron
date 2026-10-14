@@ -80,6 +80,8 @@ const WANT_SCOPES = [
   'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/gmail.compose',
   'https://www.googleapis.com/auth/calendar.events',
+  // The Closer's phase 1, approved by the employer: it reads the replies to its own sends.
+  'https://www.googleapis.com/auth/gmail.readonly',
 ];
 
 let checks = 0; const bad = []; const skipped = [];
@@ -256,7 +258,7 @@ async function main() {
      'GET /google answers 200 as kind "google"',
      'without it the Command Panel has no state line at all: status ' + g0.status);
   ok(JSON.stringify(grant.scopes || []) === JSON.stringify(WANT_SCOPES),
-     'it offers exactly the three write-only scopes, in order',
+     'it offers exactly the four scopes, in order (gmail.readonly for the Closer)',
      'a wider scope never fails a test, it only permits - so this is equality, not '
      + 'containment. Got: ' + JSON.stringify(grant.scopes));
   ok(grant.port === 4731 && String(grant.redirectUri || '').includes('127.0.0.1:4731'),

@@ -683,6 +683,19 @@ def readings(params):
                 out["plan"] = plan
         except Exception:
             pass
+    # THE CLOSER'S {plan}s, from closer.py - the module that does the work. closer_start's says
+    # how many new leads will be written to and at what daily cap, counted from the book at the
+    # moment of asking; lock_meeting's names the business behind the H- number and the time the
+    # boss offered, or that they will be asked for one. Same furniture rules.
+    if "daily" in params or "lead" in params:
+        try:
+            import closer
+            plan = (closer.describe_start(params) if "daily" in params
+                    else closer.describe_meeting(params))
+            if plan:
+                out["plan"] = plan
+        except Exception:
+            pass
     # OPERATOR'S {lines}: the size of the code operator_type_code will type, so the spoken
     # proposal can name it by shape - "about 12 lines" - and NEVER by content. Code read
     # aloud is the email-body mistake again, only longer; the card shows it in full.

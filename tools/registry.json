@@ -839,6 +839,81 @@
       "timeout_s": 180,
       "proposal": "I'll hunt for {plan} in open listings and on their own websites, sir, and keep only those with public contact details. Nothing is sent to anyone. Shall I?",
       "step": "Hunt for {plan} and write them into the leads book."
+    },
+    {
+      "id": "closer_start",
+      "name": "Start the Closer: autonomous cold email, reply reading and answering",
+      "script": "closer_start.py",
+      "_comment": [
+        "The Closer, phase 1. Its ONE card: after a yes the daemon in closer.py emails each new",
+        "lead in leads.json that has an address (one per tick, at most `daily` a day), reads the",
+        "replies in the threads its own sends created, answers them and makes a code sample, a",
+        "one-page proposal or a mockup image when one is asked for - with no further approval.",
+        "Every send is in closer-log.json. 'stop the closer' halts it at once, with no card.",
+        "DOOR-BOUND to 'closer': `daily` comes from config.json's closer.dailyColdLimit (or 10)",
+        "via server.closer_asked(), never from a model, and the brain is never offered it.",
+        "It refuses to turn on without an offer sheet (config.json closer.offer) or without a",
+        "Google grant carrying gmail.readonly. {plan} is closer.describe_start()."
+      ],
+      "doors": [
+        "closer"
+      ],
+      "capabilities": [
+        "turn on the Closer, which emails new leads from the leads book and answers their replies on its own"
+      ],
+      "triggers": [
+        "^(?:please\\s+)?(?:(?:can|could|would)\\s+you\\s+)?(?:start|turn\\s+on|switch\\s+on|resume|begin|run|chalu\\s+karo|shuru\\s+karo)\\s+(?:the\\s+)?closer\\b",
+        "^closer\\s+(?:chalu|shuru|start|on)\\b"
+      ],
+      "params": [
+        {
+          "name": "daily",
+          "type": "integer",
+          "required": true
+        }
+      ],
+      "timeout_s": 30,
+      "proposal": "I'll start the Closer and {plan}, sir. Nothing waits for your yes after this - every send goes in the log, and \"stop the closer\" halts it. Shall I?",
+      "step": "Start the Closer."
+    },
+    {
+      "id": "lock_meeting",
+      "name": "Ask one lead for a meeting, on the employer's word",
+      "script": "lock_meeting.py",
+      "_comment": [
+        "The Closer's only send that is never autonomous: 'lock a meeting with <business>'.",
+        "Which lead deserves a meeting is the employer's call, so this exists only as a card.",
+        "DOOR-BOUND to 'closer': `lead` is resolved from the employer's sentence by",
+        "closer.find_lead() and `when` is his own words or empty (the business is then asked",
+        "which times suit them - no time is ever made up). {plan} is closer.describe_meeting().",
+        "No calendar is touched this phase; the lead becomes meeting-proposed, and the daemon",
+        "marks it meeting-confirmed when the business answers with a time."
+      ],
+      "doors": [
+        "closer"
+      ],
+      "capabilities": [
+        "email a lead the Closer is talking to and ask for a meeting, when the employer says so"
+      ],
+      "triggers": [
+        "^(?:please\\s+)?(?:(?:can|could|would)\\s+you\\s+)?(?:lock|book|fix|set\\s+up|schedule|arrange|line\\s+up)\\s+(?:in\\s+)?(?:a\\s+|the\\s+)?(?:meeting|call)\\s+with\\s+\\S",
+        "\\s(?:ke\\s+saath|ke\\s+sath|se)\\s+(?:.+\\s+)?(?:meeting|call)\\s+(?:lock|fix|set|book|schedule)\\s*(?:karo|kar\\s+do|kardo)\\b"
+      ],
+      "params": [
+        {
+          "name": "lead",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "when",
+          "type": "string",
+          "required": false
+        }
+      ],
+      "timeout_s": 40,
+      "proposal": "I'll {plan}, sir. Shall I?",
+      "step": "Ask a lead for a meeting."
     }
   ]
 }

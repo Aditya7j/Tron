@@ -120,6 +120,13 @@ import confidence
 # on the ledger door; it never writes a row itself. See answer_ledger().
 import ledger
 
+# THE CLOSER. A daemon like the Scholar - its own thread, its own lock, none of this file's - that
+# writes to the Hunter's leads, reads their replies and answers them, once the boss has said
+# "start the closer" on a card. This file starts it, lends it call_groq (never the local
+# fallback: a business is not written to by a 1.7B model), and routes the boss's four sentences
+# to it - see closer_asked(). Everything it sends is in closer-log.json.
+import closer
+
 # The live lookup. Query in, at most three snippets out, and it NEVER raises - a dead
 # network, a captcha or a redesigned results page all come back as an empty list, which
 # is the one case this file has to handle anyway. No key, no pip, no SDK.
@@ -7704,6 +7711,75 @@ def act_asked(question):
 # a good dentist in Pune") and things that are not businesses (flights, jobs, flats).
 HUNT_GUEST_LINE = ("Lead hunting is the household's business, so I will leave that one for "
                    "the boss to ask.")
+CLOSER_GUEST_LINE = ("The leads and what they have written are the boss's business, so I will "
+                     "leave that one for him to ask.")
+
+
+# THE CLOSER'S FOUR SENTENCES, read by closer.parse_request() - never by a model:
+#   "today's leads" / "aaj ka update do"     the report, from the book and the log; no card
+#   "stop the closer"                         the panic key: off at once, no card
+#   "start the closer"                        closer_start's card, with the daily cap from
+#                                             config.json's closer.dailyColdLimit (or 10)
+#   "lock a meeting with <business> [when]"   lock_meeting's card, the business found in the
+#                                             book by closer.find_lead()
+# The two cards are gated on their registry entries' own triggers, as hunt_asked() is.
+def closer_asked(question):
+    """closer.parse_request()'s {action, ...} for one of the four sentences above, or None."""
+    raw = str(question or "").strip()
+    for form in list(dict.fromkeys(f for f in (raw, _strip_address(raw)) if f)):
+        asked = closer.parse_request(form)
+        if asked is None:
+            continue
+        gate = {"start": "closer_start", "meeting": "lock_meeting"}.get(asked["action"])
+        if gate:
+            tool = hands.find(gate)
+            if tool is None or not any(rx.search(form) for rx in tool["triggers"]):
+                continue
+        return asked
+    return None
+
+
+def answer_closer(question, session, asked, guest=False):
+    """(status, payload) for the "closer" route. The report and the stop are answered here; the
+    start and the meeting become cards on the closer door, and only a yes runs them."""
+    base = {"nodes": [], "route": "closer", "closerAction": asked["action"]}
+
+    def said(line, **more):
+        record_turn(session, question, line)
+        return 200, dict(base, kind="chat", answer=line, **more)
+    if guest:
+        sys.stderr.write("  closer: a guest asked (%s); nothing read, nothing proposed\n"
+                         % asked["action"])
+        return said(CLOSER_GUEST_LINE, refused="guest")
+    if asked["action"] == "report":
+        sys.stderr.write("  closer: the report, from the book and the log\n")
+        line = closer.report()
+        record_turn(session, question, line)
+        return 200, dict(base, kind="compose", answer=line)
+    if asked["action"] == "stop":
+        was = bool(closer.read_state().get("on"))
+        closer.switch(False, "stop")
+        sys.stderr.write("  closer: switched off (was %s)\n" % ("on" if was else "off"))
+        return said("The Closer is off, sir - nothing more goes out until you start it again."
+                    if was else "The Closer was already off, sir.")
+    if asked["action"] == "start":
+        block = (load_config()[0] or {}).get("closer") or {}
+        daily = block.get("dailyColdLimit", closer.DEFAULT_DAILY)
+        if type(daily) is not int or not 1 <= daily <= closer.HARD_DAILY_MAX:
+            daily = closer.DEFAULT_DAILY
+        status, payload = hands.propose("closer_start", {"daily": daily}, door="closer")
+        payload.update(base)
+        return status, payload
+    lead, why = closer.find_lead(asked["who"])
+    if lead is None:
+        sys.stderr.write("  closer: meeting refused before a card - %s\n" % why[:90])
+        return said("I cannot ask for that meeting, sir: %s." % why, refused="meeting")
+    params = {"lead": lead["id"]}
+    if asked.get("when"):
+        params["when"] = asked["when"]
+    status, payload = hands.propose("lock_meeting", params, door="closer")
+    payload.update(base)
+    return status, payload
 
 
 def hunt_asked(question):
@@ -8595,6 +8671,8 @@ def call_gemini(cfg, messages, image=None, model=None, status=None):
 # costume would have the Poison Guard answering "certainly, sir" instead of ALLOW.
 scholar.configure(chat=call_groq, whisper=call_groq_whisper, ready=groq_ready,
                   config=lambda: load_config()[0])
+closer.configure(chat=lambda messages: call_groq(load_config()[0], messages),
+                 config=lambda: load_config()[0])
 
 
 def wear_persona(cfg, messages):
@@ -10894,6 +10972,12 @@ def answer_question(question, session, guest=False):
     # figure in them is the boss's own, and the brain is never the one to fill it in.
     if qclass == "ledger":
         return answer_ledger(question, session, qclass, guest=guest)
+    # ---- THE CLOSER, PHASE 1: the report, the switch and the meeting. Before the Hunter's door,
+    # because "lock a meeting with ..." is no hunt, and before the notes, because the report is
+    # read from the book and the log and from nothing a model remembers. See closer_asked().
+    closing = closer_asked(question)
+    if closing is not None:
+        return answer_closer(question, session, closing, guest=guest)
     # ---- THE HUNTER, PHASE 1: "find me 20 dentists in Pune". A protected route for the same
     # measured reason as Operator's below - before the notes are scored - and door-bound, so the
     # card's what/where/count are the boss's words, never a model's. A guest is offered nothing.
@@ -14098,6 +14182,15 @@ def main():
               % (", ".join(t["name"] for t in scholar.read_syllabus()["topics"]) or "no topics",
                  "yt-dlp, ffmpeg, ffprobe present" if not missing
                  else "MISSING %s - audio study will refuse and say so" % ", ".join(missing)))
+
+    # ---- AND THE CLOSER, the same way. Its thread runs always and acts only while
+    # closer-state.json says on - which only the closer_start card can make it say.
+    if closer.MANAGER.start():
+        cs, problems = closer.settings()
+        print("  closer            :  %s · %s" % (
+            "ON - writing to leads on its own" if closer.read_state().get("on")
+            else "off until \"start the closer\"",
+            "offer sheet filled in" if not problems else "NO OFFER SHEET (config.json closer)"))
 
     # ---- AND THE PAPER DESK, the same way: its own thread, its own lock, its own ledger. It
     # is handed the searxng URL and nothing else from config.json, so its news reads can only

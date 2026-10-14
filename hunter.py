@@ -46,9 +46,9 @@ A LEAD
     via         the backends behind that: openstreetmap, wikidata, website
     ref         the listing's own id - "osm:node/123", "wikidata:Q123"
     foundAt     the date it was first found (YYYY-MM-DD); lastSeen the last hunt that found it
-    status      new / contacted / replied / closed / dead. THE HUNTER ONLY EVER WRITES "new":
-                add_lead() takes no status at all, and a merge never touches one. Changing it
-                is the Closer's, later.
+    status      one of STATUSES. THE HUNTER ONLY EVER WRITES "new": add_lead() takes no status
+                at all, and a merge never touches one. Changing it is the Closer's, through
+                update_lead() - see closer.py, which also keeps its own fields under "closer".
 
 NEVER INVENTED. A lead with no email, no phone and no contact page is SKIPPED and counted, never
 guessed at. An address hidden behind Cloudflare's email protection is left hidden: that is the
@@ -81,7 +81,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # A test seam, like ledger.py's: test_hunter.py points a tool script at a temporary book.
 LEADS_PATH = os.environ.get("TRONE_LEADS_PATH") or os.path.join(HERE, "leads.json")
 
-STATUSES = ("new", "contacted", "replied", "closed", "dead")
+# The first five are the Hunter's own vocabulary. The rest are the Closer's (closer.py), written
+# only through update_lead(): what the business's last word was, and where a meeting stands.
+# "replied" is a reply the Closer read and could not place - it answers nothing and waits.
+STATUSES = ("new", "contacted", "replied", "closed", "dead",
+            "not-interested", "questions", "wants-demo", "wants-price", "wants-meeting",
+            "meeting-proposed", "meeting-confirmed", "bounced", "send-failed")
 SOURCES = ("listings", "web", "listings+web")
 DEFAULT_COUNT, MAX_COUNT = 10, 25
 NAME_MAX, FIELD_MAX = 160, 300
@@ -109,6 +114,49 @@ CHALLENGE_MARKERS = ("cf-chl", "just a moment...", "captcha", "attention require
                      "verify you are human", "unusual traffic", "access denied")
 
 _lock = threading.Lock()
+
+# THE BOOK'S OTHER LOCK, BETWEEN PROCESSES. _lock above guards threads in one process, and the
+# book now has writers in two: hunt_leads.py runs as a subprocess while the Closer's daemon
+# writes statuses from inside the server. Both read the whole book and write the whole book, so
+# without this a hunt that read before the Closer marked a lead "contacted" writes it back as
+# "new" - and the next tick emails that business a second time. A lock FILE, created exclusively,
+# is the stdlib's one portable cross-process mutex; a holder that died leaves it behind, so one
+# older than LOCK_STALE_S is taken as abandoned.
+LOCK_WAIT_S, LOCK_STALE_S = 15.0, 60.0
+
+
+class file_lock:
+    """`with file_lock(path):` - held by one process at a time, through `path + ".lock"`."""
+
+    def __init__(self, path):
+        self.path = str(path) + ".lock"
+
+    def __enter__(self):
+        deadline = time.monotonic() + LOCK_WAIT_S
+        while True:
+            try:
+                fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.write(fd, str(os.getpid()).encode("ascii"))
+                os.close(fd)
+                return self
+            except FileExistsError:
+                try:
+                    if time.time() - os.path.getmtime(self.path) > LOCK_STALE_S:
+                        os.remove(self.path)
+                        continue
+                except OSError:
+                    continue
+                if time.monotonic() > deadline:
+                    raise OSError("the lock %s is held and was not released"
+                                  % os.path.basename(self.path))
+                time.sleep(0.05)
+
+    def __exit__(self, *exc):
+        try:
+            os.remove(self.path)
+        except OSError:
+            pass
+        return False
 
 
 # ------------------------------------------------------------------------------ the sentence
@@ -372,7 +420,7 @@ def add_lead(found, niche, city, now=None, path=None):
             "phone": _clip(found.get("phone"), 40), "phoneFrom": _clip(found.get("phoneFrom")),
             "contactPage": _clip(found.get("contactPage")), "ref": _clip(found.get("ref"), 80)}
     via = sorted(set(found.get("via") or []))
-    with _lock:
+    with _lock, file_lock(path or LEADS_PATH):
         rows = _raw_rows(path)
         mine = keys(lead)
         hit = next((r for r in rows if _well_formed(r) and keys(r) & mine), None)
@@ -401,6 +449,29 @@ def known(found, city, path=None):
     mine = keys(probe)
     leads, _bad = read_book(path)
     return next((r for r in leads if keys(r) & mine), None)
+
+
+def update_lead(lead_id, change, path=None):
+    """(row, "") after `change(row)` has edited one lead in place under both locks - or (None,
+    why). THE CLOSER'S ONLY WAY INTO THE BOOK. The row is re-read inside the lock, so a change is
+    never applied to a copy a hunt has since rewritten; a change that leaves the row ill-formed
+    (an unknown status, a lost name) is refused and nothing is written. Every other row - an
+    unreadable one included - goes back exactly as it was read."""
+    with _lock, file_lock(path or LEADS_PATH):
+        rows = _raw_rows(path)
+        hit = next((r for r in rows if _well_formed(r) and r["id"] == lead_id), None)
+        if hit is None:
+            return None, "there is no lead %s in the book" % lead_id
+        before = json.dumps(hit, sort_keys=True)
+        trial = json.loads(before)
+        change(trial)
+        if not _well_formed(trial) or trial["id"] != lead_id:
+            return None, "that change would leave %s unreadable, so nothing was written" % lead_id
+        if json.dumps(trial, sort_keys=True) != before:
+            hit.clear()
+            hit.update(trial)
+            _write_book(rows, path)
+        return dict(hit), ""
 
 
 def summary(path=None):

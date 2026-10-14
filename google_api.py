@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """google_api.py - the one road to Google, and the only place a token is ever read.
 
-THE SHAPE OF THE THING. Two files in secrets/, three scopes, one loopback port, and a
+THE SHAPE OF THE THING. Two files in secrets/, four scopes, one loopback port, and a
 single function that puts an authenticated request on the wire. Everything else in this
 repository that wants Google goes through here, so there is exactly one place to audit
 when the question is "what can this machine do to my account".
@@ -39,6 +39,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import secrets as secretslib
 import threading
 import time
@@ -58,19 +59,27 @@ REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke"
 CALENDAR_BASE = "https://www.googleapis.com/calendar/v3"
 GMAIL_BASE = "https://gmail.googleapis.com/gmail/v1"
 
-# THREE SCOPES AND NOT ONE CHARACTER WIDER. gmail.send can send and can do nothing else -
-# it cannot read a single message in the mailbox. gmail.compose is here only because the
-# PROOF must exercise auth and serialization without a letter leaving the building, and
-# drafts.create is the narrowest method that does that; it also happens to be what lets
-# users.getProfile tell the panel which account is connected. calendar.events can write
-# events and cannot read the rest of the calendar's settings. Notably absent:
-# gmail.readonly, gmail.modify, https://mail.google.com/ (which is total control of the
-# mailbox), and plain "calendar". A wider scope is one consent screen away and would never
-# be noticed; that is exactly why the list is written down here and asserted in preflight.
+# FOUR SCOPES AND NOT ONE CHARACTER WIDER. gmail.send can send and can do nothing else.
+# gmail.compose is here only because the PROOF must exercise auth and serialization without a
+# letter leaving the building, and drafts.create is the narrowest method that does that; it
+# also happens to be what lets users.getProfile tell the panel which account is connected.
+# calendar.events can write events and cannot read the rest of the calendar's settings.
+#
+# gmail.readonly IS A DELIBERATE WIDENING, MADE FOR THE CLOSER (closer.py) AND APPROVED BY THE
+# EMPLOYER FOR ITS PHASE 1. Until then this grant could not read a single message, by design.
+# The Closer must read the replies to the cold emails it sends, so the grant can now READ THE
+# WHOLE MAILBOX - Gmail has no scope narrower than that which can read a thread. What this
+# codebase does with it is narrower than what Google allows: get_thread() below is the only
+# reader, and the only thread ids closer.py ever passes it are the ones its own sends returned.
+# It still cannot change, label, delete or archive anything. Notably still absent:
+# gmail.modify, https://mail.google.com/ (total control of the mailbox) and plain "calendar".
+# A wider scope is one consent screen away and would never be noticed; that is exactly why the
+# list is written down here and asserted in preflight by equality.
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/gmail.compose",
     "https://www.googleapis.com/auth/calendar.events",
+    "https://www.googleapis.com/auth/gmail.readonly",
 ]
 
 # ITS OWN PORT, AND NOT THE SERVER'S. 4700 is the house; 9222-9254 are the harnesses'
@@ -791,11 +800,40 @@ def b64url(raw_bytes):
     return base64.urlsafe_b64encode(raw_bytes).decode("ascii").rstrip("=")
 
 
-def send_message(raw_bytes):
+def send_message(raw_bytes, thread_id=None):
+    """`thread_id` puts the message into an existing conversation - the Closer's replies. Gmail
+    also wants the In-Reply-To/References headers and a matching subject, which the caller's
+    raw bytes carry; the id alone is not enough for the recipient's client to thread it."""
     url = GMAIL_BASE + "/users/me/messages/send"
-    status_code, parsed, err = call("POST", url, {"raw": b64url(raw_bytes)})
+    body = {"raw": b64url(raw_bytes)}
+    if thread_id:
+        body["threadId"] = str(thread_id)
+    status_code, parsed, err = call("POST", url, body)
     if err or status_code >= 400:
         return None, err or "Gmail refused it (HTTP %d)" % status_code
+    return parsed, ""
+
+
+def has_scope(name):
+    """True when the GRANTED token carries the scope - "gmail.readonly" - not merely when SCOPES
+    asks for it. A token from before a widening keeps its old scopes until it is re-consented."""
+    granted = str((token() or {}).get("scope") or "").split()
+    return any(s.rsplit("/", 1)[-1] == name for s in granted)
+
+
+def get_thread(thread_id):
+    """(thread, "") or (None, why): one conversation, every message in full. The ONLY reader of
+    the mailbox in this codebase - see the note above SCOPES - and it takes a thread id, never a
+    search, so what it can be pointed at is what the Closer's own sends returned."""
+    if not re.fullmatch(r"[0-9a-fA-F]{6,32}", str(thread_id or "")):
+        return None, "that is not a Gmail thread id"
+    url = GMAIL_BASE + "/users/me/threads/" + urllib.parse.quote(str(thread_id)) + "?format=full"
+    status_code, parsed, err = call("GET", url)
+    if err or status_code >= 400:
+        if status_code == 403:
+            return None, ("Gmail refused to let me read it (403) - the connection may predate "
+                          "the read permission and want reconnecting")
+        return None, err or "Gmail would not give me that conversation (HTTP %d)" % status_code
     return parsed, ""
 
 

@@ -16,7 +16,6 @@ import inspect
 import json
 import os
 import pathlib
-import subprocess
 import sys
 import tempfile
 
@@ -28,6 +27,7 @@ sys.path.insert(0, str(HERE))
 
 import hands                                                   # noqa: E402
 import hunter                                                  # noqa: E402
+from tools import _proc                                        # noqa: E402
 
 REAL_TOOLS = hands.LEDGER_PATH
 hands.LEDGER_PATH = pathlib.Path(TMP) / "tools-ledger.json"
@@ -207,8 +207,8 @@ for card, label in (({"what": "dentists", "where": "Pune", "count": 0}, "count 0
                     ({"what": "", "where": "Pune", "count": 5}, "no what"),
                     ("not json", "not JSON")):
     body = card if isinstance(card, str) else json.dumps(card)
-    done = subprocess.run([sys.executable, str(HERE / "tools" / "hunt_leads.py")], input=body,
-                          capture_output=True, text=True, encoding="utf-8", timeout=30, env=env)
+    done = _proc.run([sys.executable, str(HERE / "tools" / "hunt_leads.py")], input=body,
+                     capture_output=True, text=True, encoding="utf-8", timeout=30, env=env)
     check("refused, exit 1, nothing looked for: %s" % label,
           (done.returncode, "nothing was looked for" in done.stdout), (1, True))
 
