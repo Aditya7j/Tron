@@ -2512,6 +2512,55 @@ tool stops being counted rather than leaving a name lying about on disk. The tra
 what happened, never what it was given: `tool: proposal send_email (3 parameters
 validated) awaiting a word, 120s`.
 
+### The Hunter
+
+"Find me 20 dentists in Pune", "find SaaS startups in Bangalore working on fintech", "Pune
+mein 15 dentists dhundo". The sentence is read by `hunter.parse_request()` in
+`server.hunt_asked()`, which is gated on the registry entry's own triggers. `hunt_leads` is
+door-bound to `hunt`, so what, where and count are your words and never a model's. The card
+says the plan (`{plan}` from `hunter.describe()`, with the cap of 25 said aloud if you asked
+for more) and that nothing is sent to anyone. A yes runs `tools/hunt_leads.py`. A voice the
+Doorman knows is not yours is offered nothing.
+
+**Where it looks.** Every description goes to both sources, and whichever knows the kind of
+thing answers:
+- **Listings**: OpenStreetMap through Nominatim (places with a door), and Wikidata
+  (companies by headquarters and industry). Both are open data whose usage policies allow
+  an identified, paced client.
+- **Web**: each business's own site, robots.txt first, home page and contact page only,
+  read for an email or phone it published plus the contact page as the form link.
+
+What is *not* a source, as measured on 2026-10-14:
+- **Google Maps and Google Search.** Their terms forbid automated collection. The
+  legitimate Maps door is the Places API, which needs a key with billing.
+- **DuckDuckGo.** It answers an honest client with HTTP 202 and a challenge, and
+  `search.py` only gets past that by presenting a Chrome User-Agent.
+- **The configured SearXNG.** Its TLS certificate has expired.
+
+Every request says `TroneHunter/1.0`. Nominatim is held to one request per 1.2 s and any one
+site to one per second. A source that refuses (403/429/503/a challenge page) is not asked
+again that run, and the line says so.
+
+**The book** is `leads.json`, written whole through a `.tmp` like `ledger.json` (this house
+has no SQLite and no CSV, so neither was added). It is gitignored, because it is other
+businesses' contact details. A row holds:
+- name, category, niche, location and city
+- website, email, phone and contactPage, with **emailFrom and phoneFrom naming the page or
+  OSM object each was read from**
+- source (`listings`, `web` or `listings+web`) and `via`
+- foundAt, lastSeen, and status
+
+The Hunter writes status `new` and nothing else; `add_lead()` has no status argument. One
+business is one row: a shared website host, phone (last ten digits), email, listing id, or
+name in the same city makes two finds the same business. A re-find fills only blanks and
+never touches a status the Closer set. A lead with no email, phone or contact page is
+skipped and counted, never guessed at, and an address a site hid behind Cloudflare's email
+protection is left hidden.
+
+    python hunter.py                    what the book holds
+    python hunter.py list 20            the last twenty rows
+    python test_hunter.py               the pure parts (68 checks)
+
 ### Growing a hand
 
 Every repetitive digital task you own is a ten-line script waiting for a registry entry.

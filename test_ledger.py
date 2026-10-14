@@ -528,10 +528,12 @@ for name, fn in (("add_ledger_entry", "ledger.add_entry"),
     text = io.open(os.path.join(HERE, "tools", name + ".py"), encoding="utf-8").read()
     ok(fn + "(" in text, "%s.py is the one that calls %s()" % (name, fn))
 reg = {t["id"]: t for t in hands.registry(force=True)}
+# Other hands MAY be door-bound now - Operator's "editor" and "page", the Hunter's "hunt" - but
+# none of them through the ledger's door: that door opens on the ledger's two hands and no other.
 ok(all(reg[i]["doors"] == ("ledger",) and not reg[i]["triggers"]
        for i in ("add_ledger_entry", "void_ledger_entry"))
-   and all(not t["doors"] for i, t in reg.items() if "ledger" not in i),
-   "both hands are door-bound with no trigger; every other hand keeps every door")
+   and all("ledger" not in t["doors"] for i, t in reg.items() if "ledger" not in i),
+   "both hands are door-bound with no trigger; no other hand opens on the ledger's door")
 ignore = io.open(os.path.join(HERE, ".gitignore"), encoding="utf-8").read().split()
 ok("ledger.json" in ignore and "proofs/" in ignore, "ledger.json and proofs/ are gitignored")
 

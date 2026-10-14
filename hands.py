@@ -672,6 +672,17 @@ def readings(params):
                 out["plan"] = plan
         except Exception:
             pass
+    # THE HUNTER'S {plan}: "20 dentists in Pune", from hunter.describe() - the module whose
+    # grammar read the sentence and whose report() the run's line is made of - and the cap said
+    # out loud when the boss asked for more than one hunt will chase. Same furniture rules.
+    if "what" in params and "where" in params:
+        try:
+            import hunter
+            plan = hunter.describe(params)
+            if plan:
+                out["plan"] = plan
+        except Exception:
+            pass
     # OPERATOR'S {lines}: the size of the code operator_type_code will type, so the spoken
     # proposal can name it by shape - "about 12 lines" - and NEVER by content. Code read
     # aloud is the email-body mistake again, only longer; the card shows it in full.
