@@ -425,7 +425,7 @@ def main():
             line = search_and_play(run, tab, url, query, dict(layer, generic=True))
         else:
             line = open_only(run, tab, url)
-        run.check()               # a Ctrl+H on the last tick is still a Ctrl+H
+        run.check()               # a Ctrl+M on the last tick is still a Ctrl+M
         core.say(line)
         return 0
     except core.Aborted as stop:

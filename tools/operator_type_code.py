@@ -70,10 +70,10 @@ dispatchKeyEvent are the fallbacks, in the order phase 1.2 named them.
   never retry, and say which line. A retry after a partial landing is how a solution
   ends up in the editor twice.
 
-THE PANIC KEY is phase 1.1's: Ctrl+H, registered system-wide only while this runs,
+THE PANIC KEY is phase 1.1's: Ctrl+M, registered system-wide only while this runs,
 checked before every line, unregistered in a finally. Lines are paced LINE_PAUSE_S apart
 so typing is visible and stoppable - a fifty-line paste in one event would finish before
-a hand could reach the key. If Ctrl+H cannot be armed on Windows the hand refuses to
+a hand could reach the key. If Ctrl+M cannot be armed on Windows the hand refuses to
 start. On abort it reports how many lines were in the editor, as read back.
 
 Standard library only. The CDP client, the panic key, the run machinery and the
@@ -217,7 +217,7 @@ def editor(tab, verb, arg=None):
 def landed(tab, want, unchanged, wait=LAND_WAIT_S):
     """The editor's text once the last line has had time to arrive: as soon as it equals
     `want`, or has changed from `unchanged` and read the same twice, or at the deadline.
-    A plain sleep, not run.nap(): Ctrl+H is honoured between lines, and an abort taken in
+    A plain sleep, not run.nap(): Ctrl+M is honoured between lines, and an abort taken in
     here could leave a late line in the editor that the count did not include."""
     end = time.monotonic() + wait
     last = None
@@ -374,7 +374,7 @@ def main():
     try:
         if not panic.arm():
             if sys.platform == "win32":
-                say("I could not arm Ctrl+H, sir (%s), so I have not touched the page."
+                say("I could not arm Ctrl+M, sir (%s), so I have not touched the page."
                     % panic.why)
                 return 1
             sys.stderr.write("operator_type_code: NO PANIC KEY - %s\n" % panic.why)

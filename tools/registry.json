@@ -616,7 +616,7 @@
         "OPENED and nothing more, and both the proposal ({plan}) and the success line say",
         "so. {where} and {plan} are derived blanks from operator_browser.describe(), the",
         "code the run itself uses, so a guessed '.com' is on the card before Yes.",
-        "Ctrl+H is registered system-wide only while the hand runs and stops it at the next",
+        "Ctrl+M is registered system-wide only while the hand runs and stops it at the next",
         "safe point; that is why the proposal names it.",
         "timeout_s is 60 because real page loads are slow: a cold YouTube results page, a",
         "watch page and the first frame (often an advert's) measured 11.7 s on 2026-10-14 on",
@@ -650,7 +650,7 @@
         }
       ],
       "timeout_s": 60,
-      "proposal": "I'll open {where} and {plan}, sir - press Ctrl+H any time to take it back. Shall I?",
+      "proposal": "I'll open {where} and {plan}, sir - press Ctrl+M any time to take it back. Shall I?",
       "step": "Open {where} and {plan}."
     },
     {
@@ -695,7 +695,7 @@
         }
       ],
       "timeout_s": 35,
-      "proposal": "I'll type the solution - about {lines} lines - into the editor at your cursor, sir. Press Ctrl+H any time to take it back. Shall I?",
+      "proposal": "I'll type the solution - about {lines} lines - into the editor at your cursor, sir. Press Ctrl+M any time to take it back. Shall I?",
       "step": "Type the solution, about {lines} lines, into the editor at your cursor."
     },
     {
@@ -764,7 +764,7 @@
         }
       ],
       "timeout_s": 40,
-      "proposal": "On the locked page I'll {plan}, sir - press Ctrl+H any time to take it back. Shall I?",
+      "proposal": "On the locked page I'll {plan}, sir - press Ctrl+M any time to take it back. Shall I?",
       "step": "On the locked page, {plan}."
     }
   ]

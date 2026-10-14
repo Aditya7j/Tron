@@ -2,7 +2,7 @@
 """operator_core.py - Operator, phase 1.3: the ONE generic door's machinery. Not a hand.
 
 Phases 1.1 and 1.2 each copied the same four things into their own file - the CDP client,
-the Ctrl+H key, the run clock and (1.2) the locked-tab join - and then wrote a bespoke hand
+the Ctrl+M key, the run clock and (1.2) the locked-tab join - and then wrote a bespoke hand
 on top for one site's DOM. This file is those four things ONCE, plus the three that make a
 bespoke hand unnecessary:
 
@@ -53,7 +53,7 @@ SERVER = "http://127.0.0.1:4700"  # the focus session lives in the server's proc
 PORTS = (9222, 9223, 9224)        # focus.py's CDP_PORTS, in its order
 HTTP_TIMEOUT_S = 1.5
 CALL_TIMEOUT_S = 10.0             # one CDP request; Page.navigate is the slow one
-POLL_S = 0.25                     # every wait ticks this often, and checks Ctrl+H each tick
+POLL_S = 0.25                     # every wait ticks this often, and checks Ctrl+M each tick
 LOAD_TIMEOUT_S = 25.0             # a real page on a real connection, not a fixture
 FIND_TIMEOUT_S = 15.0             # an SPA paints its results some time after "complete"
 EFFECT_WAIT_S = 2.0               # how long an action's consequence is looked for
@@ -134,7 +134,7 @@ class Failed(Exception):
 
 
 class Aborted(Exception):
-    """Ctrl+H. Carries the step that was in progress."""
+    """Ctrl+M. Carries the step that was in progress."""
 
 
 def failure_line(exc):
@@ -148,24 +148,29 @@ def failure_line(exc):
 
 
 # =============================================================================
-#  THE PANIC KEY - Ctrl+H, armed for the length of one run and not a moment longer
+#  THE PANIC KEY - Ctrl+M, armed for the length of one run and not a moment longer
 # =============================================================================
 
 MOD_CONTROL = 0x0002
 MOD_NOREPEAT = 0x4000
-VK_H = 0x48
+VK_M = 0x4D
 WM_HOTKEY = 0x0312
 WM_QUIT = 0x0012
 
 
 class PanicKey:
-    """Ctrl+H as a system-wide hotkey, on a background thread with its own message loop.
+    """Ctrl+M as a system-wide hotkey, on a background thread with its own message loop.
 
     RegisterHotKey binds the key to the CALLING THREAD's message queue, and only that
     thread may unregister it - so one thread registers, pumps GetMessage, and unregisters
     in its own finally. disarm() posts WM_QUIT, the only message that makes GetMessage
-    return 0. While registered, Chrome's own Ctrl+H (History) is suppressed; it comes back
-    the instant UnregisterHotKey runs.
+    return 0.
+
+    WAS Ctrl+H, MOVED TO Ctrl+M. Measured live: Chrome's own Ctrl+H (History) is only
+    SUPPOSED to be suppressed while RegisterHotKey holds it, and on at least one run it
+    was not - History opened anyway, mid-action, which is the one failure this key exists
+    to prevent. Ctrl+M carries no Chrome shortcut of its own, so there is nothing for it
+    to race against and nothing for UnregisterHotKey to hand back when this disarms.
 
     OFF WINDOWS THERE IS NO PANIC KEY, AND THIS SAYS SO RATHER THAN CRASHING. `armed`
     stays False and `why` names the reason; every hand refuses to start on Windows without
@@ -183,22 +188,22 @@ class PanicKey:
 
     def arm(self):
         if sys.platform != "win32":
-            self.why = "not Windows: RegisterHotKey does not exist here, so no Ctrl+H"
+            self.why = "not Windows: RegisterHotKey does not exist here, so no Ctrl+M"
             return False
         try:
             import ctypes
             from ctypes import wintypes
         except Exception as exc:                               # noqa: BLE001
-            self.why = "ctypes is unavailable (%s), so no Ctrl+H" % type(exc).__name__
+            self.why = "ctypes is unavailable (%s), so no Ctrl+M" % type(exc).__name__
             return False
 
         def pump():
             user32 = ctypes.WinDLL("user32", use_last_error=True)
             kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
             self._tid = kernel32.GetCurrentThreadId()
-            ok = user32.RegisterHotKey(None, self.hotkey_id, MOD_CONTROL | MOD_NOREPEAT, VK_H)
+            ok = user32.RegisterHotKey(None, self.hotkey_id, MOD_CONTROL | MOD_NOREPEAT, VK_M)
             if not ok:
-                self.why = "RegisterHotKey refused Ctrl+H (error %d)" % ctypes.get_last_error()
+                self.why = "RegisterHotKey refused Ctrl+M (error %d)" % ctypes.get_last_error()
                 self._ready.set()
                 return
             self.armed = True
@@ -212,7 +217,7 @@ class PanicKey:
                 user32.UnregisterHotKey(None, self.hotkey_id)
                 self.armed = False
 
-        self._thread = threading.Thread(target=pump, name="ctrl-h", daemon=True)
+        self._thread = threading.Thread(target=pump, name="ctrl-m", daemon=True)
         self._thread.start()
         self._ready.wait(3.0)
         return self.armed
@@ -236,7 +241,7 @@ def arm_or_refuse(panic, who):
     if panic.arm():
         return None
     if sys.platform == "win32":
-        return ("I could not arm Ctrl+H, sir (%s), so I have not touched the browser."
+        return ("I could not arm Ctrl+M, sir (%s), so I have not touched the browser."
                 % panic.why)
     note(who, "NO PANIC KEY - %s" % panic.why)
     return None
@@ -247,7 +252,7 @@ def arm_or_refuse(panic, who):
 # =============================================================================
 
 class Run:
-    """What every primitive consults before it acts: has Ctrl+H been pressed, and is
+    """What every primitive consults before it acts: has Ctrl+M been pressed, and is
     there time left. `step` is a gerund phrase ("searching for x") so the abort line can
     say what was in progress in plain English. `panic` may be None for a read-only use
     (the server's dry find), which has no brake because it touches nothing."""
@@ -268,7 +273,7 @@ class Run:
             raise Failed("I ran out of time while %s, sir, so I stopped there" % self.step)
 
     def nap(self, seconds=POLL_S):
-        """A wait that is also a brake check, so Ctrl+H never waits for a poll to end."""
+        """A wait that is also a brake check, so Ctrl+M never waits for a poll to end."""
         end = time.monotonic() + seconds
         while True:
             self.check()

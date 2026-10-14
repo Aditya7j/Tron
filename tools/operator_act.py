@@ -31,7 +31,7 @@ run looks again, and if the best match is no longer that name - the page changed
 the card and the Yes - it refuses rather than pressing whatever is there now.
 
 THE DISCIPLINE IS 1.1's AND 1.2's, UNCHANGED: an explicit ask, a locked tab, a "shall I?"
-card, Ctrl+H registered only while this runs and checked before every step, and a read-back
+card, Ctrl+M registered only while this runs and checked before every step, and a read-back
 of what landed. The paths each action tries, and the rule about never retrying an action
 that landed, are operator_core's and are documented there.
 
@@ -302,7 +302,7 @@ def main():
         tab = core.CDP(page["ws"])
         core.show_tab(run, tab, page["ws"])
         line = act(run, tab, params)
-        run.check()               # a Ctrl+H on the last tick is still a Ctrl+H
+        run.check()               # a Ctrl+M on the last tick is still a Ctrl+M
         core.say(line)
         return 0
     except core.Aborted as stop:
