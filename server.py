@@ -7644,19 +7644,11 @@ def tool_facts(tool_id, params_text, session=None):
         # the locked tab moved from problem A to problem B, the hand looked the tab up by
         # A's title and refused ("...its title has changed since it was locked"). The URL
         # is read through the lock's own socket, as operator_act's page_url is.
-        locked = focus.locked_tab()
-        if locked:
-            try:
-                from tools import operator_core
-                tab = operator_core.CDP(locked["ws"])
-                try:
-                    here = str(tab.evaluate("location.href", timeout=3.0) or "")
-                finally:
-                    tab.close()
-                if here:
-                    raw["page_url"] = here
-            except Exception:                                  # noqa: BLE001
-                pass
+        here, live_editor = locked_page_now()
+        if here:
+            raw["page_url"] = here
+        if code and session is not None:
+            raw.update(typing_mode(session, code, here, live_editor))
         return raw
     cfg = load_config()[0]
     name = os.path.basename(str(cfg.get("voice_model")
@@ -7699,6 +7691,23 @@ def act_asked(question):
     raw = str(question or "").strip()
     for form in dict.fromkeys((raw, _strip_address(raw))):
         parsed = operator_act.parse_request(form) if form else None
+        if parsed:
+            return parsed
+    return None
+
+
+def browse_asked(question):
+    """operator_browser's {site, query} for "play X on <a site the hand knows>", or None.
+    Raw and de-addressed forms only, as act_asked() reads them."""
+    if hands.find("operator_browser") is None:
+        return None
+    try:
+        from tools import operator_browser
+    except Exception:                                          # noqa: BLE001
+        return None
+    raw = str(question or "").strip()
+    for form in dict.fromkeys((raw, _strip_address(raw))):
+        parsed = operator_browser.parse_request(form) if form else None
         if parsed:
             return parsed
     return None
@@ -7845,13 +7854,101 @@ CODE_PROMPT = (
 
 
 def code_lane_continues(question, session, history):
-    """True for a correction that follows a coding answer directly - see B above."""
+    """True for a correction that follows a coding answer directly - see B above - ON THE
+    SAME PAGE. Operator 1.4: the lane remembers the locked page it was opened on, and a
+    sentence that reads like a correction while the locked tab now shows a DIFFERENT page
+    ("now do this one in java" on problem B) is a fresh coding turn, not a correction of
+    A's code. The page is asked only when the sentence already reads as a correction."""
     lane = _code_lane.get(session)
     if not lane or time.monotonic() - lane["at"] > CODE_LANE_TTL_S:
         return False
     if not history or history[-1].get("content") != lane["last"]:
         return False                          # something else was said since: lane closed
-    return bool(CODE_CORRECTION_RE.search(str(question or "")))
+    if not CODE_CORRECTION_RE.search(str(question or "")):
+        return False
+    if lane.get("url"):
+        here, _ed = locked_page_now(editor=False)
+        if here and _same_page(here, lane["url"]):
+            return "same"
+        if here:
+            sys.stderr.write("  code: the locked page has moved on since the last answer - "
+                             "a fresh coding turn, not a correction\n")
+            return "moved"
+    return "same"
+
+
+def _same_page(a, b):
+    """Two addresses of the same problem: LeetCode moves between /problems/x/ and
+    /problems/x/description/ by itself, so a path that only grew a trailing part counts."""
+    from urllib.parse import urlsplit
+    pa, pb = urlsplit(a or ""), urlsplit(b or "")
+    if pa.netloc != pb.netloc:
+        return False
+    x, y = pa.path.rstrip("/"), pb.path.rstrip("/")
+    return x == y or x.startswith(y + "/") or y.startswith(x + "/")
+
+
+def locked_page_now(editor=True):
+    """(url, editor_text) of the locked tab RIGHT NOW, read through the focus session's own
+    socket; ("", None) with no lock or no answer. editor_text is the whole of the page's
+    code editor, or None when it has none."""
+    locked = focus.locked_tab()
+    if not locked:
+        return "", None
+    try:
+        from tools import operator_core
+        if not editor:
+            tab = operator_core.CDP(locked["ws"])
+            try:
+                return str(tab.evaluate("location.href", timeout=3.0) or ""), None
+            finally:
+                tab.close()
+        page = operator_core.read_ws(locked["ws"], cap=200, editor_cap=TYPING_EDITOR_CAP)
+    except Exception:                                          # noqa: BLE001
+        return "", None
+    if not page:
+        return "", None
+    ed = page.get("editor") or {}
+    text = None if not ed or ed.get("cut") else str(ed.get("text") or "")
+    return str(page.get("url") or ""), text
+
+
+# OPERATOR 1.4, ITEM 1: REPLACING, NOT STACKING. Measured in 1.3: a "fix it" typed its new
+# code ON TOP of the old one, and a first typing stacked the solution on the platform's
+# starter - two `class Solution`s, which is a program that does not compile. So the card
+# now says which of three things will happen, decided here from the LIVE editor:
+#   prior   the code offered for typing last time, on this page, is still in the editor
+#           verbatim -> it is replaced, and nothing else is touched.
+#   all     the editor holds exactly what it held when the answer was written (normally
+#           the starter the solution was written to replace) -> the whole of it is.
+#   cursor  anything else - the employer has edited since - is 1.2's rule: insert at the
+#           cursor, replace nothing.
+# What will be overwritten is a PARAMETER (replace), on the card for the eyes, and the
+# hand refuses if the editor no longer holds it exactly. Never a guess.
+TYPING_EDITOR_CAP = 20000
+_code_state = {}          # session -> {"url", "editor": text when answered, "offered": code}
+
+
+def typing_mode(session, code, here, live_editor):
+    """{"replacing", "replace"} for the typing card - see the note above."""
+    state = _code_state.get(session) or {}
+    same = bool(here) and bool(state.get("url")) and _same_page(here, state["url"])
+    mode, replace = "", ""
+    if live_editor is not None and same:
+        offered = state.get("offered") or ""
+        if offered and offered.strip() and live_editor.count(offered) == 1:
+            mode, replace = "prior", offered
+        elif (state.get("editor") is not None and live_editor.strip()
+              and live_editor.rstrip() == str(state["editor"]).rstrip()):
+            mode, replace = "all", live_editor
+    if same or not state.get("url"):
+        state["offered"] = code
+        _code_state[session] = state
+    sys.stderr.write("  typing: %s (%s)\n" % (
+        {"prior": "replacing the solution typed before", "all": "replacing the editor's "
+         "contents as they were when the answer was written", "": "at the cursor"}[mode],
+        "same page" if same else "no page state for this page"))
+    return {"replacing": mode, "replace": replace} if mode else {"replacing": ""}
 
 
 def page_code_request(question):
@@ -7870,7 +7967,7 @@ def page_problem():
         return "", {}
     try:
         from tools import operator_core
-        page = operator_core.read_ws(locked["ws"])
+        page = operator_core.read_ws(locked["ws"], editor_cap=TYPING_EDITOR_CAP)
     except Exception:                                          # noqa: BLE001
         page = None
     if not page or not (page.get("text") or page.get("editor")):
@@ -7888,10 +7985,12 @@ def page_problem():
                                                                  "a language it does not name"),
                   "It currently holds the following - the platform's starter code, or the "
                   "employer's own draft, which may be in another language:",
-                  "```", str(ed["text"]).rstrip(), "```"]
+                  "```", str(ed["text"])[:3000].rstrip(), "```"]
     facts = {"chars": len(page.get("text") or ""), "scope": page.get("scope"),
              "cut": bool(page.get("cut")), "editor": bool(ed.get("text")),
-             "lang": ed.get("lang") or ""}
+             "lang": ed.get("lang") or "", "url": str(page.get("url") or ""),
+             "editor_text": (None if ed.get("cut") else str(ed.get("text") or ""))
+                            if ed else None}
     return "\n".join(parts), facts
 
 
@@ -7921,7 +8020,15 @@ def answer_code(cfg, question, session, history, sticky):
         sys.stderr.write("  tool: a tool tag came back from the CODE prompt; stripped\n")
         answer = cleaned or hands.LINES["instead"]
     record_turn(session, question, answer)
-    _code_lane[session] = {"at": time.monotonic(), "last": str(answer or "")}
+    _code_lane[session] = {"at": time.monotonic(), "last": str(answer or ""),
+                           "url": facts.get("url") or ""}
+    if facts.get("url"):
+        # The editor AS THIS ANSWER WAS WRITTEN AGAINST IT, for typing_mode(). A new page
+        # starts a new state: what was offered on problem A is never replaced on B.
+        old = _code_state.get(session) or {}
+        keep = old.get("offered") if _same_page(old.get("url", ""), facts["url"]) else ""
+        _code_state[session] = {"url": facts["url"], "editor": facts.get("editor_text"),
+                                "offered": keep}
     payload = {"answer": answer, "nodes": [], "kind": "compose", "route": "code",
                "grounded": bool(evidence)}
     if sticky and TYPE_AFTER_RE.search(question) and latest_code_block(session):
@@ -10744,8 +10851,11 @@ def answer_question(question, session, guest=False):
     # turn though it names no platform. Decided here so the notes are skipped for it below.
     code_sticky = False
     if qclass not in ("code", "ledger", "confidence", "paper", "quant"):
-        if code_lane_continues(question, session, history):
-            qclass, qfinance, code_sticky = "code", False, True
+        lane = code_lane_continues(question, session, history)
+        if lane:
+            # "same": a correction of the last answer. "moved": the locked tab now shows a
+            # different problem - still a coding turn, but a FRESH one, grounded in it.
+            qclass, qfinance, code_sticky = "code", False, lane == "same"
         elif page_code_request(question):
             qclass, qfinance = "code", False
     # THE BOOKS ARE ANSWERED HERE, before a note is read or a hand is offered to the brain: a
@@ -10759,6 +10869,12 @@ def answer_question(question, session, guest=False):
     asked = act_asked(question)
     if asked is not None:
         return propose_act(session, asked)
+    # ---- OPERATOR 1.4: "play X on hotstar" - the browser hand's own grammar, for the same
+    # measured reason as the two routes above. See operator_browser.parse_request.
+    browse = browse_asked(question)
+    if browse is not None:
+        sys.stderr.write("  route: operator - open-and-play proposed (protected route)\n")
+        return hands.propose("operator_browser", browse, door="page")
     skip_notes = (qfinance and qclass in ("general", "current", "quant", "paper")
                   or qclass == "confidence"
                   # A NAMED PLATFORM'S CODING PROBLEM - see code_request(). Never the

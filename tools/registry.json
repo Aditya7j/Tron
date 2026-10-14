@@ -697,11 +697,21 @@
           "name": "page_url",
           "type": "text",
           "required": false
+        },
+        {
+          "name": "replacing",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "replace",
+          "type": "text",
+          "required": false
         }
       ],
       "timeout_s": 35,
-      "proposal": "I'll type the solution - about {lines} lines - into the editor at your cursor, sir. Press Ctrl+M any time to take it back. Shall I?",
-      "step": "Type the solution, about {lines} lines, into the editor at your cursor."
+      "proposal": "I'll type the solution - about {lines} lines - {how}, sir. Press Ctrl+M any time to take it back. Shall I?",
+      "step": "Type the solution, about {lines} lines, {how}."
     },
     {
       "id": "operator_act",

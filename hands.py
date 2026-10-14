@@ -268,7 +268,7 @@ def _clean_tool(raw):
     if not step:
         return None, ("%s: no step template, so it could not appear in a chain's numbered "
                       "list in anything but its own filename" % tool_id)
-    for secret in ("{body}", "{minutes}", "{description}", "{code}"):
+    for secret in ("{body}", "{minutes}", "{description}", "{code}", "{replace}"):
         if secret in step:
             return None, ("%s: the step template interpolates %s, and a step line is spoken "
                           "aloud - see the note above _clean_tool's step check" % (tool_id,
@@ -677,6 +677,19 @@ def readings(params):
     # aloud is the email-body mistake again, only longer; the card shows it in full.
     if "code" in params:
         out["lines"] = str(str(params.get("code") or "").count("\n") + 1)
+        # OPERATOR 1.4's {how}: what happens to what is ALREADY in the editor, said plainly
+        # before Yes - "in place of the solution I typed before" is the sentence a fix must
+        # carry, because a replacement nobody announced is the silent stacking it replaced.
+        # Named by size, never by content, for the same reason {lines} is.
+        how = str(params.get("replacing") or "").strip().lower()
+        gone = str(params.get("replace") or "")
+        if how == "prior" and gone:
+            out["how"] = "in place of the solution I typed before"
+        elif how == "all" and gone:
+            out["how"] = ("in place of what is in the editor now - about %d lines - so "
+                          "there is one solution, not two" % (gone.count("\n") + 1))
+        else:
+            out["how"] = "into the editor at your cursor"
     # THERE IS NO {preview} HERE, AND THAT IS A DELIBERATE OMISSION WITH A TEST BEHIND IT.
     # A 200-character preview of the email body was written here first, and the registry's
     # proposal sentence read it out: "...and it reads: 'Dear Tom, about the numbers...'".

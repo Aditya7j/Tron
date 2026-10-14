@@ -195,6 +195,22 @@ _EDITOR_JS = r"""
             focused: !!inp && (document.activeElement === inp || inp.contains(document.activeElement))};
   }
   if (verb === 'refocus') { cur.focus(); return true; }
+  // SELECT [s, e] - offsets into the LF text 'read' returns - as line/column, so the
+  // editor's own line-ending setting cannot shift the range. Read back by 'read'.
+  if (verb === 'select') {
+    var text = cur.value(), lc = function (off) {
+      var head = text.slice(0, off), line = head.split('\n').length - 1;
+      return {line: line, ch: off - (head.lastIndexOf('\n') + 1)};
+    };
+    var a = lc(arg[0]), b = lc(arg[1]);
+    if (cur.kind === 'monaco') cur.ed.setSelection({startLineNumber: a.line + 1, startColumn: a.ch + 1,
+                                                    endLineNumber: b.line + 1, endColumn: b.ch + 1});
+    else if (cur.kind === 'codemirror5') cur.ed.setSelection(a, b);
+    else cur.ed.dispatch({selection: {anchor: arg[0], head: arg[1]}});
+    cur.focus();
+    var got = cur.sel();
+    return {from: got[0], to: got[1]};
+  }
   if (verb === 'paste') {
     var t = cur.input();
     if (!t) return false;
@@ -273,10 +289,18 @@ def send(tab, path, text):
 PATHS = ("paste", "insertText", "keys")
 
 
-def type_code(run, tab, code, progress):
+def type_code(run, tab, code, progress, replace="", mode=""):
     """(lines_landed, path, info). Raises Failed / Aborted. `progress` holds the count of
     lines VERIFIED in the editor so far, so an abort reports what was read back - not
-    what was sent, and not what the step text happened to say when the key went down."""
+    what was sent, and not what the step text happened to say when the key went down.
+
+    REPLACING (Operator 1.4). With `replace` - the exact text the card said would go -
+    that text is SELECTED through the editor's own API and the first line typed replaces
+    it; everything else in the editor is kept, and the read-back checks that. mode "all":
+    `replace` must be the editor's WHOLE text (what was there when the answer was
+    written); mode "prior": it must be in the editor EXACTLY ONCE (the solution typed
+    before). Anything else - the employer edited it since the card was drawn - is a
+    refusal with nothing typed, never a guess at what to overwrite."""
     run.at("finding the code editor on the page")
     info = editor(tab, "pick")
     if not info:
@@ -289,6 +313,28 @@ def type_code(run, tab, code, progress):
     before, at = info["value"], int(info["at"])
     if not info["wasFocused"]:
         time.sleep(FOCUS_SETTLE_S)    # the hand moved focus; let the editor take it
+    span = None
+    if replace:
+        replace = replace.replace("\r\n", "\n")
+        if mode == "all":
+            if before.rstrip() != replace.rstrip():
+                raise Failed("I did not type anything - the editor has changed since I "
+                             "offered to replace what was in it, so I will not overwrite it")
+            span = (0, len(before))
+        else:
+            if before.count(replace) != 1:
+                raise Failed("I did not type anything - the solution I typed before is no "
+                             "longer in the editor exactly as I left it, so I will not "
+                             "guess what to replace")
+            start = before.index(replace)
+            span = (start, start + len(replace))
+        got = editor(tab, "select", list(span)) or {}
+        if [got.get("from"), got.get("to")] != list(span):
+            raise Failed("I did not type anything - the editor would not select the code I "
+                         "was to replace")
+        note("replacing %d characters at %d (%s)" % (span[1] - span[0], span[0], mode))
+    head = before[:span[0]] if span else before[:at]
+    tail = before[span[1]:] if span else before[at:]
     pieces = chunks_of(code)
     total = code.count("\n") + 1
     typed, landed_lines, path_i = "", 0, 0
@@ -301,9 +347,11 @@ def type_code(run, tab, code, progress):
             # the next line wherever focus went. That is the user taking control too.
             raise Failed("I stopped after %s - the editor lost the cursor, so the rest "
                          "would have gone somewhere else" % lines_word(landed_lines))
-        want = before[:at] + typed + piece + before[at:]
+        want = head + typed + piece + tail
         tries = 0
-        unchanged = before[:at] + typed + before[at:]
+        # Before the first line lands, a replacement has not happened yet: the old text
+        # is still there, selected. After it, the old text is gone for good.
+        unchanged = before if (span and not typed) else head + typed + tail
         while True:
             send(tab, PATHS[path_i], piece)
             got = landed(tab, want, unchanged)
@@ -319,6 +367,8 @@ def type_code(run, tab, code, progress):
             # the refocus below, because a retry on top of a late arrival is a double.
             tries += 1
             editor(tab, "refocus")
+            if span and not typed:
+                editor(tab, "select", list(span))     # a refocus can drop the selection
             got = landed(tab, want, unchanged, wait=0.3)
             if got == want:
                 break
@@ -382,10 +432,20 @@ def main():
         found = core.find_locked_tab(label, verb="type anything",
                                      url=str(params.get("page_url") or "").strip() or None)
         tab = core.CDP(found["ws"])
-        landed, path, _info = type_code(run, tab, code, progress)
+        mode = str(params.get("replacing") or "").strip().lower()
+        replace = str(params.get("replace") or "") if mode in ("prior", "all") else ""
+        progress["replacing"] = bool(replace)
+        landed, path, _info = type_code(run, tab, code, progress, replace=replace, mode=mode)
         note("typed by %s" % path)
-        say("Typed the solution into the editor - %s added at the cursor."
-            % lines_word(landed))
+        if mode == "prior" and replace:
+            say("Replaced the solution I typed before with the new one - %s, read back "
+                "from the editor." % lines_word(landed))
+        elif mode == "all" and replace:
+            say("Replaced what was in the editor with the solution - %s, read back from "
+                "the editor." % lines_word(landed))
+        else:
+            say("Typed the solution into the editor - %s added at the cursor."
+                % lines_word(landed))
         return 0
     except Aborted as stop:
         # How much landed is what was READ BACK, line by line - never what was sent.
@@ -395,8 +455,10 @@ def main():
                 % str(stop.args[0]))
         else:
             say("Stopped - you took back control after typing %d of %s; those %d %s in "
-                "the editor." % (done, lines_word(total), done,
-                                 "is" if done == 1 else "are"))
+                "the editor%s." % (done, lines_word(total), done,
+                                   "is" if done == 1 else "are",
+                                   ", and the code they replaced is already gone"
+                                   if progress.get("replacing") else ""))
         return 1
     except Failed as exc:
         reason = str(exc).strip().rstrip(".")

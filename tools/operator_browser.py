@@ -53,6 +53,7 @@ THE PANIC KEY, the new tab, the budget and the one-line contract are 1.1's, now 
 from operator_core.
 """
 import json
+import re
 import sys
 import time
 import urllib.parse
@@ -119,9 +120,19 @@ SITES = {
 
 # What a page's own "start it" control is called, most specific first. Generic, not any
 # one site's: these are the words streaming and video pages use for the same button.
-PLAY_WORDS = ("watch live", "watch latest episode", "watch first episode", "watch now",
-              "play now", "watch", "play", "resume")
+# Measured 1.4: a series page offered "Watch Latest Season S3 E1" beside a "WATCH AGAIN"
+# control, and bare "watch" preferred the shorter one - so the season forms come first.
+PLAY_WORDS = ("watch live", "watch latest episode", "watch latest season", "watch latest",
+              "watch first episode", "watch first season", "watch now", "play now",
+              "continue watching", "resume", "watch", "play")
 NOT_PLAY = ("watchlist", "trailer", "add to")
+# NEVER PRESSED, WHATEVER ELSE THEY SAY (Operator 1.4). Measured logged out on Hotstar: the
+# only "watch" control was "Subscribe to watch", the play step pressed it, and the run
+# landed on the site's paywall. A purchase or a sign-in is the employer's to start, like
+# Run and Submit on a code page; when one of these is all there is, it IS the wall, and
+# the line says so instead.
+GATES = ("subscribe", "upgrade", "buy", "rent", "purchase", "sign in", "sign up", "log in",
+         "login", "get plan", "choose plan", "join now")
 
 NO_PORT = core.NO_PORT
 
@@ -179,6 +190,43 @@ def resolve(site, query=""):
         return ("search", url, "search it for '%s', open the first match, and start it if "
                 "it is a video" % q, {"name": host})
     return "open", url, "do nothing more on it - no search, no clicks", None
+
+
+# THE SENTENCE (Operator 1.4). Measured live, 2026-10-14: "play bigg boss on hotstar" went
+# to the hands-offer model, which declined the tag on both asks ("looked like an
+# instruction and was not one"), and the turn became a web search about where Bigg Boss
+# streams. 1.2 met the same failure for "type it in" and answered it with a protected route;
+# this is that route's grammar for this hand. The SITE must be one this file already knows
+# (a SITES alias) or a real domain with a dot - a bare word like "spotify" is left to the
+# model, so nothing here names a new site.
+_SITE = r"(?P<site>(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:/\S*)?|%s)" % "|".join(
+    re.escape(a) for layer in SITES.values() for a in sorted(layer["aliases"], key=len,
+                                                               reverse=True))
+_BROWSE_RULES = (
+    re.compile(r"^(?:please\s+)?(?:can\s+you\s+)?(?:play|put\s+on|stream|watch|start)\s+"
+               r"(?P<query>.+?)\s+(?:on|from)\s+" + _SITE + r"$", re.I),
+    re.compile(r"^(?:please\s+)?(?:can\s+you\s+)?(?:open|go\s+to|launch)\s+" + _SITE +
+               r"\s+and\s+(?:play|search(?:\s+for)?|watch|look\s+(?:up|for)|find)\s+"
+               r"(?P<query>.+)$", re.I),
+    re.compile(r"^(?:please\s+)?(?:can\s+you\s+)?(?:search|look\s+up|find)\s+(?:for\s+)?"
+               r"(?P<query>.+?)\s+on\s+" + _SITE + r"$", re.I),
+)
+
+
+def parse_request(sentence):
+    """{"site", "query"} for an explicit ask to open a known site (or a domain) and play or
+    search something on it, or None. Pure."""
+    s = " ".join(str(sentence or "").split()).strip().rstrip(".!?")
+    if not s or len(s) > 200:
+        return None
+    for rx in _BROWSE_RULES:
+        m = rx.match(s)
+        if m:
+            query = m.group("query").strip(" ,'\"")
+            site = m.group("site").strip()
+            if query and resolve(site, query)[0]:
+                return {"site": site, "query": query}
+    return None
 
 
 def describe(site, query=""):
@@ -308,7 +356,15 @@ def start_playback(run, tab, layer, label):
     for word in PLAY_WORDS:
         btn = core.find_target(tab, "the %s button" % word, role="button",
                                exact=word, skip="header, nav")
-        if btn["ok"] and not any(n in core.norm_name(btn["pick"]["name"]) for n in NOT_PLAY):
+        said_on_it = core.norm_name(btn["pick"]["name"]) if btn.get("pick") else ""
+        if btn["ok"] and any(g in said_on_it for g in GATES):
+            core.note(WHO, "the play control is a gate (%r); not pressed" % said_on_it[:60])
+            raise core.Failed("I found %s, but the only way to play it is '%s' - that is "
+                              "a sign-in or a subscription, and it is yours to start, sir. "
+                              "The page is open for you" % (
+                                  core.ascii_words(page_title(tab, layer), 60) or label,
+                                  core.ascii_words(said_on_it, 40)))
+        if btn["ok"] and not any(n in said_on_it for n in NOT_PLAY):
             run.at("pressing '%s' on '%s'" % (core.label_of(btn["pick"]), label))
             core.act_click(run, tab, btn)
             break
@@ -319,21 +375,44 @@ def start_playback(run, tab, layer, label):
     return playing, ad, muted or more_muted
 
 
+# WHAT STOOD IN THE WAY, read only after playback failed. Generic phrasing, not any site's:
+# a visible DIALOG is read first (a wall is usually a modal over the page), then the page.
+# 'login' also covers the OTP step - a visible phone-number or one-time-code input is a
+# sign-in wall whatever it says around it.
 _WALL_JS = r"""
 (function () {
-  var t = (document.body && document.body.innerText || '').toLowerCase();
-  if (/log ?in to (watch|continue)|login to (watch|continue)|sign in to watch/.test(t)) return 'login';
-  if (/subscribe to watch|upgrade to watch|choose a plan|buy a plan/.test(t)) return 'subscription';
+  var shown = function (e) { var r = e.getBoundingClientRect(); return r.width > 2 && r.height > 2 &&
+    (!e.checkVisibility || e.checkVisibility({visibilityProperty: true})); };
+  var dlg = Array.prototype.slice.call(document.querySelectorAll('[role=dialog], [aria-modal=true], dialog[open]')).filter(shown);
+  var t = (dlg.length ? dlg.map(function (d) { return d.innerText; }).join(' ')
+                      : (document.body && document.body.innerText || '')).toLowerCase().replace(/\s+/g, ' ');
+  var otp = Array.prototype.slice.call(document.querySelectorAll(
+    'input[type=tel], input[autocomplete=one-time-code], input[name*=otp i], input[placeholder*=mobile i], input[placeholder*=phone i]')).filter(shown);
+  if (otp.length || /(log ?in|sign ?in)\b.{0,40}\b(to )?(watch|continue|proceed|enjoy|stream)|enter (your )?(mobile|phone) number|enter (the )?otp|verify (your )?(mobile|number|phone)/.test(t))
+    return 'login';
+  if (/(subscribe|upgrade)\b.{0,40}\b(to )?(watch|continue|premium|plan)|choose (a |your )?plan|buy (a )?plan|available (only )?(on|with) premium|premium (plan|members|subscribers)/.test(t))
+    return 'subscription';
   return '';
 })()
 """
 
 
 def page_title(tab, layer):
-    title = tab.evaluate("document.title", timeout=5.0) or ""
+    """The watch page's own title, without the site's wrapper around it. Generic: a
+    leading "Watch " and a trailing " on X" / " - X" / " | X" where X names the site
+    (measured on Hotstar: "Watch Bigg Boss Agniparikshe S1 Episode 1 on JioHotstar"),
+    plus the layer's own title_tail."""
+    title = " ".join(str(tab.evaluate("document.title", timeout=5.0) or "").split())
     tail = layer.get("title_tail") or ""
     if tail and title.endswith(tail):
         title = title[:-len(tail)]
+    name = str(layer.get("name") or "").lower()
+    m = re.match(r"^(?:watch\s+)?(.+?)(?:\s+(?:on|-|\||\u2013)\s+([^|\-\u2013]+))?$", title,
+                 re.I)
+    if m and m.group(2) and name and name.replace(" ", "") in m.group(2).lower().replace(" ", ""):
+        return m.group(1)
+    if m and title.lower().startswith("watch "):
+        return m.group(1) + ((" " + m.group(2)) if m.group(2) else "")
     return title
 
 
@@ -350,8 +429,11 @@ def search_and_play(run, tab, url, query, layer):
         said = label
     if playing:
         if layer.get("best_effort"):
+            # The watch page's title, not the tile's caption: measured, the caption read
+            # "bigg boss agniparikshe bigg boss agniparikshe 2026 kannada..." (alt text and
+            # text run together) while the page said what was actually playing.
             return "Opened %s and %s %s%s." % (
-                name, layer.get("verb", "started"), label,
+                name, layer.get("verb", "started"), said or label,
                 " - a short clip is playing first, most likely an advert" if ad else "")
         tail = " - the first result, '%s'" % said if said else ""
         if ad:
@@ -360,6 +442,7 @@ def search_and_play(run, tab, url, query, layer):
             tail += " - muted, as the player was left"
         return "Opened %s and %s %s%s." % (name, layer.get("verb", "started playing"),
                                            core.ascii_words(query) or "it", tail)
+    label = said or label        # the page's own name for it, in every line below
     wall = tab.evaluate(_WALL_JS, timeout=5.0)
     if wall == "login":
         raise core.Failed("I found %s on %s, but it wants you logged in before it will play "

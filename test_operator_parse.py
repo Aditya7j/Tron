@@ -123,5 +123,47 @@ check("describe() still gives hands.py its two blanks",
       operator_browser.describe("vimeo.com", "lofi"),
       ("vimeo.com", "search it for 'lofi', open the first match, and start it if it is a video"))
 
+print("PHASE 1.4 - a picker named by its value, the browser's own sentence, the watch title")
+check("switch to java names the language picker", act("switch to java"),
+      ("select", "the language dropdown", "java", False))
+check("change it to c++", act("change it to c++"), ("select", "the language dropdown", "c++", False))
+check("set the theme to dark", act("set the theme to dark"), ("select", "the theme dropdown", "dark", False))
+check("NOT a picker: set the timer to 5", act("set the timer to 5"), None)
+check("NOT a picker: switch to plan B", act("switch to plan B"), None)
+check("a kind word brings its values to the finder",
+      "javascript" in operator_core.parse_target("the language dropdown")["values"], True)
+check("a value knows its kind", operator_core.kind_of_value("Python3"), "language")
+check("an unknown value has none", operator_core.kind_of_value("plan b"), "")
+
+
+def browse(sentence):
+    p = operator_browser.parse_request(sentence)
+    return None if p is None else (p["site"].lower(), p["query"])
+
+
+check("play X on hotstar is the browser hand's", browse("play bigg boss on hotstar"),
+      ("hotstar", "bigg boss"))
+check("open youtube and play X", browse("open youtube and play tum hi ho"), ("youtube", "tum hi ho"))
+check("a domain with a dot is a site", browse("search for lofi on vimeo.com"), ("vimeo.com", "lofi"))
+for sentence in ("play some music", "play kesariya on spotify", "search for lofi beats",
+                 "search for kesariya on this page"):
+    check("NOT the browser hand's: %r" % sentence, browse(sentence), None)
+
+
+class _Title(object):
+    def __init__(self, t):
+        self.t = t
+
+    def evaluate(self, *_a, **_k):
+        return self.t
+
+
+check("the watch page's title loses the site's wrapper",
+      operator_browser.page_title(_Title("Watch Bigg Boss Agniparikshe S1 Episode 1 on JioHotstar"),
+                                  operator_browser.SITES["hotstar"]),
+      "Bigg Boss Agniparikshe S1 Episode 1")
+check("a purchase or sign-in is never a play control",
+      all(g in operator_browser.GATES for g in ("subscribe", "upgrade", "sign in", "buy")), True)
+
 print("%d failure(s)" % len(FAILURES))
 sys.exit(len(FAILURES))

@@ -37,6 +37,7 @@ imports this as `operator_core` (it is run with tools/ as its directory) and the
 imports it as `tools.operator_core`. Standard library only, like every hand.
 """
 import base64
+import hashlib
 import json
 import os
 import re
@@ -65,6 +66,8 @@ EFFECT_WAIT_S = 2.0               # how long an action's consequence is looked f
 # between two DIFFERENT names is refused rather than broken by document order.
 THRESHOLD = 0.60
 TIE_GAP = 0.03
+SCROLL_BAND = 0.35                # "scrolled to" = its top in the upper 35% of the view
+SCROLL_AIM = 0.15                 # and the wheel aims it at 15% from the top
 
 # focus.py, copied: what the server's lockedTab is made of.
 HOME_BASE_HOSTS = frozenset(("127.0.0.1", "localhost", "::1", "[::1]"))
@@ -352,6 +355,7 @@ class CDP:
         path = parts.path + (("?" + parts.query) if parts.query else "")
         self._next = 0
         self.buf = bytearray()
+        self.ws_url = ws_url
         self.target_id = None
         self.events = []          # [(serial, method, params)], the newest EVENT_KEEP
         self.serial = 0
@@ -828,13 +832,48 @@ _LIB_JS = r"""
   // OPACITY IS NOT ASKED OF A FORM CONTROL. A native <select>, checkbox or file input laid
   // at opacity 0 over a styled fake is the real control and takes the real click - measured
   // on www.wikipedia.org's language picker, which an opacity check filtered out entirely.
+  // CLIPPED AWAY IS NOT VISIBLE (Operator 1.4). Measured on LeetCode: the topic-tag links
+  // sit inside a COLLAPSED accordion - their own box is 73x24, but an ancestor with
+  // overflow:hidden is 0 px tall - and the finder offered a card for a link no person can
+  // see; the click then landed on what was actually there. So the box is intersected with
+  // every clipping ancestor (overflow other than visible), up to the page's own scroller.
+  var clipCache = new Map();
+  // 'hide' for overflow hidden/clip (what is outside is gone), 'scroll' for auto/scroll
+  // (what is outside is a scroll away - LeetCode's description pane - and still findable,
+  // unless the scroller itself has collapsed to nothing), '' for visible.
+  var clips = function (p) {
+    if (clipCache.has(p)) return clipCache.get(p);
+    var cs = getComputedStyle(p), o = cs.overflowX + ' ' + cs.overflowY;
+    var c = /hidden|clip/.test(o) ? 'hide' : /auto|scroll/.test(o) ? 'scroll' : '';
+    clipCache.set(p, c);
+    return c;
+  };
+  var unclipped = function (el, r) {
+    var left = r.left, top = r.top, right = r.right, bottom = r.bottom;
+    for (var p = el.parentElement, k = 0; p && p !== document.body && p !== document.documentElement && k < 40; p = p.parentElement, k++) {
+      var kind = clips(p);
+      if (!kind) continue;
+      var pr = p.getBoundingClientRect();
+      if (kind === 'scroll') {
+        if (pr.width < 2 || pr.height < 2) return false;
+        // Past a scroller, the element is as good as scrolled into ITS view: what clips
+        // from here on clips the scroller, not where the element happens to sit now.
+        left = pr.left; top = pr.top; right = pr.right; bottom = pr.bottom;
+        continue;
+      }
+      left = Math.max(left, pr.left); top = Math.max(top, pr.top);
+      right = Math.min(right, pr.right); bottom = Math.min(bottom, pr.bottom);
+      if (right - left < 2 || bottom - top < 2) return false;
+    }
+    return true;
+  };
   var visible = function (el) {
     var r = el.getBoundingClientRect();
     if (r.width < 2 || r.height < 2) return false;
     var control = /^(SELECT|INPUT)$/.test(el.tagName);
     if (el.checkVisibility && !el.checkVisibility({opacityProperty: !control,
                                                     visibilityProperty: true})) return false;
-    return true;
+    return unclipped(el, r);
   };
   L.visible = visible;
   var inView = function (r) {
@@ -911,8 +950,20 @@ _LIB_JS = r"""
     names.forEach(function (n) {
       var s = 0;
       if (exact) {
+        // WHOLE WORDS, and a name that STARTS with the phrase ranks first (Operator 1.4).
+        // Measured on Hotstar: "watch" matched "Add to watchlist" as a substring, tied
+        // with "Watch Latest Season S3 E1", and the tie refusal pressed nothing at all.
+        var et = toks(exact), nw = toks(n.t);
         if (n.t === exact) s = 1;
-        else if (n.t.indexOf(exact) >= 0) s = 0.85 * (0.75 + 0.25 * exact.length / n.t.length);
+        else if (et.length && nw.length) {
+          var hit = -1;
+          for (var q = 0; q + et.length <= nw.length; q++) {
+            if (nw.slice(q, q + et.length).join(' ') === et.join(' ')) { hit = q; break; }
+          }
+          if (hit >= 0) s = (hit === 0 ? 0.9 : 0.85) * (0.75 + 0.25 * et.length / nw.length);
+        } else if (n.t.indexOf(exact) >= 0) {
+          s = 0.85 * (0.75 + 0.25 * exact.length / n.t.length);   // no word to match on
+        }
       } else if (words.length) {
         if (n.t === words.join(' ')) s = 1;
         else {
@@ -1002,8 +1053,12 @@ _LIB_JS = r"""
     // Never when the caller said what a match must LINK to (hrefHas) - a div is not a
     // link, and measured on YouTube's results, a Shorts tile's clickable <div> was taken
     // as "the first result" by exactly this path when no /watch link had loaded yet.
+    // Run whenever nothing with a role is a NEAR-EXACT match (0.9), not only when nothing is
+    // confident: measured on LeetCode, a control whose long description merely mentioned
+    // "topics" (0.78) beat the visible role-less chip that reads exactly "Topics" (0.85),
+    // because the chip was never looked at.
     if ((words.length || exact) && want !== 'field' && want !== 'select' && !o.hrefHas &&
-        !cands.some(function (c) { return c.conf >= o.threshold; })) {
+        !cands.some(function (c) { return c.conf >= 0.9; })) {
       var seenP = new Set(), tw = document.createTreeWalker(within || document.body, NodeFilter.SHOW_TEXT), tn;
       var probe = exact || words.join(' ');
       var n0 = 0;
@@ -1029,6 +1084,29 @@ _LIB_JS = r"""
         if (cP > 0.05) cands.push({el: ptr, i: all.indexOf(ptr), conf: cP, role: 'button', name: tsP.name,
                                    src: 'pointer', iv: ivP, area: rP.width * rP.height, disabled: false,
                                    type: '', tag: ptr.tagName.toLowerCase(), href: ''});
+      }
+    }
+    // THE CURRENT VALUE (Operator 1.4). A picker that never names its own kind - LeetCode's
+    // language button reads "Python3", and nothing on it says "language" - is found by WHAT
+    // IT SHOWS: when the ask implies a kind of value (o.values: the language names, the
+    // themes...), a control that opens something (a <select>, a combobox, a button with
+    // aria-haspopup or aria-expanded) whose current text IS one of those values is that
+    // picker. Only when nothing above was confident, and only on an exact value.
+    if (o.values && o.values.length && !cands.some(function (c) { return c.conf >= o.threshold; })) {
+      var vals = o.values.map(norm);
+      for (var vi = 0; vi < all.length; vi++) {
+        var ve = all[vi], vr = roleOf(ve);
+        var opener = vr === 'select' || (vr === 'button' &&
+                     (ve.hasAttribute('aria-haspopup') || ve.hasAttribute('aria-expanded')));
+        if (!opener || !visible(ve)) continue;
+        if (o.skip && ve.closest(o.skip)) continue;
+        var shows = ve.tagName === 'SELECT' ? norm((ve.options[ve.selectedIndex] || {}).text)
+                                            : norm(ve.innerText || ve.textContent);
+        if (!shows || vals.indexOf(shows) < 0) continue;
+        var vrr = ve.getBoundingClientRect();
+        cands.push({el: ve, i: vi, conf: 0.75, role: 'select', name: shows, src: 'current value',
+                    iv: inView(vrr), area: vrr.width * vrr.height, disabled: !!ve.disabled,
+                    type: '', tag: ve.tagName.toLowerCase(), href: ''});
       }
     }
     // A thing nested inside another candidate with the SAME name is the same control said
@@ -1257,6 +1335,14 @@ _LIB_JS = r"""
 """
 
 
+# THE LIBRARY'S VERSION IS ITS OWN HASH (Operator 1.4). It is cached on window between
+# calls, and with a hand-numbered version a page that was open before an update went on
+# running the OLD finder - measured: a fix to visibility read as no fix at all on a LeetCode
+# tab that had been open for an hour. Any change to the text now reinstalls it.
+_LIB_JS = _LIB_JS.replace("var V = 3;", "var V = '%s';" % hashlib.sha1(
+    _LIB_JS.encode("utf-8")).hexdigest()[:12], 1)
+
+
 def lib_call(tab, expr, gesture=False, timeout=6.0):
     """Install the page library if this document does not have it, then evaluate `expr`
     with `L` bound to it. One round trip either way."""
@@ -1304,6 +1390,38 @@ ORDINALS = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "
             "4th": 4, "fifth": 5, "5th": 5, "last": -1, "top": 1}
 
 
+# WHAT A KIND OF PICKER SHOWS (Operator 1.4, item 2). Generic vocabularies, not any one
+# site's: the names a language picker, a theme switch or a quality menu displays. A kind
+# word in the description ("the language dropdown") lets the finder recognise the picker
+# by its current value; a value in an ask ("switch to java") names the kind.
+VALUE_KINDS = {
+    "language": ("c", "c++", "c#", "java", "python", "python3", "javascript", "typescript",
+                 "php", "swift", "kotlin", "dart", "go", "golang", "ruby", "scala", "rust",
+                 "racket", "erlang", "elixir", "r", "perl", "haskell", "lua", "bash", "shell",
+                 "mysql", "ms sql server", "oracle", "postgresql", "pandas", "sql", "html",
+                 "css", "json", "yaml", "markdown", "plain text", "english", "hindi",
+                 "deutsch", "espanol", "francais", "italiano", "portugues", "nederlands",
+                 "japanese", "chinese", "korean", "russian", "arabic"),
+    "theme": ("light", "dark", "system", "auto", "default", "high contrast"),
+    "quality": ("auto", "144p", "240p", "360p", "480p", "720p", "1080p", "1440p", "2160p",
+                "4k", "low", "medium", "high", "full hd", "hd"),
+    "speed": ("0.25", "0.5", "0.75", "normal", "1", "1x", "1.25", "1.5", "1.75", "2", "2x"),
+    "sort": ("relevance", "newest", "oldest", "most recent", "most popular", "popular",
+             "top", "trending", "price: low to high", "price: high to low", "rating"),
+}
+
+
+def kind_of_value(text):
+    """The VALUE_KINDS kind whose vocabulary holds `text` exactly ("java" -> "language"),
+    or ""."""
+    t = " ".join(str(text or "").split()).lower()
+    t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode("ascii")
+    for kind, values in VALUE_KINDS.items():
+        if t in values:
+            return kind
+    return ""
+
+
 def parse_target(description):
     """{"words", "exact", "role", "ordinal"} for a plain description. Pure; the server uses
     it for the card and the hand for the run, so both read the description the same way.
@@ -1339,7 +1457,10 @@ def parse_target(description):
         words.append(tok)
     if ordinal and not role:
         role = "result"
-    return {"words": words, "exact": exact, "role": role, "ordinal": ordinal}
+    kinds = [w for w in words if w in VALUE_KINDS]
+    values = list(VALUE_KINDS[kinds[0]]) if kinds else []
+    return {"words": words, "exact": exact, "role": role, "ordinal": ordinal,
+            "values": values}
 
 
 def norm_name(text):
@@ -1378,7 +1499,8 @@ def find_target(tab, description, threshold=THRESHOLD, call_timeout=8.0, **how):
             "skip": how.get("skip"), "within": how.get("within"),
             "hrefHas": how.get("href_has"), "hrefNot": how.get("href_not"),
             "outsideChrome": bool(how.get("outside_chrome")),
-            "headings": bool(how.get("headings"))}
+            "headings": bool(how.get("headings")),
+            "values": list(how.get("values") or spec.get("values") or [])}
     found = lib_call(tab, "L.find(%s)" % json.dumps(opts), timeout=call_timeout)
     ranked = list((found or {}).get("ranked") or [])
     out = {"ok": False, "why": "nothing", "pick": ranked[0] if ranked else None,
@@ -1514,6 +1636,61 @@ def type_chars(tab, text):
         tab.call("Input.dispatchKeyEvent", {"type": "keyUp", "key": ch})
 
 
+class NewTabWatch:
+    """Did an action open a NEW TAB? Asked of the browser itself (Operator 1.4, item 3).
+
+    Measured in 1.3: a click on a target=_blank link left the page unchanged, so the line
+    read "nothing on the page visibly changed" - true of the page and false about what
+    happened. A browser-level socket with Target.setDiscoverTargets reports every target;
+    the ones that existed when it was armed are set aside, and a page created after it -
+    opened BY the locked tab, when Chrome says so - is the new tab. Best-effort: if the
+    browser socket cannot be had, it reports nothing rather than failing the action.
+    """
+
+    def __init__(self, tab_ws):
+        self.sock = None
+        self.mine = ""
+        self.known = set()
+        parts = urllib.parse.urlsplit(tab_ws or "")
+        self.mine = parts.path.rsplit("/", 1)[-1] if parts.path else ""
+        port = parts.port
+        try:
+            found = get_json("http://127.0.0.1:%d/json/version" % port) if port else None
+            if not isinstance(found, dict) or not found.get("webSocketDebuggerUrl"):
+                return
+            self.sock = CDP(found["webSocketDebuggerUrl"])
+            res = self.sock.call("Target.getTargets", timeout=4.0)
+            self.known = {t.get("targetId") for t in res.get("targetInfos") or []}
+            self.sock.call("Target.setDiscoverTargets", {"discover": True}, timeout=4.0)
+        except Failed:
+            self.close()
+
+    def opened(self, wait=1.0):
+        """[{id, url, opener}] for page targets created since arming."""
+        if self.sock is None:
+            return []
+        self.sock.drain(wait)
+        out, seen = [], set()
+        for _n, method, params in self.sock.events:
+            info = params.get("targetInfo") or {}
+            tid = info.get("targetId")
+            if method not in ("Target.targetCreated", "Target.targetInfoChanged"):
+                continue
+            if info.get("type") != "page" or tid in self.known or tid in seen:
+                continue
+            if info.get("openerId") and self.mine and info.get("openerId") != self.mine:
+                continue
+            seen.add(tid)
+            out.append({"id": tid, "url": str(info.get("url") or ""),
+                        "opener": info.get("openerId") == self.mine})
+        return out
+
+    def close(self):
+        if self.sock is not None:
+            self.sock.close()
+            self.sock = None
+
+
 def _href(tab):
     return tab.evaluate("location.href", timeout=5.0) or ""
 
@@ -1592,6 +1769,10 @@ def effect_words(fx):
     """The visible consequences of an action, as a short phrase for the line."""
     if not fx:
         return ""
+    if fx.get("newTab"):
+        # Said FIRST and in so many words: the locked page itself usually did not change,
+        # and "nothing changed" would have been the old line (measured in 1.3).
+        return "this opened a new tab, sir - I have not followed it"
     if fx.get("navigated"):
         return "the page moved on"
     bits = []
@@ -1644,6 +1825,20 @@ def act_click(run, tab, found):
     spot = lib_call(tab, "L.spot(%s, false)" % json.dumps(nonce)) or {}
     href = _href(tab)
     tried = []
+    tabs = NewTabWatch(getattr(tab, "ws_url", ""))
+    try:
+        res = _click_paths(run, tab, found, nonce, name, spot, href, tried)
+        fresh = tabs.opened(0.8 if not res["effects"].get("navigated") else 0.2)
+        if fresh:
+            res["effects"]["newTab"] = fresh[0]
+            res["newTab"] = fresh[0]
+        return res
+    finally:
+        tabs.close()
+
+
+def _click_paths(run, tab, found, nonce, name, spot, href, tried):
+    """act_click's three paths and its no-retry rule; see act_click."""
     for path in ("pointer", "keyboard", "dom"):
         if path == "pointer" and not spot.get("clear"):
             tried.append("pointer (covered by %s)" % (spot.get("cover") or "something"))
@@ -1869,35 +2064,63 @@ def act_select(run, tab, found, option):
     chosen = label_of(opt["pick"])
     run.at("choosing '%s'" % chosen)
     res = act_click(run, tab, opt)
-    return {"path": "custom/" + res["path"], "chosen": chosen}
+    # READ BACK: the trigger now SHOWS the choice, which is what a person checks. Looked
+    # for a few times, because a menu closes and its button re-renders a beat later.
+    want = norm_name(opt["pick"].get("name"))
+    shows = ""
+    end = time.monotonic() + 3.0
+    while True:
+        shows = norm_name(lib_call(tab, "(function(){var e=L.picked[%s];return e&&e.isConnected?"
+                                   "(e.tagName==='SELECT'?e.options[e.selectedIndex].text:"
+                                   "(e.innerText||e.textContent)):''})()" % json.dumps(nonce)))
+        if (want and want in shows) or time.monotonic() >= end:
+            break
+        run.nap(0.25)
+    return {"path": "custom/" + res["path"], "chosen": chosen,
+            "shows": shows, "verified": bool(want and want in shows)}
 
 
 def act_scroll(run, tab, found):
-    """Bring the found thing into view: real mouse-wheel turns over the page first (what a
-    person does, and what lazy-loading pages listen for), then scrollIntoView if the wheel
-    could not get it there. Read back: the element's box inside the viewport."""
+    """Bring the found thing UP, to the upper part of the view - what "scroll to the
+    history section" means to a person: real mouse-wheel turns over the page first (what
+    lazy-loading pages listen for), then scrollIntoView if the wheel could not get it
+    there. Read back: the element's top inside the upper band of the viewport.
+
+    MEASURED 1.4: the old rule stopped as soon as the element was anywhere in the
+    viewport. Wikipedia's History heading sat at y=614 of a 987-px viewport, nothing
+    moved, and the line said "Scrolled 'history' into view" - while on this screen that
+    part of a too-tall window was below the display. So the goal is the band, and a run
+    that had nothing to do says so ("already near the top")."""
     nonce = found["nonce"]
     name = label_of(found["pick"])
+    moved = False
     for _ in range(25):
         run.check()
         r = lib_call(tab, "L.rect(%s)" % json.dumps(nonce))
         if not r:
             raise Failed("I stopped - '%s' disappeared from the page while I scrolled" % name)
-        if r["inView"]:
-            return {"path": "wheel"}
-        centre = (r["top"] + r["bottom"]) / 2 - r["h"] / 2
-        delta = max(-600, min(600, centre))
+        band = (r["top"] >= -1 and r["top"] <= SCROLL_BAND * r["h"])
+        if band:
+            return {"path": "wheel" if moved else "already"}
+        delta = max(-600, min(600, r["top"] - SCROLL_AIM * r["h"]))
         if abs(delta) < 4:
             break
         _mouse(tab, "mouseWheel", int(r["w"] / 2), int(r["h"] / 2), deltaX=0, deltaY=delta)
         run.nap(0.12)
         r2 = lib_call(tab, "L.rect(%s)" % json.dumps(nonce)) or r
         if abs(r2["top"] - r["top"]) < 2:
-            break                      # the wheel moved nothing: an inner scroller
-    lib_call(tab, "L.scrollIntoView(%s)" % json.dumps(nonce))
+            break                      # the wheel moved nothing: an inner scroller, or the end
+        moved = True
+    r = lib_call(tab, "L.rect(%s)" % json.dumps(nonce)) or {}
+    if r and r["top"] >= -1 and r["top"] <= SCROLL_BAND * r["h"]:
+        return {"path": "wheel"}
+    lib_call(tab, "(function(){var e=L.picked[%s];if(e)e.scrollIntoView({block:'start',"
+                  "behavior:'instant'});return !!e})()" % json.dumps(nonce))
     run.nap(0.1)
     r = lib_call(tab, "L.rect(%s)" % json.dumps(nonce)) or {}
     if r.get("inView") or r.get("partly"):
+        # The page may simply end before the element can reach the band: in view is
+        # still in view, and the line does not claim more.
         return {"path": "scrollIntoView"}
     raise Failed("I could not bring '%s' into view" % name)
 
@@ -1940,7 +2163,7 @@ def act_hover(run, tab, found):
 # If the page has a single main landmark (main, [role=main], or one article) holding most
 # of its text, only that is read. Block boundaries become newlines; nothing is summarised.
 _READ_JS = r"""
-(function (cap) {
+(function (cap, edCap) {
   var JUNK = 'script, style, noscript, template, svg, header, nav, footer, aside, ' +
              '[role=banner], [role=navigation], [role=contentinfo], [role=complementary], ' +
              '.monaco-editor, .CodeMirror, .cm-editor, [role=code], textarea, [aria-hidden=true], ' +
@@ -2033,25 +2256,28 @@ _READ_JS = r"""
     var pick = eds.filter(function (x) { return x.focused; })[0] ||
                eds.sort(function (a, b) { return b.area - a.area; })[0];
     if (pick) ed = {kind: pick.kind, lang: pick.lang, count: eds.length,
-                    text: pick.value.slice(0, 3000), cut: pick.value.length > 3000};
+                    text: pick.value.slice(0, edCap), cut: pick.value.length > edCap};
   } catch (e) { ed = null; }
   return {title: document.title, url: location.href, headings: heads, labels: labels,
           scope: main ? 'main' : 'page', chars: text.length, cut: text.length > cap,
           text: text.slice(0, cap), editor: ed};
-})(%d)
+})(%d, %d)
 """
 
 READ_CAP = 6000
+EDITOR_CAP = 3000
 
 
-def read_page(tab, cap=READ_CAP, timeout=6.0):
-    """{title, url, headings, labels, scope, chars, cut, text} for the page, or None. A
-    pure read: nothing is clicked, focused, scrolled or marked."""
-    found = tab.evaluate(_READ_JS % int(cap), timeout=timeout)
+def read_page(tab, cap=READ_CAP, timeout=6.0, editor_cap=EDITOR_CAP):
+    """{title, url, headings, labels, scope, chars, cut, text, editor} for the page, or
+    None. A pure read: nothing is clicked, focused, scrolled or marked. `editor_cap` is
+    how much of the code editor comes back - the typing card compares it EXACTLY, so it
+    asks for all of it."""
+    found = tab.evaluate(_READ_JS % (int(cap), int(editor_cap)), timeout=timeout)
     return found if isinstance(found, dict) else None
 
 
-def read_ws(ws_url, cap=READ_CAP, timeout=6.0):
+def read_ws(ws_url, cap=READ_CAP, timeout=6.0, editor_cap=EDITOR_CAP):
     """read_page on a tab named by its socket - the server's way in, from the focus
     session's own lock. None on any failure: grounding is furniture, and losing it must
     not lose the answer."""
@@ -2060,7 +2286,7 @@ def read_ws(ws_url, cap=READ_CAP, timeout=6.0):
     except Failed:
         return None
     try:
-        return read_page(tab, cap=cap, timeout=timeout)
+        return read_page(tab, cap=cap, timeout=timeout, editor_cap=editor_cap)
     except Failed:
         return None
     finally:

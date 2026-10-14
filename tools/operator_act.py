@@ -93,6 +93,11 @@ _RULES = (
     ("search", re.compile(r"^" + _POLITE + r"search\s+(?:for\s+)?(?P<text>.+?)\s+(?:on|in)\s+(?:this|the)\s+(?:page|site|website|tab)$", re.I)),
     ("search", re.compile(r"^" + _POLITE + r"search\s+(?:this|the)\s+(?:page|site|website|tab)\s+for\s+(?P<text>.+)$", re.I)),
     ("select", re.compile(r"^" + _POLITE + r"(?:select|choose|pick)\s+(?P<text>.+?)\s+(?:from|in|on|under)\s+(?P<target>(?:the|this|that)\s+.+)$", re.I)),
+    # Operator 1.4: a picker named by what it should SHOW. "switch to java" names no control
+    # at all - the value names the kind (core.VALUE_KINDS), and the kind finds the picker by
+    # its current value. A value of no known kind is not an action ("switch to plan B").
+    ("switch", re.compile(r"^" + _POLITE + r"(?:switch|change|set)\s+(?:the\s+)?(?P<target>[a-z ]{2,30}?)\s+to\s+(?P<text>.+)$", re.I)),
+    ("switch", re.compile(r"^" + _POLITE + r"(?:switch|change)\s+(?:it\s+)?(?:over\s+)?to\s+(?P<text>.+)$", re.I)),
     ("scroll", re.compile(r"^" + _POLITE + r"scroll\s+(?:down\s+|up\s+)?(?:to|till|until)\s+(?P<target>.+)$", re.I)),
     ("hover", re.compile(r"^" + _POLITE + r"(?:hover|mouse)\s+(?:the\s+(?:pointer|mouse|cursor)\s+)?(?:over|on|onto)\s+(?P<target>.+)$", re.I)),
 )
@@ -119,6 +124,17 @@ def parse_request(sentence):
         text = (g.get("text") or "").strip(" ,")
         if len(text) >= 2 and text[0] in "\"'\u201c\u2018" and text[-1] in "\"'\u201d\u2019":
             text = text[1:-1].strip()
+        if action == "switch":
+            kind = core.kind_of_value(text)
+            if not kind:
+                return None
+            asked = " ".join(w for w in target.lower().split()
+                             if w not in ("dropdown", "picker", "it", "over", "this", "that"))
+            if asked and asked not in (kind, "editor", "code", "editor language",
+                                       "code language"):
+                return None              # "set the timer to 5" is not this
+            return {"action": "select", "target": "the %s dropdown" % kind, "text": text,
+                    "submit": False}
         if action == "search":
             return {"action": "type", "target": "the search box", "text": text,
                     "submit": True}
@@ -210,6 +226,15 @@ def act(run, tab, params):
         res = core.act_click(run, tab, found)
         core.note(WHO, "click: " + core.fx_note(res))
         seen = core.effect_words(res["effects"])
+        if res.get("newTab"):
+            # Chrome brings a new tab to the front; the locked page is put back in front of
+            # it, so the employer is still where the lock says, and the new tab is left
+            # where it opened, unfollowed.
+            core.note(WHO, "the click opened a new tab (%s); back to the locked page"
+                      % ("opened by this tab" if res["newTab"].get("opener") else "opener unknown"))
+            core.show_tab(run, tab, tab.ws_url)
+            return ("Clicked '%s' on the locked page - %s; you are still on the locked page."
+                    % (name, seen))
         if seen:
             return "Clicked '%s' on the locked page - %s%s." % (name, seen, _how(found, res))
         return ("Clicked '%s' on the locked page - it took the click, though nothing on the "
@@ -237,12 +262,18 @@ def act(run, tab, params):
         if res["path"] == "already":
             return "'%s' already shows '%s' - I left it as it was." % (
                 name, core.ascii_words(res["chosen"], 40))
+        if res.get("path", "").startswith("custom/") and not res.get("verified"):
+            return ("I chose '%s' in '%s', but it still shows '%s' - check it yourself, sir."
+                    % (core.ascii_words(res["chosen"], 40), name,
+                       core.ascii_words(res.get("shows"), 40) or "something else"))
         return "Chose '%s' in '%s'%s." % (core.ascii_words(res["chosen"], 40), name,
                                           _how(found, res))
     if action == "scroll":
         run.at("scrolling to '%s'" % name)
         res = core.act_scroll(run, tab, found)
-        return "Scrolled '%s' into view%s." % (
+        if res["path"] == "already":
+            return "'%s' is already near the top of the locked page - I did not need to scroll." % name
+        return "Scrolled to '%s'%s." % (
             name, "" if res["path"] == "wheel" else " (moved it there directly)")
     if action == "hover":
         run.at("moving the pointer to '%s'" % name)
