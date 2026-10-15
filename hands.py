@@ -696,6 +696,18 @@ def readings(params):
                 out["plan"] = plan
         except Exception:
             pass
+    # REVENUE MODE'S {plan}s, from revenue.py. revenue_start's names the platforms and the daily
+    # bid cap; revenue_submit's names the job, the platform and the files that will go - read
+    # from the work folder at the moment of asking, as the employer left it. Same furniture rules.
+    if "bids" in params or "job" in params:
+        try:
+            import revenue
+            plan = (revenue.describe_start(params) if "bids" in params
+                    else revenue.describe_submit(params))
+            if plan:
+                out["plan"] = plan
+        except Exception:
+            pass
     # OPERATOR'S {lines}: the size of the code operator_type_code will type, so the spoken
     # proposal can name it by shape - "about 12 lines" - and NEVER by content. Code read
     # aloud is the email-body mistake again, only longer; the card shows it in full.

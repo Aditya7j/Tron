@@ -914,6 +914,72 @@
       "timeout_s": 40,
       "proposal": "I'll {plan}, sir. Shall I?",
       "step": "Ask a lead for a meeting."
+    },
+    {
+      "id": "revenue_start",
+      "name": "Start Revenue Mode: find small freelance jobs, bid, and do the work",
+      "script": "revenue_start.py",
+      "_comment": [
+        "Revenue Mode, phase 1. Its on-switch: after a yes the daemon in revenue.py browses",
+        "Upwork, Fiverr and Freelancer.com in a background tab of the DevTools Chrome through",
+        "operator_core, bids on small fixed-price jobs the employer's OWN profile says he can do",
+        "(at most `bids` a day), and once one is awarded does the work and stops at 'ready for",
+        "your review'. Nothing reaches a client after that without revenue_submit's card.",
+        "DOOR-BOUND to 'revenue': `bids` is config.json's revenue.dailyBidLimit (or 2) via",
+        "server.revenue_asked(), never a model's. 'stop revenue mode' and Ctrl+M halt it.",
+        "{plan} is revenue.describe_start()."
+      ],
+      "doors": [
+        "revenue"
+      ],
+      "capabilities": [
+        "turn on Revenue Mode, which bids on small freelance jobs on the employer's own accounts and does the work, stopping for his review"
+      ],
+      "triggers": [
+        "^(?:please\\s+)?(?:(?:can|could|would)\\s+you\\s+)?(?:be|get|go|stay)\\s+in(?:to)?\\s+(?:your\\s+|the\\s+)?revenue\\s+mode\\b",
+        "^(?:please\\s+)?(?:start|enter|begin|turn\\s+on|switch\\s+on|switch\\s+to|go\\s+(?:in)?to|resume|activate)\\s+(?:your\\s+|the\\s+)?revenue\\s+mode\\b",
+        "^revenue\\s+mode\\s+(?:on|start|chalu|shuru)\\b"
+      ],
+      "params": [
+        {
+          "name": "bids",
+          "type": "integer",
+          "required": true
+        }
+      ],
+      "timeout_s": 30,
+      "proposal": "I'll go into Revenue Mode and {plan}, sir. Every bid goes in the log, nothing reaches a client without your \"submit it\", and \"stop revenue mode\" or Ctrl+M halts it. Shall I?",
+      "step": "Start Revenue Mode."
+    },
+    {
+      "id": "revenue_submit",
+      "name": "Submit reviewed freelance work to the client, on the employer's word",
+      "script": "revenue_submit.py",
+      "_comment": [
+        "THE ONE CHECKPOINT. Work Revenue Mode finished sits in revenue-work/R-xxxx/ marked",
+        "ready for review; this hand is the only thing that sends it, after the employer said",
+        "'submit it' and then yes. It delivers what is in the folder AT THAT MOMENT - his fixes",
+        "included - with DELIVERY-NOTE.txt as the message, through the platform's own delivery,",
+        "in a front tab with Ctrl+M armed. DOOR-BOUND to 'revenue': `job` is the R- number",
+        "server.revenue_asked() found ready, never a model's. {plan} is revenue.describe_submit()."
+      ],
+      "doors": [
+        "revenue"
+      ],
+      "capabilities": [
+        "deliver freelance work the employer has reviewed to the client, through the platform"
+      ],
+      "triggers": [],
+      "params": [
+        {
+          "name": "job",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "timeout_s": 240,
+      "proposal": "I'll {plan}, sir. Shall I?",
+      "step": "Submit reviewed work to the client."
     }
   ]
 }

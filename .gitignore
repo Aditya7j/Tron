@@ -121,3 +121,15 @@ closer-state.json.tmp
 closer-state.json.lock
 closer-demos/
 leads.json.lock
+# REVENUE MODE'S BOOK, LOG, SWITCH AND WORK. Other people's job posts, what was bid to them, and
+# the client work made for them - the employer's business, not this repository's to publish.
+revenue-book.json
+revenue-book.json.tmp
+revenue-book.json.lock
+revenue-log.json
+revenue-log.json.tmp
+revenue-log.json.lock
+revenue-state.json
+revenue-state.json.tmp
+revenue-state.json.lock
+revenue-work/

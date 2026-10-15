@@ -127,6 +127,14 @@ import ledger
 # to it - see closer_asked(). Everything it sends is in closer-log.json.
 import closer
 
+# REVENUE MODE. The Closer's shape again - a daemon with its own thread and lock - on Operator's
+# primitives: it browses Upwork, Fiverr and Freelancer.com in a background tab of the DevTools
+# Chrome, bids on small jobs the employer's own profile says he can do, does the work once one is
+# awarded and STOPS at "ready for your review". This file starts it, lends it Groq, and routes the
+# employer's four sentences to it - see revenue_asked(). Its earnings reach the Ledger only as the
+# Ledger's own card.
+import revenue
+
 # The live lookup. Query in, at most three snippets out, and it NEVER raises - a dead
 # network, a captcha or a redesigned results page all come back as an empty list, which
 # is the one case this file has to handle anyway. No key, no pip, no SDK.
@@ -7782,6 +7790,90 @@ def answer_closer(question, session, asked, guest=False):
     return status, payload
 
 
+REVENUE_GUEST_LINE = ("Revenue Mode works the boss's own accounts, so I will leave that one for "
+                      "him to ask.")
+
+
+# REVENUE MODE'S FOUR SENTENCES, read by revenue.parse_request() - never by a model:
+#   "be in your revenue mode" / "start revenue mode"   revenue_start's card
+#   "stop revenue mode"                                 off at once, no card
+#   "revenue update"                                    the report; and when a job has been paid
+#                                                       and is not in the Ledger yet, the
+#                                                       LEDGER'S OWN card for it (add_ledger_entry
+#                                                       on the ledger door), proof attached
+#   "submit it" / "send it" / "submit R-0003"           revenue_submit's card - the one checkpoint
+#                                                       between finished work and a client. A bare
+#                                                       "submit it" is ours only while a job is
+#                                                       ready for review.
+def revenue_asked(question):
+    """revenue.parse_request()'s {action, ...} for one of the four sentences above, or None."""
+    raw = str(question or "").strip()
+    for form in list(dict.fromkeys(f for f in (raw, _strip_address(raw)) if f)):
+        try:
+            asked = revenue.parse_request(form)
+        except OSError:
+            asked = None
+        if asked is None:
+            continue
+        gate = {"start": "revenue_start", "submit": "revenue_submit"}.get(asked["action"])
+        if gate and hands.find(gate) is None:
+            continue
+        if asked["action"] == "start" and not any(
+                rx.search(form) for rx in hands.find(gate)["triggers"]):
+            continue
+        return asked
+    return None
+
+
+def answer_revenue(question, session, asked, guest=False):
+    """(status, payload) for the "revenue" route. The report and the stop are answered here; the
+    start, the submit and an earning become cards, and only a yes runs them."""
+    base = {"nodes": [], "route": "revenue", "revenueAction": asked["action"]}
+
+    def said(line, **more):
+        record_turn(session, question, line)
+        return 200, dict(base, kind="chat", answer=line, **more)
+    if guest:
+        sys.stderr.write("  revenue: a guest asked (%s); nothing read, nothing proposed\n"
+                         % asked["action"])
+        return said(REVENUE_GUEST_LINE, refused="guest")
+    if asked["action"] == "stop":
+        was = bool(revenue.read_state().get("on"))
+        revenue.switch(False, "stop")
+        sys.stderr.write("  revenue: switched off (was %s)\n" % ("on" if was else "off"))
+        return said("Revenue Mode is off, sir - no more bids until you start it again."
+                    if was else "Revenue Mode was already off, sir.")
+    if asked["action"] == "start":
+        s, problems = revenue.settings()
+        if problems:
+            return said("I cannot start Revenue Mode, sir: %s." % problems[0], refused="settings")
+        status, payload = hands.propose("revenue_start", {"bids": s["daily"]}, door="revenue")
+        payload.update(base)
+        return status, payload
+    if asked["action"] == "submit":
+        if not asked.get("job"):
+            return said("More than one job is ready for your review, sir - %s. Say \"submit\" and "
+                        "its number." % ", ".join(asked.get("choices") or []), refused="which")
+        job = revenue.find_job(asked["job"])
+        if not job or job.get("status") != "ready":
+            return said("%s is not ready for review, sir, so there is nothing to submit." % (
+                asked["job"]), refused="not-ready")
+        status, payload = hands.propose("revenue_submit", {"job": job["id"]}, door="revenue")
+        payload.update(base)
+        return status, payload
+    sys.stderr.write("  revenue: the report, from the book and the log\n")
+    line = revenue.report()
+    card = revenue.ledger_card()
+    if card is None:
+        record_turn(session, question, line)
+        return 200, dict(base, kind="compose", answer=line)
+    status, payload = hands.propose("add_ledger_entry", card, door="ledger")
+    if payload.get("ok"):
+        payload["answer"] = line + " " + str(payload.get("answer") or "")
+    payload.update(base)
+    return status, payload
+
+
 def hunt_asked(question):
     """hunt_leads's {what, where, count, asked} for an explicit ask to find businesses, or None."""
     tool = hands.find("hunt_leads")
@@ -8150,7 +8242,7 @@ def answer_code(cfg, question, session, history, sticky):
 
 
 def call_chat_completions(url, key, model, who, messages, image=None, extra=None,
-                          status=None):
+                          status=None, max_tokens=None):
     """OpenAI's /chat/completions shape, which OpenRouter and Groq speak too.
 
     Returns (answer, error) and never raises. One implementation for all three, because
@@ -8181,7 +8273,9 @@ def call_chat_completions(url, key, model, who, messages, image=None, extra=None
     body = {
         "model": model,
         "messages": messages,
-        "max_tokens": MAX_ANSWER_TOKENS,
+        # REVENUE MODE's work is the one caller that passes a ceiling: a deliverable of a few
+        # hours does not fit the butler's 400 tokens. Every other call site leaves it None.
+        "max_tokens": int(max_tokens) if max_tokens else MAX_ANSWER_TOKENS,
     }
     if TEMPERATURE is not None:
         body["temperature"] = TEMPERATURE
@@ -8302,7 +8396,7 @@ def groq_seen(what):
         _GROQ_SEEN[what] += 1
 
 
-def call_groq(cfg, messages, image=None, model=None, status=None):
+def call_groq(cfg, messages, image=None, model=None, status=None, max_tokens=None):
     """Chat OR vision, by model string. (answer, error), never raises.
 
     ONE FUNCTION FOR BOTH BECAUSE GROQ MAKES NO DISTINCTION: an image is a content part on the
@@ -8322,7 +8416,7 @@ def call_groq(cfg, messages, image=None, model=None, status=None):
     return call_chat_completions(
         GROQ_CHAT_URL, groq_key(cfg),
         model or str(cfg.get("groq_model") or DEFAULT_CONFIG["groq_model"]),
-        "Groq", messages, image, status=status)
+        "Groq", messages, image, status=status, max_tokens=max_tokens)
 
 
 def _multipart(fields, files):
@@ -8673,6 +8767,10 @@ scholar.configure(chat=call_groq, whisper=call_groq_whisper, ready=groq_ready,
                   config=lambda: load_config()[0])
 closer.configure(chat=lambda messages: call_groq(load_config()[0], messages),
                  config=lambda: load_config()[0])
+revenue.configure(chat=lambda messages: call_groq(load_config()[0], messages),
+                  work_chat=lambda messages: call_groq(load_config()[0], messages,
+                                                       max_tokens=revenue.WORK_TOKENS),
+                  config=lambda: load_config()[0])
 
 
 def wear_persona(cfg, messages):
@@ -10978,6 +11076,12 @@ def answer_question(question, session, guest=False):
     closing = closer_asked(question)
     if closing is not None:
         return answer_closer(question, session, closing, guest=guest)
+    # ---- REVENUE MODE, PHASE 1: the switch, the report and "submit it". Beside the Closer for the
+    # same reason - read from its book, never from a model - and a bare "submit it" is taken only
+    # while a job is ready for review, so it is nobody else's sentence the rest of the time.
+    earning = revenue_asked(question)
+    if earning is not None:
+        return answer_revenue(question, session, earning, guest=guest)
     # ---- THE HUNTER, PHASE 1: "find me 20 dentists in Pune". A protected route for the same
     # measured reason as Operator's below - before the notes are scored - and door-bound, so the
     # card's what/where/count are the boss's words, never a model's. A guest is offered nothing.
@@ -14191,6 +14295,15 @@ def main():
             "ON - writing to leads on its own" if closer.read_state().get("on")
             else "off until \"start the closer\"",
             "offer sheet filled in" if not problems else "NO OFFER SHEET (config.json closer)"))
+
+    # ---- AND REVENUE MODE, the same way. Its thread runs always and acts only while
+    # revenue-state.json says on - which only the revenue_start card can make it say.
+    if revenue.MANAGER.start():
+        rs, problems = revenue.settings()
+        print("  revenue mode      :  %s · %s" % (
+            "ON - bidding on its own" if revenue.read_state().get("on")
+            else "off until \"be in your revenue mode\"",
+            ", ".join(rs["platforms"]) if not problems else "SETTINGS: " + problems[0]))
 
     # ---- AND THE PAPER DESK, the same way: its own thread, its own lock, its own ledger. It
     # is handed the searxng URL and nothing else from config.json, so its news reads can only
