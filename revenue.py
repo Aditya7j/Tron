@@ -121,6 +121,32 @@ _work_chat = None
 _config = None
 
 
+# WHICH GROQ KEY EACH CALL USED, as the server's revenue_groq() reports it: "own" is
+# GROQ_API_KEY_REVENUE_MODE, "shared" the house key the brain and the Scholar spend. Counted per
+# pass and said in the pass's notes, so "it ran on its own key" is a measurement, not a hope.
+_key_calls = {"own": 0, "shared": 0}
+_key_digest = {"own": "", "shared": ""}
+
+
+def note_key(source, digest=""):
+    if source in _key_calls:
+        _key_calls[source] += 1
+        _key_digest[source] = str(digest or "")[:12]
+
+
+def key_line(own, shared):
+    """The pass's one sentence about whose Groq budget it spent."""
+    if not own and not shared:
+        return ""
+    if shared:
+        return ("model: %d call%s on the SHARED Groq key - GROQ_API_KEY_REVENUE_MODE is not in "
+                "the server's environment, so this pass competed with the brain for the daily "
+                "limit" % (shared, "" if shared == 1 else "s")) + (
+                    " (and %d on its own)" % own if own else "")
+    return "model: %d call%s on Revenue Mode's own Groq key (sha256 %s)" % (
+        own, "" if own == 1 else "s", _key_digest["own"])
+
+
 def configure(chat=None, work_chat=None, config=None):
     """The server lends its Groq client (twice: the short ceiling for bids and checks, a longer
     one for the work itself) and its config reader. Never the local fallback."""
@@ -443,7 +469,12 @@ def find_job(job_id):
 def known_urls():
     """Every job already decided. A row still "seen" was read and never decided - measured live,
     Groq's daily limit landed mid-fit-check - so it is looked at again, not lost."""
-    return {_norm_url(r.get("url")) for r in read_book() if r.get("status") != "seen"}
+    # AND A CARD-ONLY SKIP IS NEVER FINAL: it was judged on the budget against the settings of the
+    # day. Measured live: INR jobs skipped for "no hourly rate in INR" stayed skipped after
+    # revenue.hourlyRate.INR was set, because the book called them decided. Re-judging a card
+    # costs nothing - no page, no model.
+    return {_norm_url(r.get("url")) for r in read_book()
+            if r.get("status") != "seen" and r.get("read") != "card"}
 
 
 # ------------------------------------------------------------------------------ his facts
@@ -1084,8 +1115,10 @@ def find_and_bid(sess, key, s, note, daily):
     for found in fresh:
         why_card = card_skip(budget_in(found["card"]), rates, s)
         if why_card:
-            add_job(key, found["url"], found["title"], budget=budget_in(found["card"]),
-                    query=query, status="skipped", why=[why_card], read="card")
+            row, new = add_job(key, found["url"], found["title"], budget=budget_in(found["card"]),
+                               query=query, status="skipped", why=[why_card], read="card")
+            if not new and row.get("why") != [why_card]:
+                update_job(row["id"], why=[why_card])
             continue
         if opened >= JOBS_READ_PER_PASS:
             break
@@ -1097,8 +1130,11 @@ def find_and_bid(sess, key, s, note, daily):
                "flags": red_flags(text)}
         row, new = add_job(key, job["url"], job["title"], budget=job["budget"],
                            skills=required_skills(text), query=query, jobText=text[:6000])
-        if not new and row.get("status") != "seen":
+        if not new and row.get("status") != "seen" and row.get("read") != "card":
             continue
+        if not new:                            # a card skip the settings no longer support
+            update_job(row["id"], "seen", read="page", why=[], budget=job["budget"],
+                       skills=required_skills(text), jobText=text[:6000])
         if any(re.search(rx, page.get("full") or "", re.I) for rx in PLATFORMS[key]["bid_done"]):
             update_job(row["id"], "skipped", why=["you have already bid on it yourself"])
             note("%s skipped: already bid on" % row["id"])
@@ -1531,6 +1567,7 @@ def tick(note=None, session_factory=None):
     daily = int(state.get("daily") or s["daily"])
     global _hold_until
     down = None
+    calls0 = dict(_key_calls)
     try:
         with (session_factory or Session)() as sess:
             # A MODEL OUTAGE STOPS THE MODEL'S WORK, NOT THE LOOKING. Measured live on 2026-10-15:
@@ -1582,6 +1619,11 @@ def tick(note=None, session_factory=None):
         say(core.failure_line(exc))
     except OSError as exc:
         say("stopped this pass: %s" % exc)
+    own, shared = _key_calls["own"] - calls0["own"], _key_calls["shared"] - calls0["shared"]
+    if own or shared:
+        say(key_line(own, shared))
+        _write_state(lambda st: st.update(modelKey={"own": own, "shared": shared,
+                                                    "at": _stamp()}))
     return notes
 
 
@@ -1765,6 +1807,10 @@ def report(day=None, boss="sir"):
     plat = state.get("platforms") or {}
     down = [v["line"] for k, v in plat.items() if k in s["platforms"] and not v.get("ok")]
     parts.extend(down)
+    mk = state.get("modelKey") or {}
+    if mk.get("shared"):
+        parts.append("Its last pass ran on the shared Groq key - set GROQ_API_KEY_REVENUE_MODE "
+                     "where the server starts and it gets its own budget.")
     parts.append("Revenue Mode is %s." % ("on" if state.get("on") else "off"))
     return " ".join(parts)
 
@@ -1842,9 +1888,8 @@ def _main(argv):                                               # pragma: no cove
         return 0
     if argv[:1] == ["tick"]:
         import server
-        configure(chat=lambda m: server.call_groq(server.load_config()[0], m),
-                  work_chat=lambda m: server.call_groq(server.load_config()[0], m,
-                                                       max_tokens=WORK_TOKENS),
+        configure(chat=server.revenue_groq,
+                  work_chat=lambda m: server.revenue_groq(m, max_tokens=WORK_TOKENS),
                   config=lambda: server.load_config()[0])
         for line in tick():
             print(line)

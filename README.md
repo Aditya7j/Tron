@@ -2698,6 +2698,24 @@ items have been added yet", "Add certification"), and takes your skills and hour
 remains. `config.json` → `revenue.profile` can add to that, and nothing else does. Measured on
 2026-10-15, your Freelancer profile gives HTML, CSS, JavaScript, React.js and SASS at $10 USD/hour.
 
+**Its own Groq key.** Revenue Mode's model calls (fit, bid, check, plan and work) go through
+`server.revenue_groq()`. When the server's environment carries **`GROQ_API_KEY_REVENUE_MODE`**,
+that key is used, and the brain, the Scholar and preflight never spend from it. The variable has
+to be in the environment *the server starts in*: a persistent User variable (`setx
+GROQ_API_KEY_REVENUE_MODE ...`, then a new terminal) or one set in the terminal that launches it.
+Without it, Revenue Mode runs on the shared key and says so. Every pass ends with a line such as
+"model: 4 calls on Revenue Mode's own Groq key (sha256 1a2b...)" or "... on the SHARED Groq key",
+and the report repeats a shared-key pass. Only a sha256 prefix is ever shown. One limit no code
+can settle: **Groq meters the daily limit by organization**, so a key created in the same Groq
+organization as the shared one shares its budget. A 429's text names the organization.
+
+**Rates per currency.** Your profile's "$10 USD / Hour" is read live, and `revenue.hourlyRate` adds
+your own figure in another currency, for example `{"INR": 500}`. Only INR and USD are accepted,
+because the Ledger holds only those two. A job in a currency with no rate is skipped on its card,
+never converted. That skip is **re-judged on every pass**, so setting a rate reopens the jobs it
+had skipped. Measured: before the INR rate, 19 of the first 50 Freelancer jobs were skipped for
+"no hourly rate in INR".
+
 **The fit gate**, enforced in code:
 - The search card alone rules out hourly jobs, a budget in a currency you have no rate for (never
   converted), and a minimum budget above `maxHours` (4) at your rate. Such a job is not even opened.
@@ -2758,7 +2776,7 @@ profiles), and `revenue-work/`.
     python revenue.py log 20          the last twenty audit rows
     python revenue.py tick            one pass now, with the server's Groq
     python test_revenue.py            the loop against a fake platform, plus the measured bid
-                                      form in a real headless Chrome (102 checks)
+                                      form in a real headless Chrome (111 checks)
 
 **Measured live and not yet measured.** Freelancer.com's sign-in check, profile read, search and
 job read were measured on 2026-10-15, and its bid form (labels "Bid Amount", "This project will be

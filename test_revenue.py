@@ -130,6 +130,13 @@ Fix a CSS layout bug in my header.
 Skills Required
 CSS
 """
+INR_JOB = """Footer alignment fix
+Project Details
+₹600 – 1,500 INR
+Fix the footer alignment in CSS on my landing page.
+Skills Required
+CSS
+"""
 
 # ------------------------------------------------------------------------------ the pure parts
 
@@ -223,6 +230,10 @@ class Script:
         if self.down:
             return None, self.down
         if system == revenue.FIT_SYSTEM:
+            if "footer alignment" in user:
+                return json.dumps({"deliverables": [{"quote": "Fix the footer alignment in CSS",
+                                                     "skill": "CSS"}], "kind": "code",
+                                   "hours": 2, "single": True, "needs": []}), ""
             if "CSS layout bug" in user:
                 return json.dumps({"deliverables": [{"quote": "Fix a CSS layout bug in my header",
                                                      "skill": "CSS"}], "kind": "code",
@@ -255,10 +266,22 @@ class Script:
 
 
 MODEL = Script()
-revenue.configure(chat=MODEL, work_chat=MODEL, config=lambda: json.load(open(CONFIG)))
+
+
+def keyed(source):
+    """The model behind server.revenue_groq(): every call reports which key it used."""
+    def chat(messages):
+        revenue.note_key(source, "abc123")
+        return MODEL(messages)
+    return chat
+
+
+revenue.configure(chat=keyed("own"), work_chat=keyed("own"),
+                  config=lambda: json.load(open(CONFIG)))
 JOBS = {"https://www.freelancer.com/projects/react/Ongoing": LONG_JOB,
         "https://www.freelancer.com/projects/design/Figma": FIGMA_JOB,
         "https://www.freelancer.com/projects/css/Fix-bug": GBP_JOB,
+        "https://www.freelancer.com/projects/css/Footer": INR_JOB,
         "https://www.freelancer.com/projects/react/Pricing-Card": FIT_JOB}
 
 
@@ -356,10 +379,17 @@ state = revenue.read_state()
 check("and the state remembers both as down, Freelancer as up",
       {k: v["ok"] for k, v in state["platforms"].items()},
       {"upwork": False, "fiverr": False, "freelancer": True})
+check("the pass says it spent Revenue Mode's own Groq key, and how many calls",
+      any(n.startswith("model: ") and "on Revenue Mode's own Groq key (sha256 abc123)" in n
+          for n in notes), True)
+check("and never a key's value", any("gsk_" in n for n in notes), False)
 check("his Freelancer profile was read as facts", "Twinleaves" in
       state["profiles"]["freelancer"]["text"], True)
 book = {j["title"]: j for j in revenue.read_book()}
-check("four jobs read", len(book), 4)
+check("five jobs in the book, one of them seen on its card only", len(book), 5)
+check("the INR job skipped on its card: no INR rate of yours yet",
+      (book["Footer alignment fix"]["read"], "no hourly rate in INR" in
+       book["Footer alignment fix"]["why"][0]), ("card", True))
 check("the long-term WhatsApp job skipped by rule",
       (book["Ongoing React developer"]["status"],
        "off the platform" in book["Ongoing React developer"]["why"][0]), ("skipped", True))
@@ -367,6 +397,10 @@ check("the Figma job skipped: not his skill", "Figma" in book["Figma mobile app 
       or "skill" in " ".join(book["Figma mobile app design"]["why"]), True)
 check("the GBP job skipped: no rate of his in GBP",
       any("GBP" in w for w in book["Fix a CSS bug"]["why"]), True)
+check("on its card alone - a skip the settings decided", book["Fix a CSS bug"].get("read"),
+      "card")
+check("so it is not counted as decided for good",
+      revenue._norm_url(book["Fix a CSS bug"]["url"]) in revenue.known_urls(), False)
 fit = book["React pricing card component"]
 check("the fitting job was bid on", (fit["status"], len(FakeSession.bids)), ("bid", 1))
 check("at his rate: 3 hours x $10 = $30", (fit["bid"]["amount"], fit["bid"]["currency"],
@@ -514,7 +548,13 @@ held = [j for j in revenue.read_book() if j["status"] == "seen"]
 check("the job read when the model went down is left undecided", len(held) >= 1, True)
 MODEL.down = None
 revenue._write_state(lambda st: st.update(on=True))
-revenue.tick(session_factory=FakeSession)
+revenue.configure(chat=keyed("shared"), work_chat=keyed("shared"))
+notes = revenue.tick(session_factory=FakeSession)
+check("without its own key, the pass says it ran on the SHARED key",
+      any("on the SHARED Groq key - GROQ_API_KEY_REVENUE_MODE is not in the server's "
+          "environment" in n for n in notes), True)
+check("and so does the report", "ran on the shared Groq key" in revenue.report(), True)
+revenue.configure(chat=keyed("own"), work_chat=keyed("own"))
 check("and is decided on the next pass, not lost",
       [j["status"] for j in revenue.read_book() if j["id"] in {h["id"] for h in held}
        if j["status"] == "seen"], [])
@@ -522,6 +562,24 @@ check("and the sign-in check still ran on the platforms after it",
       any(n.startswith("I'm not signed into Upwork, sir") for n in notes)
       and any(n.startswith("I'm not signed into Fiverr, sir") for n in notes), True)
 MODEL.down = None
+
+print("\na new rate reopens what its card skipped")
+with open(CONFIG, "w", encoding="utf-8") as fh:
+    json.dump({"revenue": {"searches": ["react"], "dailyBidLimit": 5, "minGapMinutes": 10,
+                           "hourlyRate": {"INR": 500}}}, fh)
+with open(os.environ["TRONE_REVENUE_LOG"], encoding="utf-8") as fh:
+    log = json.load(fh)
+for r in log["entries"]:
+    r["at"] = "2000-01-01T00:00:00"
+with open(os.environ["TRONE_REVENUE_LOG"], "w", encoding="utf-8") as fh:
+    json.dump(log, fh)
+revenue._write_state(lambda st: st.update(on=True, daily=5))
+revenue.tick(session_factory=FakeSession)
+inr = [j for j in revenue.read_book() if j["title"] == "Footer alignment fix"][0]
+check("with an INR rate set, the INR job its card skipped is opened and judged on its page",
+      (inr.get("read"), inr["status"]), ("page", "bid"))
+check("and bid at the new rate: 2 hours x Rs 500", (inr["bid"]["amount"], inr["bid"]["currency"]),
+      (100000, "INR"))
 
 # ------------------------------------------------------------------------------ the real bid form
 

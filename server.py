@@ -8767,9 +8767,35 @@ scholar.configure(chat=call_groq, whisper=call_groq_whisper, ready=groq_ready,
                   config=lambda: load_config()[0])
 closer.configure(chat=lambda messages: call_groq(load_config()[0], messages),
                  config=lambda: load_config()[0])
-revenue.configure(chat=lambda messages: call_groq(load_config()[0], messages),
-                  work_chat=lambda messages: call_groq(load_config()[0], messages,
-                                                       max_tokens=revenue.WORK_TOKENS),
+REVENUE_GROQ_ENV = "GROQ_API_KEY_REVENUE_MODE"
+
+
+def revenue_groq(messages, max_tokens=None):
+    """call_groq for Revenue Mode, ON ITS OWN KEY when the environment carries one.
+
+    WHY A SECOND KEY: measured live on 2026-10-15, three Revenue Mode passes in a row were held
+    by Groq's daily limit, spent by the brain, the Scholar and preflight on the one shared key.
+    GROQ_API_KEY_REVENUE_MODE (an environment variable, so it never sits in config.json beside
+    the other) gives its passes their own budget. Absent, Revenue Mode runs on the shared key and
+    SAYS SO every pass - a quiet fallback would be the very loss this exists to stop. Each call
+    reports which key it used to revenue.note_key(): a source and a digest, never the value.
+
+    One caveat no code here can settle: Groq meters by ORGANIZATION. A key made in the same
+    organization as the shared one draws on the same daily limit; a 429's text names the org.
+    """
+    cfg = load_config()[0]
+    own = os.environ.get(REVENUE_GROQ_ENV, "").strip()
+    if own and own.lower() not in PLACEHOLDER_KEYS:
+        cfg = dict(cfg, groq_api_key=own)
+        revenue.note_key("own", groq_digest(cfg).get("sha256", ""))
+    else:
+        revenue.note_key("shared", groq_digest(cfg).get("sha256", ""))
+    return call_groq(cfg, messages, max_tokens=max_tokens)
+
+
+revenue.configure(chat=lambda messages: revenue_groq(messages),
+                  work_chat=lambda messages: revenue_groq(messages,
+                                                          max_tokens=revenue.WORK_TOKENS),
                   config=lambda: load_config()[0])
 
 
