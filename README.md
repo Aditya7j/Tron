@@ -2662,7 +2662,7 @@ gitignored.
     python closer.py report             the report, exactly as it is spoken
     python closer.py log 20             the last twenty audit rows
     python closer.py tick               one tick now, with the server's Groq
-    python test_closer.py               the whole loop against a fake Gmail (94 checks)
+    python test_closer.py               the whole loop against a fake Gmail (98 checks)
 
 **Left for phase 2:** doing the client work after a meeting, calendar integration (a meeting is
 an email for now), LinkedIn, WhatsApp and other channels (each needs its own compliant

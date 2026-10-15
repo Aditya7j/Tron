@@ -366,7 +366,17 @@ def vet(text, allowed):
         problems.append("it claims to have looked at their %s" % _SEEN.search(text).group(0))
     if _PLACEHOLDER.search(text):
         problems.append("it still has a placeholder: %r" % _PLACEHOLDER.search(text).group(0))
+    if _PRESUME.search(text):
+        problems.append("it claims to know them: %r" % _PRESUME.search(text).group(0))
     return list(dict.fromkeys(problems))
+
+
+# CLAIMS TO KNOW THE RECIPIENT, measured in two live cold emails on 2026-10-15: "I know you
+# support patients in Pune with comprehensive care" went out, and "I imagine you see a lot of
+# patients keeping their phones close" was a draft. The Closer knows a name, a category and a
+# city - nothing about how a business works - so a sentence that begins by claiming to is cut.
+_PRESUME = re.compile(r"\b(?:i|we)\s+(?:know|understand|imagine|can\s+see|see|noticed|hear|heard|"
+                      r"gather|bet|am\s+sure|'m\s+sure)\s+(?:that\s+)?(?:you|your)\b", re.I)
 
 
 _SIGNOFF = re.compile(r"^\s*(?:best|regards|best\s+regards|warm\s+regards|kind\s+regards|"
@@ -465,9 +475,11 @@ def checked(draft_text, fact_text):
     return ["unsupported: %r" % q for q in bad]
 
 
-def _draft(system, user, fields, fact_text, check_fields=None):
+def _draft(system, user, fields, fact_text, check_fields=None, must_name=None):
     """Ask, vet, re-ask with the reasons, at most DRAFT_ATTEMPTS times. (object, attempts) or
-    (None, last reasons). Raises ModelDown if Groq cannot be asked at all."""
+    (None, last reasons). Raises ModelDown if Groq cannot be asked at all. `must_name`: the
+    business's name exactly as the book has it, which the body must carry - measured, a live
+    cold email greeted "Galaxy Closer Test Dental 2" as "Galaxy Closer Test Dental"."""
     reasons = []
     for attempt in range(1, DRAFT_ATTEMPTS + 1):
         ask = user if not reasons else (
@@ -481,6 +493,9 @@ def _draft(system, user, fields, fact_text, check_fields=None):
             continue
         if any(not str(got.get(f) or "").strip() for f in fields):
             reasons = ["it left out %s" % ", ".join(f for f in fields if not got.get(f))]
+            continue
+        if must_name and must_name.lower() not in str(got.get("body") or "").lower():
+            reasons = ["it does not name the business exactly as %r" % must_name]
             continue
         text = "\n".join(_flatten(got.get(f)) for f in (check_fields or fields))
         reasons = checked(text, fact_text)
@@ -796,7 +811,7 @@ def draft_cold(lead, s):
     allowed = fact_text + "\n" + json.dumps({k: lead.get(k) for k in (
         "name", "category", "niche", "city", "location")}, ensure_ascii=False)
     got, n = _draft(COLD_SYSTEM % {"sender": s["sender"]}, fact_text, ("subject", "body"),
-                    allowed)
+                    allowed, must_name=lead["name"])
     if got is None:
         return None, None, "no draft passed the checks (%s)" % "; ".join(n[:3])
     subject = _clip(got["subject"], 90).strip(" .\"'")

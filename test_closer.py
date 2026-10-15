@@ -137,8 +137,9 @@ class Script:
         if system.startswith("You read one email"):
             return json.dumps(self.classify), None
         if system.startswith("You write one short, personal first email"):
-            return json.dumps({"subject": "Reminders for Test Dental", "body":
-                               "Hello Test Dental team,\n\nAditya Singh sets up WhatsApp "
+            name = user.split("RECIPIENT: ", 1)[1].split(" - ", 1)[0]
+            return json.dumps({"subject": "Reminders for " + name, "body":
+                               "Hello " + name + " team,\n\nAditya Singh sets up WhatsApp "
                                "appointment reminders for clinics, so patients can confirm or "
                                "reschedule by replying. It might help a dental practice keep "
                                "its day on track.\n\nWould a short example be useful?\n\n"
@@ -193,7 +194,11 @@ for label, text in (
         ("a claim to be human", "I'm a real person, not a bot."),
         ("having seen their website", "I visited your website and loved it."),
         ("an invented link", "See www.example-demo.com for more."),
-        ("a placeholder", "Hello [Clinic Name], hope you are well.")):
+        ("a placeholder", "Hello [Clinic Name], hope you are well."),
+        ("a claim to know them (sent live, 2026-10-15)",
+         "I know you support patients in Pune with comprehensive care."),
+        ("a guess about them (a live draft)",
+         "I imagine you see a lot of patients keeping their phones close.")):
     check("rejects %s" % label, bool(closer.vet(text, FACTS)), True)
 check("a number THEY wrote may be repeated back",
       closer.vet("Happy to cover all 3 of your branches.", FACTS + "\nTHEIR MESSAGE:\nwe have 3 "
