@@ -2669,6 +2669,133 @@ an email for now), LinkedIn, WhatsApp and other channels (each needs its own com
 approach), and invoicing. It also cannot yet match a business that writes back as a new email
 instead of replying in the thread. The thread is the only match it trusts.
 
+### Revenue Mode
+
+Revenue Mode finds small freelance jobs on **Freelancer.com, Upwork and Fiverr**, bids on the
+ones your own profile says you can do, does the work once a bid is awarded, and then **stops at
+"ready for your review"**. Nothing goes to a client until you say "submit it" and then yes on the
+card. It is Operator doing a longer job. Every page is opened, read, typed into and pressed
+through `tools/operator_core.py` (the same finder, executor, reader and Ctrl+M) in a background
+tab of the DevTools Chrome. There is no browser layer of its own.
+
+**What you say:**
+- "be in your revenue mode" / "start revenue mode": the one on-card. It names the platforms and
+  the daily bid cap (`revenue.dailyBidLimit`, default 2, ceiling 5).
+- "stop revenue mode": off at once, with no card. **Ctrl+M** while it is in the browser stops the
+  step it is on *and* switches Revenue Mode off.
+- "revenue update": the report, read from the book. It covers jobs looked at and skipped (with
+  the last reason), bids placed, what is ready for review, which platforms are not signed in, and
+  for a paid job the one-line "Sir, I finished <title> - 3 hours, $30.00." The hours run from the
+  award to the submission.
+- "submit it" / "send it" / "submit R-0003": the **revenue_submit** card, then a yes. It delivers
+  the job's folder as you left it, your edits included, with `DELIVERY-NOTE.txt` as the message.
+  A bare "submit it" belongs to Revenue Mode only while a job is ready, so it stays free for
+  everything else the rest of the time.
+
+**Its facts are your own words.** There is no sheet to fill in. Once a day it reads your profile
+on each platform (`/me` on Freelancer.com), strips the platform's own furniture ("No portfolio
+items have been added yet", "Add certification"), and takes your skills and hourly rate from what
+remains. `config.json` → `revenue.profile` can add to that, and nothing else does. Measured on
+2026-10-15, your Freelancer profile gives HTML, CSS, JavaScript, React.js and SASS at $10 USD/hour.
+
+**Its own Groq key.** Revenue Mode's model calls (fit, bid, check, plan and work) go through
+`server.revenue_groq()`. When the server's environment carries **`GROQ_API_KEY_REVENUE_MODE`**,
+that key is used, and the brain, the Scholar and preflight never spend from it. The variable has
+to be in the environment *the server starts in*: a persistent User variable (`setx
+GROQ_API_KEY_REVENUE_MODE ...`, then a new terminal) or one set in the terminal that launches it.
+Without it, Revenue Mode runs on the shared key and says so. Every pass ends with a line such as
+"model: 4 calls on Revenue Mode's own Groq key (sha256 1a2b...)" or "... on the SHARED Groq key",
+and the report repeats a shared-key pass. Only a sha256 prefix is ever shown. One limit no code
+can settle: **Groq meters the daily limit by organization**, so a key created in the same Groq
+organization as the shared one shares its budget. A 429's text names the organization.
+
+**Rates per currency.** Your profile's "$10 USD / Hour" is read live, and `revenue.hourlyRate` adds
+your own figure in another currency, for example `{"INR": 500}`. Only INR and USD are accepted,
+because the Ledger holds only those two. A job in a currency with no rate is skipped on its card,
+never converted. That skip is **re-judged on every pass**, so setting a rate reopens the jobs it
+had skipped. Measured: before the INR rate, 19 of the first 50 Freelancer jobs were skipped for
+"no hourly rate in INR".
+
+**The fit gate**, enforced in code:
+- The search card alone rules out hourly jobs, a budget in a currency you have no rate for (never
+  converted), and a minimum budget above `maxHours` (4) at your rate. Such a job is not even opened.
+- Opened jobs are refused by rule for anything off-platform (WhatsApp, Telegram, email, UPI, QR,
+  "outside Freelancer") or not one small scope ("ongoing", "long-term", "monthly").
+- Then the model, **on evidence**. It must quote each deliverable from the post and name one of
+  *your* skills that covers it. A quote that is not in the post, or a skill you don't list, is a
+  skip. So is an estimate above 4 hours or more than four deliverables.
+- The bid is hours × your rate, never under the client's minimum and never over their maximum.
+- The letter passes `revenue.vet_bid()`, which rejects any certification, review, rating,
+  portfolio, award, "years of experience", guarantee, link, contact detail, time promise, number
+  not in your facts, claim to be human, or unprompted mention of AI. A second model then checks
+  it against your profile. Three failures and the job is held, never sent half right.
+- A form with a **paid upgrade ticked** (Sponsored, Highlight) is not submitted. Revenue Mode never
+  pays for one.
+
+**Pacing is a cap, not a disguise.** It places at most `dailyBidLimit` bids a day, `minGapMinutes`
+(45) apart, with one pass every `tickSeconds` (600). Nothing randomises timing or masks the browser.
+A CAPTCHA, "verify you are human" or "unusual activity" page pauses that platform for the day and
+is reported. Revenue Mode never solves one.
+
+**Not signed in is a sentence.** Each pass opens the platform's own profile page first. A redirect
+to its login page gives "I'm not signed into Upwork, sir - sign in to it in the DevTools Chrome and
+I'll pick it up on the next pass.", in the pass's notes and in the report, and that platform is
+skipped. Both redirects were measured live: Upwork goes to `/ab/account-security/login`, Fiverr to
+`/login?return=`.
+
+**After the bid,** all of it on its own:
+1. Each pass reads the bid's page for the award and accepts it.
+2. Whatever the client writes after the award is read. "Did you use AI?" gets an honest yes in a
+   fixed sentence (`AI_LINE`), and a request to pay or talk off-platform gets a fixed refusal that
+   says why (`OFF_PLATFORM_LINE`). Each is sent once per job. Anything else waits for you in the
+   report.
+3. The work is planned (one to four files), then each file is written with a 6,000-token ceiling,
+   because a few hours of work does not fit the butler's 400. Python is compiled, JavaScript goes
+   through `node --check`, and HTML is rendered to a `-preview.png` by headless Chrome. A plan that
+   needs something only the client has becomes `needs-input`.
+4. `revenue-work/R-xxxx/` gets the files, `DELIVERY-NOTE.txt` and `REVIEW.txt`. The review file
+   lists every figure and link in the work that the post did not give, for you to check by eye.
+   Then it stops.
+5. After your submit, the Transaction History is read for the payment. **On an account with no
+   transactions, Freelancer.com shows sample rows that never go away** ("Random Stuff",
+   "$56004.44 USD", "David Wang", 2019, STATUS PAID; measured for 35 s). A payment is therefore only
+   ever a row that names the job's exact title, is dated on or after the submission, and is not
+   one of those. The page is screenshotted to `proofs/`.
+6. **The earning reaches the Ledger only as the Ledger's own card.** "revenue update" puts up
+   `add_ledger_entry` on the ledger door with the platform's figure, the proof and the job number
+   in the note. Your yes writes it. `revenue.recorded()` reads `ledger.json` itself to know a job
+   is booked, so there is no second record.
+
+**Where things are kept** (all gitignored): `revenue-book.json` (every job looked at and what became
+of it), `revenue-log.json` (every bid, message, delivery and payment, written as `pressing` before
+the press and never retried), `revenue-state.json` (the switch, each platform's last check, your
+profiles), and `revenue-work/`.
+
+    python revenue.py                 the switch, each platform's last check, the book
+    python revenue.py report          the report, exactly as it is spoken
+    python revenue.py log 20          the last twenty audit rows
+    python revenue.py tick            one pass now, with the server's Groq
+    python test_revenue.py            the loop against a fake platform, plus the measured bid
+                                      form in a real headless Chrome (111 checks)
+
+**Measured live and not yet measured.** Freelancer.com's sign-in check, profile read, search and
+job read were measured on 2026-10-15, and its bid form (labels "Bid Amount", "This project will be
+delivered in", "Describe your proposal", button "Place Bid") was read from the live page. The
+award, client-message, delivery and payment steps on every platform, and everything past sign-in
+on Upwork and Fiverr, are **unmeasured**. They are written to the platforms' documented shape, and
+the finder fails closed on them: a miss stops with a sentence and never guesses. The first real
+award will say which ones hold.
+
+**Things to know:**
+- **Platform rules on automation.** Upwork's and Fiverr's terms restrict automated access and
+  proposals, so read them before signing those two in. Freelancer.com offers an official API for
+  bidding, which is the sanctioned route if this ever scales. Phase 1 drives the logged-in web page.
+- **Your Freelancer profile contradicts itself:** the bio says "1.5 years" and the Experience
+  section says Sep 2022 - present. Bids never state years either way, but fix it for clients.
+- **Freelancer.com asks you for a GSTIN** (a banner on every page, for TCS on Indian freelancers).
+  It may matter before a payout.
+- **Freelancer's free plan gives 6 bids a month**, which is why the default cap is 2 a day.
+
 ### Growing a hand
 
 Every repetitive digital task you own is a ten-line script waiting for a registry entry.
