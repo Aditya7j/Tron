@@ -11,10 +11,12 @@ out of config.json. It now builds the same RFC 2822 message and hands it to Gmai
 users.messages.send over an OAuth token, as the connected account. Three things improve and
 one gets harder, and it is worth knowing which is which:
 
-  + There is no long-lived password on this disk any more. The grant is scoped to
-    gmail.send and gmail.compose - it cannot READ a single message in the mailbox - and the
-    employer can revoke it from his Google account page in one click, without touching this
-    machine, and the very next attempt says so out loud.
+  + There is no long-lived password on this disk any more. The grant was scoped to
+    gmail.send and gmail.compose and could not READ a single message; since the Closer's
+    phase 1 it also carries gmail.readonly, so it can, though this hand still reads nothing
+    (see the note above google_api.SCOPES). The employer can revoke it from his Google
+    account page in one click, without touching this machine, and the very next attempt
+    says so out loud.
   + Gmail stamps the sent copy into Sent properly, because it is Gmail doing the sending
     rather than a stranger authenticating as him.
   + A send now returns Google's own message id, so the ledger records a thing that exists

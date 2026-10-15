@@ -111,3 +111,13 @@ proofs/
 # where they were found, and still not this repository's to publish as a list.
 leads.json
 leads.json.tmp
+# THE CLOSER'S LOG, SWITCH AND DEMOS. What other businesses wrote back, what was sent to them, and
+# the files made for them - the employer's correspondence, not this repository's to publish.
+closer-log.json
+closer-log.json.tmp
+closer-log.json.lock
+closer-state.json
+closer-state.json.tmp
+closer-state.json.lock
+closer-demos/
+leads.json.lock

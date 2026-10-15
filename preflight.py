@@ -4734,11 +4734,13 @@ def check_google_grant():
     used to be a wrong line in a file nobody read, and is now an alarm on the employer's
     phone at four in the morning - so five things about it earn an integer here:
 
-      (a) THE SCOPES ARE THE THREE, AND NOTHING WIDER. gmail.send, gmail.compose and
-          calendar.events. Every one of those is a WRITE scope with no read: this grant
-          cannot list a message, cannot read a thread and cannot see an event it did not
-          create the id of. Widen it to mail.google.com or calendar and both statements
-          stop being true, silently, with every harness still green - because a broader
+      (a) THE SCOPES ARE THE FOUR, AND NOTHING WIDER. gmail.send, gmail.compose,
+          calendar.events - and gmail.readonly, added for the Closer's phase 1 with the
+          employer's approval, because it must read the replies to the cold emails it sends.
+          That one is a real widening and is named as one: the grant can now read the
+          mailbox. It still cannot change, label or delete a message (no gmail.modify, no
+          mail.google.com) and cannot read the calendar (no plain "calendar"). Widen it again
+          and nothing fails, silently, with every harness still green - because a broader
           scope never fails, it only permits. Read from the source AND from the running
           server, since a constant is not a promise until the process is using it.
       (b) NOTHING SECRET IS ON THE WIRE. GET /google is the only Google route the page can
@@ -4775,7 +4777,8 @@ def check_google_grant():
     notes, warnings = [], []
     want = ["https://www.googleapis.com/auth/gmail.send",
             "https://www.googleapis.com/auth/gmail.compose",
-            "https://www.googleapis.com/auth/calendar.events"]
+            "https://www.googleapis.com/auth/calendar.events",
+            "https://www.googleapis.com/auth/gmail.readonly"]
 
     # -- (a) the scopes, from the source first.
     try:
@@ -4799,14 +4802,21 @@ def check_google_grant():
     broad = sorted({s for s in literals
                     if re.search(r"^https://mail\.google\.com"
                                  r"|auth/(gmail|calendar)$"
-                                 r"|auth/gmail\.(readonly|modify|metadata|insert)"
+                                 r"|auth/gmail\.(modify|metadata|insert)"
                                  r"|auth/calendar\.readonly", s)})
     if broad:
         return FAIL, notes + ["google_api.py asks for the scope(s) %s in a string literal. "
-                              "This grant is write-only by design: it must not be able to "
-                              "read a mailbox it was given to send from" % broad]
-    notes.append("three write-only scopes, declared and matched exactly: send, compose, "
-                 "calendar.events - no read scope anywhere in the module")
+                              "The grant may read mail (gmail.readonly, for the Closer) and "
+                              "must never be able to change it or the calendar" % broad]
+    # THE ONE READER. gmail.readonly can read anything in the mailbox, so what this codebase
+    # does with it is held to what the Closer needs: one function reads (get_thread, by thread
+    # id), and nothing outside google_api.py builds a Gmail URL of its own.
+    if "messages.list" in src or re.search(r"/users/me/messages\?q=|/threads\?q=", src):
+        return FAIL, notes + ["google_api.py searches the mailbox. The read scope is for the "
+                              "Closer's own threads, by id, and nothing else"]
+    notes.append("four scopes, declared and matched exactly: send, compose, calendar.events "
+                 "and gmail.readonly - the last for the Closer, and read only through "
+                 "get_thread(), by thread id, never by search")
 
     if not state["up"]:
         warnings.append("the server is not reachable, so (a) is source alone and (b)-(e) "
@@ -4821,7 +4831,7 @@ def check_google_grant():
                               "state line has nothing to read"
                               % (status, first_line(body.decode("utf-8", "replace")))]
     if list(grant.get("scopes") or []) != want:
-        return FAIL, notes + ["the running server offers scopes %s, which is not the three "
+        return FAIL, notes + ["the running server offers scopes %s, which is not the four "
                               "in its own source. The process is using a different grant "
                               "from the one this file just checked" % grant.get("scopes")]
     where = grant.get("state")

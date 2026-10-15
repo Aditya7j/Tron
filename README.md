@@ -2561,6 +2561,114 @@ protection is left hidden.
     python hunter.py list 20            the last twenty rows
     python test_hunter.py               the pure parts (68 checks)
 
+### The Closer
+
+The Closer works the Hunter's leads. It writes each new lead one short, personal email, reads
+what comes back, answers it, and sends a demo when a business asks for one. All of this happens
+on its own once you have said "start the closer". It never decides that a business deserves a
+meeting. That is your call, made through "lock a meeting with <business>".
+
+**Gmail access is wider than before.** Until this phase the Google grant was `gmail.send` +
+`gmail.compose` and could not read a single message. The Closer has to read the replies to its
+own emails, so the grant now also carries **`gmail.readonly`**. The employer approved this for
+phase 1. Gmail offers no narrower scope that can read a thread, so the grant can read the whole
+mailbox. The code only uses it through `google_api.get_thread()`, by thread id, and only on
+threads the Closer's own sends created. It never searches the mailbox. It still cannot change,
+label or delete anything. Preflight 23 asserts the four scopes by equality. To take the read
+permission back, revoke the grant in your Google account.
+
+**What you say:**
+- "start the closer" / "closer chalu karo": the one card. It says how many new leads with an
+  address it will write to and the daily cap (`closer.dailyColdLimit`, default 10, ceiling 25).
+  After a yes, nothing waits for approval.
+- "stop the closer" / "closer band karo": off at once, with no card.
+- "today's leads" / "aaj ka update do": the report, read from the book and the audit log. It
+  covers how many leads were approached today, how many cold emails went (and which failed),
+  who replied and what each one asked in their own words, and who is waiting on your meeting
+  decision.
+- "lock a meeting with <business> [on Friday at 4pm]": a card, and on a yes one email in that
+  business's thread. If you name a time it offers that time, otherwise it asks them which times
+  suit them. No calendar is touched. The lead becomes `meeting-proposed`, then
+  `meeting-confirmed` when they answer with a time, and their words are kept.
+
+**The offer sheet** is config.json's `closer` block. It is the only source of anything the
+Closer may claim, and without `service` and `senderName` the Closer refuses to start:
+
+    "closer": {
+      "offer": {
+        "service": "one line: what you offer",
+        "details": ["facts it may state", "..."],
+        "pricing": "your pricing guidance, word for word - or empty: then it never names a price",
+        "faq": [{"q": "a question businesses ask", "a": "your answer"}],
+        "senderName": "Aditya Singh",
+        "signature": "Aditya Singh\n..."
+      },
+      "dailyColdLimit": 10, "followUpAfterDays": 5, "tickSeconds": 120
+    }
+
+**What happens on its own** (the daemon in `closer.py`, every `tickSeconds`):
+1. Every thread it started is read. Replies are matched **by thread**, never by sender address.
+   A bounce marks the lead `bounced`. An automatic reply is read and ignored. An opt-out ("no
+   thanks", "unsubscribe") is caught by a rule, not by the model, and gets one fixed
+   acknowledgement. Everything else is classified as `questions`, `wants-demo`, `wants-price`
+   or `wants-meeting`, and the business's own words are stored verbatim as the lead's
+   requirement. A reply nobody can place becomes `replied`, gets no answer, and waits for you.
+2. Each reply addresses what that business asked. A request for a demo gets one of three kinds,
+   made and attached: a code sample (Python is compiled and JavaScript is checked with `node
+   --check` before it goes), a one-page proposal (PDF), or a landing-page mockup (PNG). The PDF
+   and PNG are drawn by headless Chrome from a fixed template, and the model writes only the
+   copy. A request that fits none of the three gets "I'll have our team follow up on that
+   specific need" and nothing improvised.
+3. One follow-up to a lead that has never answered, after `followUpAfterDays` (0 turns this
+   off). Never a second one.
+4. One cold email per tick, up to the day's cap.
+
+**What it never does,** enforced in code rather than asked of the model:
+- **No invented price, date or capability.** Every draft passes `closer.vet()`. A digit,
+  currency, URL, address, "free", "discount", "guarantee", "next week" or "within two days"
+  that is not in the offer sheet, the lead's row or the business's own message rejects it. A
+  second model then reads the draft against the same facts. A reply that fails three times
+  becomes a fixed honest sentence ("Aditya will come back to you on that directly"), and a cold
+  email that fails waits for the next tick.
+- **No second unsolicited email after the one follow-up.** `_send()` refuses it whatever
+  called it.
+- **"Are you an AI?" is answered yes**, in a fixed sentence placed first by code. A draft
+  claiming to be human is rejected.
+- **A failed send is never retried.** The log row is written as `sending` before Gmail is
+  asked. A cold email goes only to a lead with no row at all, and a reply only to a message
+  nothing has answered yet. A crash between Gmail's yes and the log's write therefore blocks a
+  duplicate rather than causing one.
+- **Groq or nothing.** A business is never written to by the 1.7B local fallback. When Groq is
+  throttled, the work waits. The free tier allows 200,000 tokens a day for `qwen/qwen3.8-27b`,
+  **shared with the brain and the Scholar**, and a cold email costs roughly 1,500 of them with
+  its check. When Groq refuses on the daily limit, the Closer stops asking for 15 minutes
+  (`TPD_WAIT_S`) so it doesn't spend each trickle of freed tokens on a draft it can't finish.
+  `openai/gpt-oss-120b` has its own quota, but it spends the house client's 400-token answer
+  ceiling on reasoning and comes back empty (measured 2026-10-14). It can't be used without
+  changing that client.
+- **You take over by answering by hand.** A message in the thread sent from your mailbox that
+  the Closer did not send stops it writing to that lead. It still reads the thread for the
+  report.
+
+**Where things are kept:** the leads stay in `leads.json`, the Hunter's book and the only lead
+store. Statuses move only through `hunter.update_lead()`, under a cross-process lock file, so a
+hunt running beside the Closer cannot write a "contacted" lead back to "new". The Closer's own
+fields sit under each row's `closer` key. The audit log is `closer-log.json`: every send and
+every reply read, with to whom, when, the body, any demo file's name and sha256, and why. The
+demos are in `closer-demos/` and the switch is in `closer-state.json`. All of these are
+gitignored.
+
+    python closer.py                    the switch, the offer sheet, the book's statuses
+    python closer.py report             the report, exactly as it is spoken
+    python closer.py log 20             the last twenty audit rows
+    python closer.py tick               one tick now, with the server's Groq
+    python test_closer.py               the whole loop against a fake Gmail (100 checks)
+
+**Left for phase 2:** doing the client work after a meeting, calendar integration (a meeting is
+an email for now), LinkedIn, WhatsApp and other channels (each needs its own compliant
+approach), and invoicing. It also cannot yet match a business that writes back as a new email
+instead of replying in the thread. The thread is the only match it trusts.
+
 ### Growing a hand
 
 Every repetitive digital task you own is a ten-line script waiting for a registry entry.
