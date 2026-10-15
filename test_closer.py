@@ -342,6 +342,13 @@ check("the demo file is kept, byte for byte", os.path.getsize(d["attachments"][0
 sent_before = len(GMAIL.sent)
 tick()
 check("read again, it is not answered twice", len(GMAIL.sent), sent_before)
+GMAIL.arrive(tid, "Yes, I am interested.")
+MODEL.classify = {}
+tick()
+lead = book("H-0001")
+check("a reply that asks nothing is not answered, and does not erase what they asked before",
+      (len(GMAIL.sent) - sent_before, lead["status"], lead["closer"]["requirement"][:12],
+       log("inbound")[-1]["label"]), (0, "wants-demo", "Interesting.", "unclear"))
 
 # ------------------------------------------------------------------------------ price, invented
 
@@ -435,6 +442,9 @@ check("their time confirms it, in their own words",
       ("meeting-confirmed", "Friday at 4pm works for us."))
 check("and the acknowledgement is the fixed one", "noted" in GMAIL.sent[-1]["msg"].get_content(),
       True)
+check("the report says the time offered beside what they said",
+      'Meetings confirmed: Test Dental (you offered Friday at 4pm) - they said "Friday at 4pm '
+      'works for us."' in closer.report(), True)
 
 # ------------------------------------------------------------------------------ the employer by hand
 

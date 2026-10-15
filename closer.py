@@ -1341,6 +1341,14 @@ def handle_inbound(lead, msg, s, note):
               "lastInboundHeader": msg["messageId"],
               "requirement": said, "requirementAt": row["at"],
               "replyTo": msg["replyTo"] or msg["from"]}
+    # A REPLY THAT ASKS NOTHING DOES NOT ERASE ONE THAT DID. Measured live on 2026-10-15: "Yes, I
+    # am interested." after a request for a mockup and a price turned the lead from wants-demo to
+    # replied and replaced the stated requirement with itself. It is logged and reported; the
+    # status and the requirement stay what the business last actually asked for.
+    if label == "unclear" and lead["status"] in ENGAGED and lead["status"] != "replied":
+        status = lead["status"]
+        for key in ("asked", "requirement", "requirementAt"):
+            fields.pop(key)
     if label == "meeting-time":
         fields["meetingTime"] = said
     if reading["ai"]:
@@ -1610,9 +1618,14 @@ def report(day=None, boss="sir"):
                      "name for any of them." % ", ".join(_names(waiting)))
     confirmed = [r for r in leads if r["status"] == "meeting-confirmed"]
     if confirmed:
-        parts.append("Meetings confirmed: %s." % "; ".join(
-            "%s - \"%s\"" % (r["name"], _clip((r.get("closer") or {}).get("meetingTime"), 80))
-            for r in confirmed[:4]))
+        # WHAT WAS OFFERED BESIDE WHAT THEY SAID: measured live, a business confirms with "Yes, I
+        # will be available at that time." - true, and silent about when.
+        def met(r):
+            c = r.get("closer") or {}
+            offered = c.get("meetingAsked") if c.get("meetingAsked") != "their choice" else ""
+            return "%s%s - they said \"%s\"" % (r["name"], (" (you offered %s)" % offered)
+                                                if offered else "", _clip(c.get("meetingTime"), 80))
+        parts.append("Meetings confirmed: %s." % "; ".join(met(r) for r in confirmed[:4]))
     state = read_state()
     written = {r.get("leadId") for r in rows if r.get("kind") == "cold"}
     left = sum(1 for r in _with_email(leads) if r["status"] == "new" and r["id"] not in written)
