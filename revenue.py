@@ -106,14 +106,22 @@ PROFILE_MAX_AGE_S = 24 * 3600
 PANIC_ID = 0x0B1D                              # Operator's hands use 0x0B1A..0x0B1C
 WORK_KINDS = ("code", "writing", "webpage")
 
-STATUSES = ("skipped", "bid", "bid-failed", "bid-unconfirmed", "awarded", "needs-input",
+STATUSES = ("skipped", "bid", "bid-failed", "bid-unconfirmed", "dry-run", "awarded", "needs-input",
             "ready", "submitted", "submit-unconfirmed", "paid", "work-failed")
 SAY_STATUS = {"bid": "bid placed, waiting on the client", "awarded": "awarded - working on it",
               "needs-input": "awarded, but the client has to send something first",
               "ready": "READY FOR YOUR REVIEW", "submitted": "submitted, waiting for payment",
               "submit-unconfirmed": "submitted, but the platform did not confirm it - check it",
               "bid-unconfirmed": "bid pressed, but the platform did not confirm it - check it",
+              "dry-run": "drafted - DRY RUN, nothing was pressed or sent",
               "paid": "paid", "work-failed": "awarded, but the work failed its checks"}
+
+# DRY RUN IS THE DEFAULT, AND SAFE ON THE MISSING KEY. config.json "revenue.dryRun" must be
+# written as `false`, in words, before anything here presses a real button on a real platform. No
+# key, a typo'd key, or any value that is not literally the boolean false all mean "dry run" -
+# bool(True)-ish rather than bool(False)-ish, because the cost of staying in dry run by accident is
+# a quiet no-op and the cost of leaving it by accident is a real bid in the employer's name.
+DEFAULT_DRY_RUN = True
 
 _lock = threading.Lock()
 _chat = None
@@ -325,7 +333,9 @@ def settings(cfg=None):
          "rates": rates,
          "skills": [_clip(x, 40) for x in (profile.get("skills") or []) if str(x).strip()][:40],
          "about": _clip(profile.get("about"), 1500),
-         "name": _clip(profile.get("name"), 60)}
+         "name": _clip(profile.get("name"), 60),
+         # See DEFAULT_DRY_RUN above: anything other than the literal `false` keeps this True.
+         "dryRun": block.get("dryRun", DEFAULT_DRY_RUN) is not False}
     problems = []
     if not plats:
         problems.append("revenue.platforms in config.json names none of upwork, fiverr, "
@@ -1156,13 +1166,28 @@ def find_and_bid(sess, key, s, note, daily):
             continue
         bid = {"amount": amount, "currency": job["budget"]["currency"], "days": s["days"],
                "letter": letter, "hours": fit["hours"]}
+        why_fit = "fits: %s; %d hours at your rate" % (
+            ", ".join(d["skill"] for d in fit["deliverables"]), fit["hours"])
+        # DRY RUN STOPS HERE, BEFORE ANYTHING IS PRESSED. Everything above this line only READ the
+        # live page (search, read_job, check_fit, draft_bid) - the same as a person browsing with
+        # the posts open. Nothing below this line runs: no field is filled, no button is clicked,
+        # no bid reaches the platform. The job is logged exactly as a real bid would be, status
+        # "dry-run", so "revenue update" says what WOULD have been bid instead of staying silent.
+        if s.get("dryRun", True):
+            entry = log_event({"kind": "bid", "jobId": row["id"], "platform": key,
+                               "title": job["title"], "url": job["url"], "status": "dry-run",
+                               "amount": amount, "currency": bid["currency"], "days": s["days"],
+                               "letter": letter, "draft": how, "why": why_fit})
+            update_job(row["id"], "dry-run", fit=fit, bid=dict(bid, entry=entry["id"]))
+            note("%s WOULD BID on %s: %s %s - dry run, nothing pressed or sent" % (
+                row["id"], PLATFORMS[key]["name"], bid["currency"],
+                ledger.money(amount, bid["currency"]) if bid["currency"] in ledger.CURRENCIES
+                else amount))
+            return row["id"]
         entry = log_event({"kind": "bid", "jobId": row["id"], "platform": key,
                            "title": job["title"], "url": job["url"], "status": "pressing",
                            "amount": amount, "currency": bid["currency"], "days": s["days"],
-                           "letter": letter, "draft": how,
-                           "why": "fits: %s; %d hours at your rate" % (
-                               ", ".join(d["skill"] for d in fit["deliverables"]),
-                               fit["hours"])})
+                           "letter": letter, "draft": how, "why": why_fit})
         update_job(row["id"], "bid-unconfirmed", fit=fit, bid=dict(bid, entry=entry["id"]))
         try:
             status, line = sess.place_bid(key, job, bid)
@@ -1776,7 +1801,17 @@ def report(day=None, boss="sir"):
             _clip(r.get("title"), 50), PLATFORMS[r["platform"]]["name"],
             ledger.money(r["amount"], r["currency"]) if r.get("currency") in ledger.CURRENCIES
             else r.get("amount")) for r in placed[:3])) if placed else ""
-        failed = [r for r in bids if r.get("status") != "bid"]
+        # DRY RUN IS NEITHER A PLACED BID NOR A FAILURE - it is reported on its own line so
+        # the employer cannot mistake "nothing was actually sent" for "something went wrong".
+        dry = [r for r in bids if r.get("status") == "dry-run"]
+        if dry:
+            line += "; %d dry-run bid%s drafted but NOT sent (%s)" % (
+                len(dry), "" if len(dry) == 1 else "s", "; ".join("%s on %s, %s" % (
+                    _clip(r.get("title"), 50), PLATFORMS[r["platform"]]["name"],
+                    ledger.money(r["amount"], r["currency"])
+                    if r.get("currency") in ledger.CURRENCIES else r.get("amount"))
+                    for r in dry[:3]))
+        failed = [r for r in bids if r.get("status") not in ("bid", "dry-run")]
         if failed:
             line += "; %d bid%s did not go cleanly: %s" % (
                 len(failed), "" if len(failed) == 1 else "s", "; ".join(
