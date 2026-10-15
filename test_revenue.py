@@ -59,7 +59,12 @@ def check(label, got, want):
 
 
 with open(CONFIG, "w", encoding="utf-8") as fh:
-    json.dump({"revenue": {"searches": ["react"], "dailyBidLimit": 1, "minGapMinutes": 30}}, fh)
+    # dryRun is explicitly false here: these tests exercise the real press path (place_bid,
+    # deliver, ...) against the FAKE Session below, never a real site, so there is nothing unsafe
+    # about it - and it is the only way this suite still proves that path works. Production's own
+    # config.json has no such line, so DEFAULT_DRY_RUN (true) is what actually ships.
+    json.dump({"revenue": {"searches": ["react"], "dailyBidLimit": 1, "minGapMinutes": 30,
+                           "dryRun": False}}, fh)
 
 # ------------------------------------------------------------------------------ measured text
 
@@ -566,7 +571,7 @@ MODEL.down = None
 print("\na new rate reopens what its card skipped")
 with open(CONFIG, "w", encoding="utf-8") as fh:
     json.dump({"revenue": {"searches": ["react"], "dailyBidLimit": 5, "minGapMinutes": 10,
-                           "hourlyRate": {"INR": 500}}}, fh)
+                           "hourlyRate": {"INR": 500}, "dryRun": False}}, fh)
 with open(os.environ["TRONE_REVENUE_LOG"], encoding="utf-8") as fh:
     log = json.load(fh)
 for r in log["entries"]:
