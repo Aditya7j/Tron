@@ -2195,6 +2195,25 @@
     color:rgba(232,238,252,.8);white-space:nowrap;overflow:hidden;
     text-overflow:ellipsis;max-width:52ch}
 
+  /* ---------- §45: the mode badge ----------
+     ONE SPAN, PUSHED TO THE FAR END of the status strip, and it carries no colour of the
+     three live states - #status.listening and its siblings tint `currentColor`, and a badge
+     that joined in would read as a thing that is happening rather than a thing that is set.
+     So: its own muted border, its own tint per mode, and no animation at all. A mode is a
+     standing fact and nothing about it is urgent.
+     margin-left:auto is what keeps it off the end of the `said` line without a second flex
+     wrapper; min-height on #status is unchanged, so the strip does not grow. */
+  #mode-badge{margin-left:auto;flex:0 0 auto;font-size:10px;letter-spacing:.2em;
+    text-transform:uppercase;padding:2px 7px;border-radius:3px;
+    border:1px solid rgba(232,238,252,.18);color:rgba(232,238,252,.72);
+    background:rgba(232,238,252,.04)}
+  #mode-badge[data-mode="work"]{color:#ffb347;border-color:rgba(255,179,71,.42);
+    background:rgba(255,179,71,.08)}
+  #mode-badge[data-mode="play"]{color:#4be0b8;border-color:rgba(75,224,184,.42);
+    background:rgba(75,224,184,.08)}
+  #mode-badge[data-mode="study"]{color:#9d7cff;border-color:rgba(157,124,255,.42);
+    background:rgba(157,124,255,.08)}
+
   /* ---------- focus sessions ----------
      The countdown card. Pinned top-right, and it TINTS rather than blinks: the
      colour is the whole message, readable out of the corner of your eye from a
@@ -3721,7 +3740,15 @@
   <form id="typeline" autocomplete="off">
     <input id="qline" placeholder="speak, or type…" aria-label="Type a question" />
   </form>
-  <div id="status"><i></i><span id="status-text">ready</span><span class="said" id="status-said"></span></div>
+  <!-- §45's MODE BADGE, and it is HIDDEN IN NORMAL MODE - the whole reason it is an empty
+       span with a hidden attribute rather than a cell that always reads NORMAL. Normal Mode is
+       this system's reset target, and a reset target that changed the glass would not be one:
+       with the mode normal this strip is pixel-for-pixel what it was before §45, which is what
+       keeps the existing status-strip screenshots good. It is painted by studyApply() off the
+       /study poll that was already running every 2.5s - no route, no timer, no SSE of its own.
+       NOT TO BE CONFUSED with the deck's own "work mode", which is focus.py's ambient look
+       during a focus lock: that is a LOOK and this is a TONE, and neither reads the other. -->
+  <div id="status"><i></i><span id="status-text">ready</span><span class="said" id="status-said"></span><span id="mode-badge" data-mode="normal" hidden></span></div>
   <form id="bar" autocomplete="off">
     <!-- THE SEAL, and the dot it has always had. READY / LISTENING / SPEAKING, plus the
          EAR OPEN cell that the transparency law requires while a conversation is open, and
@@ -14851,9 +14878,29 @@ async function loadLib() {
     return 'studying · ' + (st.topic || 'the syllabus');
   }
 
+  /* §45: THE BADGE, AND IT IS THE SERVER'S WORD OR NOTHING. The page never decides the mode,
+     not even optimistically after a switch it just watched go past in an answer: mode-state.json
+     is the one truth, /study carries it, and this paints it. A page that set the badge from the
+     reply it got would show WORK on a switch the Doorman refused - which is the one thing the
+     refusal path exists to prevent.
+     Normal hides the badge entirely rather than writing NORMAL in it. See the markup. */
+  function modePaint(name) {
+    const el = document.getElementById('mode-badge');
+    if (!el) return;
+    const ok = ['work', 'play', 'study'].indexOf(String(name || '')) >= 0;
+    el.dataset.mode = ok ? name : 'normal';
+    el.textContent = ok ? name : '';
+    el.hidden = !ok;
+  }
+
   function studyApply(data) {
     if (!data || typeof data !== 'object') return null;
     if (data.study) study.state = data.study;
+    /* Unconditional, and `mode` is always present on this payload - so a mode set by a
+       sentence in another tab, or by a hand editing the file, shows up here on the next poll
+       like any other state this strip reports. A dropped poll leaves the badge alone, which is
+       studyFetch()'s discipline for every other cell. */
+    modePaint(data.mode);
     /* §33: THE SCHOLAR'S HALF OF THE STREAM. This is the single funnel every poll comes
        through, so one call here covers the loop; studyPost() carries the same line because a
        keep made by hand should not wait up to STUDY_POLL_MS for its particle. Both are safe
