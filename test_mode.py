@@ -301,19 +301,39 @@ ok(mode.current() == "normal" and said.get("modeChanged") is True, "the reset wo
 
 # THE DOORMAN. A spoken sentence under somebody else's seal is refused, and the FILE IS
 # UNTOUCHED - the refusal is the absence of a write, not a sentence about one.
-mode.switch("study", by="chat")
-before = mode.read_state()
-name, said = server.protected_answer("work mode mein jao", spoken=True, seal="GUEST")
-ok(name == "mode" and said.get("refused") == "not-the-boss",
-   "a guest's spoken switch is refused at the Scholar's doorman", repr(said))
-ok(mode.read_state() == before,
-   "and the mode file is byte-identical - the refusal left no trace", repr(mode.read_state()))
-ok(said.get("mode") == "study" and said.get("modeChanged") is False,
-   "the payload still reports the REAL mode, so the badge cannot be moved by a guest")
+#
+# study_allowed() STANDS DOWN SILENTLY WHEN NOBODY IS ENROLLED - that is its own documented
+# clause, for its own reason, and it means this test's verdict depends on ambient state this
+# file does not control: a machine with no enrolled hands-voice would pass GUEST through and
+# never notice the Doorman had nothing to refuse with. A test whose answer changes with
+# whoever's laptop runs it is not a test of §45's gate, so a voice is ENROLLED here, the way
+# the real house enrolls one, rather than borrowed from whatever is already on disk.
+class _FakeVoiceprint:
+    def has_hands_voice(self):
+        return True
 
-name, said = server.protected_answer("work mode mein jao", spoken=True, seal="BOSS")
-ok(mode.current() == "work" and not said.get("refused"),
-   "and the boss's own voice is obeyed")
+_real_voiceprint = server.voiceprint
+server.voiceprint = _FakeVoiceprint()
+try:
+    mode.switch("study", by="chat")
+    before = mode.read_state()
+    name, said = server.protected_answer("work mode mein jao", spoken=True, seal="GUEST")
+    ok(name == "mode" and said.get("refused") == "not-the-boss",
+       "a guest's spoken switch is refused at the Scholar's doorman", repr(said))
+    ok(mode.read_state() == before,
+       "and the mode file is byte-identical - the refusal left no trace",
+       repr(mode.read_state()))
+    ok(said.get("mode") == "study" and said.get("modeChanged") is False,
+       "the payload still reports the REAL mode, so the badge cannot be moved by a guest")
+
+    name, said = server.protected_answer("work mode mein jao", spoken=True, seal="BOSS")
+    ok(mode.current() == "work" and not said.get("refused"),
+       "and the boss's own voice is obeyed")
+finally:
+    # RESTORED EVEN ON FAILURE, because every section below this one calls protected_answer()
+    # too, and a fake left standing would make a later section pass or fail on a verdict that
+    # was never real either.
+    server.voiceprint = _real_voiceprint
 mode.switch("normal")
 
 
