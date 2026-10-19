@@ -193,27 +193,67 @@ _ASK_RE = re.compile(r"""^(?:
 # the list of things STUDY_NOW_RE must NOT match - so claiming it here takes nothing from
 # the Scholar's own branch and fills a hole that was previously answered by the brain
 # guessing at a shelf it cannot see.
+
+# THE TAIL THIS SENTENCE MAY TRAIL OFF INTO, AND IT IS A CLOSED LIST BECAUSE AN OPEN ONE
+# SWALLOWED THE TOPIC. It was `.{0,30}` and it was wrong in the way that is hardest to see:
+# it was meant to absorb the filler a spoken question ends on - "what did you study TODAY",
+# "what have you learned SO FAR" - but `.` takes a topic as happily as an adverb, so
+#
+#     "what did you study about physics"
+#
+# matched here and was answered with the shelf recap: a canned list of the four syllabus
+# notes, in reply to a question about physics. The answer is confident, well-formed, and
+# about the wrong subject, which is the expensive kind of wrong - nobody reports it, because
+# it reads like an answer.
+#
+# THE LINE IS BETWEEN THE SESSION AND A TOPIC. "What did you study" asks about the shelf and
+# belongs here. "What did you study ABOUT PHYSICS" asks about a subject and belongs to the
+# notes search, which can go and look for physics; this function cannot, and has nothing to
+# offer but the list. So "about", "on" and "regarding" are deliberately absent below, and
+# every word that IS here is an adverb of time.
+#
+# IT IS ONE DEFINITION USED BY BOTH VERB ARMS, which is the other half of the repair. The
+# two arms were written separately and had already drifted - `stud*` took "did" or "have",
+# `learn*` took only "have", so "what did you learn" fell through to the brain while "what
+# did you study" did not. One definition cannot drift from itself.
+_RECAP_TAIL = r"""(?:\s+(?:today|yesterday|so\s+far|recently|lately|this\s+week
+                          |this\s+morning|of\s+late|all\s+day|already|till\s+now
+                          |abhi\s+tak|aaj))?"""
+
 _UPDATE_RE = re.compile(r"""^(?:
       (?:please\s+)?
       (?:
           study\s+update
         | (?:the\s+)?study\s+(?:recap|summary|report)
-        | what\s+(?:did|have)\s+you\s+(?:been\s+)?stud(?:y|ied|ying)(?:\s+.{0,30})?
-        | what\s+have\s+you\s+learn(?:ed|t)(?:\s+.{0,30})?
+        | what\s+(?:did|have)\s+you\s+(?:just\s+|been\s+)?stud(?:y|ied|ying)%(tail)s
+        | what\s+(?:did|have)\s+you\s+(?:just\s+|been\s+)?learn(?:ed|t|ing)?%(tail)s
         | (?:padhai|study)\s+(?:ka|ki)\s+(?:update|report)
         | padhai\s+kaisi\s+(?:chal\s+rahi\s+)?hai
       )
-  )$""", re.IGNORECASE | re.VERBOSE)
+  )$""" % {"tail": _RECAP_TAIL}, re.IGNORECASE | re.VERBOSE)
 
-# WHAT MUST NOT MATCH, and test_mode.py carries every one of them as a control. The first
-# group would each have been a silent mode switch in the middle of an ordinary question;
-# the last two are the expensive pair - a sentence that must still reach the Scholar's own
-# branch, and one that must still reach the brain.
+# WHAT MUST NOT MATCH, and test_mode.py carries every one of them as a control. They come in
+# three groups, and each group is a different way of being wrong:
+#
+#   - THE QUESTIONS ABOUT A MODE. Each would have been a silent mode switch in the middle of
+#     an ordinary question, and silent is the whole problem: he asks what Work Mode is, gets
+#     an answer, and every reply after it is terse for a reason he never saw.
+#   - THE TWO THAT MUST REACH SOMEBODY ELSE. "study micro-saas now" is the Scholar's own
+#     sentence and must still reach him; "research transformer attention" likewise.
+#   - THE TOPIC-SCOPED RECAPS, which is the group this file got wrong. Every one of these
+#     names a SUBJECT, so every one belongs to the notes search rather than to the shelf
+#     recap - see _RECAP_TAIL. The long one was already here and passed for the wrong
+#     reason: it was refused for being over thirty characters, not for naming a topic, so
+#     the shorter "what did you study about physics" sailed through and was answered with a
+#     list of syllabus notes. The short ones are the real control.
 _MODE_NOT = ("what is work mode", "should i use study mode", "i like play mode better",
              "how does work mode work", "tell me about play mode",
              "is normal mode the default", "what modes do you have",
              "study micro-saas now", "research transformer attention",
-             "what did you study today about rate limiting while i was out and about")
+             "what did you study today about rate limiting while i was out and about",
+             "what did you study about physics", "what did you learn about physics",
+             "what have you learned about derivatives",
+             "what did you study on rate limiting")
 
 
 def parse_request(sentence):

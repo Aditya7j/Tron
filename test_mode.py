@@ -90,7 +90,7 @@ server_source = io.open(os.path.join(HERE, "server.py"), encoding="utf-8").read(
 
 # ============================================================ 1. THE SENTENCES
 
-head("1. the sentences, and the twelve that must not be")
+head("1. the sentences, the controls that must not fire, and the recap's two directions")
 
 SET = [("work mode", "work"), ("go to work mode", "work"), ("switch to work mode", "work"),
        ("work mode mein jao", "work"), ("work mode on karo", "work"),
@@ -114,6 +114,35 @@ false_fires = [(s, mode.parse_request(s)) for s in mode._MODE_NOT
                if mode.parse_request(s) is not None]
 ok(not false_fires, "none of the %d control sentences is a mode command" % len(mode._MODE_NOT),
    repr(false_fires[:4]))
+
+# THE RECAP'S TWO DIRECTIONS, and the second one is the bug this block was added for.
+#
+# A question about the SESSION is the recap: it asks what is on the shelf, and the shelf is
+# what study_report() reads. A question about a TOPIC is not, however similarly it is worded
+# - it must fall through to the notes search, which can actually go and look the topic up.
+# The old pattern ended in `.{0,30}`, which took either, so "what did you study about
+# physics" was answered with the four syllabus notes on the shelf and not one word about
+# physics. Both lists are asserted, because fixing the leak by narrowing too far would be
+# the same bug facing the other way - the recap simply never firing.
+RECAP_YES = ("what did you study", "what did you study today", "what did you learn",
+             "what did you learn today", "what did you just study",
+             "what have you learned", "what have you been studying",
+             "what did you learn so far", "what have you learned recently",
+             "what did you study abhi tak", "study recap", "the study summary")
+recap_missed = [s for s in RECAP_YES
+                if (mode.parse_request(s) or {}).get("action") != "update"]
+ok(not recap_missed, "all %d session questions are the recap" % len(RECAP_YES),
+   repr(recap_missed))
+
+# THE ASYMMETRY THAT LET THE FIRST ONE THROUGH, kept as its own assertion because it is the
+# kind of thing that comes back: the two verb arms were written separately, so `stud*` took
+# "did" or "have" and `learn*` took only "have". "What did you learn" is not a rarer sentence
+# than "what did you study" and must not be a rarer match.
+ok((mode.parse_request("what did you learn") or {}).get("action") == "update" and
+   (mode.parse_request("what did you study") or {}).get("action") == "update" and
+   (mode.parse_request("what have you learned") or {}).get("action") == "update" and
+   (mode.parse_request("what have you studied") or {}).get("action") == "update",
+   "did/have and study/learn are symmetric - all four pairings are the recap")
 
 ok(mode.parse_request("study update") == {"action": "update"}, "\"study update\" is the recap")
 ok(mode.parse_request("padhai ka update") == {"action": "update"},
@@ -262,6 +291,25 @@ try:
         except Exploded:
             reached = True
         ok(reached, "%-34r still reaches the Scholar" % phrase)
+
+    # AND A TOPIC-SCOPED QUESTION GOES TO NEITHER OF THEM, which is the narrow channel this
+    # sentence has to thread and the reason it is proved through the funnel rather than
+    # through the regex. "What did you study about physics" must not be the shelf recap,
+    # because the shelf cannot answer it - and it must not become a STUDY either, because
+    # ninety seconds of Groq researching "about physics" is the expensive bug §45 was built
+    # to prevent, now arriving through the door the repair opened. It belongs to the brain,
+    # so the right outcome is the quiet one: no bomb, and no route claimed here at all.
+    for phrase in ("what did you study about physics", "what did you learn about physics",
+                   "what have you learned about derivatives",
+                   "what did you study on rate limiting"):
+        try:
+            name, said = server.protected_answer(phrase)
+            blew = ""
+        except Exploded as exc:
+            name, said, blew = None, None, str(exc)
+        ok(not blew and name is None,
+           "%-42r is the brain's, not the shelf's or the Scholar's" % phrase,
+           blew or "route %r" % (name,))
 finally:
     scholar.MANAGER.request = real_request
 
