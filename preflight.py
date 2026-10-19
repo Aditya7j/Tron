@@ -6183,15 +6183,21 @@ def check_world_clock():
     # come off the film's own script.md and the publish card off jobs-ledger.json, both written by
     # this machine - so the turn retrieves nothing. The upload's minute of network is the
     # Broadcaster's own thread's cost, exactly as the render's five chunks are the Director's.
-    GROWN = ("clock", "fullscreen", "study", "direct", "broadcast")
+    # EVERY GROWN ROUTE REGISTERS ITSELF HERE, in the order it was added, and that is the whole
+    # value of this tuple: it is a hand-kept ledger, so a route that appears in UNPAID_CLASSES
+    # without a line in this file fails the check and has to be looked at by somebody. §45's
+    # "mode" is the sixth and the cheapest - it answers out of mode-state.json and reaches
+    # nothing else, so it is unpaid for the clock's own reason. The four the mandate named are
+    # still read from PROTECTED_CLASSES and are still untouched.
+    GROWN = ("clock", "fullscreen", "study", "direct", "broadcast", "mode")
     if tuple(server.UNPAID_CLASSES) != tuple(server.PROTECTED_CLASSES) + GROWN:
         return FAIL, notes + ["UNPAID_CLASSES is %r; the clock, the fullscreen route, the "
                               "Scholar and the Director are meant to be tried after all four "
                               "have declined, and appended after them rather than mixed in "
                               "among them" % (tuple(server.UNPAID_CLASSES),)]
     notes.append("the four protected classes are as the mandate wrote them, and the clock, §29's "
-                 "fullscreen route, §30's study route, §35's direct route and §40's broadcast "
-                 "route are tried after them, not among them")
+                 "fullscreen route, §30's study route, §35's direct route, §40's broadcast "
+                 "route and §45's mode route are tried after them, not among them")
 
     session = "preflight-30-%d" % int(time.time())
     post_json("/reset", {"session": session}, timeout=30, label="a clean room for 30")

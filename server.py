@@ -135,6 +135,15 @@ import closer
 # Ledger's own card.
 import revenue
 
+# §45 - THE FOUR MODES. Work, Play, Study and Normal: one word in one JSON file, the sentences
+# that set it, and a short block of instruction each one puts in front of the brain through
+# persona_prompt() below - which is why this import sits here and the reading sits there. It is
+# the smallest organ in the house: no thread, no loop, no card, and it gates NOTHING. See
+# mode.py's docstring, and mind the one word it shares with the deck: the "work mode" in focus.py
+# and in viewer/index.html is an ambient LOOK during a focus lock, and this is a TONE. Two
+# features, one unfortunate word, and neither reads the other.
+import mode
+
 # The live lookup. Query in, at most three snippets out, and it NEVER raises - a dead
 # network, a captcha or a redesigned results page all come back as an empty list, which
 # is the one case this file has to handle anyway. No key, no pip, no SDK.
@@ -1196,8 +1205,32 @@ def persona(cfg=None):
 
 
 def persona_prompt(cfg=None):
-    """Who he is, in front of every system prompt this server sends."""
+    """Who he is, in front of every system prompt this server sends.
+
+    §45 - AND HOW HE IS TALKING JUST NOW. The mode block is appended HERE and nowhere else,
+    because this function is the one funnel: brain_preamble() wraps it, wear_persona() wraps
+    that, and all eight call sites (notes, small talk, web, compose, vision, webcam, nudge,
+    greeting) go through the three in that order. One read, one place, eight sites - a mode
+    plumbed into the call sites instead would be eight places to forget.
+
+    IT IS APPENDED BELOW THE PERSONA AND NOT MIXED INTO IT, which is the difference between
+    an adjustment and a rewrite. Who he is does not change with the mode; only the register
+    does, and the block says so in three lines.
+
+    AND IN NORMAL MODE THIS FUNCTION RETURNS WHAT IT ALWAYS RETURNED, byte for byte -
+    mode.prompt_block() answers the empty string for Normal, so the baseline is not
+    "very nearly today's prompt" but literally it. test_mode.py asserts that equality
+    rather than trusting this paragraph.
+    """
     who = persona(cfg)
+    block = ""
+    try:
+        block = mode.prompt_block()
+    except Exception as exc:                                   # noqa: BLE001
+        # A TONE FILE MUST NEVER BE THE THING THAT BREAKS A BRAIN CALL. mode.read_state()
+        # is written not to raise; this is the belt under that brace, because the cost of
+        # being wrong here is every answer in the house instead of one.
+        sys.stderr.write("mode: the block could not be read (%s); talking normally\n" % exc)
     return (
         "WHO YOU ARE\n"
         "- Your name is %(assistant)s. You are the personal assistant of %(formal)s, "
@@ -1214,7 +1247,7 @@ def persona_prompt(cfg=None):
         "one sentence, and never in every sentence.\n"
         % {"assistant": who["assistant"], "formal": who["boss_formal"],
            "call": who["boss_call"], "intro": who["self_intro"]}
-    )
+    ) + (("\n" + block) if block else "")
 
 
 # ------------------------------------------------- WHAT HE CAN DO, COUNTED AT START-UP
@@ -2642,7 +2675,14 @@ PROTECTED_CLASSES = ("confirmation", "meta", "identity", "directive")
 # render; a turn is charged for what it looked up to answer, not for what it set going. It stands
 # last because it is the newest, and it is the third member of this tuple behind a Doorman gate:
 # see broadcast_allowed(), which borrows study_allowed()'s BOSS-only verdict without spending it.
-UNPAID_CLASSES = PROTECTED_CLASSES + ("clock", "fullscreen", "study", "direct", "broadcast")
+#
+# §45's "mode" IS THE CHEAPEST MEMBER THIS TUPLE WILL EVER HAVE, and it is here for the
+# reason the clock is: it answers out of one small file on this disk and reaches nothing
+# else. A mode switch writes a word, a "which mode am I in" reads one, and "study update"
+# lists a folder - no embedding, no model, no network, and in the switch's case not even a
+# card. PROTECTED_CLASSES still names the four it has always named: this is a ROUTE.
+UNPAID_CLASSES = PROTECTED_CLASSES + ("clock", "fullscreen", "study", "direct", "broadcast",
+                                      "mode")
 
 
 def _addressless(question):
@@ -3674,6 +3714,11 @@ def protected_answer(question, cfg=None, ear_open=False, offer_standing=False,
     # started one are both "asked", and the page and the proof tell them apart by the fields
     # inside rather than by the presence of the key.
     gstudy = None
+    # §45, and the same sentinel discipline as gstudy's: None means the modes were not asked
+    # about at all, and a dict means they were - a switch, a reading, or the study recap. The
+    # `mode` field inside is the mode AFTER the sentence was obeyed, so a page or a harness
+    # reads one key instead of inferring the new state from the old one and the verb.
+    gmode = None
     # Same sentinel discipline as gstudy's, one line up: None means the Director was not asked at
     # all, and a dict means it was - whether the render started, was refused, or was asked for
     # without a topic. All three are "asked", and the page and the proof tell them apart by the
@@ -3760,6 +3805,100 @@ def protected_answer(question, cfg=None, ear_open=False, offer_standing=False,
                 sys.stderr.write("  route: fullscreen - asked to go %s by a voice sealed %r, "
                                  "refused at the doorman; the room is untouched\n"
                                  % (want, seal or "?"))
+
+    # ---- §45: THE FOUR MODES, AND THEY ARE ABOVE THE SCHOLAR ------------------------------
+    # THE PLACEMENT IS NOT A PREFERENCE, IT IS A MEASURED COLLISION. STUDY_NOW_RE reads
+    # (study|research) <topic> on the addressless form, and "mode" is a perfectly good topic as
+    # far as that pattern is concerned - so "study mode" matches it with topic="mode", and
+    # "study mode mein jao" matches it with topic="mode mein jao". Read in the other order, the
+    # sentence that asks for Study Mode would instead have commissioned ninety seconds of Groq
+    # research into the word "mode", written notes/study/auto/<date>-mode.md, and answered
+    # "Studying mode now, sir" - which is not a wrong-looking reply, and that is what makes it
+    # the expensive kind of bug. This branch is therefore ABOVE §30's, and test_mode.py asserts
+    # the order by putting "study mode" through the whole funnel rather than through the regex.
+    #
+    # AND BELOW ALL FOUR, for the reason §29 and §30 each gave in turn: PROTECTED_CLASSES is
+    # fixed by the mandate at four and nothing new may shadow a sentence one of them already
+    # catches. Checked, not assumed - none of the four's patterns can match a mode phrase.
+    #
+    # THE DOORMAN IS THE SCHOLAR'S, BORROWED WHOLE. study_allowed() admits the BOSS SEAL only
+    # and spends nothing, and it is the right gate here for one reason and in spite of another:
+    #   - FOR: Study Mode's own two sentences are the Scholar's sentences in all but name. The
+    #     recap reads his notes folder and the deep-dive spends a tick of Groq on it, so a voice
+    #     that may not commission a study may not commission one by first becoming a student.
+    #   - IN SPITE OF: a tone is a smaller thing than a study, and a case could be made for the
+    #     room's wider gate. It is not made, because the modes are ONE route with one door, and
+    #     two doors on one route is two laws to keep in step - §30's own argument. The cost of
+    #     the stricter choice is that a guest cannot make him terse, which is no loss.
+    #
+    # NOTHING HERE IS CONFIRMED AND NOTHING HERE IS A CARD. The switch is instant by decision:
+    # revenue.switch()'s ON needs a card because it sets a daemon bidding real money, and this
+    # sets an adjective. What he gets instead is one short sentence, which is the only signal a
+    # VOICE command has that it was heard at all.
+    if not name:
+        asked_mode = None
+        try:
+            asked_mode = mode.parse_request(forms[-1] if forms else "")
+            if asked_mode is None and forms:
+                # AND THE UNPEELED RUNG TOO, which is the clock's lesson one section down:
+                # the peel helps on "galaxy work mode mein jao" and can eat a word out of the
+                # middle of a phrase that was fixed to begin with. Both rungs, same pattern.
+                asked_mode = mode.parse_request(forms[0])
+        except Exception as exc:                               # noqa: BLE001
+            # A MODE FILE THAT THROWS SAYS NOTHING AND FALLS THROUGH, exactly as the clock
+            # does: the ordinary funnel then answers, which is a worse answer than this
+            # branch's and a far better one than a 500 on an unrelated question.
+            sys.stderr.write("mode: the sentence could not be read (%s)\n" % exc)
+        if asked_mode:
+            name = "mode"
+            allowed, refusal = study_allowed(spoken, seal)
+            if not allowed:
+                # THE STATE IS UNTOUCHED, which is the whole of the refusal - §29's law, and
+                # here it is the file that is not written rather than the room that is not
+                # filled. gmode still carries the CURRENT mode, read and not guessed, so the
+                # page's badge cannot be moved by a voice the Doorman turned away.
+                gmode = {"asked": asked_mode["action"], "mode": mode.current(),
+                         "changed": False, "refused": "not-the-boss"}
+                line = refusal
+                sys.stderr.write("  route: mode - %r asked by a voice sealed %r, refused at "
+                                 "the doorman; the mode file is untouched\n"
+                                 % (asked_mode["action"], seal or "?"))
+            else:
+                # THE ADDRESS FORM IS THE BOSS'S ALONE, passed in rather than held in mode.py,
+                # for §29's measured reason: boss_call is the only address form in the persona
+                # block, so a sentence composed inside the organ would call an enrolled
+                # colleague by the boss's name. This gate admits nobody else today, and the
+                # word is still passed in so that a later widening cannot quietly do it.
+                mine = (not spoken) or str(seal or "") == "BOSS"
+                call = who["boss_call"] if mine else "sir"
+                if asked_mode["action"] == "set":
+                    was = mode.current()
+                    want = asked_mode["mode"]
+                    if want != was:
+                        mode.switch(want, by="voice" if spoken else "chat")
+                    line = mode.switch_line(want, boss_call=call, was=was)
+                    gmode = {"asked": "set", "mode": want, "changed": want != was,
+                             "refused": ""}
+                    sys.stderr.write("  route: mode - %s -> %s (instant, no card)\n"
+                                     % (was, want))
+                elif asked_mode["action"] == "ask":
+                    line = mode.state_line(boss_call=call)
+                    gmode = {"asked": "ask", "mode": mode.current(), "changed": False,
+                             "refused": ""}
+                else:
+                    # "STUDY UPDATE" - revenue.report()'s shape, and it is answered HERE rather
+                    # than by the brain for revenue.report()'s reason: what he studied is a fact
+                    # about files on this disk, and a model asked that question will compose a
+                    # plausible week. mode.study_report() reads the shelf through
+                    # scholar.studied_today() and says the absence out loud when there is one.
+                    #
+                    # IT IS ANSWERED IN EVERY MODE, not only in Study Mode. A command that
+                    # worked only once he had remembered to flip a flag would be a command he
+                    # tried, got nothing from, and stopped using.
+                    line = mode.study_report(boss_call=call)
+                    gmode = {"asked": "update", "mode": mode.current(), "changed": False,
+                             "refused": ""}
+                    sys.stderr.write("  route: mode - the study recap, read off the shelf\n")
 
     # ---- §30: THE CURRICULUM, BESIDE THE ROOM AND ABOVE THE CLOCK ------------------------
     # PLACED FOR THE SAME THREE REASONS §29's ROOM BRANCH WAS, and the placement is the whole
@@ -4030,6 +4169,19 @@ def protected_answer(question, cfg=None, ear_open=False, offer_standing=False,
         said["studyStarted"] = gstudy["started"]
         if gstudy["refused"]:
             said["refused"] = gstudy["refused"]
+    if gmode is not None:
+        # §45's FOUR FIELDS, AND `mode` IS ALWAYS THE TRUTH AFTER THE FACT - read back out of
+        # the file by the branch above, never assumed from the verb. A refused switch is the
+        # pair (modeChanged false, refused "not-the-boss") beside a `mode` that still reads
+        # whatever it read before, which is the Doorman's verdict stated as a fact a harness
+        # can assert without matching English. `modeChanged` is false for a reading, for the
+        # recap, and for a switch into the mode he is already in - three different sentences,
+        # one honest field, and the badge needs no third state for any of them.
+        said["mode"] = gmode["mode"]
+        said["modeAsked"] = gmode["asked"]
+        said["modeChanged"] = bool(gmode["changed"])
+        if gmode["refused"]:
+            said["refused"] = gmode["refused"]
     if gdirect is not None:
         # WHAT A HARNESS READS INSTEAD OF PARSING THE SENTENCE BACK, exactly as `studyAsked` is.
         # A refused video is the pair (directAsked non-empty, directStarted false) plus the reason
@@ -12163,6 +12315,13 @@ class GalaxyHandler(SimpleHTTPRequestHandler):
                 # is a second thing that can drift out of step with the first.
                 "digest": {"due": digest["due"], "line": digest["line"],
                            "notes": digest["notes"], "offeredToday": digest["offeredToday"]},
+                # §45's ONE WORD, RIDING THE POLL THAT IS ALREADY RUNNING - the digest's own
+                # argument one comment up, and the reason the badge needed no route, no timer
+                # and no SSE event of its own. The page asks every 2.5 seconds anyway; a mode
+                # set by a sentence shows up on the next ask. It is ALWAYS present and always
+                # one of the four words, so the badge reads a string rather than testing for a
+                # key that may or may not be there.
+                "mode": mode.current(),
                 "syllabus": [t["name"] for t in scholar.read_syllabus()["topics"]]})
 
         if route == "/jobs":
