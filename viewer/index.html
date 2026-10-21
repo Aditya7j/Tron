@@ -3775,13 +3775,113 @@
   @media(prefers-reduced-motion:reduce){
     *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
   }
+
+  /* PR 29 correction: one surface boundary, quiet hierarchy, locked theme colors. */
+  #brain{gap:16px;padding:16px;border-color:var(--line);border-radius:12px;
+    background:var(--glass);box-shadow:none}
+  #convohead,:root[data-theme="work"] #convohead{border:0;border-radius:0;
+    background:none;box-shadow:none;backdrop-filter:none;padding:8px 4px 16px;min-height:200px}
+  #convo-mini{width:120px;height:120px;box-shadow:none;border-color:var(--line)}
+  #convohead .ct b{font-size:16px;font-weight:600}
+  #convohead .ct i{letter-spacing:.02em}
+  #answer{border:0;border-radius:8px;background:var(--blue-trace);padding:16px;box-shadow:none}
+  #answer .q{font-size:12px;margin-bottom:12px;padding-bottom:12px;color:var(--muted)}
+  #answer .a,#a-rich{font-weight:400;line-height:1.75}
+  #digestpanel{border:0;border-top:1px solid var(--line);border-radius:0;background:none;padding:14px 0 0}
+  #assistant-actions{padding:4px 0 0;gap:8px}
+  #assistant-actions button{background:var(--blue-trace);border-color:var(--line);font:500 11px var(--font)}
+  #sidenav .navi{font:500 12px var(--font);letter-spacing:.02em;text-transform:none;border-radius:8px}
+  #sidenav .navi.on{background:var(--blue-trace);border-color:var(--blue-glow);box-shadow:none}
+  #sidenav .navi.on svg{stroke:var(--blue-structure)}
+  #sidenav .navi:focus-visible{outline:2px solid var(--blue-structure);outline-offset:2px}
+  #title .brand{letter-spacing:.3em}
+  #title h1{letter-spacing:.18em}
+  #toprail .rl .rk{opacity:.85}
+  #toprail .rl .rv{text-shadow:none}
+  #orbit .ob-frame{border-color:var(--line);border-radius:12px;background:none}
+  #orbit svg{left:4%;width:92%}
+  #orbit .ob-f{font:11px/1.5 var(--font);letter-spacing:.02em;gap:20px}
+  #orbit .ob-f b{font-size:14px}
+  #bar,:root[data-theme="work"] #bar{border-radius:24px;border-color:var(--line);box-shadow:none}
+  #bar button{border-color:transparent;background:transparent}
+  #bar button:hover:not(:disabled){border-color:var(--blue-glow);background:var(--blue-trace)}
+  #bar:focus-within,body.accent-amber #bar:focus-within{border-color:var(--blue-glow);box-shadow:none}
+  #qline{border-radius:22px;border-color:var(--line)}
+  #compose-send{border-radius:50%}
+  #status{min-height:16px;padding:0 16px;font-size:10px;letter-spacing:.1em}
+  #cmd #ui-sound{margin-left:auto;margin-right:0;min-height:32px;padding:4px 8px;
+    border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--muted)}
+  #cmd #ui-sound[aria-pressed="true"]{color:var(--ink);border-color:var(--blue-glow)}
+  #cmd .ch .sp{margin-left:8px;letter-spacing:.03em}
+  #cmd{border-color:var(--line);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.32)}
+  #cmd .cmdact .ck{border-color:transparent;background:var(--blue-trace)}
+  #cmd .cmdact .cs{font-family:var(--font);letter-spacing:.01em;text-transform:none;font-size:11px}
+  #panel{border-color:var(--line);box-shadow:-12px 0 40px rgba(0,0,0,.2)}
+  #panel .doc-item,#panel .src-item{border:0;border-bottom:1px solid var(--line);border-radius:0;background:none;padding:16px 0}
+  #panel #p-seal{border-width:0;border-radius:6px}
+  #focuscard{border-color:var(--line);box-shadow:none;border-radius:12px}
+  #focuscard #focusface{border:0;background:none}
+  #answer.tool{border:1px solid var(--gold-glow);box-shadow:none}
+  #answer.tool::after{display:none}
+  #scribepanel{box-shadow:none}
+  :root[data-theme="work"] #brain{border-color:var(--line)}
+  :root[data-theme="work"] #digestpanel{--st-accent:var(--blue-structure);color:var(--ink)}
+  :root[data-theme="work"] #digestpanel .row,
+  :root[data-theme="work"] #digestpanel button.pro{color:var(--ink)}
+  :root[data-theme="work"] #digestpanel button.pro{border-color:var(--line)}
+  :root[data-theme="work"] #digestpanel .row .g{color:var(--muted)}
+  :root[data-theme="work"] #digestpanel .head{border-color:var(--line)}
+  :root[data-theme="work"] #mode-badge[data-mode="work"]{color:var(--ink);border-color:var(--line);background:var(--blue-trace)}
+  :root[data-theme="work"] #panel .seal,
+  :root[data-theme="work"] #panel .scan-note{color:var(--muted);border-color:var(--line);background:var(--blue-trace)}
+  :root[data-theme="work"] #panel .seal::before{background:var(--blue-structure);box-shadow:none}
+  :root[data-theme="work"] #answer.tool{border-color:var(--blue-glow);box-shadow:none}
+  :root[data-theme="work"] #a-ask{border-color:var(--line)}
+  :root[data-theme="work"] #a-ask .lbl,
+  :root[data-theme="work"] #a-ask .steps li::before{color:var(--ink)}
+  :root[data-theme="work"] #a-ask .steps .uses{color:var(--muted)}
+  :root[data-theme="work"] #ask-yes{background:var(--gold-core);border-color:var(--gold-core);color:var(--ink);box-shadow:none}
+  :root[data-theme="work"] #ask-yes:hover:not(:disabled){background:var(--gold-core);border-color:var(--blue-structure)}
+  :root[data-theme="work"] #scribepanel{--sc-accent:var(--blue-structure);--sc-ink:var(--ink);
+    --sc-rule:var(--line);--sc-faint:var(--muted);background:var(--glass);border-color:var(--line)}
+  :root[data-theme="work"] #scribepanel .lines p .t{color:var(--muted)}
+  :root[data-theme="work"] #focuscard.grace{border-color:var(--blue-glow)}
+  :root[data-theme="work"] #focuscard.grace .fh i{background:var(--blue-structure);box-shadow:none}
+  :root[data-theme="work"] #focuscard #focus-lock{color:var(--ink);border-color:var(--blue-glow);background:var(--blue-trace)}
+  :root[data-theme="work"] #brainchip.swapped,
+  :root[data-theme="work"] #brainchip.swapped b{color:var(--ink);border-color:var(--blue-glow);background:var(--blue-trace)}
+  :root[data-theme="work"] #bar button{border-color:transparent}
+  :root[data-theme="work"] #bar .dot{box-shadow:none}
+  @media(max-height:740px), (max-width:1099px){
+    #brain{padding:10px;gap:12px}
+    #convohead,:root[data-theme="work"] #convohead{min-height:0;padding:4px;flex-direction:row;justify-content:flex-start}
+    #convo-mini{width:44px;height:44px}
+    #convohead .ct{align-items:flex-start;text-align:left}
+    #digestpanel{padding-top:10px}
+  }
+  @media(max-width:1099px){
+    #cmd #ui-sound{min-height:44px}
+    #orbit svg{left:4%;width:92%}
+    #orbit .ob-f{font-size:10px;gap:10px}
+    #orbit .ob-f b{font-size:11px}
+    #status{min-height:18px;padding:0 6px;font-size:9px}
+  }
+
+  #qline:focus{border-color:var(--blue-structure);box-shadow:none;outline-offset:2px}
+  :root[data-theme="work"] #scribepanel .meta,
+  :root[data-theme="work"] #scribepanel .foot .said{color:var(--muted)}
+  :root[data-theme="work"] #scribepanel .head::before{background:var(--blue-trace);border-color:var(--line);box-shadow:none}
+  :root[data-theme="work"] #scribepanel .rec{box-shadow:none}
+
+  html.chat-reading #convohead,:root[data-theme="work"].chat-reading #convohead{
+    min-height:0;padding:8px 4px;flex-direction:row;justify-content:flex-start}
 </style>
 </head>
 <body>
 
 <canvas id="stars"></canvas>
 <div id="nebula"></div>
-<canvas id="work-nebula" width="1200" height="720" aria-hidden="true"></canvas>
+<canvas id="work-nebula" width="400" height="240" aria-hidden="true"></canvas>
 <div id="nebula-work"></div>
 <div id="sunglow" aria-hidden="true"><i class="score"></i><i class="sstreak"></i></div>
 <div id="graph"></div>
@@ -4018,6 +4118,7 @@
       <div class="mlens"><i class="miris"></i><i class="mcore"></i></div>
     </div>
     <span class="cn">command</span>
+    <button id="ui-sound" type="button" aria-pressed="false" title="UI sounds off">Sound off</button>
     <span class="sp" id="cmd-hint">ctrl+k · esc</span>
   </div>
   <input id="cmd-search" type="search" placeholder="Find a command…" aria-label="Find a command" autocomplete="off" />
@@ -4176,7 +4277,8 @@
        /study poll that was already running every 2.5s - no route, no timer, no SSE of its own.
        NOT TO BE CONFUSED with the deck's own "work mode", which is focus.py's ambient look
        during a focus lock: that is a LOOK and this is a TONE, and neither reads the other. -->
-  <div id="status"><button id="ui-sound" type="button" aria-pressed="false" title="UI sounds off">Sound off</button><i></i><span id="status-text" role="status" aria-live="polite" aria-atomic="true">ready</span><span class="said" id="status-said"></span><span id="mode-badge" data-mode="normal" hidden></span></div>
+  <div id="status"><i></i><!-- Rapid voice-state changes are read on demand; completed answers use the polite caption. -->
+    <span id="status-text" role="status" aria-live="off">ready</span><span class="said" id="status-said"></span><span id="mode-badge" data-mode="normal" hidden></span></div>
   <form id="bar" autocomplete="off">
     <!-- THE SEAL, and the dot it has always had. READY / LISTENING / SPEAKING, plus the
          EAR OPEN cell that the transparency law requires while a conversation is open, and
@@ -5151,10 +5253,13 @@ function paintWorkNebula() {
   ctx.putImageData(image,0,0);
   let seed = 0x71c0ffee;
   const random = function () { seed = (Math.imul(seed,1664525)+1013904223)>>>0; return seed/4294967296; };
+  // Keep decorative specks at their original CSS size as the backing raster shrinks.
+  const dustScale = w / 1200;
   for (let i=0;i<850;i++) {
     const x=random()*w,y=random()*h,r=random();
     ctx.fillStyle=i%7 ? 'rgba(225,226,236,'+(.08+r*.3)+')' : 'rgba('+red+','+green+','+blue+','+(.3+r*.4)+')';
-    ctx.fillRect(x,y,r>.985?1.5:.65,r>.985?1.5:.65);
+    const size = (r>.985 ? 1.5 : .65) * dustScale;
+    ctx.fillRect(x,y,size,size);
   }
   canvas.dataset.palette = key;
 }
