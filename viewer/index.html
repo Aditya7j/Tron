@@ -3348,10 +3348,6 @@
     :root[data-theme="work"] #navvoice{margin:0;padding:7px;width:40px;height:40px;justify-content:center}
     :root[data-theme="work"] #brain{top:70px!important;left:auto!important;right:12px!important;width:min(276px,calc(100vw - 24px))!important}
     :root[data-theme="work"] #orbit{left:0;right:0;top:145px;bottom:160px}
-    :root[data-theme="work"] #orbit .ob-card,
-    :root[data-theme="work"] #orbit .ob-fold,
-    :root[data-theme="work"] #orbit .ob-lbl,
-    :root[data-theme="work"] #orbit .ob-sub{display:none}
     :root[data-theme="work"] #orbit .ob-f{bottom:70px;gap:8px;font-size:9px;letter-spacing:.04em}
     :root[data-theme="work"] #dock{left:8px!important;right:8px!important;width:auto!important;bottom:66px!important;top:auto!important}
     :root[data-theme="work"] #bar{gap:7px;padding-left:10px}
@@ -3359,6 +3355,425 @@
   }
   @media(max-width:900px) and (max-height:700px){
     :root[data-theme="work"] #orbit .ob-f{bottom:24px}
+  }
+
+  /* UI 2.0 foundation: one set of component geometry for both palette systems. */
+  #title{width:min(880px,calc(100vw - 690px));min-width:0;
+    grid-template-columns:auto minmax(225px,1fr) auto;
+    column-gap:18px;padding:0 18px}
+  #title .brand{font-size:15px;letter-spacing:.32em;gap:9px;padding-right:18px}
+  #title h1{font-size:12px;letter-spacing:.24em}
+  #title #stats{font-size:11px;letter-spacing:.02em}
+  #title #density{grid-column:3;grid-row:1/3;max-width:185px;overflow:hidden;
+    text-overflow:ellipsis;font-size:10px;line-height:1.4}
+  #toprail{left:880px;justify-content:flex-end;gap:0;padding:0 8px}
+  #toprail::before{padding:0 12px 0 0;font-size:10px}
+  #toprail .rl{padding:0 clamp(7px,.75vw,14px)}
+  #toprail .rl .rv{font-size:10px;letter-spacing:.025em}
+  html.panel-open #toprail .rl{display:none}
+  #sidenav{padding:14px 10px 12px;gap:4px}
+  #sidenav .navi{height:43px;font-size:11px;letter-spacing:.09em}
+  #sidenav .navi svg{width:19px;height:19px}
+  #brain{box-sizing:border-box;min-width:0;min-height:0;padding:12px;
+    left:calc(100vw - var(--dock-w) + 12px);top:calc(var(--rail-h) + 12px);
+    width:calc(var(--dock-w) - 24px);
+    border:1px solid var(--line);border-radius:18px;
+    background:linear-gradient(160deg,var(--glass),rgba(var(--void-rgb),.78));
+    backdrop-filter:var(--blur);box-shadow:0 18px 50px rgba(0,0,0,.22);
+    overscroll-behavior:contain}
+  #convohead{min-width:0;flex-direction:column;justify-content:center;gap:10px;
+    min-height:226px;padding:14px;border-radius:12px;
+    border-color:var(--blue-glow);background:radial-gradient(circle at 50% 43%,var(--blue-trace),transparent 68%)}
+  #convo-mini{width:132px;height:132px;object-fit:contain;
+    box-shadow:0 0 34px var(--blue-trace)}
+  #convohead .ct{align-items:center;text-align:center;gap:4px}
+  #convohead .ct b{font-size:16px}
+  #assistant-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:8px;margin-top:auto;padding:12px 2px 2px}
+  #assistant-actions button{min-width:0;min-height:38px;padding:8px 9px;
+    border:1px solid var(--line);border-radius:9px;background:var(--blue-trace);
+    color:var(--ink);font:10px var(--mono);letter-spacing:.03em;cursor:pointer}
+  #assistant-actions button:hover,#assistant-actions button:focus-visible{
+    outline:none;border-color:var(--blue-structure);background:var(--gold-trace)}
+  #answer,#scribepanel,#digestpanel{min-width:0;overflow-wrap:anywhere}
+  #dock{min-width:0;gap:7px;bottom:26px;width:760px;
+    left:calc((100vw - var(--dock-w) + var(--side-w) - 760px)/2)}
+  #bar{min-width:0;box-sizing:border-box;gap:9px;padding:6px 8px 6px 15px;
+    border-radius:15px}
+  #bar .gap{min-width:8px}
+  #status{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  #caption{max-height:min(18vh,4.7em);overflow-y:auto;overscroll-behavior:contain}
+  #panel{box-sizing:border-box;overflow:hidden;padding:24px 22px 18px;
+    background:var(--glass)}
+  #panel .body{min-height:0;overscroll-behavior:contain;overflow-wrap:anywhere}
+  #cmd{box-sizing:border-box;border-radius:0 13px 13px 0;
+    max-height:calc(100dvh - var(--rail-h) - 90px)}
+  #cmd .cb{min-height:0;overscroll-behavior:contain}
+  #orbit .ob-frame{border:1px solid var(--line);border-radius:17px;
+    background:linear-gradient(145deg,rgba(var(--blue-deep-rgb),.10),rgba(var(--void-rgb),.12))}
+  #orbit svg{left:8%;width:84%;top:24px;height:calc(100% - 78px)}
+  #orbit .ob-f{bottom:17px}
+  @media(min-width:1100px) and (max-width:1700px){
+    #orbit svg{left:9%;width:82%}
+  }
+  :root[data-theme="work"] #brain{border-color:var(--gold-dim)}
+  :root[data-theme="work"] #convohead{border-color:var(--gold-glow)}
+
+  @media(max-width:1499px){
+    #title{width:min(700px,calc(100vw - 570px));column-gap:12px}
+    #toprail{left:min(700px,calc(100vw - 570px))}
+    #title #density{display:none}
+    #title{grid-template-columns:auto minmax(210px,1fr)}
+    #toprail .rl{padding:0 7px}
+  }
+  @media(max-width:1099px){
+    #title{width:100vw;max-width:100vw;grid-template-columns:auto minmax(0,1fr)}
+    #title .brand{font-size:13px;letter-spacing:.2em}
+    #title #stats{overflow:hidden;text-overflow:ellipsis}
+    :root[data-theme="work"] #title{display:grid;width:100vw;max-width:100vw;
+      grid-template-columns:auto minmax(0,1fr)}
+    :root[data-theme="work"] #title .brand{border-right:1px solid var(--line);padding-right:18px}
+    :root[data-theme="work"] #title h1,
+    :root[data-theme="work"] #title #stats{display:flex}
+    #toprail{display:none}
+    html.panel-open #focuscard,html.panel-open #facecard{
+      visibility:hidden;pointer-events:none}
+    #sidenav.gone{display:flex}
+    #sidenav{top:auto!important;bottom:0;left:0;width:100vw!important;height:60px;
+      flex-direction:row;align-items:center;justify-content:space-around;gap:2px;
+      padding:6px;border-right:0;border-top:1px solid var(--line)}
+    :root[data-theme="work"] #sidenav{height:60px;gap:2px;padding:6px}
+    #sidenav .navi{justify-content:center;min-width:42px;height:46px;padding:0 7px}
+    :root[data-theme="work"] #sidenav .navi{width:auto;flex:1;height:46px}
+    #sidenav .navi span,#navvoice .nv-t{display:none}
+    #navvoice{margin:0;justify-content:center;min-width:42px;height:44px;padding:0}
+    :root[data-theme="work"] #navvoice{min-width:42px;width:auto;height:44px;flex:1;padding:0}
+    #brain{padding:8px;border-radius:13px}
+    #brain{left:auto;right:12px;top:70px;width:min(340px,calc(100vw - 24px))}
+    #convohead{flex-direction:row;justify-content:flex-start;min-height:0;padding:8px 10px;gap:10px}
+    #convo-mini{width:44px;height:44px}
+    #convohead .ct{align-items:flex-start;text-align:left}
+    #convohead .ct b{font-size:14px}
+    #assistant-actions{display:none}
+    #dock{gap:4px;left:12px;width:calc(100vw - 24px);bottom:72px;
+      min-height:132px;justify-content:flex-end}
+    #bar{gap:5px;padding:5px 6px 5px 10px;border-radius:14px}
+    :root[data-theme="work"] #bar{gap:5px}
+    #bar #seal-text{display:none}
+    #orbit .ob-frame{border-radius:12px}
+    #orbit .ob-f{gap:8px;font-size:9px;letter-spacing:.02em}
+    :root[data-theme="work"] #orbit .ob-f{bottom:17px;gap:8px;font-size:9px;letter-spacing:.02em}
+    :root[data-theme="work"] #brain{left:auto!important;right:12px!important;
+      width:min(340px,calc(100vw - 24px))!important;top:70px!important}
+    :root[data-theme="work"] #orbit{left:var(--pane-l);right:var(--orbit-r);top:var(--orbit-t);bottom:var(--pane-b)}
+    :root[data-theme="work"] #dock{left:12px!important;right:auto!important;
+      width:calc(100vw - 24px)!important;bottom:72px!important}
+  }
+  @media(min-width:601px) and (max-width:1099px){
+    #orbit svg{left:9%;width:82%}
+  }
+  @media(max-width:600px){
+    #title{padding:0 12px;column-gap:9px;grid-template-columns:auto minmax(0,1fr)}
+    #title .brand{font-size:12px;letter-spacing:.1em;gap:4px;padding-right:9px}
+    #title .brand svg{width:21px;height:21px}
+    #title h1{font-size:9px;letter-spacing:.08em}
+    #title #stats{font-size:9px}
+    :root[data-theme="work"] #title{grid-template-columns:auto minmax(0,1fr)}
+    :root[data-theme="work"] #title .brand{padding-right:9px}
+    #sidenav .navi{min-width:38px;width:auto;flex:1;padding:0}
+    #sidenav .navi svg{width:19px;height:19px}
+    #navvoice{min-width:38px;flex:1}
+    #orbit .ob-card,#orbit .ob-fold,#orbit .ob-lbl,#orbit .ob-sub{display:none}
+    #orbit .ob-f{bottom:12px}
+    :root[data-theme="work"] #orbit .ob-f{bottom:12px}
+    #brain{max-height:min(39vh,300px)}
+    #bar .gap{min-width:0}
+    #bar .organ{width:34px;height:34px}
+    #bar button{min-width:40px;min-height:40px}
+    #bar #seal{font-size:9px;letter-spacing:.03em}
+    #status{padding:0 6px;font-size:9px}
+    #caption{font-size:13px;padding:0 8px 5px}
+    #cmd{width:min(100vw,360px);max-width:100vw;max-height:calc(100dvh - 130px)}
+    #panel{padding:22px 18px 16px}
+  }
+  @media(max-height:740px){
+    #convohead{min-height:0;flex-direction:row;padding:8px 10px}
+    #convo-mini{width:44px;height:44px}
+    #convohead .ct{align-items:flex-start;text-align:left}
+    #assistant-actions{display:none}
+    #brain{padding:8px}
+  }
+  /* UI 2.0 screens. Geometry and hierarchy use the locked palette tokens. */
+  #title{width:min(740px,calc(100vw - 650px));column-gap:20px}
+  #toprail{left:min(740px,calc(100vw - 650px))}
+  #title #density{max-width:230px;white-space:normal}
+  #brain{gap:14px;border-radius:16px}
+  #convohead{min-height:174px}
+  #convo-mini{width:100px;height:100px}
+  #convohead .ct i{font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+  #answer{padding:18px;border-radius:12px;box-shadow:none}
+  #answer .q{font:13px/1.55 var(--font);letter-spacing:0;text-transform:none;
+    padding:0 0 13px;margin:0 0 14px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+  #answer .q:empty{display:none}
+  #answer .a,#a-rich{font:14px/1.75 var(--font);color:var(--ink);overflow-wrap:anywhere}
+  #a-rich{display:none;min-height:0;max-height:var(--answermax);overflow:auto;
+    overscroll-behavior:contain;scrollbar-width:thin;scrollbar-gutter:stable}
+  #answer.rich #a-text{display:none!important}
+  #answer.rich #a-rich{display:block}
+  #a-rich>:first-child{margin-top:0}
+  #a-rich>:last-child{margin-bottom:0}
+  #a-rich p{margin:0 0 14px}
+  #a-rich h2,#a-rich h3,#a-rich h4{font-size:17px;line-height:1.35;margin:22px 0 10px;color:var(--ink)}
+  #a-rich h3{font-size:15px}
+  #a-rich h4{font-size:14px}
+  #a-rich ul,#a-rich ol{padding-left:23px;margin:10px 0 16px}
+  #a-rich li{margin:5px 0}
+  #a-rich a{color:var(--blue-structure);text-underline-offset:3px;overflow-wrap:anywhere}
+  #a-rich blockquote{margin:14px 0;padding:8px 14px;border-left:2px solid var(--blue-structure);
+    background:var(--blue-trace);color:var(--muted)}
+  #a-rich code{font:12px/1.65 var(--mono);background:var(--blue-trace);padding:2px 5px;border-radius:4px}
+  #a-rich .code-block{min-width:0;margin:14px 0;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  #a-rich .code-head{display:flex;justify-content:space-between;align-items:center;
+    padding:7px 10px;background:var(--blue-trace);font:10px var(--mono);color:var(--muted)}
+  #a-rich pre{margin:0;padding:14px;overflow:auto;max-width:100%;tab-size:2;white-space:pre}
+  #a-rich pre code{padding:0;background:none;border:0}
+  #a-rich .table-scroll{overflow:auto;max-width:100%;margin:14px 0;border:1px solid var(--line);border-radius:8px}
+  #a-rich table{border-collapse:collapse;width:100%;font-size:12px;line-height:1.6}
+  #a-rich th,#a-rich td{padding:10px 12px;min-width:100px;text-align:left;border-bottom:1px solid var(--line)}
+  #a-rich th{background:var(--blue-trace);color:var(--blue-structure)}
+  #a-rich tr:last-child td{border-bottom:0}
+  .answer-tools{display:flex;justify-content:flex-end;padding-top:10px}
+  .answer-tools button,#a-rich button{border:1px solid var(--line);border-radius:6px;
+    min-height:32px;padding:5px 10px;color:var(--muted);background:var(--glass);font:11px var(--font);cursor:pointer}
+  .answer-tools button:hover,#a-rich button:hover{border-color:var(--blue-structure);color:var(--ink)}
+  #answer:not(.show) .answer-tools,#answer.tool .answer-tools{display:none}
+  #answer.capped #a-rich{flex:1 1 auto;min-height:0}
+  #answer.capped #a-ask:not(.show){display:none}
+  #answer .src{padding-top:12px;border-top:1px solid var(--line);margin-top:14px}
+  #answer .chips{gap:7px;max-height:110px;overflow:auto}
+  #answer.err{border-color:var(--fail)}
+  #caption{font-size:clamp(14px,1.25vw,19px);line-height:1.55;border-radius:10px;
+    background:rgba(var(--void-rgb),.72);padding:10px 16px}
+  #caption:not(.up){padding:0}
+  #dock{transition:left var(--dur-lane) var(--ease-lane)}
+  #typeline{position:relative;padding:0;margin:0}
+  #typeline.up{display:flex;align-items:center;animation:none}
+  #qline{box-sizing:border-box;width:100%;min-height:48px;padding:12px 54px 12px 16px;
+    border:1px solid var(--blue-glow);border-radius:12px;background:var(--glass);
+    color:var(--ink);font:14px var(--font);letter-spacing:0}
+  #qline:focus{outline:2px solid var(--blue-structure);outline-offset:2px}
+  #compose-send{position:absolute;right:6px;top:6px;width:36px;height:36px;border-radius:9px;
+    border:1px solid var(--blue-glow);background:var(--blue-trace);color:var(--blue-structure);
+    font:20px var(--font);cursor:pointer}
+  #compose-send:disabled{opacity:.45;cursor:wait}
+  html.chat-reading #typeline{display:flex}
+  html.chat-reading #brain{transition:none;z-index:9}
+  html.chat-reading #convohead{min-height:0;flex-direction:row;justify-content:flex-start;padding:10px 12px}
+  html.chat-reading #convo-mini{width:42px;height:42px}
+  html.chat-reading #convohead .ct{align-items:flex-start;text-align:left}
+  html.chat-reading #assistant-actions{display:none}
+  html.chat-reading #orbit,html.chat-reading #presence{visibility:hidden;pointer-events:none}
+  html.chat-reading #answer{flex:1 1 auto;min-height:0}
+  html.chat-reading #answer.show:not(.tool){display:flex;flex-direction:column;overflow:hidden}
+  html.chat-reading #answer:not(.tool) .a,html.chat-reading #answer:not(.tool) #a-rich{
+    flex:1 1 0;min-height:0;max-height:none}
+  html.chat-reading #answer>.q,html.chat-reading #answer>.src,
+  html.chat-reading #answer>.answer-tools{flex:none}
+  html.chat-reading #answer.yield .a{display:block}
+  html.chat-reading #brainchip{display:none}
+  html.chat-reading #focuscard{padding:12px;transition:none}
+  html.chat-reading #focuscard #focusface,html.chat-reading #focuscard .atel,
+  html.chat-reading #focuscard #focus-mini,html.chat-reading #focuscard #focus-intent,
+  html.chat-reading #focuscard #focus-stats{display:none}
+  html.chat-reading #focuscard .aclock{margin:5px 0}
+  html.chat-reading #focuscard #focus-clock{font-size:28px}
+  html.chat-reading #focuscard .fbar{margin:7px 0}
+  html.chat-reading #focuscard .frow{margin-top:5px}
+  html.chat-reading #brain,:root[data-theme="work"].chat-reading #brain{top:var(--conversation-top,70px)!important}
+  #panel{top:var(--rail-h);border-left:1px solid var(--blue-glow);box-shadow:-18px 0 70px rgba(0,0,0,.3)}
+  #panel:not(.open){visibility:hidden;pointer-events:none}
+  #panel.open{visibility:visible}
+  #panel .kicker{padding-right:36px;line-height:1.5;color:var(--gold-core);font-size:10px}
+  #panel h2{font-size:26px;margin:18px 0 10px;overflow-wrap:anywhere}
+  #panel .meta{line-height:1.7;font-size:11px}
+  #panel .body{padding-right:5px;scrollbar-gutter:stable;font-size:14px;line-height:1.75}
+  #panel #close{width:36px;height:36px;top:18px;right:16px}
+  #p-seal{padding:10px 12px;border-radius:8px;font-size:10px;line-height:1.5}
+  #p-excerpt{white-space:pre-wrap}
+  #panel .doc-item,#panel .src-item{padding:14px;margin-bottom:9px;border:1px solid var(--line);
+    border-radius:10px;background:var(--blue-trace);min-width:0;overflow-wrap:anywhere}
+  #panel .doc-item .t,#panel .src-item .t{font-size:14px;font-weight:600;color:var(--ink)}
+  #panel .doc-item .u,#panel .src-item .u{display:block;font:11px/1.6 var(--mono);margin-top:6px;color:var(--muted)}
+  #panel .scan-note{margin-top:18px;padding:13px;border-radius:10px;line-height:1.65}
+  #panel .chip{max-width:100%;white-space:normal;overflow-wrap:anywhere;min-height:36px}
+  #p-neighbours>[hidden]{display:none!important}
+  #panel-filter{width:100%;box-sizing:border-box;margin-top:16px;padding:11px 12px;
+    border:1px solid var(--line);border-radius:9px;background:var(--blue-trace);color:var(--ink);font:13px var(--font)}
+  #panel-filter:focus,#cmd-search:focus{outline:1px solid var(--blue-structure);outline-offset:1px}
+  #panel-filter[hidden],#panel-empty[hidden]{display:none}
+  #panel-empty{font-size:13px;color:var(--muted);padding:16px 0}
+  #cmd{z-index:40;left:12px;top:calc(var(--rail-h) + 12px);width:390px;max-width:calc(100vw - 24px);
+    max-height:calc(100dvh - var(--rail-h) - 100px);border:1px solid var(--blue-glow);
+    border-radius:14px;background:var(--glass);box-shadow:0 24px 80px rgba(0,0,0,.45);visibility:hidden}
+  #cmd.open{visibility:visible}
+  #cmd .ch{padding:14px 16px;font-size:11px}
+  #cmd .ch .sp{opacity:1;font-size:10px}
+  #cmd-search{box-sizing:border-box;flex:none;width:calc(100% - 24px);margin:12px 12px 5px;
+    padding:11px 12px;border:1px solid var(--line);border-radius:8px;background:var(--blue-trace);
+    color:var(--ink);font:13px var(--font)}
+  #cmd.casting #cmd-search,#cmd.boarding #cmd-search,
+  #cmd.casting #cmd-empty,#cmd.boarding #cmd-empty{display:none}
+  #cmd .cb{padding:8px 10px 14px;gap:4px}
+  #cmd .cmdsec{padding:12px 8px 6px;margin:0;font-size:9px}
+  #cmd .cmdact{align-items:flex-start;padding:12px 10px;border-radius:8px;min-height:64px}
+  #cmd .cmdact .ck{width:24px;min-height:24px;border:1px solid var(--line);border-radius:5px;
+    line-height:24px;font-size:11px;opacity:1}
+  #cmd .cmdact .cl{font-size:13px;line-height:1.5}
+  #cmd .cmdact .cs{font-size:10px;line-height:1.6;white-space:normal;margin-top:4px;letter-spacing:.025em}
+  #cmd .cmdact .chint{font-size:8px}
+  #cmd .cmdact[hidden],#cmd .cmdsec[hidden]{display:none}
+  #cmd .board,#cmd .cast{min-height:0;overflow:auto;padding:14px;overscroll-behavior:contain}
+  #cmd .bgrid{gap:10px}
+  #cmd-empty{margin:12px;color:var(--muted);font-size:13px}
+  #cmd-empty[hidden]{display:none}
+  #focuscard{border:1px solid var(--blue-glow);border-radius:16px;clip-path:none;
+    padding:18px;background:var(--glass);box-shadow:0 20px 70px rgba(0,0,0,.35);
+    overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
+  #focuscard .aframe{display:none}
+  #focuscard .fh{font-size:10px;letter-spacing:.12em}
+  #focuscard #focusface{height:82px;margin:8px 0 12px}
+  #focuscard .aclock{align-items:center;gap:12px;margin:12px 0}
+  #focuscard #focus-clock{font:42px/1.2 var(--font);font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+  #focuscard .atel{flex:1;min-width:55px}
+  #focuscard .acell{padding:6px 0;gap:4px}
+  #focuscard .acell .av{font-size:11px}
+  #focuscard .fbar{height:5px;margin:16px 0}
+  #focuscard #focus-stats,#focuscard #focus-intent,#focuscard #focus-locked{line-height:1.6;overflow-wrap:anywhere}
+  #focuscard .frow button{min-height:38px;font-size:11px;letter-spacing:.06em}
+  #focuscard #focus-lock{border-color:var(--gold-glow);background:var(--gold-trace)}
+  #focuscard.pill .frow{display:flex}
+  #focuscard.pill{border-radius:12px;min-width:240px}
+  #brain.gated{z-index:35;background:var(--glass)}
+  #brain.gated #convohead{min-height:0;flex-direction:row;justify-content:flex-start;padding:8px}
+  #brain.gated #convo-mini{width:36px;height:36px}
+  #brain.gated #convohead .ct{align-items:flex-start;text-align:left}
+  #brain.gated #assistant-actions{display:none}
+  #a-ask .lbl{font-size:11px;line-height:1.6;letter-spacing:.1em}
+  #a-ask .rows,#a-ask .steps .vals{grid-template-columns:minmax(55px,auto) minmax(0,1fr);
+    gap:12px;font:12px/1.7 var(--mono);margin:16px 0;min-height:0}
+  #a-ask .rows span,#a-ask .steps .vals span{color:var(--ink)}
+  #a-ask .pair{padding-top:14px;border-top:1px solid var(--line);flex-wrap:wrap;gap:10px;
+    position:sticky;bottom:0;background:var(--glass);z-index:1}
+  #a-ask .pair button{min-width:88px;min-height:40px;font-size:13px}
+  #a-ask .clock{font-variant-numeric:tabular-nums;line-height:1.5;white-space:normal}
+  #scribepanel,#digestpanel{padding:16px;border-radius:12px;box-shadow:none}
+  #scribepanel .head,#digestpanel .head{flex-wrap:wrap;gap:8px;line-height:1.5}
+  #scribepanel .meta,#digestpanel .meta{font-size:10px}
+  #scribepanel .lines,#digestpanel .lines{padding:12px 0;max-height:240px;line-height:1.7}
+  #scribepanel .lines p{font-size:12px;line-height:1.7}
+  #scribepanel .foot,#digestpanel .foot{flex-wrap:wrap;gap:8px}
+  #scribepanel .foot button,#digestpanel .foot button{min-height:38px}
+  button:focus-visible{outline:2px solid var(--blue-structure);outline-offset:3px}
+  @media(max-width:1499px){
+    #title{width:calc(100vw - 570px);column-gap:12px}
+    #toprail{left:calc(100vw - 570px)}
+  }
+  @media(max-width:1099px){
+    #title,:root[data-theme="work"] #title{width:100vw;grid-template-columns:auto minmax(0,1fr)}
+    #convohead{min-height:0}
+    #convo-mini{width:44px;height:44px}
+    #brain.gated,:root[data-theme="work"] #brain.gated{top:70px!important;right:12px!important;
+      left:12px!important;width:calc(100vw - 24px)!important;max-height:calc(100dvh - 220px)!important}
+    html.chat-reading #brain,:root[data-theme="work"].chat-reading #brain{left:12px!important;
+      right:12px!important;width:calc(100vw - 24px)!important;max-height:calc(100dvh - 290px)!important}
+    #cmd{max-height:calc(100dvh - 160px)}
+    #focuscard{padding:14px;min-width:0;max-width:calc(100vw - 24px);transition:none}
+    #focuscard #focusface{display:none}
+    #focuscard #focus-clock{font-size:34px}
+    #focuscard .frow button{min-height:40px}
+    html.confirmation-open #focuscard{visibility:hidden;pointer-events:none}
+    #panel .body{font-size:14px}
+    #a-ask .rows{font-size:11px;gap:10px}
+  }
+  @media(max-height:740px){
+    #focuscard #focusface{display:none}
+    #focuscard{padding:12px}
+    #convohead{min-height:0}
+    #convo-mini{width:44px;height:44px}
+    #focuscard .frow{margin-top:7px}
+    #focuscard .fbar{margin:10px 0}
+  }
+
+  /* Final polish: existing palette and easing tokens, no additional render layers. */
+  #focuscard{--cardw:360px;min-width:var(--cardw)}
+  #focuscard.pill{min-width:240px}
+  #focuscard #focus-clock{font-size:38px}
+  #focuscard .atel{min-width:44px}
+  #focuscard #focus-locked{max-width:100%}
+  #digestpanel #digest-toggle{border:0;border-radius:6px;padding:4px 0;
+    color:var(--ink);font:inherit;letter-spacing:.1em;text-transform:uppercase;text-align:left}
+  #digest-toggle::after{content:' −';color:var(--muted)}
+  #digest-toggle[aria-expanded="false"]::after{content:' +'}
+  #digestpanel.folded .lines{display:none}
+  #digestpanel.folded:not(.asking) .head{margin:0;padding:0;border:0}
+  #digestpanel .row{flex-wrap:wrap}
+  #digestpanel .row .g{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+  #digestpanel .row .t{flex-basis:100%;white-space:normal;overflow-wrap:anywhere}
+  #digestpanel .meta{color:var(--muted)}
+  #ui-sound{flex:none;min-height:30px;padding:4px 8px;margin-right:8px;
+    border:1px solid var(--line);border-radius:7px;background:var(--glass);
+    color:var(--muted);font:10px var(--mono);letter-spacing:.02em;cursor:pointer}
+  #ui-sound[aria-pressed="true"]{color:var(--ink);border-color:var(--gold-glow)}
+  #status{display:flex;align-items:center;min-height:32px}
+  #status-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #status .said{overflow:hidden;text-overflow:ellipsis}
+  #cmd,#panel{transition:opacity 180ms var(--ease-glide),transform 180ms var(--ease-glide)}
+  #sidenav .navi,#assistant-actions button,#bar button,#ui-sound,
+  #cmd .cmdact,#focuscard button,#a-ask button,#panel .chip,
+  #digestpanel button,#scribepanel button,.answer-tools button,#a-rich button{
+    transition:color 140ms var(--ease-glide),background-color 140ms var(--ease-glide),
+      border-color 140ms var(--ease-glide),opacity 140ms var(--ease-glide)}
+  button:active:not(:disabled),[role="button"]:active{opacity:.8}
+  :where(button,a,input,[tabindex]):focus-visible{
+    outline:2px solid var(--blue-structure);outline-offset:3px}
+  #assistant-actions button:focus-visible{outline:2px solid var(--blue-structure);outline-offset:3px}
+  #a-rich pre:focus-visible,#a-rich .table-scroll:focus-visible{outline-offset:-3px}
+  #a-rich .code-head{gap:10px;overflow-wrap:anywhere}
+  #a-rich .code-head button{flex:none}
+  #a-ask .clock{min-width:9ch}
+  :root[data-theme="work"] #panel .kicker{color:var(--blue-structure)}
+  #panel .body,#cmd .cb{scroll-padding:12px}
+  @media(max-width:1099px){
+    #brain,:root[data-theme="work"] #brain{right:12px!important;left:12px!important;
+      width:calc(100vw - 24px)!important}
+    #focuscard{min-width:0;--cardw:360px}
+    #digestpanel{padding:8px 12px}
+    #digestpanel #digest-toggle{min-height:44px}
+    #digestpanel .row{padding:7px 0;border-bottom:1px solid var(--line);gap:6px}
+    #digestpanel .row:last-child{border:0}
+    #digestpanel .row .g{flex-basis:100%;color:var(--muted)}
+    #digestpanel .lines{max-height:160px}
+    #digestpanel button,#scribepanel button,#a-ask .pair button,
+    #focuscard .frow button,#panel #close,.answer-tools button,#a-rich button{min-height:44px}
+    #panel #close{width:44px}
+    #compose-send{width:44px;height:44px;top:2px;right:2px}
+    #bar button{min-width:44px;min-height:44px}
+    #ui-sound{min-height:44px}
+    #sidenav .navi,#navvoice{min-width:44px}
+    #orbit .ob-f{flex-wrap:wrap;justify-content:center;padding:0 10px;line-height:1.6}
+  }
+  @media(max-width:600px){
+    #brain{gap:8px}
+    #convohead .ct{min-width:0}
+    #convohead .ct i{font-size:11px}
+    #bar,:root[data-theme="work"] #bar{gap:2px;padding-left:5px;padding-right:5px}
+    #bar .organ{width:44px;height:44px;flex-shrink:0}
+    #bar #seal{min-width:18px;width:18px;padding:0}
+    #status{padding-left:0;padding-right:0}
+    #ui-sound{margin-right:6px;padding:4px 6px}
+  }
+  @media(prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
   }
 </style>
 </head>
@@ -3417,14 +3832,14 @@
   <button class="navi" type="button" data-go="web" title="The pages the last web lookup read"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.8 2.6 14.2 0 17M12 3.5c-2.6 2.8-2.6 14.2 0 17"/></svg><span>Web</span></button>
   <button class="navi" type="button" data-go="focus" title="A focus session"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.6"/><circle cx="12" cy="12" r="1"/></svg><span>Focus</span></button>
   <button class="navi" type="button" data-go="system" title="The command panel (Ctrl+K)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.4M12 18.6V21M3 12h2.4M18.6 12H21M5.6 5.6l1.7 1.7M16.7 16.7l1.7 1.7M5.6 18.4l1.7-1.7M16.7 7.3l1.7-1.7"/></svg><span>System</span></button>
-  <div id="navvoice" role="button" tabindex="0" title="The ear: one press opens a conversation"><svg viewBox="0 0 24 24"><path d="M4 12h1.5M7 8.5v7M10 6v12M13 9v6M16 7.5v9M19 11v2"/></svg><span class="nv-t"><b>voice</b><i id="navvoice-w">ready</i></span></div>
+  <div id="navvoice" role="button" tabindex="0" aria-label="Voice conversation" title="The ear: one press opens a conversation"><svg viewBox="0 0 24 24"><path d="M4 12h1.5M7 8.5v7M10 6v12M13 9v6M16 7.5v9M19 11v2"/></svg><span class="nv-t"><b>voice</b><i id="navvoice-w">ready</i></span></div>
 </nav>
 
 <!-- THE ORBIT MAP. The folders of the corpus drawn as worlds round one heart - the same
      counts, the same colours and the same mutes as the legend and the stats line, read from
      the same arrays in the same scope, so the map cannot say something the legend does not.
      Before the corners in the document on purpose: same layer, painted under them. -->
-<div id="orbit" role="dialog" aria-label="Orbit map of the knowledge galaxy" aria-hidden="true">
+<div id="orbit" role="region" aria-label="Orbit map of the knowledge galaxy" aria-hidden="true">
   <div class="ob-frame">
     <div class="ob-h"><span class="ob-live"><i></i>live</span><b id="ob-name">orbit map</b>
       <span class="ob-s" id="ob-sum"></span>
@@ -3588,7 +4003,7 @@
      cmdBuild() rather than typed here: each one carries a state line that is repainted
      from the organ it reports on, and a label typed twice is a label that will disagree
      with itself. The shell is here because a shell is layout; the contents are state. -->
-<section id="cmd" aria-hidden="true" aria-label="Command panel">
+<section id="cmd" role="dialog" aria-hidden="true" aria-label="Command panel">
   <div class="ch">
     <!-- THE SMALL MIND. The same instrument, the same five poses, driven by the same
          faceApply(): open the panel while an answer is being read and the thing you
@@ -3605,6 +4020,8 @@
     <span class="cn">command</span>
     <span class="sp" id="cmd-hint">ctrl+k · esc</span>
   </div>
+  <input id="cmd-search" type="search" placeholder="Find a command…" aria-label="Find a command" autocomplete="off" />
+  <div id="cmd-empty" hidden>No matching commands.</div>
   <div class="cb" id="cmd-list"></div>
   <div class="cast" id="cmd-cast">
     <div class="cwarn" id="cast-warn"></div>
@@ -3631,7 +4048,7 @@
   </div>
 </section>
 
-<aside id="panel">
+<aside id="panel" aria-labelledby="p-label">
   <button id="close" title="Close (Esc)">&times;</button>
   <div class="kicker"><i></i><span id="p-group"></span></div>
   <h2 id="p-label"></h2>
@@ -3640,7 +4057,9 @@
        #panel.docs alone, so no opener has to remember to hide it and no code path can
        show it over a web result, where it would be a lie. -->
   <div class="seal" id="p-seal">read from disk, never sent anywhere</div>
-  <div class="body">
+  <input id="panel-filter" type="search" placeholder="Filter visible sources…" aria-label="Filter visible sources" hidden />
+  <div class="body" tabindex="0" role="region" aria-label="Source content">
+    <div id="panel-empty" hidden>No matching sources.</div>
     <p id="p-excerpt"></p>
     <h3 id="p-nb-head" style="display:none">Connected</h3>
     <div class="chips" id="p-neighbours"></div>
@@ -3653,7 +4072,9 @@
   <div id="convohead"><canvas id="convo-mini" width="92" height="92" aria-hidden="true"></canvas><div class="ct"><b id="convo-name">…</b><i id="convo-sub">the conversation</i></div></div>
   <div id="answer">
     <div class="q" id="a-q"></div>
-    <div class="a" id="a-text"></div>
+    <div class="a" id="a-text" tabindex="0" role="region" aria-label="Answer"></div>
+    <div id="a-rich" tabindex="0" role="region" aria-label="Formatted answer"></div>
+    <div class="answer-tools"><button id="answer-copy" type="button" aria-label="Copy answer">Copy answer</button></div>
     <div class="src" id="a-src" style="display:none">
       <div class="lbl">Drawn from</div>
       <div class="chips" id="a-chips"></div>
@@ -3665,7 +4086,7 @@
     <!-- THE CONFIRMATION, rendered in the tab that asked. The parameters come from the
          server's validated slot, so what is shown here is exactly what would be run -
          not what was typed, and not what the model said it would do. -->
-    <div id="a-ask">
+    <div id="a-ask" role="region" aria-labelledby="ask-lbl">
       <div class="lbl" id="ask-lbl">Awaiting your word</div>
       <!-- §40 - THE THUMBNAIL PLATE, and the only picture any card in this house shows. It is
            here because the one thing a Chain Card could not previously show is the thing the
@@ -3674,7 +4095,7 @@
            showProposal() to /poster?video=<id> and never to a path - see that route. Empty and
            unshown for every other tool, so a card with no film is the card it always was. -->
       <img id="ask-plate" alt="" />
-      <div class="rows" id="ask-rows"></div>
+      <div class="rows" id="ask-rows" tabindex="0" role="region" aria-label="Action details"></div>
       <!-- THE PLAN, when there is more than one step. Empty and unshown for a single
            proposal: showProposal() fills exactly ONE of these two and empties the other, so
            the card can never show a plan of two beside the parameters of one. An <ol>, so the
@@ -3714,16 +4135,22 @@
        sentence it reads out is the server's. -->
   <div id="digestpanel">
     <div class="head">
-      <span class="lbl">studied today</span>
+      <button class="lbl" id="digest-toggle" type="button" aria-expanded="true" aria-controls="digest-lines">Studied today</button>
       <span class="meta" id="digest-meta"></span>
     </div>
-    <div class="lines" id="digest-lines"></div>
+    <div class="lines" id="digest-lines" tabindex="0" role="region" aria-label="Studied notes"></div>
     <div class="foot" id="digest-foot">
       <span id="digest-ask"></span>
       <button id="digest-yes" type="button">Yes</button>
       <button id="digest-no" type="button">No</button>
       <span class="said" id="digest-said"></span>
     </div>
+  </div>
+  <div id="assistant-actions" aria-label="Quick actions">
+    <button type="button" data-assistant-go="galaxy">Explore Galaxy</button>
+    <button type="button" data-assistant-go="chat">Ask in Chat</button>
+    <button type="button" data-assistant-go="archive">Open Archive</button>
+    <button type="button" data-assistant-go="focus">Focus Session</button>
   </div>
 </div>
 <!-- THE ASK, split out of #brain by UI mandate II: the caption, the type line, the status and
@@ -3739,6 +4166,7 @@
        keydown handler deciding what Enter means. -->
   <form id="typeline" autocomplete="off">
     <input id="qline" placeholder="speak, or type…" aria-label="Type a question" />
+    <button id="compose-send" type="submit" aria-label="Send question" title="Send question">↑</button>
   </form>
   <!-- §45's MODE BADGE, and it is HIDDEN IN NORMAL MODE - the whole reason it is an empty
        span with a hidden attribute rather than a cell that always reads NORMAL. Normal Mode is
@@ -3748,7 +4176,7 @@
        /study poll that was already running every 2.5s - no route, no timer, no SSE of its own.
        NOT TO BE CONFUSED with the deck's own "work mode", which is focus.py's ambient look
        during a focus lock: that is a LOOK and this is a TONE, and neither reads the other. -->
-  <div id="status"><i></i><span id="status-text">ready</span><span class="said" id="status-said"></span><span id="mode-badge" data-mode="normal" hidden></span></div>
+  <div id="status"><button id="ui-sound" type="button" aria-pressed="false" title="UI sounds off">Sound off</button><i></i><span id="status-text" role="status" aria-live="polite" aria-atomic="true">ready</span><span class="said" id="status-said"></span><span id="mode-badge" data-mode="normal" hidden></span></div>
   <form id="bar" autocomplete="off">
     <!-- THE SEAL, and the dot it has always had. READY / LISTENING / SPEAKING, plus the
          EAR OPEN cell that the transparency law requires while a conversation is open, and
@@ -3761,14 +4189,14 @@
       <span id="seal-text">ready</span>
     </span>
     <span class="gap"></span>
-    <button id="screen" class="organ" type="button" title="Share a screen and ask about it">
+    <button id="screen" class="organ" type="button" aria-label="Share screen" title="Share a screen and ask about it">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <rect x="2" y="3.5" width="20" height="14" rx="2.5"/>
         <path d="M8 21h8M12 17.5V21"/>
       </svg><i class="od" aria-hidden="true"></i>
     </button>
-    <button id="eye" class="organ" type="button"
+    <button id="eye" class="organ" type="button" aria-label="Posture camera"
             title="Open the eyes · posture only, no frame leaves this machine">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -3776,7 +4204,7 @@
         <circle cx="12" cy="12" r="3.1"/>
       </svg><i class="od" aria-hidden="true"></i>
     </button>
-    <button id="focusbtn" class="organ" type="button" title="Start a focus session (or say “thirty minutes on this”)">
+    <button id="focusbtn" class="organ" type="button" aria-label="Focus session" title="Start a focus session (or say “thirty minutes on this”)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
            stroke-linecap="round" aria-hidden="true">
         <circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.4"/>
@@ -3788,7 +4216,7 @@
          turned into text as it happens. The tooltip says "share audio" out loud because the
          one way this feature fails silently is a picker accepted with the Share Audio tick
          left off, and a man who has been told to tick it will tick it. -->
-    <button id="scribebtn" class="organ" type="button"
+    <button id="scribebtn" class="organ" type="button" aria-label="Record meeting transcript"
             title="Take the minutes · share a tab or window with “Share audio” ticked">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
            stroke-linecap="round" aria-hidden="true">
@@ -3800,7 +4228,7 @@
          to by a name it does not answer to is a control you hunt for. It is also the
          only thing in this page that opens the microphone: no organ may.
          ONE CLICK IS ONE CONVERSATION, not one sentence. See THE OPEN EAR. -->
-    <button id="mic" class="organ" type="button" title="Your ears · one tap opens a conversation">
+    <button id="mic" class="organ" type="button" aria-label="Voice conversation" title="Your ears · one tap opens a conversation">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
@@ -4080,11 +4508,11 @@ const LAYOUT = {
      room. It matches #focuscard's min-width in the stylesheet on purpose: the governor
      sets the width, the sheet holds the floor, and the probe's `visage` case fails if
      one of the two is ever edited without the other. */
-  CARD_W: 460,
+  CARD_W: 360,
   /* Below this much canvas it wears the compact pill - and the number is the full-dress
-     card plus its two margins, because a 460px card on a 300px canvas is not a card
+     card plus its two margins, because a 360px card on a 300px canvas is not a card
      that is tight, it is a card half of which is off the screen. */
-  CARD_MIN: 512,
+  CARD_MIN: 412,
   CARD_FLOOR: 210,   // and below THIS it stands down entirely
   TOAST_MAX: 760,    // the toast's full width, panel closed
   TOAST_MIN: 220,
@@ -4267,22 +4695,26 @@ function layoutSide(vw) {
    THE RECORD, layoutLast, keeps every field it had: `toast` and `toastBox` are the ASK now
    (the bottom surface, which is what they always measured), `canvasW` is the pane's width,
    and the new walls are reported beside them. */
-function layout(vwOverride) {
+function layout(vwOverride, settled) {
   const vw = vwOverride || window.innerWidth, vh = window.innerHeight;
   const root = document.documentElement;
+  const compact = vw < 1100;
+  const reading = root.classList.contains('chat-reading');
   const panel = layoutMine('panel');
   const panelOpen = !!(panel && panel.classList.contains('open'));
-  const panelW = Math.min(LAYOUT.PANEL_MAX, Math.round(vw * LAYOUT.PANEL_VW));
+  root.classList.toggle('panel-open', panelOpen);
+  const panelW = compact ? vw : Math.min(LAYOUT.PANEL_MAX, Math.round(vw * LAYOUT.PANEL_VW));
   if (panel) {
     panel.style.top = '0px';
     panel.style.right = '0px';
     panel.style.height = '100%';
     panel.style.width = panelW + 'px';
   }
-  const sideW = layoutSide(vw);
-  const dockW = Math.max(LAYOUT.DOCK_MIN, Math.min(LAYOUT.DOCK_MAX, vw - sideW - LAYOUT.BAR_ROOM));
+  const sideW = compact ? 0 : layoutSide(vw);
+  const dockW = compact ? 0 : Math.max(LAYOUT.DOCK_MIN, Math.min(LAYOUT.DOCK_MAX, vw - sideW - LAYOUT.BAR_ROOM));
   /* THE RIGHT WALL: the dock, or the panel if it is open and wider. */
-  const taken = panelOpen ? Math.max(dockW, panelW) : dockW;
+  const taken = compact ? 0 : (reading ? (panelOpen ? panelW : 0) :
+    (panelOpen ? Math.max(dockW, panelW) : dockW));
   const paneL = sideW, paneR = vw - taken;
   const canvasW = Math.max(0, paneR - paneL);
 
@@ -4292,20 +4724,21 @@ function layout(vwOverride) {
   const titleW = title && layoutShown(title) ? Math.ceil(title.offsetWidth) : 0;
   const rail = layoutMine('toprail');
   const railH = rail && layoutShown(rail) ? rail.offsetHeight : 0;
+  const headerH = Math.max(railH, title && layoutShown(title) ? title.offsetHeight : 0);
   if (rail) {
     rail.style.left = titleW + 'px';
     rail.style.right = (panelOpen ? panelW : 0) + 'px';
   }
-  const topFloor = railH ? railH + LAYOUT.GAP : LAYOUT.TOP;
-  const chipFloor = railH ? railH + 8 : LAYOUT.CHIP_TOP;
-  const laneRight = taken + LAYOUT.EDGE;
+  const topFloor = headerH + LAYOUT.GAP;
+  const chipFloor = headerH + 8;
+  const laneRight = compact ? 12 : taken + LAYOUT.EDGE;
 
   /* THE SIDEBAR. */
   const side = layoutMine('sidenav');
   if (side) {
     side.style.width = sideW + 'px';
-    side.style.top = railH + 'px';
-    side.classList.toggle('gone', sideW === 0);
+    side.style.top = headerH + 'px';
+    side.classList.toggle('gone', sideW === 0 && !compact);
     side.classList.toggle('icons', sideW > 0 && sideW < LAYOUT.SIDE_W);
   }
 
@@ -4330,15 +4763,22 @@ function layout(vwOverride) {
      the column as a lane, so nothing in the pane lands on it. */
   const col = layoutMine('brain');
   const ask = layoutMine('dock');
+  const measuredAskH = ask ? ask.offsetHeight : 0;
+  const pendingGate = !!(layoutMine('answer') && layoutMine('answer').classList.contains('tool') &&
+    layoutMine('a-ask') && layoutMine('a-ask').classList.contains('show'));
+  const focusReserve = reading && !(compact && pendingGate) && card && layoutShown(card) ? card.offsetHeight + LAYOUT.GAP : 0;
+  root.style.setProperty('--conversation-top', (topFloor + focusReserve) + 'px');
   let convoBox = null, vbudget = null;
   if (col) {
-    const width = dockW - LAYOUT.DOCK_GAP * 2;
-    const right = vw - (panelOpen ? panelW : 0) - LAYOUT.DOCK_GAP;
+    const width = reading ? Math.min(880, canvasW - 24) :
+      (compact ? vw - 24 : dockW - LAYOUT.DOCK_GAP * 2);
+    const right = reading ? paneL + (canvasW + width) / 2 :
+      vw - (compact ? 0 : (panelOpen ? panelW : 0)) - LAYOUT.DOCK_GAP;
     const left = right - width;
     col.style.left = left + 'px';
     col.style.right = 'auto';
     col.style.width = width + 'px';
-    col.style.top = topFloor + 'px';
+    col.style.top = (topFloor + focusReserve) + 'px';
     col.style.bottom = 'auto';
     col.style.transform = 'none';
     const answer = layoutMine('answer');
@@ -4346,12 +4786,17 @@ function layout(vwOverride) {
     const gateOpen = !!(answer && layoutShown(answer) &&
                         answer.classList.contains('tool') &&
                         layoutShown(layoutMine('a-ask')));
+    root.classList.toggle('confirmation-open', gateOpen);
+    col.style.visibility = panelOpen && !gateOpen ? 'hidden' : '';
     col.classList.toggle('gated', gateOpen);
     if (ask) ask.classList.toggle('gated', gateOpen);          // precedence 1: the caption
-    const floorY = vh - LAYOUT.EDGE -
-      (panelOpen && ask && layoutShown(ask) ? ask.offsetHeight + LAYOUT.GAP : 0);
-    const budget = Math.max(0, floorY - topFloor);
+    const floorY = vh - (compact ? 72 : LAYOUT.EDGE) -
+      ((panelOpen || reading || gateOpen) && ask && layoutShown(ask) ? ask.offsetHeight + LAYOUT.GAP : 0);
+    const budget = Math.max(0, Math.min(floorY - topFloor - focusReserve,
+      reading || gateOpen ? vh :
+      (compact ? Math.min(300, vh * .35) : vh)));
     col.style.maxHeight = budget + 'px';
+    col.style.height = reading || gateOpen ? budget + 'px' : '';
     let stripped = false, stripH = 0;
     if (scribe) {                                               // precedence 2: the minutes
       stripped = gateOpen && layoutShown(scribe);
@@ -4364,7 +4809,7 @@ function layout(vwOverride) {
       answer.classList.remove('capped');
       answer.style.maxHeight = '';
       wanted = col.scrollHeight;
-      if (gateOpen || wanted > budget) {
+      if (gateOpen || (!reading && wanted > budget)) {
         const others = Math.max(0, wanted - answer.offsetHeight);
         gateMax = Math.max(LAYOUT.GATE_MIN,
                            Math.min(LAYOUT.GATE_MAX, budget - others - LAYOUT.GAP));
@@ -4390,7 +4835,8 @@ function layout(vwOverride) {
   /* THE LANES - the focus card, the face card, the legend - down the pane's right edge. With the
      panel open the column is in the pane, so they start under it and it counts as one of them. */
   let laneTop = topFloor, laneW = 0, cardTop = topFloor;
-  if (panelOpen && convoBox && layoutShown(col)) {
+  if ((compact || (panelOpen && col && col.style.visibility !== 'hidden')) &&
+      convoBox && layoutShown(col)) {
     laneTop = convoBox.bottom + LAYOUT.GAP;
     laneW = convoBox.width;
   }
@@ -4399,8 +4845,19 @@ function layout(vwOverride) {
     if (!el) return;
     el.style.right = laneRight + 'px';
     el.style.top = laneTop + 'px';
+    if (id === 'focuscard') {
+      if (reading) {
+        const readW = Math.min(880, canvasW - 24);
+        el.style.width = readW + 'px';
+        el.style.right = (vw - paneL - (canvasW + readW) / 2) + 'px';
+        el.style.top = topFloor + 'px';
+      }
+      el.style.maxHeight = Math.max(140, vh - laneTop - (compact ? 220 : 180)) + 'px';
+      if (reading) el.style.maxHeight = Math.max(140, vh - topFloor - 220) + 'px';
+      if (compact && !reading) el.style.width = Math.min(360, vw - 24) + 'px';
+    }
     if (id === 'focuscard') cardTop = laneTop;
-    if (layoutShown(el)) {
+    if (layoutShown(el) && !(compact && panelOpen && (id === 'focuscard' || id === 'facecard'))) {
       laneTop += el.offsetHeight + LAYOUT.GAP;
       const w = id === 'focuscard' && !el.classList.contains('pill') ? LAYOUT.CARD_W : el.offsetWidth;
       laneW = Math.max(laneW, w);
@@ -4413,9 +4870,9 @@ function layout(vwOverride) {
   const toast = ask;
   let toastBox = null, cardBox = null, cleared = false;
   if (toast) {
-    let w = Math.max(LAYOUT.TOAST_MIN,
+    let w = compact ? Math.max(0, vw - 24) : Math.max(LAYOUT.TOAST_MIN,
                      Math.min(LAYOUT.TOAST_MAX, canvasW - LAYOUT.PANE_PAD * 2));
-    const left = paneL + Math.max(LAYOUT.PANE_PAD / 2, (canvasW - w) / 2);
+    const left = compact ? 12 : paneL + Math.max(LAYOUT.PANE_PAD / 2, (canvasW - w) / 2);
     const cardShown = card && layoutShown(card) && !card.classList.contains('nofit');
     if (cardShown) {
       const cw = card.classList.contains('pill') ? card.offsetWidth : LAYOUT.CARD_W;
@@ -4430,30 +4887,33 @@ function layout(vwOverride) {
       return box.right > cardBox.left && box.left < cardBox.right &&
              box.bottom > cardBox.top && box.top < cardBox.bottom;
     };
-    if (hit(left, w)) {
+    if (!compact && hit(left, w)) {
       w = Math.max(LAYOUT.TOAST_MIN, cardBox.left - LAYOUT.GAP - left);
       cleared = true;
     }
     toast.style.width = w + 'px';
     toast.style.left = left + 'px';
     toast.style.right = 'auto';
-    toast.style.bottom = LAYOUT.EDGE + 'px';
+    toast.style.bottom = (compact ? 72 : LAYOUT.EDGE) + 'px';
     toast.style.transform = 'none';
     toastBox = { left: left, right: left + w, width: w,
-                 top: vh - LAYOUT.EDGE - toastH, bottom: vh - LAYOUT.EDGE,
+                 top: vh - (compact ? 72 : LAYOUT.EDGE) - toastH,
+                 bottom: vh - (compact ? 72 : LAYOUT.EDGE),
                  cleared: cleared, overlaps: hit(left, w) };
   }
   const askH = toastBox ? toastBox.bottom - toastBox.top : 0;
   const bchip = layoutMine('brainchip'), bmenu = layoutMine('brainmenu');
+  const chipTight = canvasW < LAYOUT.CHIP_MIN ||
+    !!(card && card.classList.contains('live') && layoutShown(card));
   if (bchip) {
     bchip.style.left = (paneL + LAYOUT.EDGE) + 'px';
     bchip.style.bottom = (LAYOUT.EDGE + askH + 14) + 'px';
-    bchip.classList.toggle('tight', canvasW < LAYOUT.CHIP_MIN);
+    bchip.classList.toggle('tight', chipTight);
   }
   if (bmenu) {
     bmenu.style.left = (paneL + LAYOUT.EDGE) + 'px';
     bmenu.style.bottom = (LAYOUT.EDGE + askH + 46) + 'px';
-    bmenu.classList.toggle('tight', canvasW < LAYOUT.CHIP_MIN);
+    bmenu.classList.toggle('tight', chipTight);
   }
   let chipTop = chipFloor;
   const chipMid = Math.round(paneL + canvasW / 2);
@@ -4519,20 +4979,23 @@ function layout(vwOverride) {
   root.style.setProperty('--dock-w', dockW + 'px');
   root.style.setProperty('--pane-l', paneL + 'px');
   root.style.setProperty('--pane-r', taken + 'px');
-  root.style.setProperty('--pane-t', railH + 'px');
+  root.style.setProperty('--pane-t', headerH + 'px');
   root.style.setProperty('--pane-b', Math.max(0, Math.round(vh - bandBot)) + 'px');
   /* THE MAP STEPS ASIDE FOR A CARD. The legend may sit over the map's corner - it is the map's
      own key - but a focus card or the watching face is a live organ, and the map's heart is
      not allowed under one. So while either is up the map moves out of the lane column - BESIDE
      it or BELOW it, whichever leaves the map the larger square, the same choice the well makes. */
-  const organUp = (card && layoutShown(card) && !card.classList.contains('nofit')) ||
-                  !!(layoutMine('facecard') && layoutShown(layoutMine('facecard')));
-  let orbitR = taken, orbitT = railH;
+  const organUp =
+    ((card && layoutShown(card) && !card.classList.contains('nofit')) ||
+     !!(layoutMine('facecard') && layoutShown(layoutMine('facecard'))));
+  // Compact cards occupy a measured band above the map, including the study disclosure.
+  let orbitR = taken, orbitT = compact ? Math.max(headerH + 99,
+    convoBox && layoutShown(col) ? convoBox.bottom + LAYOUT.GAP : 0) : headerH;
   if (organUp) {
     const besideW = (vw - laneRight - laneW - LAYOUT.GAP) - paneL;
-    const fullH = bandBot - railH, belowH = bandBot - laneTop;
-    if (Math.min(besideW, fullH) >= Math.min(canvasW, belowH)) orbitR = laneRight + laneW + LAYOUT.GAP;
-    else orbitT = laneTop;
+    const fullH = bandBot - headerH, belowH = bandBot - laneTop;
+    if (!compact && Math.min(besideW, fullH) >= Math.min(canvasW, belowH)) orbitR = laneRight + laneW + LAYOUT.GAP;
+    else orbitT = Math.max(orbitT, laneTop);
   }
   root.style.setProperty('--orbit-r', orbitR + 'px');
   root.style.setProperty('--orbit-t', orbitT + 'px');
@@ -4551,13 +5014,16 @@ function layout(vwOverride) {
     railH: railH, topFloor: topFloor, chipFloor: chipFloor,
     clearedToast: cleared,
     overlap: !!(toastBox && toastBox.overlaps),
-    chipsBottom: chipTop, tight: canvasW < LAYOUT.CHIP_MIN,
+    chipsBottom: chipTop, tight: chipTight,
     /* UI MANDATE II: the walls and the new surfaces. */
     sideW: sideW, dockW: dockW, titleW: titleW,
     pane: { left: paneL, right: paneR, top: railH, bottom: bandBot, w: canvasW },
     convoBox: convoBox,
     stage: document.body && document.body.classList.contains('stage-presence') ? 'presence' : 'galaxy'
   };
+  // A width change can wrap the caption/composer after the column was measured.
+  // Settle that new height once; this adds no timer or continuous layout loop.
+  if (!settled && ask && Math.abs(ask.offsetHeight - measuredAskH) > 1) return layout(vwOverride, true);
   return layoutLast;
 }
 
@@ -5207,7 +5673,11 @@ async function loadLib() {
     selected = null;
     hiNodes.clear(); hiLinks.clear();
     refresh();
+    const panelHadFocus = $('panel').contains(document.activeElement);
     $('panel').classList.remove('open');
+    if (innerWidth >= 1100 && panelHadFocus && panelReturnFocus && panelReturnFocus.isConnected) {
+      panelReturnFocus.focus({ preventScroll:true });
+    }
     /* §39 PART 3: and the idle clock goes down with it. This is the page's ONE close - the ✕,
        Escape, a background click, a compose answer putting the web panel away, and all three
        of the sidebar's own closes come through here - so a timer disarmed on this line is a
@@ -6361,6 +6831,8 @@ async function loadLib() {
      the top of the scope - a const here would be a temporal-dead-zone throw on first paint. */
   var orbitState;
   const OB_NS = 'http://www.w3.org/2000/svg';
+  // A live MediaQueryList avoids allocating one per SVG edge on every frame.
+  const orbitMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const OB = {
     /* Two orbits, tilted in opposite senses so the system reads as one in depth rather than
        as two flat hoops. `k` is how much longer the outer one takes to go round. */
@@ -6770,7 +7242,7 @@ async function loadLib() {
      speed, but read from --ease-node-orbit-drift so that is a decision made in one place. */
   function orbitPlace(now) {
     if (!orbitState || !orbitState.nodes.length) return;
-    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const still = orbitMotion.matches;
     const period = Math.max(1000, EASE.ms('--dur-node-orbit-drift'));
     const drift = EASE.curve('--ease-node-orbit-drift');
     const openMs = EASE.ms('--dur-panel-open');
@@ -6837,7 +7309,7 @@ async function loadLib() {
     th.path.setAttribute('d', d);
     th.grad.setAttribute('x1', ax.toFixed(1)); th.grad.setAttribute('y1', ay.toFixed(1));
     th.grad.setAttribute('x2', bx.toFixed(1)); th.grad.setAttribute('y2', by.toFixed(1));
-    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const still = orbitMotion.matches;
     const u = still ? 0.5 : ((now / OB.BEAD_MS + th.seed) % 1);
     const v = 1 - u;
     const px = v * v * ax + 2 * v * u * cx + u * u * bx, py = v * v * ay + 2 * v * u * cy + u * u * by;
@@ -7033,7 +7505,9 @@ async function loadLib() {
     if (!nav) return;
     Array.prototype.forEach.call(nav.querySelectorAll('.navi'), function (b) {
       const go = b.getAttribute('data-go');
-      const on = (go === 'galaxy' && s.now === 'galaxy') || (go === 'chat' && s.now === 'presence');
+      const reading = document.documentElement.classList.contains('chat-reading');
+      const on = (go === 'galaxy' && !reading && s.now === 'galaxy') ||
+        (go === 'chat' && (reading || s.now === 'presence'));
       b.classList.toggle('on', on);
       if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
@@ -7046,6 +7520,11 @@ async function loadLib() {
   function navGo(go) {
     const s = stageState();
     s.lastGo = go;
+    if (go === 'chat' || go === 'galaxy' || go === 'focus') {
+      document.documentElement.classList.toggle('chat-reading', go === 'chat');
+      layout();
+      navPaint();
+    }
     if (go === 'galaxy') return stageSet('galaxy', 'the sidebar');
     if (go === 'chat') { const sl = $('slash'); if (sl) sl.click(); return 'chat'; }
     if (go === 'archive') return cmdRun('archive') ? 'archive' : 'refused';
@@ -7350,7 +7829,7 @@ async function loadLib() {
      Called after typeOut, which puts every character in the DOM on the first frame, so
      scrollHeight here is the finished height and not a height mid-reveal. */
   function answerReach() {
-    const el = $('a-text');
+    const el = $('answer').classList.contains('rich') ? $('a-rich') : $('a-text');
     if (!el) return false;
     const over = el.scrollHeight - el.clientHeight > 1;
     if (over) {
@@ -7364,6 +7843,116 @@ async function loadLib() {
     }
     return over;
   }
+
+  /* A DOM-only Markdown reader: no HTML from answers is inserted. The original answer
+     remains in #a-text for speech, citations and existing state contracts. */
+  function answerInline(into, source) {
+    const re = /(`[^`\n]+`|\*\*[^*\n]+\*\*|\*[^*\n]+\*|\[[^\]\n]+\]\(https?:\/\/[^\s)]+\))/g;
+    let at = 0, match;
+    while ((match = re.exec(source))) {
+      into.appendChild(document.createTextNode(source.slice(at, match.index)));
+      const token = match[0];
+      let node;
+      if (token[0] === '`') {
+        node = document.createElement('code'); node.textContent = token.slice(1, -1);
+      } else if (token[0] === '[') {
+        const split = token.indexOf(']('), href = safeUrl(token.slice(split + 2, -1));
+        node = document.createElement(href ? 'a' : 'span');
+        node.textContent = token.slice(1, split);
+        if (href) { node.href = href; node.target = '_blank'; node.rel = 'noopener noreferrer'; }
+      } else {
+        const strong = token.startsWith('**');
+        node = document.createElement(strong ? 'strong' : 'em');
+        node.textContent = token.slice(strong ? 2 : 1, strong ? -2 : -1);
+      }
+      into.appendChild(node); at = re.lastIndex;
+    }
+    into.appendChild(document.createTextNode(source.slice(at)));
+  }
+  function answerRich(text) {
+    const raw = String(text == null ? '' : text), box = $('a-rich');
+    box.replaceChildren();
+    const rich = /(^|\n)(#{1,6}\s|```|>\s|[-*]\s|\d+\.\s)|\*\*|`[^`]+`|\[[^\]]+\]\(https?:|\n[|:\s-]+\|/.test(raw);
+    $('answer').classList.toggle('rich', rich);
+    if (!rich) return;
+    const lines = raw.replace(/\r\n/g, '\n').split('\n');
+    const cells = line => line.trim().replace(/^\||\|$/g, '').split('|').map(v => v.trim());
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (!line.trim()) { i++; continue; }
+      if (/^```/.test(line)) {
+        const block = document.createElement('div'); block.className = 'code-block';
+        const head = document.createElement('div'); head.className = 'code-head';
+        const label = document.createElement('span'); label.textContent = line.slice(3).trim() || 'code';
+        const copy = document.createElement('button'); copy.type = 'button'; copy.textContent = 'Copy code';
+        const pre = document.createElement('pre'), code = document.createElement('code'), parts = [];
+        pre.tabIndex = 0; pre.setAttribute('role', 'region'); pre.setAttribute('aria-label', 'Code block');
+        i++;
+        while (i < lines.length && !/^```/.test(lines[i])) parts.push(lines[i++]);
+        if (i < lines.length) i++;
+        code.textContent = parts.join('\n');
+        copy.addEventListener('click', () => answerCopy(code.textContent, copy, 'Copy code'));
+        head.append(label, copy); pre.appendChild(code); block.append(head, pre); box.appendChild(block);
+        continue;
+      }
+      if (line.includes('|') && i + 1 < lines.length &&
+          cells(lines[i + 1]).every(c => /^:?-{3,}:?$/.test(c))) {
+        const wrap = document.createElement('div'); wrap.className = 'table-scroll';
+        wrap.tabIndex = 0; wrap.setAttribute('role', 'region'); wrap.setAttribute('aria-label', 'Answer table');
+        const table = document.createElement('table'), thead = document.createElement('thead');
+        const tr = document.createElement('tr');
+        cells(line).forEach(c => { const th = document.createElement('th'); th.scope = 'col'; answerInline(th, c); tr.appendChild(th); });
+        thead.appendChild(tr); table.appendChild(thead);
+        const tbody = document.createElement('tbody'); i += 2;
+        while (i < lines.length && lines[i].includes('|') && lines[i].trim()) {
+          const row = document.createElement('tr');
+          cells(lines[i++]).forEach(c => { const td = document.createElement('td'); answerInline(td, c); row.appendChild(td); });
+          tbody.appendChild(row);
+        }
+        table.appendChild(tbody); wrap.appendChild(table); box.appendChild(wrap); continue;
+      }
+      const heading = /^(#{1,6})\s+(.*)$/.exec(line);
+      if (heading) {
+        const h = document.createElement('h' + Math.min(4, heading[1].length + 1));
+        answerInline(h, heading[2]); box.appendChild(h); i++; continue;
+      }
+      const list = /^(\s*)([-*]|\d+\.)\s+(.*)$/.exec(line);
+      if (list) {
+        const ordered = /\d/.test(list[2]), ul = document.createElement(ordered ? 'ol' : 'ul');
+        if (ordered) ul.start = parseInt(list[2], 10);
+        while (i < lines.length) {
+          const item = /^(\s*)([-*]|\d+\.)\s+(.*)$/.exec(lines[i]);
+          if (!item || /\d/.test(item[2]) !== ordered) break;
+          const li = document.createElement('li'); answerInline(li, item[3]); ul.appendChild(li); i++;
+        }
+        box.appendChild(ul); continue;
+      }
+      if (/^>\s?/.test(line)) {
+        const quote = document.createElement('blockquote'); answerInline(quote, line.replace(/^>\s?/, ''));
+        box.appendChild(quote); i++; continue;
+      }
+      const p = document.createElement('p'), parts = [line]; i++;
+      while (i < lines.length && lines[i].trim() && !/^(#{1,6}\s|```|>\s|[-*]\s|\d+\.\s)/.test(lines[i]) &&
+             !(lines[i].includes('|') && i + 1 < lines.length && /^[|:\s-]+$/.test(lines[i + 1]))) parts.push(lines[i++]);
+      answerInline(p, parts.join('\n')); box.appendChild(p);
+    }
+    box.scrollTop = 0;
+  }
+  async function answerCopy(text, button, label) {
+    try { await navigator.clipboard.writeText(text); button.textContent = 'Copied'; }
+    catch (e) { button.textContent = 'Copy unavailable'; }
+    button.setAttribute('aria-label', button.textContent);
+    setTimeout(() => { if (button.isConnected) { button.textContent = label; button.setAttribute('aria-label', label); } }, 1800);
+  }
+  $('answer-copy').addEventListener('click', function () {
+    answerCopy($('a-text').textContent, this, 'Copy answer');
+  });
+  // A reader who scrolls manually owns the position until the next answer.
+  let answerManualScroll = false;
+  ['wheel', 'touchstart', 'keydown'].forEach(function (event) {
+    $('a-text').addEventListener(event, function () { answerManualScroll = true; }, { passive: true });
+  });
 
   function renderAnswer(question, text, isError, ids, sources, cites) {
     /* AND §39'S VANISH IS CALLED OFF FIRST OF ALL, before a single character is written. A
@@ -7388,8 +7977,9 @@ async function loadLib() {
     /* The answer arrives COMPLETE and is then revealed - see typeOut(). Every character
        is in the DOM before this line returns, so #a-text.textContent is the whole answer
        from the first frame and nothing that reads this page has to wait for a show. */
+    answerRich(text);
     typeOut($('a-text'), text);
-    answerReach();
+    answerManualScroll = false;
     /* AND THE SINGLE-SURFACE DECISION IS RE-TAKEN HERE, because the paragraph has just changed
        under a caption that may still be up from the sentence before it. Comparing the new text
        against the old subtitle is what makes the class honest in both directions: it releases
@@ -7437,6 +8027,7 @@ async function loadLib() {
        old citation row was. One send per chip; the queue's ceiling and the one-in-flight law
        are cineStreamSend's, not this line's. */
     cineStreamCites();
+    answerReach();
     return used;
   }
 
@@ -8636,6 +9227,36 @@ async function loadLib() {
     cmdBuilt = true;
   }
 
+  function cmdFilter() {
+    const query = $('cmd-search').value.trim().toLowerCase();
+    let visible = 0;
+    $('cmd-list').querySelectorAll('.cmdact').forEach(function (row) {
+      row.hidden = !!query && !row.textContent.toLowerCase().includes(query);
+      if (!row.hidden) visible++;
+    });
+    $('cmd-list').querySelectorAll('.cmdsec').forEach(function (section) {
+      let next = section.nextElementSibling, any = false;
+      while (next && !next.classList.contains('cmdsec')) { if (!next.hidden) any = true; next = next.nextElementSibling; }
+      section.hidden = !any;
+    });
+    $('cmd-empty').hidden = visible > 0;
+    cmdScroll();
+  }
+  $('cmd-search').addEventListener('input', cmdFilter);
+  $('cmd-search').addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowDown' && e.key !== 'Enter') return;
+    const row = $('cmd-list').querySelector('.cmdact:not([hidden]):not([aria-disabled="true"])');
+    if (row) { e.preventDefault(); row.focus(); }
+  });
+  $('cmd-list').addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    const rows = Array.from(this.querySelectorAll('.cmdact:not([hidden])'));
+    const index = rows.indexOf(document.activeElement);
+    if (index < 0) return;
+    e.preventDefault();
+    rows[(index + (e.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length].focus();
+  });
+
   /* ---- §32 PART 2: THE SCROLL AFFORDANCE ----
      WHAT WAS WRONG. At 1280 and 1366 the list was already taller than the panel - measured
      before this heal: 693px of rows in 607px and 575px of window - and there was nothing on the
@@ -8703,6 +9324,7 @@ async function loadLib() {
         else row.removeAttribute('aria-disabled');
       });
       cmd.paints++;
+      cmdFilter();
       /* A repaint can change the list's height - a state line that grows a word, a row that
          gains a reason - so the affordance is recomputed with it. Free while shut. */
       cmdScroll();
@@ -8716,8 +9338,10 @@ async function loadLib() {
     if (want) {
       cmdPaint();
       const wasOpen = el.classList.contains('open');
+      if (!wasOpen) cmd.returnFocus = document.activeElement;
       el.classList.add('open');
       el.setAttribute('aria-hidden', 'false');
+      $('cmd-search').focus({ preventScroll: true });
       cmd.opens++;
       if (!wasOpen) chime('glass');            // a sheet arriving: the cool family
       /* AFTER the class, and on the next frame: cmdScroll refuses to measure a shut panel, and
@@ -8736,6 +9360,9 @@ async function loadLib() {
       el.classList.remove('open');
       el.setAttribute('aria-hidden', 'true');
       cmdView('list');
+      const back = cmd.returnFocus;
+      if (back && back.isConnected && !el.contains(back) && back.getClientRects().length) back.focus({ preventScroll: true });
+      else $('slash').focus({ preventScroll: true });
       castStop();                 // an audition does not outlive the panel that started it
       /* The watch does not outlive the panel either - except while consent is genuinely
          in flight, which is the one case where the answer is still worth having when the
@@ -8755,6 +9382,7 @@ async function loadLib() {
     el.classList.toggle('boarding', cmd.view === 'board');
     if (cmd.view !== 'board') boardStop();
     if (cmd.view === 'list') { el.classList.remove('offline'); castStop(); }
+    if (cmd.view === 'list' && el.classList.contains('open')) $('cmd-search').focus({ preventScroll: true });
   }
 
   /* ==================================================== THE BOARDS ====
@@ -9903,6 +10531,74 @@ async function loadLib() {
      panel with one key would be one keystroke doing two people's jobs. When the sheet is
      open, Escape is the sheet's and stops there; when it is not, the page's own handler
      never hears about it. */
+  // One observer owns modal accessibility; no polling or duplicated open handlers.
+  // Only the top surface is modal. Background inertness follows that surface's lifetime.
+  function polishSurfaces() {
+    const command = $('cmd'), panel = $('panel');
+    const gate = $('a-ask'), brain = $('brain'), digest = $('digestpanel');
+    const compact = matchMedia('(max-width:1099px)');
+    const toggle = $('digest-toggle');
+    let scope = null, queued = false;
+    const returns = new WeakMap(), inerted = new Set();
+    const visible = el => el && el.isConnected && el.getClientRects().length &&
+      getComputedStyle(el).visibility !== 'hidden' && !el.closest('[inert]');
+    function sync() {
+      queued = false;
+      const next = command.classList.contains('open') ? command :
+        (gate.classList.contains('show') ? brain :
+          (compact.matches && panel.classList.contains('open') ? panel : null));
+      command.setAttribute('aria-modal', String(next === command));
+      brain.setAttribute('role', gate.classList.contains('show') ? 'dialog' : 'region');
+      brain.setAttribute('aria-label', gate.classList.contains('show') ? 'Confirm action' : 'Assistant');
+      brain.setAttribute('aria-modal', String(next === brain));
+      panel.setAttribute('role', compact.matches ? 'dialog' : 'region');
+      panel.setAttribute('aria-modal', String(next === panel));
+      inerted.forEach(el => { el.inert = false; }); inerted.clear();
+      if (next !== scope) {
+        const active = document.activeElement, previous = scope;
+        if (next && !next.contains(active) && !returns.has(next)) returns.set(next, active);
+        scope = next;
+        if (next && !next.contains(active)) {
+          const restore = previous === command && next.contains(cmd.returnFocus) ? cmd.returnFocus : null;
+          (visible(restore) ? restore : next === command ? $('cmd-search') : next === brain ? $('ask-no') : $('close')).focus({ preventScroll:true });
+        } else if (!next && previous && previous.contains(active)) {
+          const back = previous === command ? cmd.returnFocus : returns.get(previous);
+          (visible(back) ? back : $('slash')).focus({ preventScroll:true });
+        }
+        if (previous && !next) returns.delete(previous);
+      }
+      if (next) Array.from(document.body.children).forEach(el => {
+        if (el === next || el.contains(next) || el.inert || /^(SCRIPT|STYLE)$/.test(el.tagName)) return;
+        el.inert = true; inerted.add(el);
+      });
+    }
+    function schedule() { if (!queued) { queued = true; requestAnimationFrame(sync); } }
+    const observer = new MutationObserver(schedule);
+    [command, panel, gate].forEach(el => observer.observe(el, {attributes:true,attributeFilter:['class']}));
+    function fold(on) {
+      if (on && $('digest-lines').contains(document.activeElement)) toggle.focus({preventScroll:true});
+      digest.classList.toggle('folded', on);
+      toggle.setAttribute('aria-expanded', String(!on));
+      layout();
+    }
+    toggle.addEventListener('click', () => fold(!digest.classList.contains('folded')));
+    compact.addEventListener('change', () => { fold(compact.matches); schedule(); });
+    fold(compact.matches);
+    orbitMotion.addEventListener('change', function () {
+      if (orbitMotion.matches) {
+        // Cancel an in-flight Web Animation as well as disabling future CSS motion.
+        const stage = stageState();
+        (stage.anims || []).forEach(animation => animation.cancel());
+        stage.anims = [];
+      }
+    });
+    document.querySelectorAll('#sidenav .navi').forEach(el => {
+      el.setAttribute('aria-label', el.querySelector('span').textContent);
+      el.querySelector('svg').setAttribute('aria-hidden', 'true');
+    });
+    sync();
+  }
+
   function cmdUp() {
     cmdBuild();
     const back = $('cast-back');
@@ -9914,6 +10610,20 @@ async function loadLib() {
     if (bback) bback.onclick = function () { cmdView('list'); cmdPaint(); };
     addEventListener('keydown', function (e) {
       const k = String(e.key || '').toLowerCase();
+      if (k === 'tab') {
+        const command = $('cmd'), panel = $('panel');
+        const scope = command && command.classList.contains('open') ? command :
+          ($('brain').classList.contains('gated') ? $('brain') :
+            (innerWidth < 1100 && panel.classList.contains('open') ? panel : null));
+        if (scope) {
+          const stops = Array.from(scope.querySelectorAll('button:not(:disabled),a[href],input:not(:disabled),[tabindex="0"]'))
+            .filter(el => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden');
+          const first = stops[0], last = stops[stops.length - 1], active = document.activeElement;
+          if (first && (!scope.contains(active) || (e.shiftKey ? active === first : active === last))) {
+            e.preventDefault(); (e.shiftKey ? last : first).focus({ preventScroll: true });
+          }
+        }
+      }
       if (k === 'y' && (e.ctrlKey || e.metaKey) && !e.altKey) {
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -13494,6 +14204,12 @@ async function loadLib() {
      form whose default action is a page navigation must still be told so. */
   $('bar').addEventListener('submit', function (e) { e.preventDefault(); });
   $('slash').onclick = function () { typeLineUp('the slash button'); };
+  $('assistant-actions').addEventListener('click', function (e) {
+    const action = e.target.closest('[data-assistant-go]');
+    if (!action) return;
+    const nav = document.querySelector('#sidenav [data-go="' + action.dataset.assistantGo + '"]');
+    if (nav) nav.click();
+  });
 
   /* THE BUSY GATE, which used to be a disabled "Ask" button. Six call sites reached into
      that button; the button is gone, so the three things it did are one function: the dot
@@ -13504,6 +14220,7 @@ async function loadLib() {
     const shut = !!on;
     const box = $('qline');
     if (box) box.disabled = shut;
+    $('compose-send').disabled = shut;
     $('dot').classList.toggle('busy', shut);
   }
 
@@ -13568,7 +14285,8 @@ async function loadLib() {
     if (!card || !body) return false;
     const held = capCollapse(body.textContent);
     const spoken = capCollapse(line);
-    const same = !!held && (spoken === held || spoken.indexOf(held) === 0) &&
+    const same = !card.classList.contains('rich') && !document.documentElement.classList.contains('chat-reading') &&
+                 !!held && (spoken === held || spoken.indexOf(held) === 0) &&
                  body.scrollHeight <= body.clientHeight + 1;
     if (same !== caption_yield.on) {
       caption_yield.on = same;
@@ -13955,6 +14673,7 @@ async function loadLib() {
      document and would move the whole deck to chase a word. */
   function karaScroll(span) {
     const box = kara.box;
+    if (box === $('a-text') && answerManualScroll) return false;
     if (!span || !box) return false;
     if (box.scrollHeight <= box.clientHeight + 1) return false;
     const r = span.getBoundingClientRect(), b = box.getBoundingClientRect();
@@ -14353,14 +15072,32 @@ async function loadLib() {
     return panelIdleArm('touched');
   }
 
+  let panelReturnFocus = null;
   function panelUp() {
+    if (!$('panel').contains(document.activeElement)) panelReturnFocus = document.activeElement;
+    const filter = $('panel-filter');
+    filter.value = '';
+    const rows = $('p-neighbours').querySelectorAll('.doc-item,.src-item,.chip,.wchip');
+    filter.hidden = rows.length < 2;
+    rows.forEach(row => { row.hidden = false; });
+    $('panel-empty').hidden = true;
     panelAuto.opens++;
     panelAuto.cited = vanishUp();
     panelAuto.hover = false;
     try { panelAuto.hover = !!$('panel').matches(':hover'); } catch (e) { /* no :hover */ }
     panelIdleArm('opened');
+    if (innerWidth >= 1100) $('close').focus({ preventScroll:true });
     return true;
   }
+  $('panel-filter').addEventListener('input', function () {
+    const query = this.value.trim().toLowerCase();
+    let found = 0;
+    $('p-neighbours').querySelectorAll('.doc-item,.src-item,.chip,.wchip').forEach(function (row) {
+      row.hidden = !!query && !row.textContent.toLowerCase().includes(query);
+      if (!row.hidden) found++;
+    });
+    $('panel-empty').hidden = !query || found > 0;
+  });
 
   function panelClose(why) {
     if (!panelIsOpen()) return false;
@@ -20121,7 +20858,7 @@ async function loadLib() {
     typeRun++;
     const run = typeRun;
     el.classList.remove('typed');
-    if (!typeWanted(s)) {
+    if ((el.id === 'a-text' && $('answer').classList.contains('rich')) || !typeWanted(s)) {
       el.textContent = s;
       typeLit = typeTotal = s.length;
       return;
@@ -20226,7 +20963,21 @@ async function loadLib() {
      "a muted tab never built the bus" - true until the Open Ear, which raises the analyser
      through tonesUp() and would have handed a ?mute=1 tab a working chime bus as a side
      effect of listening. The invariant was doing a mute gate's job; this says it outright. */
-  function chimesAllowed() { return !MUTED && !!toneBus && audioUnlocked; }
+  // UI cues share the existing gain/ducking bus; speech keeps its own consent path.
+  let uiSoundEnabled = false;
+  if (MUTED) {
+    $('ui-sound').disabled = true;
+    $('ui-sound').title = 'UI sounds unavailable while this tab is muted';
+  }
+  $('ui-sound').addEventListener('click', function () {
+    uiSoundEnabled = !uiSoundEnabled;
+    this.setAttribute('aria-pressed', String(uiSoundEnabled));
+    this.textContent = uiSoundEnabled ? 'Sound on' : 'Sound off';
+    this.title = MUTED ? 'This tab is muted; UI sounds remain silent' :
+      (uiSoundEnabled ? 'Turn UI sounds off' : 'Turn UI sounds on');
+    if (uiSoundEnabled) { unlockAudio(); chime('glass'); }
+  });
+  function chimesAllowed() { return uiSoundEnabled && !MUTED && !!toneBus && audioUnlocked; }
 
   /* ---- THE DUCK ----
      A CHIME NEVER TALKS OVER THE BUTLER. The wake, confirm and refusal tones are 80%
@@ -25070,15 +25821,21 @@ async function loadLib() {
       const image = skin.tex.image;
       const cv = document.createElement('canvas');
       cv.width = image.width; cv.height = image.height;
-      const g = cv.getContext('2d');
+      // This canvas is read back once to recolor every pixel; keep it CPU-backed.
+      const g = cv.getContext('2d', { willReadFrequently:true });
       if (!g || !window.__planetTHREE) return skin.tex;
       g.drawImage(image, 0, 0);
       const pixels = g.getImageData(0, 0, cv.width, cv.height);
       const rgb = planetRgb(css), data = pixels.data;
+      const redScale = 0.28 + 0.72 * rgb[0] / 255;
+      const greenScale = 0.28 + 0.72 * rgb[1] / 255;
+      const blueScale = 0.28 + 0.72 * rgb[2] / 255;
       /* Preserve surface detail and alpha; recolor a copy, never the original canvas. */
       for (let i = 0; i < data.length; i += 4) {
         const light = data[i] * 0.2126 + data[i + 1] * 0.7152 + data[i + 2] * 0.0722;
-        for (let c = 0; c < 3; c++) data[i + c] = Math.round(light * (0.28 + 0.72 * rgb[c] / 255));
+        data[i] = Math.round(light * redScale);
+        data[i + 1] = Math.round(light * greenScale);
+        data[i + 2] = Math.round(light * blueScale);
       }
       g.putImageData(pixels, 0, 0);
       const tex = new window.__planetTHREE.CanvasTexture(cv);
@@ -25554,7 +26311,8 @@ async function loadLib() {
     const w = PLANET.SKIN_PX, h = PLANET.SKIN_PX / 2;
     const cv = document.createElement('canvas');
     cv.width = w; cv.height = h;
-    const g = cv.getContext('2d');
+    // Read at boot for luminance and on theme changes for recoloring.
+    const g = cv.getContext('2d', { willReadFrequently:true });
     if (!g) return null;
     const rgb = planetRgb(tintCss);
     const rnd = planetRnd(seed);
@@ -26670,10 +27428,19 @@ async function loadLib() {
          as it was before this existed; it does not take the galaxy down. */
       planetNoiseBuild();
       planetKindsFrom(nodes);
-      nodes.forEach(function (n) {
+      // The measured startup stall is skin rasterisation. Keep identical pixels and
+      // boot ordering, but yield between small batches so greetings/input can paint.
+      // All skins still finish before planet activation and the density auditions.
+      const SKIN_BATCH_MS = 8;
+      let skinSliceAt = performance.now();
+      for (const n of nodes.slice()) {
         const made = planetSkin(THREE, n, planetKind(n), colorOf[n.group] || '#9fb4d8', planetSeed(n));
         if (made) planetSkins.set(n.id, made);
-      });
+        if (performance.now() - skinSliceAt >= SKIN_BATCH_MS) {
+          await new Promise(resolve => setTimeout(resolve, 0));
+          skinSliceAt = performance.now();
+        }
+      }
       /* And the sun, before the first paint: a world built and painted under the library's
          own even lighting and then re-lit a frame later would be a visible flinch on load. */
       skyLight(THREE);
@@ -27781,9 +28548,12 @@ async function loadLib() {
       });
   }
 
+  polishSurfaces();
   setTimeout(function () { $('boot').classList.add('gone'); }, 450);
 
   /* A small handle for the console (and for automated checks). */
+
+
   window.__galaxy = {
     Graph: Graph, nodes: nodes, allLinks: allLinks, strongLinks: strongLinks,
     focus: focusNode, ask: ask, colorOf: colorOf,
