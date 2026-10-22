@@ -38,6 +38,9 @@ import re
 import sys
 
 sys.dont_write_bytecode = True
+# The one shared final line, so run_tests.py reads a result rather than
+# guessing at this suite's private dialect. See testkit.py.
+import testkit
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import focus                                                   # noqa: E402
@@ -472,12 +475,53 @@ ok(EARS and EARS.group(1) == focus.LINES["ears_off"],
    "and it is character for character the server's sentence",
    repr(EARS.group(1) if EARS else None))
 
-calls = re.findall(r"startListening\(\)\s*;", page_source)
-ok(len(calls) == 1,
-   "exactly one line in the page calls startListening()", str(len(calls)))
+# THE EAR LAW, at the granularity the page now has.
+#
+# This block used to read "exactly one line in the page calls startListening(),
+# and it is the ear button". That was true when the open ear was one function.
+# It stopped being true when the ear grew a barge-in and a self-healing re-arm,
+# both of which restart the recogniser INSIDE a session that is already open -
+# and it had been failing quietly for long enough that nobody had counted it.
+#
+# The law did not change; only its spelling did, so this is a restatement and not
+# a relaxation. The law is: a microphone opens because the boss pressed the ear
+# button, and for no other reason. That is two claims and both are greppable.
+#
+#   1. every startListening() lives inside THE OPEN EAR - the section whose every
+#      function runs only while a session is already open;
+#   2. the only callers of earOpen(), which is the one thing that STARTS a
+#      session, are the ear button's click handler and the declared harness door.
+#
+# Written this way the check is stricter than the one it replaces: a new call
+# site anywhere else in the page fails claim 1 by location rather than by count,
+# so the next person to add one is told where the law is, not just that a number
+# moved. The page says the same thing in prose above $('mic').onclick; this is
+# the half that is enforced.
+EAR_BANNER = "========================================================= THE OPEN EAR ===="
+SCRIBE_BANNER = "============== THE SCRIBE: A MEETING, TAKEN DOWN AS IT HAPPENS =============="
+ok(page_source.count(EAR_BANNER) == 1 and page_source.count(SCRIBE_BANNER) == 1,
+   "the open ear is one named section of the page, with a boundary at each end")
+open_ear = page_source.split(EAR_BANNER, 1)[-1].split(SCRIBE_BANNER, 1)[0]
+
+STARTS = r"(^|[^.\w])startListening\(\)\s*;"
+everywhere = re.findall(STARTS, page_source, re.M)
+inside = re.findall(STARTS, open_ear, re.M)
+ok(len(everywhere) == len(inside) and inside,
+   "every line that starts the recogniser is inside THE OPEN EAR, and nowhere else",
+   "%d in the page, %d of them in the section" % (len(everywhere), len(inside)))
+
+# A call, not a mention: the page discusses earOpen() in four comments, and a
+# comment cannot open a microphone. `earOpen();` and `earOpen())` are the two
+# shapes a real call takes.
+openers = re.findall(r"earOpen\(\)\s*[;)]", page_source)
+ok(len(openers) == 2, "and exactly two lines in the page open an ear session at all",
+   str(len(openers)))
 click_block = page_source.split("$('mic').onclick", 1)
-ok(len(click_block) == 2 and "startListening();" in click_block[1][:400],
-   "and it is the ear button")
+ok(len(click_block) == 2 and "earOpen();" in click_block[1][:400],
+   "the first is the ear button")
+harness_block = page_source.split("raise: function ()", 1)
+ok(len(harness_block) == 2 and "earOpen()" in harness_block[1][:200],
+   "and the second is the harness door, which is declared rather than discovered")
 
 eyes_block = page_source.split("================================================================= eyes ==", 1)
 ok(len(eyes_block) == 2, "the eyes have their own section in the page")
@@ -486,10 +530,38 @@ ok(not re.findall(r"startListening\(\)\s*;", eyes_only),
    "and nothing in it reaches for the microphone")
 ok("audio: false" in eyes_only, "it asks for pixels with audio switched off")
 
-# The mute gate, still the only one, and a muted tab still publishes.
-ok(page_source.count("if (MUTED)") == 2 and "const MUTED = /(^|[?&])mute=1" in page_source,
-   "?mute=1 is read once and gates only speak() and the idle status")
-ok("noteSaid(line, false); return false; }   // the mute gate" in page_source,
+# THE MUTE GATE. Read once, and it gates sound and nothing else.
+#
+# The old spelling of this was `count("if (MUTED)") == 2`, which was a count of
+# the gates that existed on the day it was written rather than a claim about
+# them. The boot ceremony later became the third thing in the page that makes a
+# noise and grew a gate of its own - correctly - and the number went to three.
+#
+# What actually matters is that MUTED is READ in one place and that every gate it
+# feeds is about sound: a ?mute=1 that suppressed a network call or a piece of
+# state would make a muted tab a different program, and the whole value of the
+# flag is that a test tab is the same program with the volume down. So each gate
+# is named here with what it silences, and an unnamed fourth one fails.
+MUTE_GATES = {
+    "if (MUTED) return setStatus('', 'muted tab · this page will not speak');":
+        "the idle status line",
+    "if (MUTED) { captionFade(CAPTION_HOLD_MS); noteSaid(line, false); return false; }":
+        "speak(), which still records the line it did not say",
+    "if (MUTED) {":
+        "the boot ceremony, which holds no ceremony in a tab that cannot sound",
+}
+ok(page_source.count("const MUTED = /(^|[?&])mute=1") == 1,
+   "?mute=1 is read in exactly one place in the page")
+ok(page_source.count("if (MUTED)") == len(MUTE_GATES),
+   "and every gate it feeds is named here, with what it silences",
+   "%d gates in the page, %d named" % (page_source.count("if (MUTED)"), len(MUTE_GATES)))
+for gate, silences in MUTE_GATES.items():
+    ok(gate in page_source, "the mute gate on %s is where it says it is" % silences)
+
+# The receipt a muted tab leaves. Anchored on the call rather than on the call
+# plus the comment that used to follow it: the comment was edited away and this
+# check failed on a page where the receipt was still being written.
+ok("noteSaid(line, false); return false; }" in page_source,
    "a muted tab records the line it did not say, so a test tab is still checkable")
 
 # ======================================================= 9. the look, and the screen
@@ -502,16 +574,38 @@ ok("'/look?q='" in page_source.replace('"', "'") or "/look?q=" in page_source,
    "and it posts the one frame to /look")
 ok("grabFrame('cam')" in page_source,
    "grabbed from the camera by the one grabber, after the question exists")
-ok(len(re.findall(r"getUserMedia\(\{", page_source)) == 1 and
-   page_source.count("navigator.mediaDevices.getUserMedia") == 2,
-   "there is exactly one call that opens a camera, and one check that it exists",
+# ONE CAMERA, AND THE OTHER STREAMS ARE DEAF TO PIXELS.
+#
+# The old spelling counted getUserMedia call sites and demanded one. That was a
+# fair reading of the page when the only stream in it was the camera, and it
+# became wrong - not looser, WRONG - when the open ear and the Scribe each
+# opened a microphone of their own. Counting them together cannot express the
+# law, because the law is about which of them asks for pixels.
+#
+# So each getUserMedia call is read with its constraints, and the claim is the
+# one that matters: exactly one asks for video, every other one says video:false
+# out loud, and nothing asks for both. A fourth stream that wanted a camera
+# would fail this; a fourth microphone that said video:false would not, which is
+# correct, because a microphone is the ear law's business and it is proved above.
+opens = re.findall(r"getUserMedia\(\{(.*?)\n\s*\}\);", page_source, re.S)
+ok(len(opens) == page_source.count("getUserMedia({"),
+   "every getUserMedia in the page is read here with its constraints",
+   "%d read, %d in the page" % (len(opens), page_source.count("getUserMedia({")))
+cameras = [c for c in opens if re.search(r"video:\s*\{", c)]
+deaf_to_pixels = [c for c in opens if re.search(r"video:\s*false", c)]
+ok(len(cameras) == 1, "exactly one call in the page opens a camera", str(len(cameras)))
+ok("audio: false" in cameras[0] if cameras else False,
+   "and that one asks for pixels with audio switched off - the ear law, in code")
+ok(len(deaf_to_pixels) == len(opens) - 1,
+   "every other stream says video: false, so no second thing can reach the camera",
+   "%d of %d" % (len(deaf_to_pixels), len(opens)))
+ok(page_source.count("navigator.mediaDevices.getUserMedia")
+   == len(opens) + page_source.count("navigator.mediaDevices.getUserMedia)")
+   + page_source.count("navigator.mediaDevices.getUserMedia;"),
+   "and every mention of the API is either one of those calls or a check that it exists",
    str(page_source.count("navigator.mediaDevices.getUserMedia")))
 
-print("\n  %d checks, %d failed\n" % (checks, len(failures)))
-if failures:
-    for claim in failures:
-        print("    FAILED: %s" % claim)
-    print("")
+testkit.summary(__file__, checks, failures)
 try:
     os.remove(focus.LEDGER_PATH)
     os.rmdir(_ledger_dir)

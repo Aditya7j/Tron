@@ -39,6 +39,15 @@ os.environ.update({"TRONE_REVENUE_BOOK": os.path.join(TMP, "revenue-book.json"),
                    "TRONE_PROOFS_DIR": os.path.join(TMP, "proofs")})
 sys.path.insert(0, str(HERE))
 
+# The one shared final line, so run_tests.py reads a result rather than
+# guessing at this suite's private dialect. See testkit.py.
+import testkit                                                  # noqa: E402
+
+# Counted here rather than inferred from the output, because "it ran and
+# asserted nothing" and "it ran and everything passed" print the same
+# zero otherwise.
+CHECKS = 0
+
 import hands                                                   # noqa: E402
 import ledger                                                  # noqa: E402
 import revenue                                                 # noqa: E402
@@ -51,6 +60,8 @@ FAILURES = []
 
 
 def check(label, got, want):
+    global CHECKS
+    CHECKS += 1
     ok = got == want
     print("  %s %s" % ("ok  " if ok else "FAIL", label))
     if not ok:
@@ -638,7 +649,12 @@ def free_port():
 
 chrome = revenue.closer._chrome()
 if not chrome:
-    print("  SKIP no Chrome on this machine - the real-form checks did not run")
+    # Already a skip, and already honest about it - but it was a bare print, so
+    # the runner saw a suite that reported four fewer checks and no reason why.
+    # A silent reduction in what a suite asserts is the same failure as a silent
+    # failure, so it goes through testkit and is counted.
+    testkit.skip("no Chrome on this machine - the four real-form checks, which "
+                 "drive a headless browser against a fixture page, did not run")
 else:
     http_port, cdp_port = free_port(), free_port()
     server = http.server.ThreadingHTTPServer(("127.0.0.1", http_port), Fixture)
@@ -692,7 +708,5 @@ else:
 
 hands.LEDGER_PATH = REAL_TOOLS
 shutil.rmtree(TMP, ignore_errors=True)
-print("\n  %d failed\n" % len(FAILURES))
-for f in FAILURES:
-    print("    FAILED: %s" % f)
+testkit.summary(__file__, CHECKS, FAILURES)
 sys.exit(min(len(FAILURES), 120))

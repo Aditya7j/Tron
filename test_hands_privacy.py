@@ -39,6 +39,7 @@ Run it:  python test_hands_privacy.py
 Exit status is the number of failures.
 """
 
+import inspect
 import json
 import os
 import pathlib
@@ -48,6 +49,9 @@ import sys
 import tempfile
 
 sys.dont_write_bytecode = True
+# The one shared final line, so run_tests.py reads a result rather than
+# guessing at this suite's private dialect. See testkit.py.
+import testkit
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import hands                                                   # noqa: E402
@@ -132,6 +136,27 @@ class Trace:
 trace = Trace()
 real_stderr, sys.stderr = sys.stderr, trace
 
+
+def _unmask(kind, value, tb, _real=real_stderr, _inner=sys.excepthook):
+    """Put the real stderr back before the interpreter prints a traceback.
+
+    THIS IS NOT A TIDINESS HOOK. Without it the capture above swallows the
+    traceback of any crash in this file: the suite died on a KeyError, printed
+    nothing, exited 1, and looked for all the world like a suite that had simply
+    failed one check - which is how six broken claims and a stale registry
+    fixture lived on main. The capture is still the right design, because claim 5
+    is a claim about everything hands.py said; it just must not be the last thing
+    holding the microphone when the run falls over.
+
+    The same reasoning as focus.py's _release_watch: whatever ends the session,
+    every path out of it goes through one place that hands the real thing back.
+    """
+    sys.stderr = _real
+    _inner(kind, value, tb)
+
+
+sys.excepthook = _unmask
+
 # --------------------------------------------------- claim 1: the canary is foreign
 
 SHIPPED = ["hands.py", "server.py", "viewer/index.html", "tools/registry.json",
@@ -183,15 +208,25 @@ workshop = pathlib.Path(tempfile.mkdtemp(prefix="hands-privacy-"))
      "capabilities": ["measure whatever it is handed"], "timeout_s": 20,
      "params": [{"name": "secret", "type": "text", "required": True},
                 {"name": "label", "type": "string", "required": False}],
-     "proposal": "A measurement, sir, of something you would rather I did not repeat."},
+     "proposal": "A measurement, sir, of something you would rather I did not repeat.",
+     # `step` became required when chains landed, and this fixture predated that:
+     # without it _clean_tool() dropped all three tools, hands.registry() came back
+     # empty, every claim below asked its question of a registry with nothing in it,
+     # and the suite then died on a KeyError whose traceback went into the stderr
+     # capture twenty lines above. One missing field, six failures and no summary.
+     # Deliberately naming {label} and not {secret}: a step line is spoken aloud,
+     # which is the whole reason _clean_tool refuses {body} and its four siblings.
+     "step": "Measure the thing called '{label}'."},
     {"id": "mouth", "name": "A tool that repeats itself", "script": "mouth.py",
      "capabilities": ["read back whatever it is handed"], "timeout_s": 20,
      "params": [{"name": "secret", "type": "text", "required": True}],
-     "proposal": "A careless tool, sir, which will read its input back to you."},
+     "proposal": "A careless tool, sir, which will read its input back to you.",
+     "step": "Read something back to you."},
     {"id": "argv", "name": "A tool that looks at its command line", "script": "argv.py",
      "capabilities": ["report its own arguments"], "timeout_s": 20,
      "params": [{"name": "secret", "type": "text", "required": True}],
-     "proposal": "A look, sir, at what was put on the command line."},
+     "proposal": "A look, sir, at what was put on the command line.",
+     "step": "Look at what was put on the command line."},
 ]}, indent=2), encoding="utf-8")
 
 ledger_dir = pathlib.Path(tempfile.mkdtemp(prefix="hands-ledger-"))
@@ -295,8 +330,48 @@ ok(not hits(ledger_bytes()),
    "and the next write scrubs the file, because every write goes through ledger() first",
    ledger_bytes())
 after_edit = hands.ledger()
-ok(set(json.loads(hands.LEDGER_PATH.read_text(encoding="utf-8"))) == {"version", "tools"},
-   "the file on disk has two keys: a version and the tools")
+# THE SHAPE CLAIM, and the point of it is that a new field cannot arrive quietly.
+# One did. `chains` landed with the Chain Card and this check went red the same
+# day - and nobody saw it, because the suite was dying twenty checks earlier on a
+# registry fixture and printing no summary at all. That is the whole argument for
+# the floor in one line, so it is written down here rather than just fixed.
+#
+# The compartment is legitimate and hands.py gives it its own whitelist, so the
+# claim becomes "exactly these three, each one named", not "two". A fourth still
+# fails, which is what the claim was ever for.
+LEDGER_COMPARTMENTS = {
+    "version": "the file format",
+    "tools": "one row of four counts per registered hand",
+    "chains": "one row per multi-step plan, through its own whitelist",
+}
+ok(set(json.loads(hands.LEDGER_PATH.read_text(encoding="utf-8")))
+   == set(LEDGER_COMPARTMENTS),
+   "the file on disk has three keys, and every one of them is named here",
+   json.dumps(sorted(json.loads(hands.LEDGER_PATH.read_text(encoding="utf-8")))))
+
+# And the new compartment gets the hostile read the tools table has had all
+# along, because an unproved whitelist is not a whitelist. A chain row carrying a
+# canary, an id that is not an id, and a step naming a tool that does not exist.
+hands.LEDGER_PATH.write_text(json.dumps({"version": 1, "tools": {}, "chains": [
+    {"id": "c1234-1", "status": "ok", "steps": ["ear", "mouth"], "ran": 2,
+     "stopped": 0, "at": "2026-01-01T09:00:00",
+     "recipient": CANARY_TO, "body": CANARY_BODY},
+    {"id": "not-an-id", "status": "ok", "steps": ["ear"], "ran": 1, "stopped": 0,
+     "at": "2026-01-01T09:00:00"},
+    {"id": "c1234-2", "status": "ok", "steps": [CANARY_ID], "ran": 1, "stopped": 0,
+     "at": "2026-01-01T09:00:00"},
+]}, indent=2), encoding="utf-8")
+chain_rows = hands.chain_ledger()
+ok(not hits(json.dumps(chain_rows)),
+   "a hand-edited chain row cannot introduce a key, so no canary is read back",
+   json.dumps(chain_rows))
+ok([r["id"] for r in chain_rows] == ["c1234-1"],
+   "a malformed chain id and a step naming no registered tool are both dropped",
+   json.dumps([r["id"] for r in chain_rows]))
+hands.LEDGER_PATH.write_text(json.dumps({"version": 1, "tools": {
+    "ear": {"ok": 1, "failed": 0, "refused": 1, "lapsed": 1,
+            "last": "2026-01-01T09:00:00"}}}, indent=2), encoding="utf-8")
+after_edit = hands.ledger()
 ok(after_edit["ear"]["lapsed"] == 1,
    "the lapse was counted on top of the sanitised row", json.dumps(after_edit["ear"]))
 
@@ -305,11 +380,25 @@ ok(after_edit["ear"]["lapsed"] == 1,
 source = (ROOT / "hands.py").read_text(encoding="utf-8")
 ok("shell=False" in source and "shell=True" not in source,
    "hands.py runs scripts with shell=False, always - there is no shell string anywhere")
-ok(re.search(r"subprocess\.run\(\s*\n?\s*\[sys\.executable,\s*str\(script\)\]", source)
+# The spawn moved from subprocess.run to tools/_proc.run - the quiet-spawn
+# wrapper that keeps a hand from flashing a console window - and these two
+# claims were still looking for the old name. They are claims about the SHAPE of
+# the command line and about there being ONE spawn, neither of which the move
+# changed, so they are re-anchored rather than relaxed: _proc.run is named
+# explicitly, and a direct call to subprocess.run or Popen would now fail the
+# second one where before it would have satisfied it.
+ok(re.search(r"_proc\.run\(\s*\n?\s*\[sys\.executable,\s*str\(script\)\]", source)
    is not None,
    "the command line is the interpreter and the script path, and nothing else")
-ok(len(re.findall(r"\w+\s*=\s*subprocess\.run\(", source)) == 1,
-   "there is exactly one place in the file that can start a process")
+# Anchored at the start of a line, with nothing but an assignment allowed in
+# front, so that the module docstring's prose ABOUT the execution - which names
+# subprocess.run in a sentence - is not counted as a second way to start one.
+spawns = re.findall(
+    r"^\s*(?:\w+\s*=\s*)?(?:subprocess|_proc|os)\.(?:run|Popen|call|system|spawn\w*|"
+    r"check_output|check_call)\(", source, re.M)
+ok(len(spawns) == 1,
+   "there is exactly one place in the file that can start a process",
+   "%d: %s" % (len(spawns), [s.strip() for s in spawns]))
 
 status, said = hands.propose("argv", {"secret": CANARY_BODY})
 status, said = hands.execute(door="curl", proposal_id=(said["pending"] or {}).get("id"))
@@ -367,13 +456,33 @@ hands.REGISTRY_PATH = hands.TOOLS_DIR / "registry.json"
 hands.registry(force=True)
 shipped = hands.registry()
 ok(len(shipped) >= 3, "the shipped registry loads", json.dumps([t["id"] for t in shipped]))
+# THE DERIVED BLANKS. A proposal may also name a reading that hands.readings()
+# computes - {when} and {duration} from the calendar stamps, {plan} and {where}
+# from what the Operator will actually do, {lines} and {how} from the code about
+# to be typed. Those are sentence furniture: they never enter params, never reach
+# the script and never reach the ledger, which is precisely why they are not in
+# the schema and why this check went red when chains and the Operator landed.
+#
+# Taken from readings()'s own source rather than listed here, for the same reason
+# LEGIT_LABELS in test_focus_privacy.py asks focus for its labels: a second copy
+# of a vocabulary is a copy that disagrees with the first one eventually. So the
+# claim is unchanged - a template may not render the word {something} at an
+# employer - and it now knows the whole set of somethings that are real.
+readings_src = inspect.getsource(hands.readings)
+DERIVED = set(re.findall(r'out\["([a-z0-9_]+)"\]', readings_src)) - {"_refusal"}
+ok(DERIVED >= {"when", "duration", "plan", "where", "lines", "how"},
+   "hands.readings() declares the derived blanks, and they are read from its source",
+   json.dumps(sorted(DERIVED)))
+
 bad_blanks, unspoken = {}, {}
 for tool in shipped:
-    names = {p["name"] for p in tool["params"]}
+    declared = {p["name"] for p in tool["params"]}
     blanks = set(re.findall(r"\{([a-z0-9_]+)\}", tool["proposal"]))
-    if blanks - names:
-        bad_blanks[tool["id"]] = sorted(blanks - names)
-    unspoken[tool["id"]] = sorted(names - blanks)
+    if blanks - declared - DERIVED:
+        bad_blanks[tool["id"]] = sorted(blanks - declared - DERIVED)
+    # The unspoken list stays a statement about the SCHEMA - which declared
+    # parameter never reaches the sentence - so the derived blanks are not in it.
+    unspoken[tool["id"]] = sorted(declared - blanks)
 ok(not bad_blanks,
    "every blank in every proposal template names a real parameter, so no template can "
    "render the word {something} at an employer", json.dumps(bad_blanks))
@@ -387,8 +496,24 @@ ok(not re.search(r"password|api[_-]?key|smtp_|secret", mailer),
    mailer[:200])
 # The file itself, minus its own documentation - the _comment block is prose ABOUT keys
 # and is allowed to use the words; the declarations are not.
+#
+# AT EVERY DEPTH, which it did not used to be. Only the top-level _comment was
+# stripped, and when a tool grew a _comment of its own - the Operator's, saying
+# "password fields are refused by the hand", which is the opposite of a leak -
+# this went red on a sentence promising not to do the thing it was accused of.
+# The rule was right and its reach was wrong, so the reach is fixed rather than
+# the regex softened: a credential in any field that is not documentation still
+# fails, including in a _comment's neighbours.
+def _undocumented(value):
+    if isinstance(value, dict):
+        return {k: _undocumented(v) for k, v in value.items() if k != "_comment"}
+    if isinstance(value, list):
+        return [_undocumented(v) for v in value]
+    return value
+
+
 on_disk = json.loads((ROOT / "tools" / "registry.json").read_text(encoding="utf-8"))
-registry_text = json.dumps({k: v for k, v in on_disk.items() if k != "_comment"})
+registry_text = json.dumps(_undocumented(on_disk))
 ok(not re.search(r"(?i)(api[_-]?key|password|secret|credential)", registry_text),
    "the registry file on disk holds no key, password or secret - a tool that needs one "
    "reads config.json itself, server-side")
@@ -402,9 +527,5 @@ ok(after == real_ledger_before,
 for folder in (workshop, ledger_dir):
     shutil.rmtree(folder, ignore_errors=True)
 
-print("\n  %d checks, %d failed\n" % (checks, len(failures)))
-if failures:
-    for claim in failures:
-        print("    FAILED: %s" % claim)
-    print("")
+testkit.summary(__file__, checks, failures)
 sys.exit(min(len(failures), 120))

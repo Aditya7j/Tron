@@ -48,6 +48,9 @@ import re
 import sys
 
 sys.dont_write_bytecode = True
+# The one shared final line, so run_tests.py reads a result rather than
+# guessing at this suite's private dialect. See testkit.py.
+import testkit
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import focus                                                   # noqa: E402
@@ -439,7 +442,13 @@ ok(bool(watch_re), "the page has a WATCH_RE")
 # characters, which is not a fact about the code - the share branch drifted past it as
 # comments were added above it, and the check failed on a file where all three branches
 # were still in the right order. Anchored on something real instead.
-ask_block = page_source.split("async function ask(question)", 1)[1].split("busy = true", 1)[0]
+# Anchored on the function's NAME, not on its parameter list. It used to be
+# spelled "async function ask(question)" and the page later gave ask() a second
+# parameter, at which point this split returned a one-element list and the suite
+# died on an IndexError four hundred lines from the end - reporting nothing at
+# all, including the checks that were still passing. The signature is not the
+# fact this claim is about; the order of the three branches is.
+ask_block = page_source.split("async function ask(", 1)[1].split("busy = true", 1)[0]
 ok(ask_block.index("WATCH_OFF_RE.test(question)") < ask_block.index("WATCH_RE.test(question)"),
    "\"stop watching\" is tested before \"watch my screen\", which it contains")
 ok(ask_block.index("WATCH_RE.test(question)") <
@@ -593,11 +602,7 @@ ok("watchOpenedShare = !had;" in watch_js,
 ok("stopWatch('blind')" in watch_js,
    "a live track producing no picture stops it rather than watching nothing")
 
-print("\n  %d checks, %d failed\n" % (checks, len(failures)))
-if failures:
-    for claim in failures:
-        print("    FAILED: %s" % claim)
-    print("")
+testkit.summary(__file__, checks, failures)
 try:
     os.remove(focus.LEDGER_PATH)
 except OSError:

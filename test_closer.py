@@ -32,6 +32,15 @@ os.environ.update({"TRONE_LEADS_PATH": os.path.join(TMP, "leads.json"),
                    "TRONE_CLOSER_CONFIG": CONFIG})
 sys.path.insert(0, str(HERE))
 
+# The one shared final line, so run_tests.py reads a result rather than
+# guessing at this suite's private dialect. See testkit.py.
+import testkit                                                  # noqa: E402
+
+# Counted here rather than inferred from the output, because "it ran and
+# asserted nothing" and "it ran and everything passed" print the same
+# zero otherwise.
+CHECKS = 0
+
 import hands                                                   # noqa: E402
 import hunter                                                  # noqa: E402
 import closer                                                  # noqa: E402
@@ -44,6 +53,8 @@ NOTES = []
 
 
 def check(label, got, want):
+    global CHECKS
+    CHECKS += 1
     ok = got == want
     print("  %s %s" % ("ok  " if ok else "FAIL", label))
     if not ok:
@@ -321,11 +332,29 @@ check("as a reply to their message", reply["msg"]["In-Reply-To"],
       "<in-%d@testdental.example>" % (GMAIL.n - 1))
 check("it answers 'are you an AI' with yes, first", body.startswith("To answer your question "
                                                                      "directly: yes"), True)
+# THE MOCKUP, WHICH NEEDS A BROWSER TO DRAW IT.
+#
+# closer.render() calls headless Chrome, and on a machine without one it returns
+# "there is no Chrome on this machine to draw it with" - correctly, and the reply
+# still goes without the picture. This block used to assume the attachment and
+# died on `att[0]` with an IndexError, which ended the suite ninety checks early
+# and printed no summary: a crash read as a failing test, on every machine with
+# no browser, including every CI runner this repository will ever have.
+#
+# A declared skip, not a quiet one: the reason is printed and counted, and the
+# five claims that do NOT need a picture - the reply went, into the right thread,
+# answering the question, and the lead's words kept verbatim - still run.
 att = [p for p in reply["msg"].iter_attachments()]
-check("with the mockup attached as a PNG",
-      [(p.get_content_type(), p.get_filename()) for p in att],
-      [("image/png", "mockup-test-dental.png")])
-check("a real image, drawn by Chrome", len(att[0].get_content()) > 10000, True)
+if closer._chrome() is None:
+    testkit.skip("no Chrome on this machine: the mockup cannot be drawn, so the "
+                 "attachment and demo-log claims are not asked")
+    check("and the reply still goes, saying nothing it cannot back up",
+          (att, "could not be drawn" in " | ".join(NOTES)), ([], True))
+else:
+    check("with the mockup attached as a PNG",
+          [(p.get_content_type(), p.get_filename()) for p in att],
+          [("image/png", "mockup-test-dental.png")])
+    check("a real image, drawn by Chrome", len(att[0].get_content()) > 10000, True)
 lead = book("H-0001")
 check("an ask quoted from words they never wrote is dropped - no invented meeting",
       [r["reading"] for r in log("inbound")][-1]["also"], [])
@@ -333,12 +362,20 @@ check("the lead now wants a demo, and their words are kept verbatim, without the
       (lead["status"], lead["closer"]["requirement"]),
       ("wants-demo", "Interesting. Can you show me a mockup of what our landing page could look "
                      "like? Also - are you an AI?"))
-d = log("demo")[-1]
-check("the log says what was sent and why",
-      (d["status"], d["attachments"][0]["name"], "wants-demo" in d["why"],
-       "AI" in d["why"]), ("sent", "mockup-test-dental.png", True, True))
-check("the demo file is kept, byte for byte", os.path.getsize(d["attachments"][0]["file"]),
-      d["attachments"][0]["bytes"])
+if closer._chrome() is None:
+    # NO ROW AT ALL, and that is the right behaviour rather than a gap: a demo
+    # that was never drawn was never sent, and the demo log is a record of what
+    # went out. The claim worth making here is that nothing was logged as sent -
+    # a row saying "sent" with no file behind it is exactly what this half of the
+    # log exists to catch.
+    check("and nothing is logged as a demo that was never drawn", log("demo"), [])
+else:
+    d = log("demo")[-1]
+    check("the log says what was sent and why",
+          (d["status"], d["attachments"][0]["name"], "wants-demo" in d["why"],
+           "AI" in d["why"]), ("sent", "mockup-test-dental.png", True, True))
+    check("the demo file is kept, byte for byte",
+          os.path.getsize(d["attachments"][0]["file"]), d["attachments"][0]["bytes"])
 sent_before = len(GMAIL.sent)
 tick()
 check("read again, it is not answered twice", len(GMAIL.sent), sent_before)
@@ -544,5 +581,5 @@ check("a cap beyond the ceiling is refused", (done.returncode, "between 1 and 25
       (1, True))
 
 hands.LEDGER_PATH = REAL_TOOLS
-print("\n%d failure(s)" % len(FAILURES))
+testkit.summary(__file__, CHECKS, FAILURES)
 sys.exit(len(FAILURES))

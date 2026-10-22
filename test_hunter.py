@@ -25,6 +25,15 @@ BOOK = os.path.join(TMP, "leads.json")
 os.environ["TRONE_LEADS_PATH"] = BOOK
 sys.path.insert(0, str(HERE))
 
+# The one shared final line, so run_tests.py reads a result rather than
+# guessing at this suite's private dialect. See testkit.py.
+import testkit                                                  # noqa: E402
+
+# Counted here rather than inferred from the output, because "it ran and
+# asserted nothing" and "it ran and everything passed" print the same
+# zero otherwise.
+CHECKS = 0
+
 import hands                                                   # noqa: E402
 import hunter                                                  # noqa: E402
 from tools import _proc                                        # noqa: E402
@@ -35,6 +44,8 @@ FAILURES = []
 
 
 def check(label, got, want):
+    global CHECKS
+    CHECKS += 1
     ok = got == want
     print("  %s %s" % ("ok  " if ok else "FAIL", label))
     if not ok:
@@ -229,5 +240,5 @@ check("through its own door the card speaks the plan", (st, p["pending"]["line"]
 hands.clear_pending("test")
 
 hands.LEDGER_PATH = REAL_TOOLS
-print("\n%d failure(s)" % len(FAILURES))
+testkit.summary(__file__, CHECKS, FAILURES)
 sys.exit(len(FAILURES))

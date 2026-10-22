@@ -1,0 +1,40 @@
+{
+  "_comment": [
+    "THE KNOWN-FAIL LEDGER. Every check in this repository that is failing today, why,",
+    "who owns it, and when it was written down. run_tests.py reads this file and nothing",
+    "else decides whether a red run breaks the build.",
+    "",
+    "THE RULE IS SYMMETRIC, and the second half is the half that matters:",
+    "",
+    "  a failure IN this file      is reported, with its reason, and forgiven",
+    "  a failure NOT in this file  breaks the build",
+    "  a ROW HERE THAT NOW PASSES  ALSO breaks the build",
+    "",
+    "That last one is not tidiness. A row that outlives its failure is how a repaired",
+    "bug comes back unnoticed, and it is how \"those three are expected\" turned into",
+    "folklore nobody rechecked. A fixed check must be taken out of this file in the same",
+    "commit that fixes it, and the build will tell you if you forget.",
+    "",
+    "A ROW IS NOT A PLACE TO PUT A CHECK YOU DID NOT WANT TO FIX. The reason must say",
+    "which side is wrong - the code or the test - and what it would take to clear it.",
+    "A row whose reason is \"flaky\" is a row somebody has not finished reading.",
+    "",
+    "  suite   the filename without .py, exactly as testkit.suite_name() spells it",
+    "  check   the failing claim, character for character, or null with error: true",
+    "  error   true means the SUITE ITSELF crashes; there is no claim to name",
+    "  why     which side is wrong, and what clears it",
+    "  owner   a person, not a team",
+    "  added   the day it was written down"
+  ],
+  "version": 1,
+  "entries": [
+    {
+      "suite": "test_email_wiring",
+      "check": null,
+      "error": true,
+      "why": "THE TEST IS WRONG, NOT THE CODE. This suite tests the mailer that logged in to smtp.gmail.com with a sixteen-character app password out of config.json. tools/send_email.py has not worked that way since ffbfd0f: it builds the same RFC 2822 message and hands it to the Gmail v1 API over an OAuth token, and says so at length in its own docstring. So the suite wires a fake SMTP config, gets 'Google will not renew the connection' from a mailer that never opens a socket, finds nothing in its SMTP double's log, and dies on Double.log[0]. Twenty-odd claims about STARTTLS, certificate verification and app-password handling are claims about code that was deleted. Clearing this is not a repair, it is a rewrite against google_api: a token double, the three token states (absent, revoked, refresh-failed), and the Gmail send path - roughly the size of the original suite, and outside Phase III step 0, whose job was to make the floor truthful rather than to re-test the mailer. Until then the hand's live behaviour is covered by preflight's hands check, which is in the live set only.",
+      "owner": "Aditya",
+      "added": "2026-10-22"
+    }
+  ]
+}

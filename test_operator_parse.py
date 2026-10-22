@@ -17,6 +17,15 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools"))
+
+# The one shared final line, so run_tests.py reads a result rather than
+# guessing at this suite's private dialect. See testkit.py.
+import testkit                                                  # noqa: E402
+
+# Counted here rather than inferred from the output, because "it ran and
+# asserted nothing" and "it ran and everything passed" print the same
+# zero otherwise.
+CHECKS = 0
 import operator_act      # noqa: E402
 import operator_browser  # noqa: E402
 import operator_core     # noqa: E402
@@ -25,6 +34,8 @@ FAILURES = []
 
 
 def check(label, got, want):
+    global CHECKS
+    CHECKS += 1
     ok = got == want
     print("  %s %s" % ("ok  " if ok else "FAIL", label))
     if not ok:
@@ -165,5 +176,5 @@ check("the watch page's title loses the site's wrapper",
 check("a purchase or sign-in is never a play control",
       all(g in operator_browser.GATES for g in ("subscribe", "upgrade", "sign in", "buy")), True)
 
-print("%d failure(s)" % len(FAILURES))
+testkit.summary(__file__, CHECKS, FAILURES)
 sys.exit(len(FAILURES))
