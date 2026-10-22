@@ -32,14 +32,14 @@
 </script>
 <style>
   :root{
-    --ink:#e8eefc;
-    --muted:#8fa0c0;
-    --line:rgba(140,170,220,.16);
+    --ink:#fff;
+    --muted:#8B97AD;
+    --line:rgba(30,42,68,.90);
     /* HYPER-GLASS. One background for every panel on the deck, so "is this surface a
        panel?" has a single answer and a single value. The saturate() in the blur is what
        separates glass from grey: it pulls the nebula's colour up through the sheet
        instead of averaging it into mud. */
-    --glass:rgba(15,15,20,.6);
+    --glass:rgba(13,20,36,.72);
     --blur:blur(12px) saturate(150%);
     /* HOW TALL A SPOKEN ANSWER MAY GET BEFORE IT SCROLLS INSIDE ITSELF. 46vh, and the
        number is arithmetic rather than taste: this deck's left column also has to hold the
@@ -118,15 +118,15 @@
        CSS cannot pull channels out of a hex - and ui_enhancement_proof asserts each triplet
        resolves to exactly its master, so the two forms cannot drift apart.
        ===================================================================== */
-    --gold-core:#ffb23c;
-    --gold-core-rgb:255,178,60;
+    --gold-core:#F5A623;
+    --gold-core-rgb:245,166,35;
     --gold-hot:#fff2d2;
     --gold-glow:rgba(var(--gold-core-rgb),.55);
     --gold-dim:rgba(var(--gold-core-rgb),.18);
     --gold-trace:rgba(var(--gold-core-rgb),.07);
     --gold-local:#f0b866;
-    --blue-structure:#7cc4ff;
-    --blue-structure-rgb:124,196,255;
+    --blue-structure:#4DB8FF;
+    --blue-structure-rgb:77,184,255;
     --blue-glow:rgba(var(--blue-structure-rgb),.45);
     --blue-dim:rgba(var(--blue-structure-rgb),.12);
     --blue-trace:rgba(var(--blue-structure-rgb),.06);
@@ -418,10 +418,10 @@
      three ellipses can be found by looking for it. */
   #nebula{position:fixed;inset:0;z-index:1;pointer-events:none;
     background:
-      radial-gradient(52% 46% at 21% 27%, rgba(139,92,246,.06), transparent 72%),
-      radial-gradient(46% 40% at 81% 68%, rgba(45,212,191,.05), transparent 72%),
-      radial-gradient(64% 52% at 55% 98%, rgba(124,88,230,.035), transparent 74%);
-    filter:blur(40px)}
+      radial-gradient(52% 46% at 21% 27%, rgba(76,140,255,.42), transparent 72%),
+      radial-gradient(46% 40% at 81% 68%, rgba(90,200,250,.30), transparent 72%),
+      radial-gradient(64% 52% at 55% 98%, rgba(245,166,35,.14), transparent 74%);
+    filter:blur(64px)}
 
   /* ---------- AND THE SAME FIELD, IN WORK MODE ----------
      THE COLD BAND. One element, opacity 0 at rest, brought up over #nebula while the layer
@@ -505,12 +505,12 @@
      the telemetry rail now owns the first 30px of the window across its whole width, so
      the top one is the rail's height plus the margin it always had. */
   #title{top:calc(var(--rail-h) + 16px);left:26px;max-width:38ch}
-  #title h1{margin:0;font-size:15px;letter-spacing:.34em;text-transform:uppercase;
+  #title h1{margin:0;font-size:15px;text-transform:uppercase;
     font-weight:600;color:#fff;text-shadow:0 0 18px rgba(var(--blue-structure-rgb),.45)}
-  #title p{margin:7px 0 0;font-size:11.5px;color:var(--muted);letter-spacing:.06em}
+  #title p{margin:7px 0 0;font-size:11.5px;color:var(--muted);}
   #title .hint{margin-top:9px;font-size:11px;color:rgba(143,160,192,.62)}
   #density{margin-top:7px;padding:0;background:none;border:0;cursor:pointer;
-    font:inherit;font-size:11px;color:var(--blue-structure);opacity:.8;letter-spacing:.04em;
+    font:inherit;font-size:11px;color:var(--blue-structure);opacity:.8;
     text-align:left;transition:.2s}
   #density:hover{opacity:1;text-shadow:0 0 12px rgba(var(--gold-core-rgb),.5)}
 
@@ -521,7 +521,7 @@
   #brainchip{position:fixed;z-index:7;display:flex;
     align-items:center;gap:7px;padding:5px 11px;border-radius:999px;
     border:1px solid var(--line);background:rgba(10,14,26,.72);
-    backdrop-filter:var(--blur);font-size:10.5px;letter-spacing:.16em;
+    backdrop-filter:var(--blur);font-size:10.5px;
     text-transform:uppercase;color:var(--muted);cursor:pointer;
     transition:color .25s,border-color .25s,background .25s}
   #brainchip:hover{border-color:rgba(var(--gold-core-rgb),.5);color:#cfe4ff}
@@ -531,7 +531,7 @@
   #brainchip.swapped{color:#ffc65c;border-color:rgba(255,198,92,.55);
     background:rgba(255,198,92,.08)}
   #brainchip.nokey{color:#ff7d7d;border-color:rgba(255,125,125,.5)}
-  #brainchip b{font-weight:600;letter-spacing:.16em;color:#fff}
+  #brainchip b{font-weight:600;color:#fff}
   #brainchip.swapped b{color:#ffd88f}
   #brainchip.nokey b{color:#ffb4b4}
   /* Too little room to sit beside the toast. The width that decides this is the
@@ -549,7 +549,7 @@
     box-shadow:0 18px 40px rgba(0,0,0,.5)}
   #brainmenu.open{display:flex}
   #brainmenu button{appearance:none;border:0;background:transparent;color:#cfe4ff;
-    font:inherit;font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+    font:inherit;font-size:11px;text-transform:uppercase;
     text-align:left;padding:7px 10px;border-radius:8px;cursor:pointer;
     transition:background .15s,color .15s}
   #brainmenu button:hover{background:rgba(var(--gold-core-rgb),.12);color:#fff}
@@ -563,7 +563,7 @@
   #legend{text-align:right;max-width:30ch;
     transition:top .22s var(--ease-lane),right .22s var(--ease-lane)}
   #legend .lg{display:flex;align-items:center;justify-content:flex-end;gap:8px;
-    font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+    font-size:11.5px;text-transform:uppercase;color:var(--muted);
     padding:2.5px 0;cursor:pointer;user-select:none;transition:color .2s,opacity .2s}
   #legend .lg:hover{color:#fff}
   #legend .lg.off{opacity:.32}
@@ -601,7 +601,7 @@
   #toprail{position:fixed;top:0;left:0;right:0;height:var(--rail-h);z-index:6;
     display:flex;align-items:center;
     padding:0 12px;overflow:hidden;
-    font-family:var(--mono);font-size:10px;line-height:1;letter-spacing:.13em;
+    font-family:var(--font);font-size:10px;line-height:1;
     text-transform:uppercase;color:var(--muted);
     background:linear-gradient(180deg,rgba(9,11,19,.88),rgba(5,6,10,.6));
     backdrop-filter:var(--blur);border-bottom:1px solid var(--line);
@@ -612,7 +612,7 @@
   #toprail .rl::before{content:'[';opacity:.34;margin-right:3px}
   #toprail .rl::after{content:']';opacity:.34;margin-left:3px}
   #toprail .rk{opacity:.58}
-  #toprail .rv{font-weight:500;color:#fff;letter-spacing:.1em;
+  #toprail .rv{font-weight:500;color:#fff;
     font-variant-numeric:tabular-nums}
   #toprail .rl.local .rv{color:var(--local);text-shadow:0 0 10px rgba(240,184,102,.3)}
   #toprail .rl.live .rv{color:var(--live);text-shadow:0 0 10px rgba(34,224,255,.32)}
@@ -672,10 +672,10 @@
   #cmd.open{opacity:1;transform:translateX(0);pointer-events:auto}
   #cmd .ch{display:flex;align-items:center;gap:8px;flex:0 0 auto;
     padding:9px 13px;border-bottom:1px solid var(--line);
-    font-family:var(--mono);font-size:var(--t-head);letter-spacing:.16em;text-transform:uppercase;
+    font-family:var(--font);font-size:var(--t-head);text-transform:uppercase;
     color:var(--muted)}
-  #cmd .ch .cn{color:#fff;letter-spacing:.2em}
-  #cmd .ch .sp{margin-left:auto;opacity:.5;letter-spacing:.1em}
+  #cmd .ch .cn{color:#fff;}
+  #cmd .ch .sp{margin-left:auto;opacity:.5;}
   #cmd .cb{overflow:auto;padding:7px;display:flex;flex-direction:column;gap:3px}
   /* One action. A full-width row, not a card: a list of orders reads down, and a border
      on all four sides of each one would make five boxes out of one instrument. */
@@ -687,16 +687,16 @@
      rather than here, so that the whole of that argument sits in one place. */
   .cmdact[aria-disabled="true"]{opacity:.42;cursor:default}
   .cmdact .ck{flex:0 0 auto;width:13px;text-align:center;
-    font-family:var(--mono);font-size:var(--t-key);color:var(--blue-structure);opacity:.7}
+    font-family:var(--font);font-size:var(--t-key);color:var(--blue-structure);opacity:.7}
   .cmdact .cw{flex:1 1 auto;min-width:0}
   /* flex 1 1 auto and min-width 0 are new: the label now shares a row with the hint, and a long
      label must give way rather than push the hint off the panel. overflow-wrap:anywhere for the
      same reason it is on the citation chips - a label is ours, but "Disconnect" plus an account
      that arrives from Google is not. */
   .cmdact .cl{display:block;flex:1 1 auto;min-width:0;overflow-wrap:anywhere;
-    font-size:var(--t-row);color:#fff;letter-spacing:.01em}
+    font-size:var(--t-row);color:#fff;}
   .cmdact .cs{display:block;margin-top:3px;
-    font-family:var(--mono);font-size:var(--t-sub);letter-spacing:.09em;text-transform:uppercase;
+    font-family:var(--font);font-size:var(--t-sub);text-transform:uppercase;
     color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   /* THE SAME THREE LIGHTS AS EVERYTHING ELSE. An action whose organ is running says so in
      cyan; one that acts on this disk says so in gold; one that cannot be pressed says why
@@ -747,7 +747,7 @@
      border-bottom on a container, so it costs no box and no height of its own. */
   #cmd .cmdsec{flex:0 0 auto;display:flex;align-items:center;gap:9px;
     margin:10px 10px 3px;
-    font-family:var(--mono);font-size:var(--t-sec);letter-spacing:.2em;text-transform:uppercase;
+    font-family:var(--font);font-size:var(--t-sec);text-transform:uppercase;
     color:var(--muted);opacity:.6;user-select:none}
   #cmd .cmdsec::after{content:"";flex:1 1 auto;height:1px;
     background:linear-gradient(90deg,var(--line),transparent)}
@@ -765,7 +765,7 @@
      fixed 6px and the gap is fixed - so this reads as a column without being one. */
   .cmdact .ctop{display:flex;align-items:baseline;gap:10px;width:100%}
   .cmdact .chint{flex:0 0 auto;
-    font-family:var(--mono);font-size:var(--t-hint);letter-spacing:.15em;
+    font-family:var(--font);font-size:var(--t-hint);
     color:var(--muted);opacity:.5;white-space:nowrap;
     transition:opacity .16s}
   .cmdact:hover .chint,.cmdact:focus-visible .chint{opacity:.85}
@@ -837,7 +837,7 @@
   #cmd .cwarn{display:none;gap:8px;align-items:center;
     padding:8px 10px;border:1px solid rgba(255,107,107,.34);border-radius:4px;
     background:rgba(255,107,107,.07);
-    font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+    font-family:var(--font);font-size:9.5px;text-transform:uppercase;
     color:rgba(255,107,107,.86);line-height:1.5}
   #cmd.offline .cwarn{display:flex}
   .cand{border:1px solid var(--line);border-radius:4px;padding:9px 10px;
@@ -845,24 +845,24 @@
   .cand.chosen{border-color:rgba(240,184,102,.5);background:rgba(240,184,102,.05)}
   .cand .cn{display:flex;align-items:baseline;gap:7px}
   .cand .cn b{font-weight:600;font-size:13px;color:#fff}
-  .cand .cn em{font-style:normal;font-family:var(--mono);font-size:9px;
-    letter-spacing:.1em;text-transform:uppercase;color:var(--local);opacity:.8}
-  .cand .cn .cnow{margin-left:auto;font-family:var(--mono);font-size:8.5px;
-    letter-spacing:.14em;text-transform:uppercase;color:var(--local)}
+  .cand .cn em{font-style:normal;font-family:var(--font);font-size:9px;
+    text-transform:uppercase;color:var(--local);opacity:.8}
+  .cand .cn .cnow{margin-left:auto;font-family:var(--font);font-size:8.5px;
+    text-transform:uppercase;color:var(--local)}
   .cand .cnote{display:block;margin-top:3px;font-size:11px;color:var(--muted);
     line-height:1.45}
   .cand .crow{display:flex;gap:6px;margin-top:8px}
   .cand button{flex:1 1 0;padding:6px 8px;border:1px solid var(--line);border-radius:3px;
     background:rgba(255,255,255,.02);color:var(--ink);cursor:pointer;
-    font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;
+    font-family:var(--font);font-size:9.5px;text-transform:uppercase;
     transition:background .16s,border-color .16s}
   .cand button:hover:not(:disabled){background:rgba(var(--gold-core-rgb),.1);
     border-color:rgba(var(--gold-core-rgb),.3)}
   .cand button.keep:hover:not(:disabled){background:rgba(240,184,102,.12);
     border-color:rgba(240,184,102,.45)}
   .cand button:disabled{opacity:.4;cursor:default}
-  .cand .cst{display:block;margin-top:6px;font-family:var(--mono);font-size:9px;
-    letter-spacing:.1em;text-transform:uppercase;color:var(--muted);min-height:11px}
+  .cand .cst{display:block;margin-top:6px;font-family:var(--font);font-size:9px;
+    text-transform:uppercase;color:var(--muted);min-height:11px}
   .cand .cst.live{color:var(--live)}
   .cand .cst.local{color:var(--local)}
   .cand .cst.bad{color:rgba(255,107,107,.72)}
@@ -900,13 +900,13 @@
   /* THE DAY OFFSET RIDES HERE, and it is the reason this span exists: a clock tile without
      it is a half-answer, so it is beside the name where the eye lands and not in the small
      print underneath. */
-  .btile .bn em{margin-left:auto;flex:0 0 auto;font-style:normal;font-family:var(--mono);
-    font-size:8px;letter-spacing:.13em;text-transform:uppercase;color:var(--local);
+  .btile .bn em{margin-left:auto;flex:0 0 auto;font-style:normal;font-family:var(--font);
+    font-size:8px;text-transform:uppercase;color:var(--local);
     opacity:.85}
-  .btile .bv{display:block;margin-top:5px;font-family:var(--mono);font-size:17px;
-    letter-spacing:.02em;color:#fff;font-variant-numeric:tabular-nums}
-  .btile .bs{display:block;margin-top:3px;font-family:var(--mono);font-size:8.5px;
-    letter-spacing:.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap;
+  .btile .bv{display:block;margin-top:5px;font-family:var(--font);font-size:17px;
+    color:#fff;font-variant-numeric:tabular-nums}
+  .btile .bs{display:block;margin-top:3px;font-family:var(--font);font-size:8.5px;
+    text-transform:uppercase;color:var(--muted);white-space:nowrap;
     overflow:hidden;text-overflow:ellipsis}
   /* The same three lights as every other surface on this deck. Nothing is coloured for
      emphasis; a tile is cyan because its organ is running. */
@@ -921,7 +921,7 @@
   .btile.home{border-left:2px solid var(--gold-core)}
   .btile button{margin-top:7px;width:100%;padding:5px 7px;border:1px solid var(--line);
     border-radius:3px;background:rgba(255,255,255,.02);color:var(--ink);cursor:pointer;
-    font-family:var(--mono);font-size:9px;letter-spacing:.11em;text-transform:uppercase;
+    font-family:var(--font);font-size:9px;text-transform:uppercase;
     transition:background .16s,border-color .16s}
   .btile button:hover:not(:disabled){background:rgba(var(--gold-core-rgb),.1);
     border-color:rgba(var(--gold-core-rgb),.3)}
@@ -983,14 +983,14 @@
     display:flex;flex-direction:column;padding:26px 26px 22px}
   #panel.open{transform:none}
   #panel .kicker{display:flex;align-items:center;gap:9px;font-size:10.5px;
-    letter-spacing:.24em;text-transform:uppercase;color:var(--muted)}
+    text-transform:uppercase;color:var(--muted)}
   #panel .kicker i{width:8px;height:8px;border-radius:50%;background:currentColor;
     box-shadow:0 0 10px currentColor}
   /* Tight tracking on the one real header on this deck. The wide-tracked #title above is
      a brand mark, not a header, and squeezing it would be reading this rule as a taste
      rather than as what it is: long words at 25px sit too loose at default tracking. */
   #panel h2{margin:14px 0 4px;font-size:25px;line-height:1.16;font-weight:600;color:#fff;
-    letter-spacing:-.05em}
+    }
   /* §39 PART 4 - AND THE INK COMES UP TO MEET THE THINNER SHEET.
      The panel's background went from .72-.80 to .60, so more of the starfield is behind every
      line of text than there was; ink at 86% and 70% of itself was already the weakest text on
@@ -1000,12 +1000,12 @@
      the two surfaces now set prose in one colour and metadata in one colour, and
      karaoke_proof measures the panel's contrast against the card's and refuses anything
      below it. Sizes, weights, tracking and the mono face are untouched: this is alpha only. */
-  #panel .meta{font-size:11px;color:var(--muted);letter-spacing:.05em;
-    font-variant-numeric:tabular-nums;font-family:var(--mono)}
+  #panel .meta{font-size:11px;color:var(--muted);
+    font-variant-numeric:tabular-nums;font-family:var(--font)}
   #panel .body{margin-top:18px;overflow-y:auto;flex:1;font-size:13.5px;line-height:1.6;
     color:#f2f6ff}
   #panel .body p{margin:0 0 14px}
-  #panel h3{margin:22px 0 10px;font-size:10.5px;letter-spacing:.2em;
+  #panel h3{margin:22px 0 10px;font-size:10.5px;
     text-transform:uppercase;color:var(--muted);font-weight:600}
   #close{position:absolute;top:20px;right:22px;width:28px;height:28px;border-radius:50%;
     border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;
@@ -1027,7 +1027,7 @@
      note the house studied by itself is still one source. Violet, the Scholar's hue - see
      #seal-study - so the eye can tell "I filed this" from "the house read this while I was
      asleep" without having to read the path. */
-  .chip b.auto{font-weight:500;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;
+  .chip b.auto{font-weight:500;font-family:var(--font);font-size:9.5px;
     text-transform:uppercase;color:#b79cff;margin-left:8px;
     border:1px solid rgba(183,156,255,.4);border-radius:999px;padding:1px 6px 0}
 
@@ -1044,7 +1044,7 @@
     transform:translateY(-2px)}
   a.src-item .t{display:block;font-size:13px;line-height:1.35;color:#fff}
   a.src-item .u{display:block;margin-top:5px;font-size:11px;color:var(--web);
-    word-break:break-all;letter-spacing:.01em}
+    word-break:break-all;}
   /* Full alpha for the same reason as #panel .body above: this is the docs panel's standfirst
      and it sits on the thinner sheet now. Same hue, same size. */
   .src-note{font-size:11.5px;color:var(--muted);margin:0 0 16px;line-height:1.5}
@@ -1081,8 +1081,8 @@
     transform:translateY(-2px)}
   .dchip i{width:6px;height:6px;border-radius:1.5px;background:var(--doc);
     display:inline-block;margin-right:7px;box-shadow:0 0 7px var(--doc)}
-  .dchip b{font-weight:500;font-family:var(--mono);font-size:10.5px;color:var(--doc);
-    margin-left:6px;letter-spacing:.04em;font-variant-numeric:tabular-nums}
+  .dchip b{font-weight:500;font-family:var(--font);font-size:10.5px;color:var(--doc);
+    margin-left:6px;font-variant-numeric:tabular-nums}
   #panel.docs .kicker{color:var(--doc)}
   .doclist{display:flex;flex-direction:column;gap:10px;margin-top:2px}
   /* A row, ruled down its left edge in the document's own gold. The rule is what makes a
@@ -1092,7 +1092,7 @@
     background:rgba(240,184,102,.04);border-radius:4px;padding:10px 13px}
   .doc-item .t{display:block;font-size:13px;line-height:1.35;color:#fff}
   .doc-item .u{display:block;margin-top:5px;font-size:11px;color:var(--doc);
-    font-family:var(--mono);letter-spacing:.01em;word-break:break-all}
+    font-family:var(--font);word-break:break-all}
   /* ---- THE PRIVACY SEAL ----
      "read from disk, never sent anywhere" used to be the tail of the census line, in the
      same grey as the word "passages", which made the most load-bearing sentence in this
@@ -1105,7 +1105,7 @@
   .seal{align-items:center;gap:8px;margin:0 0 14px;
     padding:7px 10px;border:1px solid rgba(240,184,102,.32);border-radius:4px;
     background:rgba(240,184,102,.05);
-    font-family:var(--mono);font-size:10px;letter-spacing:.11em;text-transform:uppercase;
+    font-family:var(--font);font-size:10px;text-transform:uppercase;
     color:rgba(240,184,102,.92)}
   .seal::before{content:'';width:7px;height:7px;flex:0 0 auto;border-radius:1.5px;
     background:var(--doc);box-shadow:0 0 8px var(--doc)}
@@ -1129,7 +1129,7 @@
   #answer.show{display:block;animation:rise var(--spring-ms) var(--spring)}
   @keyframes rise{from{opacity:0;transform:translateY(12px) scale(.985)}
     to{opacity:1;transform:none}}
-  #answer .q{font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  #answer .q{font-size:11px;text-transform:uppercase;
     color:var(--muted);margin-bottom:9px}
   /* ---------- THE CONTAINED PAGE ----------
      THE DOCUMENT NEVER SCROLLS SIDEWAYS. That is the whole law, and everything in this
@@ -1275,10 +1275,10 @@
      on itself underneath a sentence somebody is reading: the answer stays the brightest thing
      in the card. No animation of any kind - see the deck's law; this text changes every 2.5
      seconds and a transition on it would be a card that never settles. */
-  #job-line{display:block;margin-top:11px;font-size:12px;letter-spacing:.07em;
+  #job-line{display:block;margin-top:11px;font-size:12px;
     color:#9fb4d8;opacity:.86;overflow-wrap:anywhere}
   #answer .src{margin-top:13px}
-  #answer .src .lbl{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
+  #answer .src .lbl{font-size:10.5px;text-transform:uppercase;
     color:var(--muted);margin-bottom:8px}
 
   /* ---------- THE MOMENT OF TRUST ----------
@@ -1310,15 +1310,15 @@
      entirely - the buttons arrive where they will stay. */
   #a-ask.show{display:block;animation:gate .09s linear}
   @keyframes gate{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-  #a-ask .lbl{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
+  #a-ask .lbl{font-size:10.5px;text-transform:uppercase;
     color:#ffc86a;margin-bottom:9px}
   /* THE PARAMETERS, IN MONO, and not for the look of it: these are the exact values
      about to be handed to a script, and a proportional font closes up a double space,
      leans an l into a 1 and makes rn look like m. A value you cannot read character by
      character is a value you cannot approve. */
   #a-ask .rows{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;
-    font-size:12px;line-height:1.55;margin-bottom:13px;font-family:var(--mono)}
-  #a-ask .rows b{color:var(--muted);font-weight:500;letter-spacing:.02em;
+    font-size:12px;line-height:1.55;margin-bottom:13px;font-family:var(--font)}
+  #a-ask .rows b{color:var(--muted);font-weight:500;
     white-space:nowrap}
   /* CLAMPED, AND THE CLAMP IS ABOUT ONE PARAMETER. Every value on this card until now was
      a path, a subject line or a number - two lines at worst. `minutes` is a whole
@@ -1417,9 +1417,9 @@
      placeholder is visible in the rows, and this is the same fact in English for somebody who
      is reading the plan rather than auditing it. */
   #a-ask .steps .uses{grid-column:2;color:rgba(255,200,106,.72);font-size:11px;
-    letter-spacing:.02em}
+    }
   #a-ask .steps .vals{grid-column:2;display:grid;grid-template-columns:auto 1fr;
-    gap:3px 10px;margin-top:5px;font-family:var(--mono);font-size:11px;line-height:1.5}
+    gap:3px 10px;margin-top:5px;font-family:var(--font);font-size:11px;line-height:1.5}
   #a-ask .steps .vals b{color:var(--muted);font-weight:500;white-space:nowrap}
   #a-ask .steps .vals span{color:rgba(226,235,252,.92);word-break:break-word;
     white-space:pre-wrap;max-height:120px;overflow:auto;overscroll-behavior:contain}
@@ -1444,7 +1444,7 @@
     transform:translateY(-2px)}
   #a-ask button:disabled{opacity:.45;cursor:default;transform:none}
   #a-ask .clock{font-size:11px;color:var(--muted);margin-left:auto;
-    font-family:var(--mono);font-variant-numeric:tabular-nums}
+    font-family:var(--font);font-variant-numeric:tabular-nums}
 
   /* ---------- THE LIVE TRANSCRIPT ----------
      WHERE IT LIVES AND WHY THAT IS THE WHOLE DESIGN. This panel is a CHILD OF #brain, the
@@ -1561,7 +1561,7 @@
     box-shadow:0 0 10px rgba(233,185,120,.35),
       inset 0 0 0 1.5px rgba(46,28,10,.55),
       inset 0 0 0 3px rgba(255,226,180,.35)}
-  #scribepanel .lbl{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
+  #scribepanel .lbl{font-size:10.5px;text-transform:uppercase;
     color:var(--sc-accent);order:1}
   /* The live dot, and it is the same borrowed beat as everything else that is running - but
      in the Scribe's hue, because a recorder's light is the one place on this glass where a
@@ -1570,8 +1570,8 @@
     box-shadow:0 0 11px rgba(233,185,120,.85);flex:0 0 auto;display:none;order:2;
     animation:pulse 1.15s ease-in-out infinite}
   #scribepanel.live .rec{display:block}
-  #scribepanel .meta{margin-left:auto;font-family:var(--mono);font-size:10.5px;
-    letter-spacing:.02em;color:rgba(233,185,120,.62);font-variant-numeric:tabular-nums;
+  #scribepanel .meta{margin-left:auto;font-family:var(--font);font-size:10.5px;
+    color:rgba(233,185,120,.62);font-variant-numeric:tabular-nums;
     order:3}
   /* THE COLUMN ITSELF. A fixed ceiling rather than a growing panel: an hour's meeting is
      hundreds of lines and a column that grew would walk up the window and out of it,
@@ -1584,7 +1584,7 @@
      a scrolling box is painted against that box and stays put while its content moves, which
      is exactly the behaviour wanted and the reason the rule is not drawn per line. */
   #scribepanel .lines{max-height:198px;overflow-y:auto;overscroll-behavior:contain;
-    font-family:var(--mono);font-size:12px;line-height:1.62;color:var(--sc-ink);
+    font-family:var(--font);font-size:12px;line-height:1.62;color:var(--sc-ink);
     display:flex;flex-direction:column;gap:5px;
     background-image:linear-gradient(90deg,
       transparent 0 calc(var(--sc-gutter) - 10px),
@@ -1634,7 +1634,7 @@
   #scribe-close:hover:not(:disabled){color:#fff;border-color:rgba(140,170,220,.5)}
   #scribepanel .foot button:disabled{opacity:.45;cursor:default;transform:none}
   #scribepanel .foot .said{margin-left:auto;font-size:11px;color:var(--sc-faint);
-    font-family:var(--mono)}
+    font-family:var(--font)}
 
   /* ---------- THE MINUTES, COLLAPSED TO ONE LINE ----------
      A confirmation gate and a rolling transcript both want the same column, and only one of
@@ -1681,7 +1681,7 @@
      from anywhere else and are the reason it stays on screen at all. The letter-spacing comes
      off too: .2em over eighteen characters is about 38px of pure air, which at 312px is the
      difference between abbreviating and not. The numbers are never the ones that go. */
-  #scribepanel.strip .head .lbl{white-space:nowrap;letter-spacing:.11em;
+  #scribepanel.strip .head .lbl{white-space:nowrap;
     min-width:0;overflow:hidden;text-overflow:ellipsis}
   #scribepanel.strip .head .meta{white-space:nowrap;flex:0 0 auto}
 
@@ -1714,9 +1714,9 @@
   @media (prefers-reduced-motion:reduce){#digestpanel.show{animation:none}}
   #digestpanel .head{display:flex;align-items:center;gap:10px;margin-bottom:7px;
     border-bottom:1px solid rgba(183,156,255,.15);padding-bottom:7px}
-  #digestpanel .lbl{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
+  #digestpanel .lbl{font-size:10.5px;text-transform:uppercase;
     color:var(--st-accent)}
-  #digestpanel .meta{margin-left:auto;font-family:var(--mono);font-size:10.5px;
+  #digestpanel .meta{margin-left:auto;font-family:var(--font);font-size:10.5px;
     color:rgba(183,156,255,.62);font-variant-numeric:tabular-nums}
   /* A CEILING AND A SCROLL, for the reason #scribepanel .lines has one: the syllabus can
      hand the daemon a busy day, and a column that grew would take the toast's rectangle
@@ -1727,10 +1727,10 @@
     color:#e8e2ff;min-width:0}
   #digestpanel .row .t{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;
     white-space:nowrap}
-  #digestpanel .row .g{flex:0 0 auto;font-family:var(--mono);font-size:9.5px;
-    letter-spacing:.12em;text-transform:uppercase;color:rgba(183,156,255,.7)}
+  #digestpanel .row .g{flex:0 0 auto;font-family:var(--font);font-size:9.5px;
+    text-transform:uppercase;color:rgba(183,156,255,.7)}
   #digestpanel button{flex:0 0 auto;border:1px solid var(--line);border-radius:999px;
-    cursor:pointer;font-family:inherit;font-size:10.5px;letter-spacing:.08em;
+    cursor:pointer;font-family:inherit;font-size:10.5px;
     padding:4px 10px;background:transparent;color:var(--muted);
     transition:color .18s,border-color .18s}
   #digestpanel button:hover:not(:disabled){color:#fff;border-color:rgba(183,156,255,.6)}
@@ -1745,8 +1745,8 @@
     font-size:11.5px;color:rgba(226,220,255,.84)}
   #digestpanel.asking .foot{display:flex}
   #digestpanel .foot #digest-ask{flex:1 1 auto;min-width:0}
-  #digestpanel .foot .said{flex:0 0 auto;font-family:var(--mono);font-size:10px;
-    letter-spacing:.06em;color:rgba(183,156,255,.6)}
+  #digestpanel .foot .said{flex:0 0 auto;font-family:var(--font);font-size:10px;
+    color:rgba(183,156,255,.6)}
 
   /* THE CAPTION STANDS DOWN WHILE A GATE IS OPEN. The line the butler speaks when he offers a
      hand is already on the card, verbatim, with the parameters he is asking about underneath
@@ -1832,7 +1832,7 @@
      by setStatus() - the one place this page's state is said out loud - so the seal cannot
      fall behind the status row it sits under. */
   #seal{display:flex;align-items:center;gap:9px;flex:0 0 auto;padding:10px 0;
-    font-family:var(--mono);font-size:10.5px;letter-spacing:.17em;
+    font-family:var(--font);font-size:10.5px;
     text-transform:uppercase;color:var(--muted);transition:color .3s}
   #seal[data-state="listening"]{color:#ff8b9a}
   #seal[data-state="thinking"]{color:#ffb347}
@@ -1845,7 +1845,7 @@
     /* A border and not a background: the seal sits on glass that is already three
        surfaces deep, and a fourth fill behind six characters reads as a button. */
     border:1px solid rgba(255,107,127,.45);border-radius:999px;padding:3px 9px 2px;
-    letter-spacing:.15em}
+    }
   #seal.open #seal-ear{display:inline-block}
   /* THE SPEAKER CELL, and it is deliberately the quieter of the two pills. EAR OPEN is a
      warning - a microphone is live in this room - and warnings are pink here. Who is talking
@@ -1855,7 +1855,7 @@
      seal implying it knows something it does not. */
   #seal-who{display:none;font-weight:600;color:var(--muted);
     border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:3px 9px 2px;
-    letter-spacing:.15em}
+    }
   #seal-who.on{display:inline-block}
   /* And a voice the gate will take an order from is named in the same green the seal uses
      for SPEAKING: it is the one reading on this deck that means "this person can make
@@ -1872,7 +1872,7 @@
      Violet, and nothing else on this deck is: see #digestpanel. */
   #seal-study{display:none;font-weight:600;color:#b79cff;
     border:1px solid rgba(183,156,255,.42);border-radius:999px;padding:3px 9px 2px;
-    letter-spacing:.15em}
+    }
   #seal-study.on{display:inline-block}
   #seal-text{opacity:.9}
   /* §32 - AND A LAST RESORT UNDER THE SPACER, so the pill can never again be pushed open by
@@ -1926,7 +1926,7 @@
      thing on the screen and the thing on the keyboard are the same thing. */
   #slash{flex:0 0 auto;width:34px;height:34px;padding:0;border-radius:50%;
     border:1px dashed rgba(140,170,220,.32);background:transparent;color:var(--muted);
-    font-family:var(--mono);font-size:14px;line-height:1;cursor:pointer;
+    font-family:var(--font);font-size:14px;line-height:1;cursor:pointer;
     display:grid;place-items:center;
     transition:color .2s,border-color .2s,background .2s,transform .12s ease-out}
   #slash:hover{color:#fff;border-color:rgba(140,170,220,.6);
@@ -1945,11 +1945,11 @@
   #typeline.up{display:block;animation:rise var(--spring-ms) var(--spring)}
   #qline{width:100%;box-sizing:border-box;background:rgba(7,9,16,.78);
     border:1px solid var(--line);border-radius:13px;padding:11px 16px;
-    color:var(--ink);font-family:var(--mono);font-size:13px;letter-spacing:.02em;
+    color:var(--ink);font-family:var(--font);font-size:13px;
     outline:0;backdrop-filter:var(--blur)}
   #qline:focus{border-color:rgba(var(--gold-core-rgb),.5);
     box-shadow:0 0 0 3px rgba(var(--gold-core-rgb),.07)}
-  #qline::placeholder{color:rgba(143,160,192,.45);letter-spacing:.08em}
+  #qline::placeholder{color:rgba(143,160,192,.45);}
 
   /* ---------- THE CAPTION ----------
      CAPTIONS ARE CINEMA, NOT CHAT. No border, no fill, no corner radius - a subtitle is
@@ -2044,7 +2044,7 @@
   @keyframes miclive{0%{opacity:.6;transform:scale(1)}
     100%{opacity:0;transform:scale(1.42)}}
   #status{display:flex;align-items:center;gap:9px;padding:0 20px;min-height:16px;
-    font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+    font-size:11px;text-transform:uppercase;color:var(--muted);
     transition:color .3s}
   #status i{width:6px;height:6px;border-radius:50%;background:currentColor;
     box-shadow:0 0 9px currentColor;flex:0 0 auto;transition:.3s}
@@ -2083,14 +2083,14 @@
     transition:top .2s var(--ease-lane),left .22s var(--ease-lane);
     border-radius:999px;background:rgba(38,6,10,.86);border:1px solid rgba(255,77,94,.7);
     backdrop-filter:blur(12px);box-shadow:0 10px 34px rgba(255,0,30,.28);
-    font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#ffd7dc}
+    font-size:11px;text-transform:uppercase;color:#ffd7dc}
   #sharing.live{display:flex}
   #sharing .rec{width:9px;height:9px;border-radius:50%;background:#ff4d5e;
     box-shadow:0 0 12px #ff4d5e;animation:pulse 1.15s ease-in-out infinite;
     flex:0 0 auto}
-  #sharing .dim{letter-spacing:.02em;text-transform:none;color:rgba(255,215,220,.62)}
+  #sharing .dim{text-transform:none;color:rgba(255,215,220,.62)}
   #sharing button{border:0;border-radius:999px;cursor:pointer;font-family:inherit;
-    font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;padding:5px 11px;
+    font-size:10.5px;text-transform:uppercase;padding:5px 11px;
     background:rgba(255,77,94,.22);color:#ffe6ea;border:1px solid rgba(255,77,94,.45)}
   #sharing button:hover{background:rgba(255,77,94,.4)}
 
@@ -2115,16 +2115,16 @@
     transition:top .2s var(--ease-lane),left .22s var(--ease-lane);
     border-radius:999px;background:rgba(20,12,38,.88);
     border:1px solid rgba(157,124,255,.6);backdrop-filter:blur(12px);
-    box-shadow:0 10px 34px rgba(110,70,255,.24);font-size:11px;letter-spacing:.2em;
+    box-shadow:0 10px 34px rgba(110,70,255,.24);font-size:11px;
     text-transform:uppercase;color:#e4dbff}
   #eyeing.live{display:flex}
   #eyeing .lid{width:9px;height:9px;border-radius:50%;background:#9d7cff;
     box-shadow:0 0 12px #9d7cff;animation:pulse 1.6s ease-in-out infinite;
     flex:0 0 auto}
-  #eyeing .dim{letter-spacing:.02em;text-transform:none;
+  #eyeing .dim{text-transform:none;
     color:rgba(228,219,255,.62)}
   #eyeing button{border:0;border-radius:999px;cursor:pointer;font-family:inherit;
-    font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;padding:5px 11px;
+    font-size:10.5px;text-transform:uppercase;padding:5px 11px;
     background:rgba(157,124,255,.22);color:#efe9ff;
     border:1px solid rgba(157,124,255,.45)}
   #eyeing button:hover{background:rgba(157,124,255,.4)}
@@ -2139,16 +2139,16 @@
     transition:top .2s var(--ease-lane),left .22s var(--ease-lane);
     border-radius:999px;background:rgba(36,24,6,.88);
     border:1px solid rgba(255,183,77,.62);backdrop-filter:blur(12px);
-    box-shadow:0 10px 34px rgba(255,150,0,.22);font-size:11px;letter-spacing:.2em;
+    box-shadow:0 10px 34px rgba(255,150,0,.22);font-size:11px;
     text-transform:uppercase;color:#ffe7c2}
   #watching.live{display:flex}
   #watching .eye{width:9px;height:9px;border-radius:50%;background:#ffb74d;
     box-shadow:0 0 12px #ffb74d;animation:pulse 2.6s ease-in-out infinite;
     flex:0 0 auto}
-  #watching .dim{letter-spacing:.02em;text-transform:none;
+  #watching .dim{text-transform:none;
     color:rgba(255,231,194,.66);font-variant-numeric:tabular-nums}
   #watching button{border:0;border-radius:999px;cursor:pointer;font-family:inherit;
-    font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;padding:5px 11px;
+    font-size:10.5px;text-transform:uppercase;padding:5px 11px;
     background:rgba(255,183,77,.2);color:#fff1dc;
     border:1px solid rgba(255,183,77,.45)}
   #watching button:hover{background:rgba(255,183,77,.38)}
@@ -2161,7 +2161,7 @@
     padding:12px 13px;border-radius:16px;
     background:rgba(14,10,4,.92);border:1px solid rgba(255,183,77,.5);
     backdrop-filter:blur(14px);box-shadow:0 18px 50px rgba(0,0,0,.6);
-    color:#ffe7c2;font-size:11px;letter-spacing:.06em;
+    color:#ffe7c2;font-size:11px;
     transition:top .22s var(--ease-lane),right .22s var(--ease-lane)}
   #facecard.show{display:block}
   #facecard .row{display:flex;align-items:center;gap:10px}
@@ -2171,14 +2171,14 @@
   #facecard .wrap{display:flex;align-items:center;gap:11px}
   #facecard .wrap.think{border-radius:12px;
     box-shadow:inset 0 0 26px rgba(255,150,0,.22)}
-  #facecard .t{text-transform:uppercase;letter-spacing:.2em;font-size:10px}
+  #facecard .t{text-transform:uppercase;font-size:10px}
   #facecard .mark{width:38px;height:38px;flex:0 0 auto}
-  #facecard .t{text-transform:uppercase;letter-spacing:.2em;font-size:10px}
+  #facecard .t{text-transform:uppercase;font-size:10px}
   #facecard .s{color:rgba(255,231,194,.66);font-variant-numeric:tabular-nums;
-    margin-top:2px;letter-spacing:.02em;text-transform:none}
+    margin-top:2px;text-transform:none}
   #facecard .pin{margin-top:9px;width:100%;border:1px solid rgba(255,183,77,.4);
     border-radius:999px;background:rgba(255,183,77,.16);color:#fff1dc;
-    font-family:inherit;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    font-family:inherit;font-size:10px;text-transform:uppercase;
     padding:6px 8px;cursor:pointer}
   #facecard .pin:hover{background:rgba(255,183,77,.34)}
 
@@ -2188,10 +2188,10 @@
   #answer .saw img{width:132px;border-radius:8px;border:1px solid rgba(255,77,94,.4);
     display:block;background:#000}
   #answer .saw .fm{font-size:10.5px;line-height:1.7;color:var(--muted);
-    letter-spacing:.02em}
-  #answer .saw .fm b{display:block;font-size:10px;letter-spacing:.2em;
+    }
+  #answer .saw .fm b{display:block;font-size:10px;
     text-transform:uppercase;color:#ff9aa6;margin-bottom:3px;font-weight:500}
-  #status .said{text-transform:none;letter-spacing:.01em;font-size:12px;
+  #status .said{text-transform:none;font-size:12px;
     color:rgba(232,238,252,.8);white-space:nowrap;overflow:hidden;
     text-overflow:ellipsis;max-width:52ch}
 
@@ -2203,7 +2203,7 @@
      standing fact and nothing about it is urgent.
      margin-left:auto is what keeps it off the end of the `said` line without a second flex
      wrapper; min-height on #status is unchanged, so the strip does not grow. */
-  #mode-badge{margin-left:auto;flex:0 0 auto;font-size:10px;letter-spacing:.2em;
+  #mode-badge{margin-left:auto;flex:0 0 auto;font-size:10px;
     text-transform:uppercase;padding:2px 7px;border-radius:3px;
     border:1px solid rgba(232,238,252,.18);color:rgba(232,238,252,.72);
     background:rgba(232,238,252,.04)}
@@ -2374,11 +2374,11 @@
   #focuscard .atel{flex:0 0 96px;min-width:0;display:flex;flex-direction:column;gap:5px}
   #focuscard .atel.r{margin-left:auto}
   #focuscard .acell{display:grid;grid-template-columns:1fr auto;align-items:center;
-    column-gap:5px;font-family:var(--mono);font-size:7.5px;letter-spacing:.14em;
+    column-gap:5px;font-family:var(--font);font-size:7.5px;
     text-transform:uppercase;color:rgba(143,160,192,.62);line-height:1}
   #focuscard .acell .ak{grid-column:1;overflow:hidden;text-overflow:ellipsis;
     white-space:nowrap}
-  #focuscard .acell .av{grid-column:2;color:#dbe6ff;font-size:8.5px;letter-spacing:.04em;
+  #focuscard .acell .av{grid-column:2;color:#dbe6ff;font-size:8.5px;
     font-variant-numeric:tabular-nums;white-space:nowrap}
   #focuscard .acell .asp{grid-column:1/-1;display:block;width:100%;height:11px;
     overflow:visible}
@@ -2403,12 +2403,12 @@
      name is server-written and can be long, and flex children refuse to shrink below their
      content unless min-width:0 says they may. */
   #focuscard .fh{display:flex;align-items:center;gap:7px;font-size:10px;line-height:1.5;
-    letter-spacing:.22em;text-transform:uppercase;color:var(--muted);
+    text-transform:uppercase;color:var(--muted);
     max-width:var(--textmax);flex-wrap:wrap}
   #focuscard .fh i{width:6px;height:6px;border-radius:50%;background:#4be0b8;
     box-shadow:0 0 9px #4be0b8;flex:0 0 auto;transition:.3s}
   #focus-state{min-width:0;overflow-wrap:anywhere}
-  #focuscard .fh b{margin-left:auto;font-weight:500;letter-spacing:.1em;
+  #focuscard .fh b{margin-left:auto;font-weight:500;
     color:rgba(143,160,192,.62);text-transform:none;font-size:9.5px;
     min-width:0;overflow-wrap:anywhere}
   /* THE DIGITS GET THEIR OWN ROW, and min-height is what reserves it. At font-size 34 with
@@ -2417,7 +2417,7 @@
      into it, and no absolutely-positioned thing is permitted to cross it. The clock is the
      one element on this card that must be legible at a glance from across a room. */
   #focus-clock{margin:7px 0 2px;font-size:34px;line-height:1;min-height:34px;
-    font-weight:300;letter-spacing:.02em;color:#fff;font-variant-numeric:tabular-nums;
+    font-weight:300;color:#fff;font-variant-numeric:tabular-nums;
     max-width:var(--textmax);transition:color .3s}
   #focuscard .fbar{height:3px;border-radius:2px;background:rgba(140,170,220,.14);
     overflow:hidden;margin:9px 0 8px}
@@ -2433,21 +2433,21 @@
   #focus-intent{display:none;font-size:11px;line-height:1.5;color:#cdd9f2;
     margin:-2px 0 7px;padding-left:8px;border-left:2px solid rgba(75,224,184,.55);
     max-width:calc(var(--textmax) - 10px);overflow-wrap:anywhere}
-  #focus-stats{font-size:10.5px;letter-spacing:.06em;line-height:1.5;
+  #focus-stats{font-size:10.5px;line-height:1.5;
     color:rgba(143,160,192,.8);font-variant-numeric:tabular-nums;
     max-width:var(--textmax);overflow-wrap:anywhere}
   #focus-stats b{color:#dbe6ff;font-weight:500}
   #focuscard .frow{display:flex;gap:6px;margin-top:10px}
   #focuscard .frow button{flex:1;border:1px solid var(--line);border-radius:999px;
     background:transparent;color:var(--muted);cursor:pointer;font-family:inherit;
-    font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;padding:6px 0;
+    font-size:9.5px;text-transform:uppercase;padding:6px 0;
     transition:.2s}
   #focuscard .frow button:hover{color:#fff;border-color:rgba(140,170,220,.55)}
   /* The override, and the one control on this card that changes what is WATCHED
      rather than what the clock is doing - so it flashes its own confirmation the
      instant it is pressed, and wears the on-target colour while it does. */
   #focuscard .frow.flock{margin-top:9px}
-  #focus-lock{letter-spacing:.16em}
+  #focus-lock{}
   #focus-lock.done{color:#4be0b8;border-color:rgba(75,224,184,.7);
     background:rgba(75,224,184,.16)}
   /* WHAT IS LOCKED, or why nothing is. It sits directly under the pill because it is
@@ -2457,7 +2457,7 @@
      to this one - can still hide it in the narrow window without !important.
      The title is an OBSERVED string, the only one on this card besides your own
      dictated intent, so it is written with textContent and clipped in both places. */
-  #focus-locked{display:none;font-size:9.5px;letter-spacing:.1em;line-height:1.5;
+  #focus-locked{display:none;font-size:9.5px;line-height:1.5;
     text-transform:uppercase;color:rgba(143,160,192,.85);margin:8px 0 0;
     max-width:var(--textmax);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #focus-locked.on,#focus-locked.off{display:block}
@@ -2820,7 +2820,7 @@
   #boot{position:fixed;inset:0;z-index:20;display:grid;place-items:center;
     background:#000;transition:opacity .6s;text-align:center;padding:30px}
   #boot.gone{opacity:0;pointer-events:none;visibility:hidden}
-  #boot .t{font-size:12px;letter-spacing:.34em;text-transform:uppercase;color:var(--muted)}
+  #boot .t{font-size:12px;text-transform:uppercase;color:var(--muted)}
   #boot .e{margin-top:14px;font-size:13px;color:#ffc9a8;max-width:52ch;line-height:1.7}
   /* ---------- THE HOVER ANNOTATION, AND THE BUBBLE THAT IS GONE ----------------
      THE LIBRARY'S TOOLTIP IS SWITCHED OFF HERE, IN CSS, AS WELL AS AT THE ACCESSOR.
@@ -2848,16 +2848,16 @@
     background:linear-gradient(90deg,rgba(158,188,232,.74),rgba(158,188,232,.2));
     transform-origin:0 50%;transform:rotate(-34deg)}
   #worldhud .wtext{position:absolute;left:42px;top:-42px;
-    font-family:var(--mono);font-size:10.5px;
+    font-family:var(--font);font-size:10.5px;
     line-height:1.5;white-space:nowrap;color:rgba(226,234,250,.94)}
   /* AND THE SAME ANNOTATION, MIRRORED, for a world near the right-hand edge - where
      the version above would write its reading off the side of the screen. The leader
      still leaves the limb at the same angle; only its handedness changes. */
   #worldhud.wleft .wlead{transform:rotate(-146deg)}
   #worldhud.wleft .wtext{left:auto;right:42px;text-align:right}
-  #worldhud .wtext b{font-weight:500;letter-spacing:.02em}
+  #worldhud .wtext b{font-weight:500;}
   #worldhud .wtext i{font-style:normal;color:rgba(150,170,205,.82);
-    letter-spacing:.09em;text-transform:uppercase;font-size:9.5px}
+    text-transform:uppercase;font-size:9.5px}
   #worldhud .wsep{color:rgba(130,150,190,.5);margin:0 .5ch}
   @media (max-width:720px){
     #legend{display:none} #title{max-width:22ch}
@@ -2940,9 +2940,9 @@
      surface and that wire is DO-NOT-ALTER. Same declarations, same computed values. */
   #brainmenu .prov{margin-top:4px;
     padding-top:7px;border-top:1px solid var(--line);
-    font-family:var(--mono);font-size:9.5px;letter-spacing:.11em}
+    font-family:var(--font);font-size:9.5px;}
   #brainmenu .prov[aria-disabled="true"]{opacity:.5;cursor:default}
-  #brainmenu .prov b{font-weight:500;color:var(--blue-structure);letter-spacing:.06em}
+  #brainmenu .prov b{font-weight:500;color:var(--blue-structure);}
   #brainmenu .prov i{font-style:normal;float:right;border:1px solid var(--line);
     border-radius:4px;padding:0 4px;font-size:10px;color:var(--muted)}
 
@@ -3053,15 +3053,15 @@
     transition:transform var(--dur-panel-open) var(--ease-panel-open)}
   #orbit.open .ob-frame{transform:translateX(-50%) scale(1)}
   #orbit .ob-h{position:absolute;left:18px;right:12px;top:12px;display:flex;align-items:center;
-    gap:12px;font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+    gap:12px;font-family:var(--font);font-size:11px;text-transform:uppercase;
     color:var(--muted);z-index:1}
-  #orbit .ob-h b{color:#fff;font-weight:500;letter-spacing:.26em;
+  #orbit .ob-h b{color:#fff;font-weight:500;
     text-shadow:0 0 16px var(--blue-glow)}
   #orbit .ob-h .ob-live{display:inline-flex;align-items:center;gap:7px;color:var(--gold-core)}
   #orbit .ob-h .ob-live i{width:7px;height:7px;border-radius:50%;background:var(--gold-core);
     box-shadow:0 0 10px var(--gold-glow)}
-  #orbit .ob-h .ob-s{margin-left:auto;letter-spacing:.1em;text-transform:none}
-  #orbit #ob-close{margin-left:8px;font:inherit;font-size:10px;letter-spacing:.18em;
+  #orbit .ob-h .ob-s{margin-left:auto;text-transform:none}
+  #orbit #ob-close{margin-left:8px;font:inherit;font-size:10px;
     text-transform:uppercase;color:var(--muted);background:var(--blue-trace);
     border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer}
   #orbit #ob-close:hover,#orbit #ob-close:focus-visible{color:#fff;outline:none;
@@ -3069,10 +3069,10 @@
   #orbit svg{position:absolute;left:0;top:34px;width:100%;height:calc(100% - 70px);
     overflow:visible}
   #orbit .ob-f{position:absolute;left:18px;right:18px;bottom:11px;display:flex;gap:18px;
-    justify-content:center;flex-wrap:wrap;font-family:var(--mono);font-size:11px;
-    letter-spacing:.12em;color:var(--muted)}
+    justify-content:center;flex-wrap:wrap;font-family:var(--font);font-size:11px;
+    color:var(--muted)}
   #orbit .ob-f b{color:#fff;font-weight:500}
-  #orbit .ob-f .ob-motto{color:var(--blue-glow);letter-spacing:.42em;text-transform:uppercase}
+  #orbit .ob-f .ob-motto{color:var(--blue-glow);text-transform:uppercase}
 
   /* The drawing. Every colour is a token, so the map is lit by the same two lamps as the
      deck it is a map of. */
@@ -3108,20 +3108,20 @@
   #orbit .ob-cross.ob-thread{stroke-width:1.8;stroke-opacity:.95}
   #orbit .ob-bead{fill:var(--gold-hot);stroke:var(--gold-hot);stroke-opacity:.30;stroke-width:5}
   #orbit .ob-member{fill:none;stroke-width:.7;stroke-opacity:.24;stroke-linecap:round}
-  #orbit .ob-cross-n{fill:var(--gold-hot);font:11px var(--mono);text-anchor:middle}
+  #orbit .ob-cross-n{fill:var(--gold-hot);font:11px var(--font);text-anchor:middle}
   #orbit .ob-ring.gold{stroke:var(--gold-core)}
   #orbit .ob-ring.blue{stroke:var(--blue-structure)}
   #orbit .ob-ring{fill:none;stroke-width:1.6;stroke-opacity:.9}
-  #orbit .ob-lbl{fill:var(--ink);font:500 14px var(--mono);letter-spacing:.2em;
+  #orbit .ob-lbl{fill:var(--ink);font:500 14px var(--font);
     text-anchor:middle;paint-order:stroke;stroke:rgba(var(--void-rgb),.85);stroke-width:4px}
-  #orbit .ob-sub{fill:var(--muted);font:11px var(--mono);letter-spacing:.08em;
+  #orbit .ob-sub{fill:var(--muted);font:11px var(--font);
     text-anchor:middle;paint-order:stroke;stroke:rgba(var(--void-rgb),.85);stroke-width:3px}
-  #orbit .ob-ini{fill:#fff;font:600 13px var(--mono);text-anchor:middle;
+  #orbit .ob-ini{fill:#fff;font:600 13px var(--font);text-anchor:middle;
     dominant-baseline:central;opacity:.85}
   #orbit .ob-node.muted{opacity:.32}
-  #orbit .ob-cn{fill:#fff;font:500 11px var(--mono);letter-spacing:.26em;text-anchor:middle;
+  #orbit .ob-cn{fill:#fff;font:500 11px var(--font);text-anchor:middle;
     paint-order:stroke;stroke:rgba(var(--void-rgb),.6);stroke-width:3px}
-  #orbit .ob-cc{fill:var(--gold-hot);font:11px var(--mono);letter-spacing:.12em;
+  #orbit .ob-cc{fill:var(--gold-hot);font:11px var(--font);
     text-anchor:middle;paint-order:stroke;stroke:rgba(var(--void-rgb),.8);stroke-width:3px}
   /* THE HEART BREATHES, on its own named curve. Transform and opacity only, per the law
      about motion, and the box it scales about is its own. */
@@ -3143,7 +3143,7 @@
   #stats[role="button"]{position:relative;cursor:pointer;border-radius:4px;outline:none;
     transition:color var(--dur-lane) var(--ease-lane)}
   #stats[role="button"]::after{content:"\25CE";position:absolute;left:-17px;top:0;
-    color:var(--blue-structure);opacity:.75;font-family:var(--mono);font-size:1em;
+    color:var(--blue-structure);opacity:.75;font-family:var(--font);font-size:1em;
     pointer-events:none}
   #stats[role="button"]:hover,#stats[role="button"]:focus-visible{color:#fff}
   #stats[role="button"]:hover::after,#stats[role="button"]:focus-visible::after,
@@ -3172,10 +3172,10 @@
     backdrop-filter:var(--blur);border-bottom:1px solid var(--line)}
   #title .brand{grid-column:1;grid-row:1/3;display:flex;align-items:center;gap:10px;
     padding-right:16px;border-right:1px solid var(--line);color:#fff;
-    font:500 17px var(--font);letter-spacing:.42em}
+    font:500 17px var(--font);}
   #title .brand svg{width:26px;height:26px;fill:none;stroke:var(--blue-structure);stroke-width:1.6;
     filter:drop-shadow(0 0 6px var(--blue-glow))}
-  #title h1{grid-column:2;grid-row:1;font-size:11.5px;letter-spacing:.32em;white-space:nowrap}
+  #title h1{grid-column:2;grid-row:1;font-size:11.5px;white-space:nowrap}
   #title #stats{grid-column:2;grid-row:2;margin:3px 0 0;font-size:11px;white-space:nowrap}
   #title #density{grid-column:3;grid-row:1/3;margin:0;white-space:nowrap;font-size:11px}
   #title .hint{display:none}
@@ -3183,7 +3183,7 @@
   #toprail .rl{flex-direction:column;align-items:flex-start;justify-content:center;gap:5px;
     padding:0 16px}
   #toprail .rl::before,#toprail .rl::after{content:none}
-  #toprail .rl .rk{opacity:.62;letter-spacing:.16em}
+  #toprail .rl .rk{opacity:.62;}
   #toprail .rl .rv{font-size:11px}
   /* FIVE CELLS ON NARROWER GLASS. CONFIDENCE made the rail ~117px wider, and below 1366px the
      cell ran off the right edge into overflow:hidden - measured at 1280: content 747px in a
@@ -3191,13 +3191,13 @@
      tracking tighten, and the font sizes the deck proof holds stay exactly as they are. */
   @media (max-width: 1365px){
     #toprail .rl{padding:0 8px}
-    #toprail .rl .rk{letter-spacing:.06em}
-    #toprail .rl .rv{letter-spacing:.04em}
+    #toprail .rl .rk{}
+    #toprail .rl .rv{}
   }
   /* ONLINE is the last /health reading, and it is set by the same function that paints the
      five cells from that reading - see railFrom() - so it can only be on while they are fresh. */
   #toprail::before{content:'offline';display:flex;align-items:center;gap:7px;padding:0 16px 0 4px;white-space:nowrap;flex:none;
-    color:var(--fail);letter-spacing:.18em}
+    color:var(--fail);}
   #toprail.online::before{content:'\25CF  online';color:var(--gold-core)}
 
   /* THE SIDEBAR. The house's real sections and nothing else - see NAV in the script for what
@@ -3210,7 +3210,7 @@
   #sidenav.gone{display:none}
   #sidenav .navi{display:flex;align-items:center;gap:13px;height:44px;padding:0 13px;
     border:1px solid transparent;border-radius:11px;background:transparent;cursor:pointer;
-    color:var(--muted);font:500 11.5px var(--mono);letter-spacing:.18em;text-transform:uppercase;
+    color:var(--muted);font:500 11.5px var(--font);text-transform:uppercase;
     text-align:left;transition:color var(--dur-lane) var(--ease-lane),
       background var(--dur-lane) var(--ease-lane),border-color var(--dur-lane) var(--ease-lane)}
   #sidenav .navi svg{width:20px;height:20px;flex:0 0 auto;fill:none;stroke:currentColor;
@@ -3227,7 +3227,7 @@
      LISTENING exactly when the bar's seal does. Pressing it is pressing the ear. */
   #navvoice{margin-top:auto;display:flex;align-items:center;gap:11px;padding:12px;
     border:1px solid var(--line);border-radius:12px;background:var(--blue-trace);cursor:pointer;
-    color:var(--muted);font:500 10.5px var(--mono);letter-spacing:.16em;text-transform:uppercase}
+    color:var(--muted);font:500 10.5px var(--font);text-transform:uppercase}
   #navvoice svg{width:22px;height:22px;flex:0 0 auto;fill:none;stroke:var(--blue-structure);
     stroke-width:1.6;stroke-linecap:round}
   #navvoice .nv-t{display:flex;flex-direction:column;gap:4px;min-width:0}
@@ -3248,8 +3248,8 @@
   #convo-mini{width:46px;height:46px;flex:0 0 auto;border-radius:50%;
     border:1px solid var(--blue-glow);background:rgba(var(--void-rgb),.6)}
   #convohead .ct{display:flex;flex-direction:column;gap:3px;min-width:0}
-  #convohead .ct b{color:#fff;font:500 15px var(--font);letter-spacing:.02em}
-  #convohead .ct i{font-style:normal;font-size:11px;color:var(--muted);letter-spacing:.06em}
+  #convohead .ct b{color:#fff;font:500 15px var(--font);}
+  #convohead .ct i{font-style:normal;font-size:11px;color:var(--muted);}
 
   /* THE ASK, at the foot of the pane: caption, type line, status and the organ bar - the
      surfaces that were the bottom of #brain, moved as one. Same layer, same lane motion. */
@@ -3316,7 +3316,7 @@
   :root[data-theme="work"] .online{color:var(--blue-structure)}
   :root[data-theme="work"] #orbit .ob-f b{color:var(--blue-structure)}
   :root[data-theme="work"] #orbit .ob-card{fill:rgba(3,4,7,.86);stroke:rgba(255,120,125,.22)}
-  :root[data-theme="work"] #orbit .ob-lbl{fill:var(--ink);letter-spacing:.12em}
+  :root[data-theme="work"] #orbit .ob-lbl{fill:var(--ink);}
   :root[data-theme="work"] #orbit .ob-sub{fill:var(--muted)}
   :root[data-theme="work"] #orbit .ob-ring{stroke:var(--blue-structure);stroke-width:1.2}
   :root[data-theme="work"] #orbit .ob-thread-glow{stroke-width:8;opacity:.18}
@@ -3348,7 +3348,7 @@
     :root[data-theme="work"] #navvoice{margin:0;padding:7px;width:40px;height:40px;justify-content:center}
     :root[data-theme="work"] #brain{top:70px!important;left:auto!important;right:12px!important;width:min(276px,calc(100vw - 24px))!important}
     :root[data-theme="work"] #orbit{left:0;right:0;top:145px;bottom:160px}
-    :root[data-theme="work"] #orbit .ob-f{bottom:70px;gap:8px;font-size:9px;letter-spacing:.04em}
+    :root[data-theme="work"] #orbit .ob-f{bottom:70px;gap:8px;font-size:9px;}
     :root[data-theme="work"] #dock{left:8px!important;right:8px!important;width:auto!important;bottom:66px!important;top:auto!important}
     :root[data-theme="work"] #bar{gap:7px;padding-left:10px}
     :root[data-theme="work"] #bar #seal-text{display:none}
@@ -3361,18 +3361,18 @@
   #title{width:min(880px,calc(100vw - 690px));min-width:0;
     grid-template-columns:auto minmax(225px,1fr) auto;
     column-gap:18px;padding:0 18px}
-  #title .brand{font-size:15px;letter-spacing:.32em;gap:9px;padding-right:18px}
-  #title h1{font-size:12px;letter-spacing:.24em}
-  #title #stats{font-size:11px;letter-spacing:.02em}
+  #title .brand{font-size:15px;gap:9px;padding-right:18px}
+  #title h1{font-size:12px;}
+  #title #stats{font-size:11px;}
   #title #density{grid-column:3;grid-row:1/3;max-width:185px;overflow:hidden;
     text-overflow:ellipsis;font-size:10px;line-height:1.4}
   #toprail{left:880px;justify-content:flex-end;gap:0;padding:0 8px}
   #toprail::before{padding:0 12px 0 0;font-size:10px}
   #toprail .rl{padding:0 clamp(7px,.75vw,14px)}
-  #toprail .rl .rv{font-size:10px;letter-spacing:.025em}
+  #toprail .rl .rv{font-size:10px;}
   html.panel-open #toprail .rl{display:none}
   #sidenav{padding:14px 10px 12px;gap:4px}
-  #sidenav .navi{height:43px;font-size:11px;letter-spacing:.09em}
+  #sidenav .navi{height:43px;font-size:11px;}
   #sidenav .navi svg{width:19px;height:19px}
   #brain{box-sizing:border-box;min-width:0;min-height:0;padding:12px;
     left:calc(100vw - var(--dock-w) + 12px);top:calc(var(--rail-h) + 12px);
@@ -3392,7 +3392,7 @@
     gap:8px;margin-top:auto;padding:12px 2px 2px}
   #assistant-actions button{min-width:0;min-height:38px;padding:8px 9px;
     border:1px solid var(--line);border-radius:9px;background:var(--blue-trace);
-    color:var(--ink);font:10px var(--mono);letter-spacing:.03em;cursor:pointer}
+    color:var(--ink);font:10px var(--font);cursor:pointer}
   #assistant-actions button:hover,#assistant-actions button:focus-visible{
     outline:none;border-color:var(--blue-structure);background:var(--gold-trace)}
   #answer,#scribepanel,#digestpanel{min-width:0;overflow-wrap:anywhere}
@@ -3428,7 +3428,7 @@
   }
   @media(max-width:1099px){
     #title{width:100vw;max-width:100vw;grid-template-columns:auto minmax(0,1fr)}
-    #title .brand{font-size:13px;letter-spacing:.2em}
+    #title .brand{font-size:13px;}
     #title #stats{overflow:hidden;text-overflow:ellipsis}
     :root[data-theme="work"] #title{display:grid;width:100vw;max-width:100vw;
       grid-template-columns:auto minmax(0,1fr)}
@@ -3461,8 +3461,8 @@
     :root[data-theme="work"] #bar{gap:5px}
     #bar #seal-text{display:none}
     #orbit .ob-frame{border-radius:12px}
-    #orbit .ob-f{gap:8px;font-size:9px;letter-spacing:.02em}
-    :root[data-theme="work"] #orbit .ob-f{bottom:17px;gap:8px;font-size:9px;letter-spacing:.02em}
+    #orbit .ob-f{gap:8px;font-size:9px;}
+    :root[data-theme="work"] #orbit .ob-f{bottom:17px;gap:8px;font-size:9px;}
     :root[data-theme="work"] #brain{left:auto!important;right:12px!important;
       width:min(340px,calc(100vw - 24px))!important;top:70px!important}
     :root[data-theme="work"] #orbit{left:var(--pane-l);right:var(--orbit-r);top:var(--orbit-t);bottom:var(--pane-b)}
@@ -3474,9 +3474,9 @@
   }
   @media(max-width:600px){
     #title{padding:0 12px;column-gap:9px;grid-template-columns:auto minmax(0,1fr)}
-    #title .brand{font-size:12px;letter-spacing:.1em;gap:4px;padding-right:9px}
+    #title .brand{font-size:12px;gap:4px;padding-right:9px}
     #title .brand svg{width:21px;height:21px}
-    #title h1{font-size:9px;letter-spacing:.08em}
+    #title h1{font-size:9px;}
     #title #stats{font-size:9px}
     :root[data-theme="work"] #title{grid-template-columns:auto minmax(0,1fr)}
     :root[data-theme="work"] #title .brand{padding-right:9px}
@@ -3490,7 +3490,7 @@
     #bar .gap{min-width:0}
     #bar .organ{width:34px;height:34px}
     #bar button{min-width:40px;min-height:40px}
-    #bar #seal{font-size:9px;letter-spacing:.03em}
+    #bar #seal{font-size:9px;}
     #status{padding:0 6px;font-size:9px}
     #caption{font-size:13px;padding:0 8px 5px}
     #cmd{width:min(100vw,360px);max-width:100vw;max-height:calc(100dvh - 130px)}
@@ -3512,7 +3512,7 @@
   #convo-mini{width:100px;height:100px}
   #convohead .ct i{font-size:12px;line-height:1.5;overflow-wrap:anywhere}
   #answer{padding:18px;border-radius:12px;box-shadow:none}
-  #answer .q{font:13px/1.55 var(--font);letter-spacing:0;text-transform:none;
+  #answer .q{font:13px/1.55 var(--font);text-transform:none;
     padding:0 0 13px;margin:0 0 14px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
   #answer .q:empty{display:none}
   #answer .a,#a-rich{font:14px/1.75 var(--font);color:var(--ink);overflow-wrap:anywhere}
@@ -3534,7 +3534,7 @@
   #a-rich code{font:12px/1.65 var(--mono);background:var(--blue-trace);padding:2px 5px;border-radius:4px}
   #a-rich .code-block{min-width:0;margin:14px 0;border:1px solid var(--line);border-radius:9px;overflow:hidden}
   #a-rich .code-head{display:flex;justify-content:space-between;align-items:center;
-    padding:7px 10px;background:var(--blue-trace);font:10px var(--mono);color:var(--muted)}
+    padding:7px 10px;background:var(--blue-trace);font:10px var(--font);color:var(--muted)}
   #a-rich pre{margin:0;padding:14px;overflow:auto;max-width:100%;tab-size:2;white-space:pre}
   #a-rich pre code{padding:0;background:none;border:0}
   #a-rich .table-scroll{overflow:auto;max-width:100%;margin:14px 0;border:1px solid var(--line);border-radius:8px}
@@ -3560,7 +3560,7 @@
   #typeline.up{display:flex;align-items:center;animation:none}
   #qline{box-sizing:border-box;width:100%;min-height:48px;padding:12px 54px 12px 16px;
     border:1px solid var(--blue-glow);border-radius:12px;background:var(--glass);
-    color:var(--ink);font:14px var(--font);letter-spacing:0}
+    color:var(--ink);font:14px var(--font);}
   #qline:focus{outline:2px solid var(--blue-structure);outline-offset:2px}
   #compose-send{position:absolute;right:6px;top:6px;width:36px;height:36px;border-radius:9px;
     border:1px solid var(--blue-glow);background:var(--blue-trace);color:var(--blue-structure);
@@ -3603,7 +3603,7 @@
   #panel .doc-item,#panel .src-item{padding:14px;margin-bottom:9px;border:1px solid var(--line);
     border-radius:10px;background:var(--blue-trace);min-width:0;overflow-wrap:anywhere}
   #panel .doc-item .t,#panel .src-item .t{font-size:14px;font-weight:600;color:var(--ink)}
-  #panel .doc-item .u,#panel .src-item .u{display:block;font:11px/1.6 var(--mono);margin-top:6px;color:var(--muted)}
+  #panel .doc-item .u,#panel .src-item .u{display:block;font:11px/1.6 var(--font);margin-top:6px;color:var(--muted)}
   #panel .scan-note{margin-top:18px;padding:13px;border-radius:10px;line-height:1.65}
   #panel .chip{max-width:100%;white-space:normal;overflow-wrap:anywhere;min-height:36px}
   #p-neighbours>[hidden]{display:none!important}
@@ -3629,7 +3629,7 @@
   #cmd .cmdact .ck{width:24px;min-height:24px;border:1px solid var(--line);border-radius:5px;
     line-height:24px;font-size:11px;opacity:1}
   #cmd .cmdact .cl{font-size:13px;line-height:1.5}
-  #cmd .cmdact .cs{font-size:10px;line-height:1.6;white-space:normal;margin-top:4px;letter-spacing:.025em}
+  #cmd .cmdact .cs{font-size:10px;line-height:1.6;white-space:normal;margin-top:4px;}
   #cmd .cmdact .chint{font-size:8px}
   #cmd .cmdact[hidden],#cmd .cmdsec[hidden]{display:none}
   #cmd .board,#cmd .cast{min-height:0;overflow:auto;padding:14px;overscroll-behavior:contain}
@@ -3640,16 +3640,16 @@
     padding:18px;background:var(--glass);box-shadow:0 20px 70px rgba(0,0,0,.35);
     overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
   #focuscard .aframe{display:none}
-  #focuscard .fh{font-size:10px;letter-spacing:.12em}
+  #focuscard .fh{font-size:10px;}
   #focuscard #focusface{height:82px;margin:8px 0 12px}
   #focuscard .aclock{align-items:center;gap:12px;margin:12px 0}
-  #focuscard #focus-clock{font:42px/1.2 var(--font);font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+  #focuscard #focus-clock{font:42px/1.2 var(--font);font-variant-numeric:tabular-nums;}
   #focuscard .atel{flex:1;min-width:55px}
   #focuscard .acell{padding:6px 0;gap:4px}
   #focuscard .acell .av{font-size:11px}
   #focuscard .fbar{height:5px;margin:16px 0}
   #focuscard #focus-stats,#focuscard #focus-intent,#focuscard #focus-locked{line-height:1.6;overflow-wrap:anywhere}
-  #focuscard .frow button{min-height:38px;font-size:11px;letter-spacing:.06em}
+  #focuscard .frow button{min-height:38px;font-size:11px;}
   #focuscard #focus-lock{border-color:var(--gold-glow);background:var(--gold-trace)}
   #focuscard.pill .frow{display:flex}
   #focuscard.pill{border-radius:12px;min-width:240px}
@@ -3658,9 +3658,9 @@
   #brain.gated #convo-mini{width:36px;height:36px}
   #brain.gated #convohead .ct{align-items:flex-start;text-align:left}
   #brain.gated #assistant-actions{display:none}
-  #a-ask .lbl{font-size:11px;line-height:1.6;letter-spacing:.1em}
+  #a-ask .lbl{font-size:11px;line-height:1.6;}
   #a-ask .rows,#a-ask .steps .vals{grid-template-columns:minmax(55px,auto) minmax(0,1fr);
-    gap:12px;font:12px/1.7 var(--mono);margin:16px 0;min-height:0}
+    gap:12px;font:12px/1.7 var(--font);margin:16px 0;min-height:0}
   #a-ask .rows span,#a-ask .steps .vals span{color:var(--ink)}
   #a-ask .pair{padding-top:14px;border-top:1px solid var(--line);flex-wrap:wrap;gap:10px;
     position:sticky;bottom:0;background:var(--glass);z-index:1}
@@ -3711,7 +3711,7 @@
   #focuscard .atel{min-width:44px}
   #focuscard #focus-locked{max-width:100%}
   #digestpanel #digest-toggle{border:0;border-radius:6px;padding:4px 0;
-    color:var(--ink);font:inherit;letter-spacing:.1em;text-transform:uppercase;text-align:left}
+    color:var(--ink);font:inherit;text-transform:uppercase;text-align:left}
   #digest-toggle::after{content:' −';color:var(--muted)}
   #digest-toggle[aria-expanded="false"]::after{content:' +'}
   #digestpanel.folded .lines{display:none}
@@ -3722,7 +3722,7 @@
   #digestpanel .meta{color:var(--muted)}
   #ui-sound{flex:none;min-height:30px;padding:4px 8px;margin-right:8px;
     border:1px solid var(--line);border-radius:7px;background:var(--glass);
-    color:var(--muted);font:10px var(--mono);letter-spacing:.02em;cursor:pointer}
+    color:var(--muted);font:10px var(--font);cursor:pointer}
   #ui-sound[aria-pressed="true"]{color:var(--ink);border-color:var(--gold-glow)}
   #status{display:flex;align-items:center;min-height:32px}
   #status-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -3784,24 +3784,24 @@
   #convo-mini{width:80px;height:80px;box-shadow:none;border-color:var(--line)}
   #convohead .ct{align-items:flex-start;text-align:left}
   #convohead .ct b{font-size:20px;font-weight:600}
-  #convohead .ct i{letter-spacing:.02em}
+  #convohead .ct i{}
   #answer{border:0;border-radius:0;background:none;padding:4px 0 12px;box-shadow:none}
   #answer .q{font-size:12px;margin-bottom:12px;padding-bottom:12px;color:var(--muted)}
   #answer .a,#a-rich{font-weight:400;line-height:1.75}
   #digestpanel{border:0;border-top:1px solid var(--line);border-radius:0;background:none;padding:14px 0 0}
   #assistant-actions{padding:8px 0 0;gap:10px;margin-top:0}
   #assistant-actions button{background:var(--blue-trace);border-color:var(--line);font:500 12px var(--font);min-height:46px}
-  #sidenav .navi{font:500 12px var(--font);letter-spacing:.02em;text-transform:none;border-radius:8px}
+  #sidenav .navi{font:500 12px var(--font);text-transform:none;border-radius:8px}
   #sidenav .navi.on{background:var(--blue-trace);border-color:var(--blue-glow);box-shadow:none}
   #sidenav .navi.on svg{stroke:var(--blue-structure)}
   #sidenav .navi:focus-visible{outline:2px solid var(--blue-structure);outline-offset:2px}
-  #title .brand{letter-spacing:.3em}
-  #title h1{letter-spacing:.18em}
+  #title .brand{}
+  #title h1{}
   #toprail .rl .rk{opacity:.85}
   #toprail .rl .rv{text-shadow:none}
   #orbit .ob-frame{border:0;border-radius:0;background:none;box-shadow:none}
   #orbit svg{left:4%;width:92%}
-  #orbit .ob-f{font:12px/1.5 var(--font);letter-spacing:.02em;gap:28px}
+  #orbit .ob-f{font:12px/1.5 var(--font);gap:28px}
   #orbit .ob-f b{font-size:18px}
   #bar,:root[data-theme="work"] #bar{border-radius:24px;border-color:var(--line);box-shadow:none}
   #bar button{border-color:transparent;background:transparent}
@@ -3809,14 +3809,14 @@
   #bar:focus-within,body.accent-amber #bar:focus-within{border-color:var(--blue-glow);box-shadow:none}
   #qline{border-radius:22px;border-color:var(--line)}
   #compose-send{border-radius:50%}
-  #status{min-height:16px;padding:0 16px;font-size:10px;letter-spacing:.1em}
+  #status{min-height:16px;padding:0 16px;font-size:10px;}
   #cmd #ui-sound{margin-left:auto;margin-right:0;min-height:32px;padding:4px 8px;
     border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--muted)}
   #cmd #ui-sound[aria-pressed="true"]{color:var(--ink);border-color:var(--blue-glow)}
-  #cmd .ch .sp{margin-left:8px;letter-spacing:.03em}
+  #cmd .ch .sp{margin-left:8px;}
   #cmd{border-color:var(--line);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.32)}
   #cmd .cmdact .ck{border-color:transparent;background:var(--blue-trace)}
-  #cmd .cmdact .cs{font-family:var(--font);letter-spacing:.01em;text-transform:none;font-size:11px}
+  #cmd .cmdact .cs{font-family:var(--font);text-transform:none;font-size:11px}
   #panel{border-color:var(--line);box-shadow:-12px 0 40px rgba(0,0,0,.2)}
   #panel .doc-item,#panel .src-item{border:0;border-bottom:1px solid var(--line);border-radius:0;background:none;padding:16px 0}
   #panel #p-seal{border-width:0;border-radius:6px}
@@ -3891,13 +3891,53 @@
   #bar .organ,:root[data-theme="work"] #bar .organ{border:0;box-shadow:none}
   @media(min-width:1100px){
     :root{--rail-h:76px}
-    #navvoice{flex-direction:column;gap:6px;padding:10px 4px;letter-spacing:.08em}
+    #navvoice{flex-direction:column;gap:6px;padding:10px 4px;}
     #convohead .ct i{font-size:12px;line-height:1.6}
     #answer .a,#a-rich{font-size:15px}
     #sidenav .navi{flex-direction:column;justify-content:center;gap:8px;height:76px;padding:10px 4px}
     #sidenav .navi svg{width:24px;height:24px}
-    #title h1{font-size:15px;letter-spacing:.18em}
+    #title h1{font-size:15px;}
     #title .brand{font-size:22px}
+  }
+
+  /* Typography is sans throughout the product chrome. Only rail values and answer code use mono. */
+  #title .brand{font:600 22px/1.1 var(--font);letter-spacing:.28em}
+  #title h1{font:700 17px/1.2 var(--font);letter-spacing:.06em}
+  #title #stats{font:400 13px/1.35 var(--font);color:var(--muted)}
+  #sidenav .navi{font:500 12.5px/1.25 var(--font);color:var(--muted)}
+  #sidenav .navi.on{color:var(--blue-structure)}
+  #toprail{font-family:var(--font)}
+  #toprail .rl .rk{font:500 10px/1.1 var(--font);letter-spacing:.10em;color:var(--muted)}
+  #toprail .rl .rv{font:500 12px/1.2 var(--mono)}
+  #convohead .ct b{font:700 27px/1.2 var(--font)}
+  #convohead .ct i{font:400 14px/1.4 var(--font);color:var(--muted)}
+  #answer .a,#a-rich{font:400 14px/1.55 var(--font)}
+  #answer .q{font:600 17px/1.4 var(--font)}
+  #assistant-actions button{font:500 13px/1.25 var(--font)}
+  #orbit .ob-lbl{font:600 13px var(--font)}
+  #orbit .ob-sub{font:400 11px var(--font);fill:var(--muted)}
+  #orbit .ob-f{font:400 12px/1.4 var(--font)}
+  #orbit .ob-f b{font:700 23px/1.1 var(--font)}
+  #qline,#qline::placeholder{font:400 14px/1.4 var(--font)}
+  #qline::placeholder{color:var(--muted)}
+  #status,#seal,#caption{font-family:var(--font)}
+  #recent-activity{display:block;min-width:0;padding-top:16px;border-top:1px solid var(--line)}
+  #recent-activity[hidden]{display:none}
+  #recent-activity .recent-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:7px}
+  #recent-title{margin:0;color:var(--muted);font:600 11px/1.2 var(--font);letter-spacing:.14em;text-transform:uppercase}
+  #recent-list{list-style:none;margin:0;padding:0}
+  #recent-list li{display:flex;flex-direction:column;gap:3px;min-width:0;padding:11px 2px;border-bottom:1px solid var(--line)}
+  #recent-list li:last-child{border-bottom:0}
+  #recent-list .recent-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink);font:500 13.5px/1.35 var(--font)}
+  #recent-list .recent-meta{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font:400 11.5px/1.3 var(--font)}
+  @media(max-width:1099px){
+    #title .brand{font-size:clamp(12px,2vw,22px)}
+    #title h1{font-size:clamp(10px,1.55vw,17px)}
+    #title #stats{font-size:clamp(9px,1.2vw,13px)}
+    #convohead .ct b{font-size:20px}
+    #convohead .ct i{font-size:12px}
+    /* Keep the feed available by scrolling the existing assistant pane; its mobile height stays capped so the graph remains exposed. */
+    #recent-activity{display:block}
   }
 </style>
 </head>
@@ -4277,6 +4317,10 @@
     <button type="button" data-assistant-go="archive">Open Archive</button>
     <button type="button" data-assistant-go="focus">Focus Session</button>
   </div>
+  <section id="recent-activity" aria-labelledby="recent-title">
+    <div class="recent-head"><h2 id="recent-title">Recent activity</h2></div>
+    <ol id="recent-list"></ol>
+  </section>
 </div>
 <!-- THE ASK, split out of #brain by UI mandate II: the caption, the type line, the status and
      the organ bar, at the foot of the main pane. The answer card and its records stay in
@@ -5405,6 +5449,32 @@ async function loadLib() {
   const links = GRAPH.links.map(function (l) { return Object.assign({}, l); });
   const byId = new Map(nodes.map(function (n) { return [n.id, n]; }));
   function idOf(v) { return (v && typeof v === 'object') ? v.id : v; }
+
+  /* The activity rail reads the same note objects as the Galaxy; no separate feed or fixture. */
+  function renderRecentActivity() {
+    const list = document.getElementById('recent-list');
+    if (!list) return;
+    const recent = nodes.filter(function (n) { return Number.isFinite(Number(n.touched)); })
+      .slice().sort(function (a, b) { return Number(b.touched) - Number(a.touched); }).slice(0, 5);
+    const rows = document.createDocumentFragment();
+    recent.forEach(function (n) {
+      const row = document.createElement('li');
+      const title = document.createElement('span');
+      const meta = document.createElement('span');
+      const path = String(n.file || '').replace(/\\/g, '/').split('/');
+      const folder = path.length > 1 ? path[path.length - 2] : 'Notes';
+      const date = new Date(Number(n.touched) * 1000);
+      title.className = 'recent-name';
+      meta.className = 'recent-meta';
+      title.textContent = String(n.label || path[path.length - 1] || 'Untitled note');
+      meta.textContent = folder + ' · ' + (Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }));
+      row.append(title, meta);
+      rows.appendChild(row);
+    });
+    list.replaceChildren(rows);
+    document.getElementById('recent-activity').hidden = recent.length === 0;
+  }
+  renderRecentActivity();
 
   /* ---- density: a small corpus can be near-fully connected, which reads as a
      hairball. Default to each note's strongest few edges; the toggle in the HUD
@@ -12430,6 +12500,7 @@ async function loadLib() {
 
     nodes.push(node);
     byId.set(node.id, node);
+    renderRecentActivity();
     /* Recorded because it is only true for one frame: the moment graphData()
        re-heats the layout, repulsion pushes the new star off the note it was born
        on, so "was it born in the right place" is not answerable after the fact. */
@@ -27642,7 +27713,7 @@ async function loadLib() {
     box.id = id;
     box.style.cssText =
       'position:fixed;' + corner + ';z-index:9999;pointer-events:none;' +
-      'font:11px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;' +
+      'font:11px/1.55 var(--font);' +
       'background:rgba(6,10,16,.88);color:#cfe3ff;border:1px solid #23405f;' +
       'border-radius:6px;padding:8px 10px;max-width:390px;white-space:pre-wrap;' +
       'box-shadow:0 6px 24px rgba(0,0,0,.45)';
