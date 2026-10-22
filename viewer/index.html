@@ -199,7 +199,23 @@
       "Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     --mono:"JetBrains Mono","JetBrainsMono Nerd Font",ui-monospace,"Cascadia Mono",
       "SFMono-Regular",Menlo,Consolas,monospace;
+    /* AND A THIRD, FOR THE SIGN OVER THE DOOR. Black Ops One is a display face: one
+       weight, heavy, and unreadable at body size, so it is a separate token rather than
+       a third name on --font. It dresses the wordmark, the two headings and the stat
+       numbers; every line a person actually reads stays on --font. */
+    --display:"Black Ops One",Impact,"Arial Black",sans-serif;
   }
+
+  /* HELD LOCALLY, WHICH IS THE WHOLE REASON IT IS ALLOWED. The rule above still stands -
+     no <link> to a font host - because the file sits beside this page in viewer/ and is
+     served by the same local server. Nothing here tells a third party who opened their
+     own notes. Missing file: the stack falls to Impact and the page is unharmed. */
+  @font-face{
+    font-family:"Black Ops One";
+    src:url("BlackOpsOne-Regular.ttf") format("truetype");
+    font-weight:400;font-style:normal;font-display:swap;
+  }
+
   :root[data-theme="work"]{
     --ink:#f5efee;
     --muted:#b9a6a9;
@@ -3941,6 +3957,14 @@
   #qline,#qline::placeholder{font:400 13px/1.4 var(--font)}
   #qline::placeholder{color:var(--muted)}
   #status,#seal,#caption{font-family:var(--font)}
+  /* THE DISPLAY FACE, ON FOUR THINGS AND NOT A FIFTH. Black Ops One ships ONE weight, so
+     the weight is pinned to 400 at every site: ask for 600 or 700 and the browser draws a
+     synthetic bold over an already-heavy face, which smears at this size. Letter-spacing
+     comes down from the sans values too - the face is wide to begin with. */
+  #title .brand{font:400 17px/1.1 var(--display);letter-spacing:.14em}
+  #title h1{font:400 14px/1.2 var(--display);letter-spacing:.03em}
+  #convohead .ct b{font:400 19px/1.2 var(--display)}
+  #orbit .ob-f b{font:400 20px/1.1 var(--display)}
   #recent-activity{display:block;min-width:0;padding-top:16px;border-top:1px solid var(--line)}
   #recent-activity[hidden]{display:none}
   #recent-activity .recent-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:7px}
