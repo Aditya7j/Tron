@@ -35,12 +35,16 @@ Exit status is the number of failures.
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
 import time
 
 sys.dont_write_bytecode = True
+# The one shared final line, so run_tests.py reads a result rather than
+# guessing at this suite's private dialect. See testkit.py.
+import testkit
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
@@ -385,6 +389,75 @@ finally:
 mode.switch("normal")
 
 
+# ===================================================== EVERY GATE THAT STANDS DOWN
+#
+# study_allowed() is not the only law in server.py that opens itself when nobody is
+# enrolled, and the bug that made this block necessary - a GUEST sailing through on a
+# machine with an empty roster, with the test cheerfully reporting a pass - is a bug
+# every one of them can have. It got caught here once, by accident. So the OTHERS are
+# enumerated rather than trusted, from server.py's own source, and the count is a
+# claim: a fourth gate on this pattern fails this check on the day it lands, and
+# whoever adds it has to come here and force it closed before their suite means
+# anything.
+#
+# Three gates, named with what each one costs when it is wrong, because that is the
+# whole reason they do not all make the same choice:
+#
+#   fullscreen_allowed  a bigger window. Opens on a store that will not read, too.
+#   study_allowed       a mode switch, which is undone by saying so again.
+#   the Hands gate      an email leaving the house. This one FAILS CLOSED on a store
+#                       that will not read, and the asymmetry is deliberate.
+head("5b. no law in server.py stands down without this file knowing")
+
+server_src = io.open(os.path.join(HERE, "server.py"), encoding="utf-8").read()
+STAND_DOWNS = re.findall(r"^\s*(?:if not |guarded = )voiceprint\.has_hands_voice\(\)",
+                         server_src, re.M)
+ok(len(STAND_DOWNS) == 3,
+   "exactly three laws in server.py read has_hands_voice(), and all three are below",
+   "%d found" % len(STAND_DOWNS))
+
+
+class _NobodyEnrolled:
+    """An empty roster - the state every one of these gates opens itself for."""
+
+    def has_hands_voice(self):
+        return False
+
+    def seal_for(self, verdict):
+        return "GUEST"
+
+
+class _SomebodyEnrolled:
+    def has_hands_voice(self):
+        return True
+
+    def seal_for(self, verdict):
+        return "GUEST"
+
+
+# BOTH DIRECTIONS, which is the point. Forcing the guard CLOSED proves the refusal is
+# real; forcing it OPEN proves the stand-down is the documented clause rather than a
+# gate that never worked. A test that only ever ran the second one - which is what a
+# machine with an empty speaker-store silently does - proves nothing at all.
+for gate, action in ((server.fullscreen_allowed, "fill the screen"),
+                     (server.study_allowed, "switch the mode")):
+    server.voiceprint = _SomebodyEnrolled()
+    try:
+        allowed, refusal = gate(True, "GUEST")
+        ok(allowed is False and refusal,
+           "with a voice enrolled, a GUEST may not %s - and is told so" % action,
+           repr((allowed, refusal))[:120])
+        allowed, _ = gate(True, "BOSS")
+        ok(allowed is True, "while the boss may %s" % action)
+        server.voiceprint = _NobodyEnrolled()
+        allowed, _ = gate(True, "GUEST")
+        ok(allowed is True,
+           "and with NOBODY enrolled the law stands down for %s - documented, and proved "
+           "here rather than met by accident" % action)
+    finally:
+        server.voiceprint = _real_voiceprint
+
+
 # ============================================================ 6. STUDY UPDATE
 
 head("6. \"study update\", read off the shelf and never from a model")
@@ -479,7 +552,5 @@ ok("mode.prompt_block" not in io.open(os.path.join(HERE, "scholar.py"),
 
 mode.switch("normal")
 shutil.rmtree(TMP, ignore_errors=True)
-print("\n  %d checks, %d failed\n" % (checks, len(failures)))
-for f in failures:
-    print("    FAILED: %s" % f)
+testkit.summary(__file__, checks, failures)
 sys.exit(min(len(failures), 120))

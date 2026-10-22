@@ -55,6 +55,9 @@ import threading
 import types
 
 sys.dont_write_bytecode = True
+# The one shared final line, so run_tests.py reads a result rather than
+# guessing at this suite's private dialect. See testkit.py.
+import testkit
 
 ROOT = pathlib.Path(__file__).resolve().parent
 SCRIPT = ROOT / "tools" / "send_email.py"
@@ -478,9 +481,5 @@ ok(os.path.isfile(SCRIPT) and SCRIPT.read_bytes() == COPY.read_bytes(),
    "the shipped script was tested as shipped - the copy that ran is identical to it")
 shutil.rmtree(house, ignore_errors=True)
 
-print("\n  %d checks, %d failed\n" % (checks, len(failures)))
-if failures:
-    for claim in failures:
-        print("    FAILED: %s" % claim)
-    print("")
+testkit.summary(__file__, checks, failures)
 sys.exit(min(len(failures), 120))

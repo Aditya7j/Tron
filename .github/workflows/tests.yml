@@ -1,0 +1,52 @@
+# The floor, on every push.
+#
+# WHAT THIS RUNS AND WHY IT IS ALLOWED TO BE THE WHOLE STORY. It invokes
+# run_tests.py and nothing else. There is no second list here of what the suite
+# is, no "and also run test_foo.py", no inline python -c: a CI file that knows
+# which tests exist is a second definition of the suite, and the day the two
+# disagree the one nobody is watching is this one. run_tests.py discovers the
+# suites; this file presses the button.
+#
+# OFFLINE ONLY, and that is a property of the runner, not of this file. The
+# default run uses preflight --offline, so no Groq key, no Chrome and no server
+# on 4700 is needed. Nothing secret is passed in, deliberately: a workflow that
+# could reach the provider would make the green here mean something different
+# from the green on a laptop, and the whole point of the floor is that it means
+# the same thing everywhere.
+#
+# A runner that finds no suites exits non-zero (run_tests.py --self-test proves
+# it), so a checkout that silently lost its tests fails here rather than passing.
+
+name: tests
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+jobs:
+  floor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # No install step and no requirements file on purpose. Every suite in the
+      # offline set is standard library plus this checkout - the suites that
+      # need yfinance or onnxruntime import them softly and say so - and a CI
+      # that quietly installs the world is a CI that stops telling you when a
+      # dependency became mandatory.
+
+      - name: the runner refuses an empty checkout
+        run: python -X utf8 run_tests.py --self-test
+
+      - name: every suite, offline
+        run: python -X utf8 run_tests.py
+        env:
+          # Named and emptied rather than merely absent, so the log says out loud
+          # that the offline run is offline by construction and not by accident.
+          GROQ_API_KEY: ""

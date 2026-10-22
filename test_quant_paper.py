@@ -34,6 +34,9 @@ import sys
 import tempfile
 
 sys.dont_write_bytecode = True
+# The one shared final line, so run_tests.py reads a result rather than
+# guessing at this suite's private dialect. See testkit.py.
+import testkit
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
@@ -327,9 +330,5 @@ for name, text in (("quant_paper.py", src), ("server.py", server_src)):
     hits = sorted(set(m.group(0) for m in EXEC.finditer(text)))
     ok(not hits, "%s names no order-execution API or brokerage" % name, str(hits))
 
-print("\n  %d checks, %d failed\n" % (checks, len(failures)))
-if failures:
-    for claim in failures:
-        print("    FAILED: %s" % claim)
-    print("")
+testkit.summary(__file__, checks, failures)
 sys.exit(min(len(failures), 120))

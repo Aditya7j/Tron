@@ -51,6 +51,9 @@ import re
 import sys
 
 sys.dont_write_bytecode = True
+# The one shared final line, so run_tests.py reads a result rather than
+# guessing at this suite's private dialect. See testkit.py.
+import testkit
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
@@ -479,9 +482,5 @@ ok(not re.search(r"(?:rows|models|menu)\s*=\s*\[\s*['\"]", brain_js),
 ok("if (state) paintBrain(state)" in brain_js,
    "the chip moves only on the server's word, refusal included")
 
-print("\n  %d checks, %d failed\n" % (checks, len(failures)))
-if failures:
-    for claim in failures:
-        print("    FAILED: %s" % claim)
-    print("")
+testkit.summary(__file__, checks, failures)
 sys.exit(min(len(failures), 120))

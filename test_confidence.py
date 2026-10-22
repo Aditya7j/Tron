@@ -54,6 +54,9 @@ from functools import partial
 from http.server import ThreadingHTTPServer
 
 sys.dont_write_bytecode = True
+# The one shared final line, so run_tests.py reads a result rather than
+# guessing at this suite's private dialect. See testkit.py.
+import testkit
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
@@ -88,6 +91,41 @@ def head(title):
 
 
 NOW = datetime.datetime(2026, 10, 9, 12, 0, 0)
+
+
+# ------------------------------------------------------------- a frozen clock
+#
+# EVERY FIXTURE IN THIS FILE IS DATED RELATIVE TO NOW, and confidence.py only
+# counts a run inside a seven-day window, so a frozen date is a fixture with an
+# expiry on it. Most of the suite passes `now=NOW` explicitly and is safe. One
+# call did not and could not - server.answer_confidence() goes through the real
+# entry point, which is the whole point of that check, and the real entry point
+# reads the wall clock. Seven days after the date above, every fixture job fell
+# out of the window, the overall score became None, and the suite died on a
+# "%d%% of None" four hundred lines in. It had been doing that for a week.
+#
+# So the module's clock is replaced rather than the fixtures re-dated: focus.py's
+# `time` is stood in for the same way in test_focus_privacy.py, for the same
+# reason. confidence.py reaches for exactly two names on `datetime`, both of
+# them below, and nothing else in the process is touched.
+class _FrozenNow(datetime.datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return NOW
+
+
+_REAL_TIMEDELTA = datetime.timedelta
+
+
+class _FrozenDatetimeModule(object):
+    # timedelta aliased above the class, because inside a class body the name
+    # `datetime` would resolve to the attribute being defined on the line above.
+    datetime = _FrozenNow
+    timedelta = _REAL_TIMEDELTA
+
+
+cf.datetime = _FrozenDatetimeModule
+
 TMP = tempfile.mkdtemp()
 REAL = {n: getattr(cf, n) for n in ("JOBS_LEDGER", "STUDY_LEDGER", "PAPER_LEDGER",
                                     "CACHE_PATH", "HERE")}
@@ -558,9 +596,5 @@ ok(cf.JOBS_RING == jobs.LEDGER_MAX and cf.STUDY_RING == scholar.LEDGER_HISTORY_M
 after = (os.path.getmtime(REAL["CACHE_PATH"]) if os.path.exists(REAL["CACHE_PATH"]) else None)
 ok(after == REAL_CACHE_MTIME, "the real confidence-cache.json was never touched")
 
-print("\n  %d checks, %d failed\n" % (checks, len(failures)))
-if failures:
-    for claim in failures:
-        print("    FAILED: %s" % claim)
-    print("")
+testkit.summary(__file__, checks, failures)
 sys.exit(min(len(failures), 120))

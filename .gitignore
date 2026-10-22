@@ -133,3 +133,13 @@ revenue-state.json
 revenue-state.json.tmp
 revenue-state.json.lock
 revenue-work/
+# §45's SWITCH. mode-state.json is which of the four modes the house is in right now, with a
+# timestamp and who said so - it is rewritten every time the mode changes, which is several
+# times an hour on a working day. It was committed in faf2bdc and should not have been: a
+# repository that remembers it was last in Work Mode on a Tuesday afternoon produces a dirty
+# tree for every person who runs the thing, forever, and a diff nobody can review. Exactly the
+# same reasoning as scholar-state.json and revenue-state.json above it, and like them the
+# SOURCE of the setting - what the four modes are - lives in mode.py, which is tracked.
+mode-state.json
+mode-state.json.tmp
+mode-state.json.lock

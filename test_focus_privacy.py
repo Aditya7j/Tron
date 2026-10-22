@@ -45,6 +45,9 @@ import threading
 import urllib.parse
 
 sys.dont_write_bytecode = True
+# The one shared final line, so run_tests.py reads a result rather than
+# guessing at this suite's private dialect. See testkit.py.
+import testkit
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import focus                                                   # noqa: E402
@@ -140,6 +143,166 @@ _ledger_dir = tempfile.mkdtemp(prefix="focus-privacy-")
 focus.LEDGER_PATH = os.path.join(_ledger_dir, "focus-ledger.json")
 
 
+# ===================================================== a controllable browser
+#
+# WHY THIS IS HERE AND NOT THREE HUNDRED LINES DOWN, which is where it used to be.
+#
+# focus.py asks the BROWSER which of its tabs is in front, over a real DevTools
+# socket on a real port, and tab-level locking is the half of a session that
+# depends on the answer. This file had a complete fake for that - a /json shim
+# and a socket speaking the real protocol - but it installed it two thirds of
+# the way down, so every session driven above it was reading whatever Chrome
+# happened to be running on the machine executing the test.
+#
+# That is not a theoretical complaint. The suite reported 5 failures on a machine
+# with a debugging port open and 17 on a machine without one, from the same
+# commit, and the number was read as a regression three days running. With no
+# port the lock refuses and the card's word becomes "noport"; with a half-live
+# endpoint it becomes "unreadable"; with a real Chrome it becomes "". Sixteen
+# audits and one spoken-line assertion moved with it. Nothing had landed in
+# between - the machine had changed.
+#
+# So the fake is installed HERE, before the first session, and the browser this
+# suite talks to is the one it builds. The sections further down that want a
+# DIFFERENT browser - two windows with the same title, no endpoint at all, the
+# card trap - still say so in place, and still say it by assigning PAGES or by
+# putting the real urllib back for as long as they need it. This only decides
+# what the browser looks like when nobody has said otherwise.
+
+def _recv_exactly(conn, n):
+    buf = b""
+    while len(buf) < n:
+        chunk = conn.recv(n - len(buf))
+        if not chunk:
+            raise OSError("short read")
+        buf += chunk
+    return buf
+
+
+def _server_frame(payload):
+    """One UNMASKED text frame, which is what a server must send."""
+    if len(payload) < 126:
+        return struct.pack("!BB", 0x81, len(payload)) + payload
+    return struct.pack("!BBH", 0x81, 126, len(payload)) + payload
+
+
+class FakePage(threading.Thread):
+    """A DevTools page socket in thirty lines: handshake, one frame in, one out.
+
+    The value it answers with is taken from the last path segment, so one server can
+    play several tabs - "vis" is a visible one, "hid" a background one, "foc" the
+    focused one - and the client's own masking is recorded, because an unmasked client
+    frame is a protocol violation that Chrome would close the socket over.
+    """
+
+    ANSWERS = {"vis": 1, "hid": 0, "foc": 3, "mute": None}
+
+    def __init__(self):
+        threading.Thread.__init__(self, daemon=True)
+        self.sock = socket.socket()
+        self.sock.bind(("127.0.0.1", 0))
+        self.sock.listen(16)
+        self.port = self.sock.getsockname()[1]
+        self.asked = []
+        self.masked = []
+
+    def run(self):
+        while True:
+            try:
+                conn, _ = self.sock.accept()
+            except OSError:
+                return
+            threading.Thread(target=self._serve, args=(conn,), daemon=True).start()
+
+    def _serve(self, conn):
+        try:
+            conn.settimeout(3)
+            buf = b""
+            while b"\r\n\r\n" not in buf:
+                chunk = conn.recv(4096)
+                if not chunk:
+                    return
+                buf += chunk
+            path = buf.split(b" ")[1].decode("ascii")
+            conn.sendall(b"HTTP/1.1 101 Switching Protocols\r\n"
+                         b"Upgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
+            head = _recv_exactly(conn, 2)
+            length = head[1] & 0x7F
+            if length == 126:
+                length = struct.unpack("!H", _recv_exactly(conn, 2))[0]
+            self.masked.append(bool(head[1] & 0x80))
+            mask = _recv_exactly(conn, 4) if head[1] & 0x80 else b"\0\0\0\0"
+            body = _recv_exactly(conn, length)
+            body = bytes(b ^ mask[i % 4] for i, b in enumerate(body))
+            self.asked.append((path, json.loads(body.decode("utf-8"))))
+            value = self.ANSWERS.get(path.rsplit("/", 1)[-1], 0)
+            if value is None:
+                return                      # a tab that never answers, on purpose
+            conn.sendall(_server_frame(json.dumps(
+                {"id": 1, "result": {"result": {"value": value}}}).encode("utf-8")))
+        except (OSError, ValueError):
+            pass
+        finally:
+            try:
+                conn.close()
+            except OSError:
+                pass
+
+
+page = FakePage()
+page.start()
+
+
+def ws(name):
+    return "ws://127.0.0.1:%d/devtools/page/%s" % (page.port, name)
+
+
+def _pages_for_frontmost():
+    """What a Chrome showing `frontmost` would list, when nothing says otherwise.
+
+    One tab, on the host the reader is about to be told is in front, answering
+    "I am the focused one" - which is the ordinary case and the one every
+    session in this file is driving. A frontmost with no host is a native app:
+    no tabs, which is what makes the app-level path still exercise itself.
+    """
+    if not frontmost.get("host"):
+        return []
+    return [{"type": "page", "id": "fake-front",
+             "url": "https://%s/some/path?q=1" % frontmost["host"],
+             "title": "a window title mentioning " + str(frontmost["host"]),
+             "webSocketDebuggerUrl": ws("foc")}]
+
+class _Answer:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def read(self):
+        return json.dumps(self._payload).encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+# None means: derive the listing from `frontmost`, see _pages_for_frontmost().
+# A list - which is what every section below assigns - is used as it stands.
+PAGES = None
+
+
+class _UrllibShim:                 # only the two attributes focus.py actually uses
+    parse = urllib.parse
+
+    class request:
+        @staticmethod
+        def urlopen(url, timeout=None):
+            return _Answer(_pages_for_frontmost() if PAGES is None else PAGES)
+
+
+real_urllib, focus.urllib = focus.urllib, _UrllibShim
+
+
 # -------------------------------------------------------------- the scanners
 
 def strings_in(value, path="state"):
@@ -220,7 +383,16 @@ def is_canned(text):
     return any(p.match(text) for p in TEMPLATE_PATTERNS)
 
 
-ENUMS = set(focus.STATES) | {r for r in focus.END_REASONS if r} | set(focus.SAY_KINDS)
+# TAB_LOCK_WHY is the card's one-word reason for the state of the tab lock -
+# "noport", "declined", "ambiguous", "unreadable", "gone" - and the reader
+# forces anything else to "" before it is published (focus.py, public_state).
+# It arrived with the stabilisation gate and this set never learned about it,
+# so every audit of a session that could not lock a tab reported its reason
+# word as a stray string. Read from focus's own tuple rather than typed out
+# again here, for the same reason LEGIT_LABELS asks focus for its labels: a
+# vocabulary written down twice is a vocabulary that disagrees with itself.
+ENUMS = (set(focus.STATES) | {r for r in focus.END_REASONS if r}
+         | set(focus.SAY_KINDS) | set(focus.TAB_LOCK_WHY))
 ENUMS.add("")
 
 
@@ -512,33 +684,6 @@ audit(focus.public_state(stayer), "settled app-only after never leaving home")
 # answers "I don't know" rather than picking one.
 
 
-class _Answer:
-    def __init__(self, payload):
-        self._payload = payload
-
-    def read(self):
-        return json.dumps(self._payload).encode("utf-8")
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
-
-
-PAGES = []
-
-
-class _UrllibShim:                 # only the two attributes focus.py actually uses
-    parse = urllib.parse
-
-    class request:
-        @staticmethod
-        def urlopen(url, timeout=None):
-            return _Answer(PAGES)
-
-
-real_urllib, focus.urllib = focus.urllib, _UrllibShim
 
 PAGES = [{"type": "page", "url": "https://work.example.com/a", "title": "New Tab"},
          {"type": "page", "url": "https://elsewhere.example.net/b", "title": "New Tab"}]
@@ -588,6 +733,11 @@ ok(steps[-1]["settled"] and not steps[-1]["tab"],
    json.dumps(steps[-1]))
 focus.CDP_PORTS = real_ports
 focus.READER_BACKEND = backend
+# ...and the fake browser goes back in. That section wanted a machine with no
+# DevTools port anywhere, which is why it reached for the real urllib; every
+# session after it wants the controllable one again. Leaving the real one in
+# place here is what made the whole second half of this file ambient.
+focus.urllib = _UrllibShim
 
 
 # ================================================ the intent, and who may write it
@@ -876,92 +1026,6 @@ ok(not hits, "the re-targeted reader holds no identity in plaintext either",
 print("")
 
 
-def _recv_exactly(conn, n):
-    buf = b""
-    while len(buf) < n:
-        chunk = conn.recv(n - len(buf))
-        if not chunk:
-            raise OSError("short read")
-        buf += chunk
-    return buf
-
-
-def _server_frame(payload):
-    """One UNMASKED text frame, which is what a server must send."""
-    if len(payload) < 126:
-        return struct.pack("!BB", 0x81, len(payload)) + payload
-    return struct.pack("!BBH", 0x81, 126, len(payload)) + payload
-
-
-class FakePage(threading.Thread):
-    """A DevTools page socket in thirty lines: handshake, one frame in, one out.
-
-    The value it answers with is taken from the last path segment, so one server can
-    play several tabs - "vis" is a visible one, "hid" a background one, "foc" the
-    focused one - and the client's own masking is recorded, because an unmasked client
-    frame is a protocol violation that Chrome would close the socket over.
-    """
-
-    ANSWERS = {"vis": 1, "hid": 0, "foc": 3, "mute": None}
-
-    def __init__(self):
-        threading.Thread.__init__(self, daemon=True)
-        self.sock = socket.socket()
-        self.sock.bind(("127.0.0.1", 0))
-        self.sock.listen(16)
-        self.port = self.sock.getsockname()[1]
-        self.asked = []
-        self.masked = []
-
-    def run(self):
-        while True:
-            try:
-                conn, _ = self.sock.accept()
-            except OSError:
-                return
-            threading.Thread(target=self._serve, args=(conn,), daemon=True).start()
-
-    def _serve(self, conn):
-        try:
-            conn.settimeout(3)
-            buf = b""
-            while b"\r\n\r\n" not in buf:
-                chunk = conn.recv(4096)
-                if not chunk:
-                    return
-                buf += chunk
-            path = buf.split(b" ")[1].decode("ascii")
-            conn.sendall(b"HTTP/1.1 101 Switching Protocols\r\n"
-                         b"Upgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
-            head = _recv_exactly(conn, 2)
-            length = head[1] & 0x7F
-            if length == 126:
-                length = struct.unpack("!H", _recv_exactly(conn, 2))[0]
-            self.masked.append(bool(head[1] & 0x80))
-            mask = _recv_exactly(conn, 4) if head[1] & 0x80 else b"\0\0\0\0"
-            body = _recv_exactly(conn, length)
-            body = bytes(b ^ mask[i % 4] for i, b in enumerate(body))
-            self.asked.append((path, json.loads(body.decode("utf-8"))))
-            value = self.ANSWERS.get(path.rsplit("/", 1)[-1], 0)
-            if value is None:
-                return                      # a tab that never answers, on purpose
-            conn.sendall(_server_frame(json.dumps(
-                {"id": 1, "result": {"result": {"value": value}}}).encode("utf-8")))
-        except (OSError, ValueError):
-            pass
-        finally:
-            try:
-                conn.close()
-            except OSError:
-                pass
-
-
-page = FakePage()
-page.start()
-
-
-def ws(name):
-    return "ws://127.0.0.1:%d/devtools/page/%s" % (page.port, name)
 
 
 ok(focus._ws_eval_int(ws("foc"), focus._FRONT_EXPR) == 3,
@@ -1599,9 +1663,5 @@ try:
 except OSError:
     pass
 
-print("\n  %d checks, %d failed\n" % (checks, len(failures)))
-if failures:
-    for claim in failures:
-        print("    FAILED: %s" % claim)
-    print("")
+testkit.summary(__file__, checks, failures)
 sys.exit(min(len(failures), 120))

@@ -46,6 +46,9 @@ sys.dont_write_bytecode = True          # this file leaves nothing behind, __pyc
 # somebody changes FRAME_MEDIA_TYPE in one place and not the other.
 import server                                                  # noqa: E402
 import focus                                                   # noqa: E402
+# The one shared final line, so run_tests.py reads preflight's verdict the same
+# way it reads every suite's. See testkit.py.
+import testkit                                                 # noqa: E402
 # The intake's own declaration, so check 37 counts the questions the module declares rather
 # than the number seventeen written twice. Standard library only, like build.py.
 import census                                                  # noqa: E402
@@ -68,6 +71,7 @@ else:
 PASS, FAIL, WARN = "pass", "fail", "warn"
 QUIET = "--quiet" in sys.argv[1:]
 KEEP_NOTE = "--keep-note" in sys.argv[1:]
+OFFLINE = "--offline" in sys.argv[1:]
 
 
 try:
@@ -8803,15 +8807,57 @@ CHECKS = [
      check_delete_prohibition),
 ]
 
+# =============================================================================
+#  THE OFFLINE SUBSET - the only checks CI is allowed to ask for
+# =============================================================================
+#
+# Everything in CHECKS above is a live call by design, and the file's opening
+# paragraph defends that at length: a mock is a description of what we believed
+# at the time. That stays true, and this does not weaken it. It only writes down
+# which of those checks happen to need NOTHING but this checkout - no server on
+# 4700, no Groq key, no Chrome, no network - so that a push can be told the truth
+# about the part of preflight it is able to run.
+#
+# Declared as a set of the functions themselves rather than as a second list of
+# names, for the reason §45 gives about the mode table: a list written twice is a
+# list that disagrees with itself by Thursday. CHECKS is still the only place the
+# suite is defined; this is a filter over it, and a check removed from CHECKS
+# cannot linger here because the name would not resolve.
+#
+# How the set was arrived at, so the next person can redo it rather than trust it:
+# preflight was run with server.PORT pointed at a port nothing listens on, and
+# these are the checks that still passed. Two that also passed are deliberately
+# NOT here - check_credentials and check_model - because they passed by making a
+# real signed call to Groq, which is exactly the ambient dependency the offline
+# subset exists to exclude. They are the live suite's business.
+OFFLINE_SAFE = frozenset((
+    check_reset_contract,        # reads server.py's own source for the arming hand
+    check_speaker_store,         # the voiceprint folder's house rules, store empty or not
+    check_one_surface,           # the page and the card, read off disk
+    check_boot_ceremony,         # the ceremony's source, and the three ways it stays quiet
+    check_face_shading,          # one object and one allocation, counted in the page
+    check_scribe_skin,           # the Scribe's paper and the 34px strip, in CSS
+    check_the_seam,              # the surfaces' ordering, in the page
+    check_chunk_guard,           # arithmetic, and the one halving - pure functions
+    check_async_parity,          # the Scholar's thread and lock discipline, by inspection
+    check_poison_guard,          # what the guard refuses is never written - source-level
+    check_delete_prohibition,    # the Broadcaster has no delete call to find
+))
+
 
 def main():
+    checks = [c for c in CHECKS if c[1] in OFFLINE_SAFE] if OFFLINE else CHECKS
     say("")
     say("  preflight  ·  http://%s:%d  ·  %s"
         % (server.HOST, server.PORT, time.strftime("%d %b %Y %H:%M:%S")))
-    say("  every check below is a live call; nothing here is mocked")
+    if OFFLINE:
+        say("  --offline: %d of %d checks, the ones that need nothing but this checkout"
+            % (len(checks), len(CHECKS)))
+    else:
+        say("  every check below is a live call; nothing here is mocked")
     say("")
 
-    for number, (name, fn) in enumerate(CHECKS, 1):
+    for number, (name, fn) in enumerate(checks, 1):
         started = time.time()
         try:
             outcome, detail = fn()
@@ -8836,6 +8882,13 @@ def main():
         say("")
     out("  %d pass, %d fail, %d warn" % (passed, failed, warned))
     say("")
+    # The same final line every suite ends with, so run_tests.py reads preflight
+    # exactly as it reads the others and nothing has to special-case it. The
+    # skipped count is the live checks this run declined to make, which in
+    # --offline is the whole point and in a live run is zero.
+    skipped = ["%d live checks that need a server, a key or a browser" % (len(CHECKS) - len(checks))
+               ] if OFFLINE and len(checks) != len(CHECKS) else []
+    testkit.summary(__file__, len(checks), [n for s, n in results if s == FAIL], skipped)
     return min(failed, 120)
 
 

@@ -52,6 +52,9 @@ from functools import partial
 from http.server import ThreadingHTTPServer
 
 sys.dont_write_bytecode = True
+# The one shared final line, so run_tests.py reads a result rather than
+# guessing at this suite's private dialect. See testkit.py.
+import testkit
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
@@ -543,9 +546,5 @@ after = {p: (open(p, "rb").read() if os.path.exists(p) else None)
 ok(after == before, "the real ledger.json and tools-ledger.json were never touched")
 shutil.rmtree(TMP, ignore_errors=True)
 
-print("\n  %d checks, %d failed\n" % (checks, len(failures)))
-if failures:
-    for claim in failures:
-        print("    FAILED: %s" % claim)
-    print("")
+testkit.summary(__file__, checks, failures)
 sys.exit(min(len(failures), 120))
