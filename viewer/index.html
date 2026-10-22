@@ -3552,8 +3552,8 @@
   #answer .src{padding-top:12px;border-top:1px solid var(--line);margin-top:14px}
   #answer .chips{gap:7px;max-height:110px;overflow:auto}
   #answer.err{border-color:var(--fail)}
-  #caption{font-size:clamp(14px,1.25vw,19px);line-height:1.55;border-radius:10px;
-    background:rgba(var(--void-rgb),.72);padding:10px 16px}
+  #caption{font-size:clamp(13px,1vw,16px);line-height:1.55;border-radius:0;
+    background:none;padding:6px 16px;color:var(--ink)}
   #caption:not(.up){padding:0}
   #dock{transition:left var(--dur-lane) var(--ease-lane)}
   #typeline{position:relative;padding:0;margin:0}
@@ -3777,19 +3777,20 @@
   }
 
   /* PR 29 correction: one surface boundary, quiet hierarchy, locked theme colors. */
-  #brain{gap:16px;padding:16px;border-color:var(--line);border-radius:12px;
-    background:var(--glass);box-shadow:none}
+  #brain{gap:20px;padding:20px;border:0;border-radius:0;
+    background:linear-gradient(180deg,var(--glass),transparent);box-shadow:none;backdrop-filter:none}
   #convohead,:root[data-theme="work"] #convohead{border:0;border-radius:0;
-    background:none;box-shadow:none;backdrop-filter:none;padding:8px 4px 16px;min-height:200px}
-  #convo-mini{width:120px;height:120px;box-shadow:none;border-color:var(--line)}
-  #convohead .ct b{font-size:16px;font-weight:600}
+    background:none;box-shadow:none;backdrop-filter:none;padding:4px 0 12px;min-height:92px;flex-direction:row;justify-content:flex-start}
+  #convo-mini{width:80px;height:80px;box-shadow:none;border-color:var(--line)}
+  #convohead .ct{align-items:flex-start;text-align:left}
+  #convohead .ct b{font-size:20px;font-weight:600}
   #convohead .ct i{letter-spacing:.02em}
-  #answer{border:0;border-radius:8px;background:var(--blue-trace);padding:16px;box-shadow:none}
+  #answer{border:0;border-radius:0;background:none;padding:4px 0 12px;box-shadow:none}
   #answer .q{font-size:12px;margin-bottom:12px;padding-bottom:12px;color:var(--muted)}
   #answer .a,#a-rich{font-weight:400;line-height:1.75}
   #digestpanel{border:0;border-top:1px solid var(--line);border-radius:0;background:none;padding:14px 0 0}
-  #assistant-actions{padding:4px 0 0;gap:8px}
-  #assistant-actions button{background:var(--blue-trace);border-color:var(--line);font:500 11px var(--font)}
+  #assistant-actions{padding:8px 0 0;gap:10px;margin-top:0}
+  #assistant-actions button{background:var(--blue-trace);border-color:var(--line);font:500 12px var(--font);min-height:46px}
   #sidenav .navi{font:500 12px var(--font);letter-spacing:.02em;text-transform:none;border-radius:8px}
   #sidenav .navi.on{background:var(--blue-trace);border-color:var(--blue-glow);box-shadow:none}
   #sidenav .navi.on svg{stroke:var(--blue-structure)}
@@ -3798,10 +3799,10 @@
   #title h1{letter-spacing:.18em}
   #toprail .rl .rk{opacity:.85}
   #toprail .rl .rv{text-shadow:none}
-  #orbit .ob-frame{border-color:var(--line);border-radius:12px;background:none}
+  #orbit .ob-frame{border:0;border-radius:0;background:none;box-shadow:none}
   #orbit svg{left:4%;width:92%}
-  #orbit .ob-f{font:11px/1.5 var(--font);letter-spacing:.02em;gap:20px}
-  #orbit .ob-f b{font-size:14px}
+  #orbit .ob-f{font:12px/1.5 var(--font);letter-spacing:.02em;gap:28px}
+  #orbit .ob-f b{font-size:18px}
   #bar,:root[data-theme="work"] #bar{border-radius:24px;border-color:var(--line);box-shadow:none}
   #bar button{border-color:transparent;background:transparent}
   #bar button:hover:not(:disabled){border-color:var(--blue-glow);background:var(--blue-trace)}
@@ -3875,6 +3876,29 @@
 
   html.chat-reading #convohead,:root[data-theme="work"].chat-reading #convohead{
     min-height:0;padding:8px 4px;flex-direction:row;justify-content:flex-start}
+  /* The answer remains a reader during voice transitions, as it already does in Chat.
+     Only presentation changes: the caption clock, text and speech pipeline are untouched. */
+  #answer.yield>.a{display:block}
+  #answer [hidden],#answer .answer-tools:has([hidden]){display:none!important}
+  #answer .q:empty{display:none}
+  #answer::before,#answer::after,#brain::before,#brain::after{display:none}
+  #answer.tool,:root[data-theme="work"] #answer.tool{border:0;border-top:1px solid var(--line)}
+  #a-ask{border:0;border-top:1px solid var(--line)}
+  #focuscard .fstat,#focuscard .frow button,#panel .seal,#panel .scan-note{box-shadow:none}
+  #a-rich .code-block,#a-rich .table-scroll{border:0;border-radius:0}
+  #qline{border-color:transparent;background:var(--blue-trace)}
+  #status #mode-badge{border:0;background:none}
+  #bar .organ,:root[data-theme="work"] #bar .organ{border:0;box-shadow:none}
+  @media(min-width:1100px){
+    :root{--rail-h:76px}
+    #navvoice{flex-direction:column;gap:6px;padding:10px 4px;letter-spacing:.08em}
+    #convohead .ct i{font-size:12px;line-height:1.6}
+    #answer .a,#a-rich{font-size:15px}
+    #sidenav .navi{flex-direction:column;justify-content:center;gap:8px;height:76px;padding:10px 4px}
+    #sidenav .navi svg{width:24px;height:24px}
+    #title h1{font-size:15px;letter-spacing:.18em}
+    #title .brand{font-size:22px}
+  }
 </style>
 </head>
 <body>
@@ -4175,7 +4199,7 @@
     <div class="q" id="a-q"></div>
     <div class="a" id="a-text" tabindex="0" role="region" aria-label="Answer"></div>
     <div id="a-rich" tabindex="0" role="region" aria-label="Formatted answer"></div>
-    <div class="answer-tools"><button id="answer-copy" type="button" aria-label="Copy answer">Copy answer</button></div>
+    <div class="answer-tools"><button id="answer-copy" type="button" hidden disabled aria-label="Copy answer">Copy answer</button></div>
     <div class="src" id="a-src" style="display:none">
       <div class="lbl">Drawn from</div>
       <div class="chips" id="a-chips"></div>
@@ -4616,7 +4640,7 @@ const LAYOUT = {
      that is tight, it is a card half of which is off the screen. */
   CARD_MIN: 412,
   CARD_FLOOR: 210,   // and below THIS it stands down entirely
-  TOAST_MAX: 760,    // the toast's full width, panel closed
+  TOAST_MAX: 1100,   // grows within the governed pane; narrow screens keep their existing budget
   TOAST_MIN: 220,
   CHIP_MIN: 860,     // the brain chip and its menu hide below this much canvas
   MOVE_MS: 220,      // every transition in the governed rules matches this
@@ -4730,7 +4754,7 @@ const LAYOUT = {
      the bar's contents need - clamped to DOCK_MIN..DOCK_MAX, so the bar never loses an organ
      to the dock. DOCK_MAX is the note panel's own width, so the panel opening over the
      dock covers it exactly and nothing reflows. */
-  SIDE_W: 184, SIDE_W_ICON: 68, SIDE_FULL_MIN: 1500, SIDE_ICON_MIN: 1180,
+  SIDE_W: 104, SIDE_W_ICON: 68, SIDE_FULL_MIN: 1500, SIDE_ICON_MIN: 1180,
   DOCK_MAX: 420, DOCK_MIN: 300, BAR_ROOM: 792, PANE_PAD: 16, DOCK_GAP: 12,
   /* ---- THE VERTICAL BUDGET ----
      The governor has owned the WIDTH of the toast column since it was written, and the
@@ -8051,7 +8075,8 @@ async function loadLib() {
     setTimeout(() => { if (button.isConnected) { button.textContent = label; button.setAttribute('aria-label', label); } }, 1800);
   }
   $('answer-copy').addEventListener('click', function () {
-    answerCopy($('a-text').textContent, this, 'Copy answer');
+    const text = $('a-text').textContent;
+    if (text.trim()) answerCopy(text, this, 'Copy answer');
   });
   // A reader who scrolls manually owns the position until the next answer.
   let answerManualScroll = false;
@@ -8118,7 +8143,14 @@ async function loadLib() {
       used.forEach(function (n) { box.appendChild(chip(n)); });
       docs.forEach(function (c) { box.appendChild(docChip(c)); });
     }
-    $('answer').classList.add('show');
+    /* A question or a Copy control is not an answer. Evidence can stand alone;
+       copying belongs only to actual text, never to evidence or a confirmation. */
+    const copyable = !!$('a-text').textContent.trim();
+    $('answer-copy').hidden = !copyable;
+    $('answer-copy').disabled = !copyable;
+    $('answer-copy').textContent = 'Copy answer';
+    $('answer-copy').setAttribute('aria-label', 'Copy answer');
+    $('answer').classList.toggle('show', copyable || !!(used.length || web.length || docs.length));
     /* AND RE-MEASURE, because an answer is the one thing that changes the TOAST's height
        and the no-overlap law is a statement about two heights. A long answer with a source
        row is several times the height of a short one, and the governor's clearance test read
@@ -8162,6 +8194,8 @@ async function loadLib() {
   function clearAskUI() {
     $('a-ask').classList.remove('show');
     $('answer').classList.remove('tool');
+    if (!$('a-text').textContent.trim() && !$('a-chips').childElementCount &&
+        !$('a-saw').classList.contains('show')) $('answer').classList.remove('show');
     /* The room comes back up. This lives with the rest of the card's undoing rather
        than in hideProposal(), because the vignette is part of the UI of being asked and
        every path that takes the buttons away must take the dimming with them - including
@@ -8291,7 +8325,7 @@ async function loadLib() {
     $('ask-lbl').textContent = (pending.name || 'Awaiting your word') + ' · your word?';
     $('ask-yes').disabled = false;
     $('ask-no').disabled = false;
-    $('answer').classList.add('tool');
+    $('answer').classList.add('tool', 'show');
     $('a-ask').classList.add('show');
     /* THE ROOM DIMS. An opacity on a fixed overlay that cannot be clicked: no layout, no
        repaint of anything under it, and no chance of standing between a hand - or a
@@ -12717,6 +12751,7 @@ async function loadLib() {
       FRAME_TYPE + '<br>grabbed as you asked, sent ' + ageMs + ' ms later' +
       (note ? '<br>' + esc(note) : '');
     $('a-saw').classList.add('show');
+    $('answer').classList.add('show');
   }
 
   let lastSight = null;      // what was actually sent, for the console and the tests
@@ -15071,6 +15106,9 @@ async function loadLib() {
          web, tool, capped, yield, bare, vanishing - and a list would be one behind the next
          person who adds one. #answer starts life with no classes at all. */
       card.className = '';
+      $('a-rich').replaceChildren();
+      $('answer-copy').hidden = true;
+      $('answer-copy').disabled = true;
       $('a-q').textContent = '';
       $('a-text').textContent = '';
       karaReset();
@@ -16274,6 +16312,9 @@ async function loadLib() {
       });
     } catch (e) { /* nothing to forget if the server is not there */ }
     $('answer').classList.remove('show');
+    $('a-rich').replaceChildren();
+    $('answer-copy').hidden = true;
+    $('answer-copy').disabled = true;
     /* The ↻ button clears a pending proposal with everything else - the server drops it
        too, inside /reset, so this is the UI catching up rather than the decision. */
     hideProposal();
